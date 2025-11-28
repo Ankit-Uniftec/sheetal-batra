@@ -1,29 +1,50 @@
-
+/* Background */
 .screen4-bg {
-  background-image: url("C:\Users\Vipin Agrawal\sheetal_ui\public\bg.png"); 
+  background-image: url("../images/Screen1bg.png");
   background-size: cover;
   background-position: center;
   min-height: 100vh;
   padding: 40px;
+  position: relative;
+  font-family: "Poppins", sans-serif;
 }
 
-/* WHITE CARD */
-.screen4-card {
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
   width: 90%;
-  max-width: 900px;
+  max-width: 1300px;
   margin: auto;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 35px;
-  border-radius: 20px;
-  box-shadow: 0 4px 25px rgba(0,0,0,0.1);
+  align-items: center;
 }
 
-/* Title */
-.title {
-  font-family: serif;
+.logo4 {
+  width: 110px;
+}
+
+.order-title {
   color: #c7a24f;
   font-size: 26px;
-  margin-bottom: 25px;
+  font-weight: 600;
+}
+
+/* Card */
+.screen4-card {
+  width: 95%;
+  max-width: 1300px;
+  margin: 20px auto;
+  padding: 35px 50px;
+  border-radius: 20px;
+  
+  backdrop-filter: blur(5px);
+}
+
+.product-title {
+  font-size: 28px;
+  color: #c7a24f;
+  font-weight: 600;
+  margin-bottom: 30px;
 }
 
 /* Form Rows */
@@ -38,13 +59,16 @@
 }
 
 label {
+  display: block;
   font-size: 14px;
-  color: #333;
+  margin-bottom: 6px;
+  color: #6b6b6b;
 }
 
-select {
+select,
+.input-line {
   width: 100%;
-  padding: 10px;
+  padding: 8px 5px;
   border: none;
   border-bottom: 2px solid #c7a24f;
   background: transparent;
@@ -52,76 +76,181 @@ select {
   outline: none;
 }
 
-/* SIZE BOX */
+/* Size Section */
 .size-box {
   margin: 25px 0;
 }
 
 .size-label {
   font-weight: 600;
-  margin-right: 10px;
+  color: #6b6b6b;
 }
 
 .sizes {
   display: flex;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .size-btn {
-  padding: 8px 14px;
-  border: 1px solid #ccc;
-  background: white;
-  border-radius: 6px;
+  padding: 8px 15px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid #c7a24f;
   cursor: pointer;
+  transition: 0.2s;
 }
 
-.size-btn.active {
+.size-btn.active,
+.size-btn:hover {
   background: #c7a24f;
   color: white;
 }
 
-/* Measurement bar */
+/* Measurements bar */
 .measure-bar {
-  background: rgba(255,255,255,0.7);
-  border: 1px solid #ddd;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid #c7a24f;
   padding: 14px;
   border-radius: 10px;
   display: flex;
   justify-content: space-between;
   margin: 25px 0;
+  font-weight: 500;
 }
 
 .plus-btn {
   background: transparent;
   border: none;
-  font-size: 20px;
+  font-size: 22px;
   color: #c7a24f;
   cursor: pointer;
 }
 
-/* Comments */
-.comments textarea {
-  width: 100%;
-  height: 80px;
+/* Comments & attachments */
+.input-line {
   border: none;
   border-bottom: 2px solid #c7a24f;
-  padding: 10px;
-  outline: none;
   background: transparent;
+  padding: 8px 5px;
 }
 
-/* Continue Button */
-.continue-box {
-  text-align: right;
+/* Footer Buttons */
+.footer-btns {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+}
+
+.add-product-btn {
+  background: #c7a24f;
+  color: white;
+  border: none;
+  padding: 12px 40px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
 .continue-btn {
   background: #c7a24f;
   color: white;
-  padding: 12px 45px;
   border: none;
-  border-radius: 6px;
+  padding: 12px 45px;
+  font-size: 16px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 16px;
+}
+
+/* Back Button */
+.back-btn {
+  position: fixed;
+  left: 25px;
+  bottom: 25px;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #c7a24f;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+}
+
+/* Measurement Dropdown Container */
+.measure-container {
+  display: flex;
+  margin-top: 20px;
+  background: rgba(255,255,255,0.75);
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+/* Left category menu */
+.measure-menu {
+  width: 200px;
+  background: #f6efe4;
+  padding: 20px 0;
+}
+
+.measure-item {
+  padding: 14px 25px;
+  font-size: 16px;
+  color: #555;
+  cursor: pointer;
+  transition: 0.2s;
+  border-left: 4px solid transparent;
+}
+
+.measure-item:hover {
+  background: #fff5d9;
+}
+
+.measure-item.active {
+  font-weight: 600;
+  border-left: 4px solid #c7a24f;
+  background: #fff5d9;
+}
+
+/* Right side inputs */
+.measure-fields {
+  flex: 1;
+  padding: 25px 35px;
+}
+
+.measure-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #c7a24f;
+  margin-bottom: 25px;
+}
+
+/* Grid */
+.measure-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* Input fields */
+.measure-field label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.measure-field input {
+  width: 100%;
+  padding: 12px 12px;
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #d9d9d9;
+  font-size: 15px;
+  outline: none;
+}
+
+.measure-field input:focus {
+  border-color: #c7a24f;
 }

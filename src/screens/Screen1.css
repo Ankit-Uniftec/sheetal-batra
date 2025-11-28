@@ -23,21 +23,33 @@
   padding: 25px;
   border-radius: 20px;
   text-align: center;
+  
   box-shadow: rgba(0, 0, 0, 0.1) 0 4px 20px;
   
 }
-
-p{
+.card p{
   font-size: 20px;
   font-style: regular;
   font-weight: 400;
   margin-top: 21px;
+   width: 100%;
+  text-align: center;
 }
-h2{
+.card h2{
+  /* font-weight: 500;
+  font-size: 32px;
+  
+  font-style: medium;
+  color: #D5B85A; */
   font-weight: 500;
   font-size: 32px;
-  font-style: medium;
   color: #D5B85A;
+  margin: 0 auto;      /* centers with consistent spacing */
+  display: block;      /* ensures correct centering in card */
+  text-align: center;  /* explicitly center text */
+  line-height: 1.2; 
+  width: 100%;
+  
 }
 
 .input {
