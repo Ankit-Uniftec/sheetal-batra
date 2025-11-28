@@ -4,6 +4,7 @@ import Screen2 from "./screens/Screen2";
 import Screen3 from "./screens/Screen3";
 import Screen4 from "./screens/Screen4";
 import Screen6  from "./screens/Screen6";
+import Screen7 from "./screens/Screen7";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/userinfo" element={<Screen3 />} /> 
         <Route path="/product" element={<Screen4 />} />
         <Route path="/confirmDetail" element={<Screen6/>}/>
+        <Route path="/payment" element={<Screen7/>}/>
       </Routes>
     </BrowserRouter>
   );
