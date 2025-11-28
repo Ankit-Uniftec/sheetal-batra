@@ -135,19 +135,21 @@ export default function Screen4() {
       mode_of_delivery: modeOfDelivery,
       order_flag: orderFlag,
       delivery_date: deliveryDate,
-      created_at: new Date(),
+      // created_at: new Date(),
     };
 
-    const { data, error } = await supabase
-      .from("orders")
-      .insert(orderPayload);
+    // const { data, error } = await supabase
+    //   .from("orders")
+    //   .insert(orderPayload);
 
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("Order saved successfully!");
-      navigate("/nextpage");
-    }
+    // if (error) {
+    //   alert(error.message);
+    // } else {
+    //   alert("Order saved successfully!");
+    //   navigate("/nextpage");
+    // }
+    // Now navigate to Screen6 with complete payload
+  navigate("/confirmDetail", { state: { orderPayload } });
   };
 
 

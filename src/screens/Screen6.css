@@ -1,0 +1,197 @@
+.screen6 {
+  background: url("../images/Screen1bg.png") no-repeat center/cover;
+  min-height: 100vh;
+  padding: 40px 60px;
+  font-family: 'Arial';
+}
+
+/* HEADER */
+.screen6-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sheetal-logo {
+  width: 140px;
+}
+
+.back-btn {
+  border: none;
+  background: #f1f1f1;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.share-btn {
+  background: #c7a24f;
+  color: white;
+  padding: 12px 28px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.title {
+  text-align: left;
+  font-size: 32px;
+  margin: 40px 0 20px;
+  color: #c7a24f;
+}
+
+/* MAIN CARD CONTAINER */
+.screen6-container {
+  width: 100%;
+}
+
+/* SECTION BOXES */
+.section-box {
+  background: rgba(255, 255, 255, 0.85);
+  padding: 25px;
+  border-radius: 14px;
+  margin-bottom: 30px;
+  box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.section-box h3 {
+  color: #c7a24f;
+  font-size: 20px;
+  margin-bottom: 20px;
+}
+
+/* 3 Column Row */
+.row3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.field label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 600;
+}
+
+/* .field span,
+.input-line,
+.input-select {
+  border-bottom: 2px solid #c7a24f;
+  padding-bottom: 6px;
+  display: block;
+  font-size: 15px;
+  background: transparent;
+} */
+ .input-line,
+.input-select,
+.field span {
+  display: block;
+  border: none;
+  border-bottom: 2px solid #c7a24f;
+  padding-bottom: 6px;
+  padding-top: 4px;
+  font-size: 15px;
+  background: transparent;
+  outline: none;
+  width: 100%;
+}
+
+/* FORCE TEXT VISIBLE */
+.input-line,
+.input-select,
+.input-select option,
+.section-box select,
+.section-box input {
+  color: #000 !important;
+}
+
+/* .input-line {
+  border: none;
+  border-bottom: 2px solid #c7a24f;
+  padding: 6px 0;
+  outline: none;
+}
+
+.input-select {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #c7a24f;
+  padding: 6px 0;
+  outline: none;
+  color: #333
+} */
+
+/* Dropdown option text */
+.input-select option {
+  color: #000;
+  background: #fff;
+}
+.full-width {
+  grid-column: span 3;
+}
+
+/* PRODUCT CARD */
+/* PRODUCT DETAILS SECTION */
+.product-box {
+  display: flex;
+  gap: 25px;
+  margin-top: 25px;
+  padding: 10px 0;
+}
+
+/* PRODUCT IMAGE */
+.prod-img {
+  width: 140px;
+  height: 180px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #f2e9d3;
+}
+
+/* PRODUCT INFO CONTAINER */
+.prod-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* TWO-COLUMN ROW */
+.prod-row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+}
+
+/* LABEL AND VALUE STYLE */
+.prod-field label {
+  color: #c7a24f;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.prod-field span {
+  display: block;
+  padding: 5px 0;
+  border-bottom: 2px solid #c7a24f;
+  font-size: 15px;
+  color: #333;
+}
+
+
+/* CONFIRM BUTTON */
+.confirm-btn {
+  display: block;
+  margin: 40px auto;
+  background: #c7a24f;
+  color: white;
+  padding: 14px 50px;
+  font-size: 18px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
