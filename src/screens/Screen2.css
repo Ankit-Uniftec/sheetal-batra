@@ -1,13 +1,23 @@
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; }
+
+/* ---- Screen 2 (matches screen1) ---- */
 .screen2-bg {
-  height: 100vh;
+  min-height: 100vh;
+  width: 100%;
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed; /* same as screen1 */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  
 }
 
 .logo2 {
@@ -15,42 +25,62 @@
   margin-bottom: 20px;
 }
 
+/* Card matches .card from screen1 */
 .card2 {
-  width: 80%;
   max-width: 480px;
   height: 500px;
-  background: #FFFFFF73;
+  background: #FFFFFF73;            /* rgba(255,255,255,0.45) */
   padding: 25px;
   border-radius: 20px;
   text-align: center;
-  
   box-shadow: rgba(0, 0, 0, 0.1) 0 4px 20px;
-  
+  margin: 0 16px;                   /* small safety padding on tiny screens */
 }
-p{
-  font-size: 20px;
-  font-style: regular;
-  font-weight: 400;
-  margin-top: 21px;
-}
-h2{
+
+/* Title matches .card h2 in screen1 */
+.title{
+  font-family: jost, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  font-style: normal;
   font-weight: 500;
   font-size: 32px;
-  font-style: medium;
   color: #D5B85A;
+  margin: 0 auto;
+  display: block;
+  text-align: center;
+  line-height: 1.2;
+  width: 100%;
+}
+
+/* Subtitle matches .card p in screen1 */
+.subtitle{
+  font-family: jost, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 400;
+  margin-top: 21px;
+  width: 100%;
+  text-align: center;
+  color: #111;                      /* optional: ensure good contrast */
 }
 
 .otp-text {
   margin: 10px 0;
   color: #555;
+  font-family: jost, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
 
+/* Inputs area mirrors .input width/height from screen1 */
 .otp-box {
   display: flex;
   justify-content: space-between;
-  margin: 18px 0;
+  width: 90%;
+  height: 56px;
+  margin: 18px auto;
+  
+  
 }
 
+/* Each OTP input aligns with screen1 input height and border */
 .otp-input {
   width: 45px;
   height: 56px;
@@ -58,23 +88,47 @@ h2{
   border-radius: 3px;
   font-size: 18px;
   text-align: center;
-  margin-top: 80px;
+  margin-top: 80px; /* same vertical rhythm as .input on screen1 */
+  margin-right: 8px;
+  outline: none;
 }
 
+/* Button matches .btn from screen1 */
 .btn2 {
-  width: 100%;
+  width: 90%;
   margin-top: 24px;
   height: 56px;
   padding: 12px;
-  background: #c7a24f;
-  color: white;
+  background: #D5B85A;
+  color: #fff;
   border: none;
   border-radius: 3px;
   cursor: pointer;
   font-size: 16px;
+  font-family: inherit;
 }
 
+/* Accessible focus states (optional but recommended) */
+.btn2:focus,
+.otp-input:focus {
+  outline: 2px solid #D5B85A;
+  outline-offset: 2px;
+}
+
+/* Timer styled similar to screen1 <small> */
 .timer {
-  margin-top: 15px;
-  color: #666;
+  display: block;
+  margin-top: 110px;               /* align with screen1 small spacing */
+  color: #5E677C;
+  font-size: 14px;
+  font-family: poppins, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  text-align: center;
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Small responsive nicety */
+@media (max-width: 520px) {
+  .card2 { height: auto; }
+  .otp-input { margin-top: 48px; }
 }

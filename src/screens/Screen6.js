@@ -238,7 +238,7 @@ export default function Screen6() {
               >
                 <option value="">Select</option>
                 {salespersons.map((sp) => (
-                  <option key={sp.id} value={sp.id}>
+                  <option key={sp.id} value={sp.id} >
                     {sp.salesperson}
                   </option>
                 ))}
@@ -267,10 +267,11 @@ export default function Screen6() {
 
       {/* Product Image */}
       <img
-        src={item.image_url || "/images/sample-product.jpg"}
+        src={item.image_url}
         alt="product"
         className="prod-img"
       />
+     
 
       {/* Product Info */}
       <div className="prod-details">

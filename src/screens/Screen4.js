@@ -362,10 +362,10 @@ export default function Screen4() {
 
         {/* ACTION BUTTONS */}
         <div className="footer-btns">
-          <button className="add-product-btn" onClick={handleAddProduct}>
+          <button className="productBtn" onClick={handleAddProduct}>
             Add Product
           </button>
-          <button className="continue-btn" onClick={saveOrder}>
+          <button className="continueBtn" onClick={saveOrder}>
             Continue
           </button>
         </div>

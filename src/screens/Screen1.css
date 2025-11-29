@@ -1,12 +1,15 @@
 .screen1 {
-  height: 100vh;
+  min-height: 100vh;
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  background-attachment: fixed;
+
   
 }
 
@@ -16,10 +19,10 @@
 }
 
 .card {
-  width: 80%;
+  
   max-width: 480px;
   height: 500px;
-  background: #FFFFFF73;
+  background:#FFFFFF73;
   padding: 25px;
   border-radius: 20px;
   text-align: center;
@@ -28,6 +31,7 @@
   
 }
 .card p{
+  font-family: jost;
   font-size: 20px;
   font-style: regular;
   font-weight: 400;
@@ -39,8 +43,10 @@
   /* font-weight: 500;
   font-size: 32px;
   
-  font-style: medium;
+  
   color: #D5B85A; */
+  font-family: jost;
+  font-style: medium;
   font-weight: 500;
   font-size: 32px;
   color: #D5B85A;
@@ -53,7 +59,7 @@
 }
 
 .input {
-  width: 100%;
+  width: 90%;
   height: 56px;
   padding: 12px;
   margin-top: 80px;
@@ -63,11 +69,11 @@
 }
 
 .btn {
-  width: 100%;
+  width: 90%;
   margin-top: 24px;
   height: 56px;
   padding: 12px;
-  background: #c7a24f;
+  background: #D5B85A;
   color: white;
   border: none;
   border-radius: 3px;
@@ -78,10 +84,11 @@
 small {
   display: block;
   margin-top: 110px;
-  color: #666;
+  color: #5E677C;
+  font-size: 14px;
+  font-family: poppins;
+  text-align: center;
+  font-weight: 400;
+  font-style: regular;
 }
 
-small a {
-  
-  color: #c7a24f;
-}

@@ -1,8 +1,11 @@
 .screen6 {
-  background: url("../images/Screen1bg.png") no-repeat center/cover;
+  background-image: url("../images/Screen1bg.png");
+  background-size: cover;
+  background-position: center;
   min-height: 100vh;
-  padding: 40px 60px;
-  font-family: 'Arial';
+  padding: 40px;
+  position: relative;
+  font-family: 'Jost';
 }
 
 /* HEADER */
@@ -13,7 +16,9 @@
 }
 
 .sheetal-logo {
-  width: 140px;
+  width: 211px;
+  height: 118px;
+  margin-top: 29px;
 }
 
 .back-btn {
@@ -27,20 +32,23 @@
 }
 
 .share-btn {
-  background: #c7a24f;
+  background: #D5B85A;
   color: white;
   padding: 12px 28px;
   border: none;
-  border-radius: 6px;
+  height: 45px;
+  width: 145px;
   cursor: pointer;
   font-weight: bold;
+  margin-top: 50px;
+    
 }
 
 .title {
   text-align: left;
   font-size: 32px;
   margin: 40px 0 20px;
-  color: #c7a24f;
+  color: #D5B85A;
 }
 
 /* MAIN CARD CONTAINER */
@@ -50,7 +58,7 @@
 
 /* SECTION BOXES */
 .section-box {
-  background: rgba(255, 255, 255, 0.85);
+  background: #FFFFFFB0;
   padding: 25px;
   border-radius: 14px;
   margin-bottom: 30px;
@@ -58,7 +66,7 @@
 }
 
 .section-box h3 {
-  color: #c7a24f;
+  color: #D5B85A;
   font-size: 20px;
   margin-bottom: 20px;
 }
@@ -67,62 +75,49 @@
 .row3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 28px;
+  gap: 30px;
+  margin-bottom: 20px;
+}
+.field {
+  border-bottom: 2px solid #D5B85A;
+  display: flex;
+  align-items: center;
+  gap: 10px;       /* space between label and value */
 }
 
 .field label {
-  font-size: 14px;
-  color: #666;
-  font-weight: 600;
+  white-space: nowrap; 
+  font-size: 13px;
+  color: #D5B85A;
+  font-weight: 500;
+  
 }
 
-/* .field span,
-.input-line,
-.input-select {
-  border-bottom: 2px solid #c7a24f;
-  padding-bottom: 6px;
-  display: block;
-  font-size: 15px;
-  background: transparent;
-} */
+
+
  .input-line,
 .input-select,
 .field span {
   display: block;
   border: none;
-  border-bottom: 2px solid #c7a24f;
+  
   padding-bottom: 6px;
-  padding-top: 4px;
-  font-size: 15px;
+  padding-top: 0px;
+  font-size: 13px;
   background: transparent;
   outline: none;
   width: 100%;
 }
 
 /* FORCE TEXT VISIBLE */
-.input-line,
-.input-select,
+
 .input-select option,
 .section-box select,
 .section-box input {
   color: #000 !important;
 }
 
-/* .input-line {
-  border: none;
-  border-bottom: 2px solid #c7a24f;
-  padding: 6px 0;
-  outline: none;
-}
 
-.input-select {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid #c7a24f;
-  padding: 6px 0;
-  outline: none;
-  color: #333
-} */
 
 /* Dropdown option text */
 .input-select option {
@@ -168,7 +163,7 @@
 
 /* LABEL AND VALUE STYLE */
 .prod-field label {
-  color: #c7a24f;
+  color: #D5B85A;
   font-weight: 600;
   font-size: 14px;
 }
@@ -176,7 +171,7 @@
 .prod-field span {
   display: block;
   padding: 5px 0;
-  border-bottom: 2px solid #c7a24f;
+  border-bottom: 2px solid #D5B85A;
   font-size: 15px;
   color: #333;
 }
@@ -186,12 +181,131 @@
 .confirm-btn {
   display: block;
   margin: 40px auto;
-  background: #c7a24f;
+  
+  background: #D5B85A;
   color: white;
   padding: 14px 50px;
   font-size: 18px;
   border: none;
-  border-radius: 8px;
+  
   cursor: pointer;
 }
 
+
+/* ------- Mobile: up to tablets ------- */
+@media (max-width: 600px) {
+  .screen6 {
+    /* less side padding on small screens */
+    padding: 20px 18px;
+    /* iOS Safari hates fixed backgrounds; avoid jank */
+    background-attachment: scroll;
+    font-size: 16px;
+  }
+
+  /* Header */
+  .screen6-header {
+    gap: 12px;
+  }
+  .sheetal-logo {
+    width: 140px;
+    height: auto;
+    margin-top: 10px;
+  }
+  .back-btn {
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
+  }
+  .share-btn {
+    height: 40px;
+    width: auto;
+    padding: 10px 14px;
+    margin-top: 10px;       /* reduce large top margin */
+    font-size: 14px;
+    border-radius: 9999px;
+  }
+
+  .title {
+    font-size: 24px;
+    margin: 20px 0 14px;
+  }
+
+  /* Sections */
+  .section-box {
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 18px;
+  }
+  .section-box h3 {
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+
+  /* 3-column -> 1-column */
+  .row3 {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .full-width {
+    grid-column: auto;
+  }
+
+  /* Inputs / spans */
+  .field label {
+    font-size: 13px;
+  }
+  .input-line,
+  .input-select,
+  .field span {
+    font-size: 14px;
+    padding-bottom: 4px;
+  }
+
+  /* Product card stack */
+  .product-box {
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+  }
+  .prod-img {
+    width: 100%;
+    height: 220px;           /* taller banner style */
+    border-radius: 10px;
+  }
+  .prod-details {
+    gap: 12px;
+  }
+  .prod-row2 {
+    grid-template-columns: 1fr; /* 2-col -> 1-col */
+    gap: 12px;
+  }
+  .prod-field label {
+    font-size: 13px;
+  }
+  .prod-field span {
+    font-size: 14px;
+  }
+
+  /* Confirm button: full-width, big tap target */
+  .confirm-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    margin: 24px 0 40px;
+  }
+}
+
+/* ------- Small phones ------- */
+@media (max-width: 420px) {
+  .sheetal-logo { width: 120px; }
+  .title { font-size: 22px; }
+  .confirm-btn { padding: 12px; font-size: 15px; }
+}
+
+/* Optional: respect safe areas (iPhone notches) */
+@supports (padding: max(0px)) {
+  .screen6 {
+    padding-left: max(18px, env(safe-area-inset-left));
+    padding-right: max(18px, env(safe-area-inset-right));
+  }
+}
