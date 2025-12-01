@@ -98,7 +98,7 @@ export default function Screen2() {
       <div className="card">
         <div style={{textAlign:'center',alignItems:"center",justifyContent:"center",justifyItems:"center", width:'372px'}}>
           <h2 className="title">Welcome to Sheetal Batra</h2>
-        <p className="subtitle">Your personalised Sheetal Batra experience awaits.</p>
+        <p className="subtitle">Your personalised  experience awaits.</p>
         </div>
 
         <p className="otp-text">OTP has been sent to +91 {mobile}</p>

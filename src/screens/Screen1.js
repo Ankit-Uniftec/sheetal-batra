@@ -42,7 +42,7 @@ export default function Screen1() {
       <div className="card">
         <div style={{textAlign:'center',alignItems:"center",justifyContent:"center",justifyItems:"center", width:'372px'}}>
           <h2>Welcome to Sheetal Batra</h2>
-        <p>Your personalised Sheetal Batra experience awaits.</p>
+        <p>Your personalised  experience awaits.</p>
         </div>
 
         <div style={{width:'372px'}}>
