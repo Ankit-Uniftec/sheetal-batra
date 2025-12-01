@@ -7,7 +7,7 @@ export default function Screen2() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const mobile = location.state?.mobile; // 10 digits only
+  const mobile = location.state?.mobile; // 10 digits
   const phoneNumber = location.state?.phoneNumber; // +91XXXXXXXXXX
 
   const [time, setTime] = useState(30);
@@ -15,20 +15,23 @@ export default function Screen2() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const inputRefs = useRef([]);
 
-  // Timer
+  // ---------------- TIMER ----------------
   useEffect(() => {
     const timer = setInterval(() => {
       setTime((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
+
     return () => clearInterval(timer);
   }, []);
 
-  // Handle OTP input
+  // ---------------- OTP INPUT HANDLING ----------------
   const handleChange = (value, index) => {
     if (!/^\d*$/.test(value)) return;
+
     const updated = [...otp];
     updated[index] = value;
     setOtp(updated);
+
     if (value && index < 5) {
       inputRefs.current[index + 1].focus();
     }
@@ -40,70 +43,95 @@ export default function Screen2() {
     }
   };
 
-  
-
+  // ---------------- VERIFY OTP ----------------
   const verifyOTP = async () => {
-  const code = otp.join("");
+    const code = otp.join("");
 
-  if (code.length !== 6) {
-    alert("Enter a valid 6-digit OTP");
-    return;
-  }
+    if (code.length !== 6) {
+      alert("Enter a valid 6-digit OTP");
+      return;
+    }
 
-  setLoading(true);
+    setLoading(true);
 
-  const { data: otpData, error } = await supabase.auth.verifyOtp({
-    phone: phoneNumber,
-    token: code,
-    type: "sms",
-  });
+    const { data: otpData, error } = await supabase.auth.verifyOtp({
+      phone: phoneNumber,
+      token: code,
+      type: "sms",
+    });
 
-  setLoading(false);
+    setLoading(false);
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
- 
+    const normalized = phoneNumber.replace(/\D/g, "").slice(-10);
+    const formatted = "+91" + normalized;
 
-  const normalized = phoneNumber.replace(/\D/g, "").slice(-10);
-  const formatted = "+91" + normalized;
+    await supabase.from("profiles").upsert({
+      id: otpData.user.id,
+      phone: formatted,
+    });
 
-  // ⛔ MUST ALWAYS INSERT PROFILE WITH ID MATCHING AUTH USER ID
-  await supabase.from("profiles").upsert({
-    id: otpData.user.id,
-    phone: formatted,
-  });
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", otpData.user.id)
+      .maybeSingle();
 
-  // Now check if full profile exists
-  const { data: existingProfile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", otpData.user.id)    // SAFE
-    .maybeSingle();
+    if (existingProfile && existingProfile.full_name) {
+      navigate("/product");
+    } else {
+      navigate("/userinfo", { state: { phoneNumber: formatted } });
+    }
+  };
 
-  if (existingProfile && existingProfile.full_name) {
-    navigate("/product");
-  } else {
-    navigate("/userinfo", { state: { phoneNumber: formatted } });
-  }
-};
+  // ---------------- RESEND OTP ----------------
+  const resendOTP = async () => {
+    if (time !== 0) return;
 
+    setLoading(true);
 
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: phoneNumber,
+    });
+
+    setLoading(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    // Reset timer & OTP fields
+    setTime(30);
+    setOtp(["", "", "", "", "", ""]);
+    inputRefs.current[0]?.focus();
+  };
 
   return (
     <div className="screen2-bg">
-       <img src="/logo.png" alt="logo" className="logo" />
+      <img src="/logo.png" alt="logo" className="logo" />
+
       <div className="card">
-        <div style={{textAlign:'center',alignItems:"center",justifyContent:"center",justifyItems:"center", width:'372px'}}>
+        <div
+          style={{
+            textAlign: "center",
+            alignItems: "center",
+            justifyContent: "center",
+            justifyItems: "center",
+            width: "372px",
+          }}
+        >
           <h2 className="title">Welcome to Sheetal Batra</h2>
-        <p className="subtitle">Your personalised  experience awaits.</p>
+          <p className="subtitle">Your personalised experience awaits.</p>
         </div>
 
-        <p className="otp-text">OTP has been sent to +91 {mobile}</p>
-
         <div className="otpBox">
+          <p className="otp-text">OTP has been sent to +91 {mobile}</p>
+
           {otp.map((v, i) => (
             <input
               key={i}
@@ -121,7 +149,13 @@ export default function Screen2() {
           {loading ? "Verifying..." : "Continue"}
         </button>
 
-        <p className="timer-text">You can resend the code in {time} seconds</p>
+        {time > 0 ? (
+          <p className="timer-text">You can resend the code in {time} seconds</p>
+        ) : (
+          <button className="resend-btn" onClick={resendOTP}>
+            Resend OTP
+          </button>
+        )}
       </div>
     </div>
   );

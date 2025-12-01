@@ -1,4 +1,25 @@
-/* Background */
+
+select,
+select option,
+input,
+label,
+.field select,
+.field input,
+.field option {
+  font-family: "Jost", sans-serif !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  color: #111 !important;
+}
+
+
+select option[value=""] {
+  color: #777 !important;
+}
+*{
+  font-family: "Jost", sans-serif !important;
+}
+
 .screen4-bg {
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
@@ -10,7 +31,7 @@
  
 }
 
-/* Header */
+
 .header {
   display: flex;
   justify-content: space-between;
@@ -21,8 +42,8 @@
 }
 
 .logo4 {
-  width: 211px;
-  height: 118px;
+  width: 150px;
+  height: 100px;
   margin-top: 29px;
 }
 
@@ -32,11 +53,10 @@
   font-size: 26px;
   font-weight: 600;
   font-style: semibold;
-  font-family: jost;
+  font-family: "Jost", sans-serif !important;
   font-size: Typography/Font Size/Display 6;
 }
 
-/* Card */
 .screen4-card {
   width: 95%;
   max-width: 1300px;
@@ -54,7 +74,12 @@
   margin-bottom: 30px;
 }
 
-/* Form Rows */
+.product-price {
+  margin-top: 25px;
+  font-size: 14px;
+  color: #444;
+}
+
 .row {
   display: flex;
   gap: 25px;
@@ -69,7 +94,7 @@
   display: block;
   font-size: 16px;
   margin-bottom: 6px;
-  color:black;
+  
   font-weight: 400;
 
 }
@@ -85,9 +110,15 @@ select,
   outline: none;
 }
 
-/* Size Section */
+
 .size-box {
   margin: 25px 0;
+  display: flex;
+  flex-direction: row;
+  text-align: center;
+  align-items: center;
+  
+
 }
 
 .size-label {
@@ -98,12 +129,12 @@ select,
 .sizes {
   display: flex;
   gap: 10px;
-  margin-top: 10px;
+  margin-left: 3px;
 }
 
 .size-btn {
   padding: 8px 15px;
-  border-radius: 8px;
+  border-radius: 3px;
   background: rgba(255,255,255,0.7);
   border: 1px solid #c7a24f;
   cursor: pointer;
@@ -116,16 +147,19 @@ select,
   color: white;
 }
 
-/* Measurements bar */
+
 .measure-bar {
-  background: rgba(255,255,255,0.9);
+  background: #FFFFFF99;
   border: 1px solid #D5B85A;
-  padding: 14px;
-  border-radius: 10px;
+  text-align: center;
+  align-items: center;
+  padding: 5px;
+  border-radius: 3px;
   display: flex;
   justify-content: space-between;
   margin: 25px 0;
   font-weight: 500;
+  height: 35px;
 }
 
 .plus-btn {
@@ -136,44 +170,22 @@ select,
   cursor: pointer;
 }
 
-/* Comments & attachments */
+
 .input-line {
   border: none;
-  border-bottom: 2px solid #D5B85A;
+  
   background: transparent;
   padding: 8px 5px;
 }
 
-/* Footer Buttons */
+
 .footer-btns {
   display: flex;
   justify-content: space-between;
-  margin-top: 30px;
+  margin-top: 25px;
 }
 
-/* .productBtn {
-  background: #D5B85A;
-  color: white;
-  border: none;
-  height: 165px;
-  width: 56px;
-  
-  font-size: 16px;
-  
-  cursor: pointer;
-}
 
-.continueBtn {
-  height: 165px;
-  width: 56px;
-  background: #D5B85A;
-  color: white;
-  border: none;
-  
-  font-size: 16px;
-  
-  cursor: pointer;
-} */
 .productBtn{
   background: #D5B85A;
   color: #fff;
@@ -209,7 +221,6 @@ select,
 }
 
 
-/* Back Button */
 .back-btn {
   position: fixed;
   left: 25px;
@@ -224,7 +235,7 @@ select,
   box-shadow: 0 3px 10px rgba(0,0,0,0.2);
 }
 
-/* Measurement Dropdown Container */
+
 .measure-container {
   display: flex;
   margin-top: 20px;
@@ -234,7 +245,7 @@ select,
   overflow: hidden;
 }
 
-/* Left category menu */
+
 .measure-menu {
   width: 200px;
   background: #f6efe4;
@@ -260,7 +271,7 @@ select,
   background: #fff5d9;
 }
 
-/* Right side inputs */
+
 .measure-fields {
   flex: 1;
   padding: 25px 35px;
@@ -273,14 +284,13 @@ select,
   margin-bottom: 25px;
 }
 
-/* Grid */
+
 .measure-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
-/* Input fields */
 .measure-field label {
   font-size: 14px;
   font-weight: 600;
@@ -300,4 +310,103 @@ select,
 
 .measure-field input:focus {
   border-color: #D5B85A;
+}
+
+
+.qty-field label {
+  font-size: 16px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d5b85a;
+  padding: 6px 12px;
+  border-radius: 6px;
+  width: max-content;
+}
+
+.qty-controls button {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #d5b85a;
+}
+
+.qty-controls span {
+  width: 30px;
+  text-align: center;
+  font-size: 18px;
+}
+
+
+
+.summary-box-fixed {
+   
+  width: 30%;        
+  
+  margin-top: 20px;
+  padding: 20px;
+  background: rgba(255,255,255,0.85);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  backdrop-filter: blur(6px);
+}
+
+.summary-box-fixed h3 {
+  color: #D5B85A;
+  margin-bottom: 10px;
+}
+
+.summary-box-fixed p {
+  margin: 5px 0;
+}
+
+.summary-box-fixed .grand-total {
+  margin-top: 12px;
+  color: #D5B85A;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+
+@media (max-width: 700px) {
+  .summary-box-fixed {
+    position: relative;
+    width: 100%;
+    right: 0;
+    bottom: 0;
+    margin-top: 20px;
+  }
+}
+
+
+
+@media (max-width: 700px) {
+  .summary-box-fixed {
+    width: 100%;
+  }
+
+  .footer-btns {
+    flex-direction: column;
+    gap: 15px;
+  }
+}
+
+.added-product-row{
+  background: #FFFFFF99;
+  border: 1px solid #D5B85A;
+  text-align: center;
+  align-items: center;
+  padding: 5px;
+  border-radius: 3px;
+  display: flex;
+  justify-content: space-between;
+  margin: 25px 0;
+  font-weight: 500;
+  height: 35px;
 }

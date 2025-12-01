@@ -1,3 +1,6 @@
+*{
+  font-family: "Jost", sans-serif !important;
+}
 .screen1 {
   min-height: 100vh;
   background-image: url("../images/Screen1bg.png");
@@ -14,7 +17,8 @@
 }
 
 .logo {
-  width: 120px;
+  width: 150px;
+  height: 100px;
   margin-bottom: 20px;
 }
 
@@ -83,7 +87,7 @@
 
 small {
   display: block;
-  margin-top: 110px;
+  margin-top: 80px;
   color: #5E677C;
   font-size: 14px;
   font-family: poppins;

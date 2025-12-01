@@ -1,3 +1,6 @@
+*{
+  font-family: "Jost", sans-serif !important;
+}
 .screen6 {
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
@@ -16,8 +19,8 @@
 }
 
 .sheetal-logo {
-  width: 211px;
-  height: 118px;
+  width: 150px;
+  height: 100px;
   margin-top: 29px;
 }
 

@@ -1,3 +1,6 @@
+*{
+  font-family: "Jost", sans-serif !important;
+}
 .screen3-root {
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
@@ -19,7 +22,8 @@
 }
 
 .logo3 {
-  width: 140px;
+  width: 150px;
+  height: 100px;
   margin: auto;
   display: block;
   margin-bottom: 15px;

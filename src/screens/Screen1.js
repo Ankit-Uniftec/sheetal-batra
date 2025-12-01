@@ -15,6 +15,7 @@ export default function Screen1() {
       alert("Please enter a valid 10-digit mobile number");
       return;
     }
+    
 
     const phoneNumber = "+91" + normalized;
     setLoading(true);
