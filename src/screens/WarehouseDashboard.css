@@ -1,0 +1,139 @@
+* {
+  font-family: jost, sans-serif;
+}
+
+/* --- PAGE WRAPPER --- */
+.dashboard-wrapper {
+  width: 100%;
+  min-height: 100vh;
+  background-image: url("../images/Screen1bg.png");
+  background-size: cover;
+  padding: 40px 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* --- HEADER --- */
+.top-header {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.header-left { justify-self: start; }
+
+.logout-btn {
+  justify-self: end;
+  border: 1px solid #d5b85a;
+  background: transparent;
+  height: 50px;
+  width: 50px;
+  cursor: pointer;
+  font-size: 22px;
+  border-radius: 8px;
+}
+
+.title {
+  text-align: center;
+  font-size: 34px;
+  color: #d5b85a;
+}
+
+/* --- ORDERS LIST --- */
+.orders-container {
+  width: 100%;
+  max-width: 850px;
+}
+
+.order-wrapper {
+  margin-bottom: 22px;
+}
+
+/* --- BOX BUTTON --- */
+.order-box {
+  width: 140px;
+  height: 28px;
+  background: #d5b85a;
+  color: white;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 4px #00000025;
+  transition: 0.2s ease;
+}
+
+.order-box:hover {
+  background: #c3a148;
+}
+
+/* --- DROPDOWN --- */
+.order-dropdown {
+  margin-top: 12px;
+  background: white;
+  padding: 22px;
+  border-radius: 10px;
+  border-left: 4px solid #d5b85a;
+  box-shadow: 0 3px 8px #00000025;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #444;
+}
+
+/* --- DROPDOWN GRID --- */
+.dropdown-content {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 25px;
+}
+
+.dropdown-img {
+  width: 150px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+}
+
+.dropdown-info p {
+  margin: 6px 0;
+  font-size: 14px;
+  color: #444;
+}
+
+.dropdown-info strong {
+  color: #d5b85a;
+}
+
+/* BUTTON */
+.complete-btn {
+  margin-top: 18px;
+  background: #d5b85a;
+  border: none;
+  padding: 10px 25px;
+  border-radius: 8px;
+  color: white;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.complete-btn:disabled {
+  background: #777;
+  cursor: not-allowed;
+}
