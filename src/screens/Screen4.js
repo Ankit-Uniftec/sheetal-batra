@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen4.css";
+import Logo from "../images/logo.png";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -376,7 +377,7 @@ export default function Screen4() {
     <div className="screen4-bg">
       {/* HEADER */}
       <div className="header">
-        <img src="/logo.png" className="logo4" alt="logo" />
+        <img src={Logo} className="logo4" alt="logo" />
         <h2 className="order-title">Order Form</h2>
       </div>
 

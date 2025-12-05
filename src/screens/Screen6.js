@@ -3,7 +3,7 @@ import "./Screen6.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-
+import Logo from "../images/logo.png";
 export default function Screen6() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -164,7 +164,7 @@ useEffect(() => {
       {/* HEADER */}
       <div className="screen6-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
-        <img src="/logo.png" className="sheetal-logo" alt="logo" />
+        <img src={Logo} className="sheetal-logo" alt="logo" />
         <button className="sharebtn">Share</button>
       </div>
 
@@ -239,11 +239,11 @@ useEffect(() => {
 
           <div className="row3">
             <div className="field">
-              <label>Billing address same as delivery address:</label>
+              <label>Required GST:</label>
               <select
                 className="input-select"
-                value={billingSame ? "yes" : "no"}
-                onChange={(e) => setBillingSame(e.target.value === "yes")}
+                value={billingSame ? "no" : "yes"}
+                onChange={(e) => setBillingSame(e.target.value === "no")}
               >
                 <option value="yes">Yes</option>
                 <option value="no">No</option>
@@ -311,7 +311,7 @@ useEffect(() => {
 
         {/* CONFIRM BUTTON */}
         <button className="confirm-btn" onClick={confirmOrder}>
-          Confirm & Submit Order
+          Place Order
         </button>
 
       </div>

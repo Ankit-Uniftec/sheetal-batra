@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen1.css";
+import Logo from "../images/logo.png";
 
 export default function Screen1() {
   const navigate = useNavigate();
@@ -66,7 +67,7 @@ export default function Screen1() {
       {/* BACK BUTTON */}
       <button className="back-btn" onClick={handleBack}>←</button>
 
-      <img src="/logo.png" alt="logo" className="logo" />
+      <img src={Logo} alt="logo" className="logo" />
 
       <div className="card">
 

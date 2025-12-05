@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import "./WarehouseDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-
+import Logo from "../images/logo.png";
 const WarehouseDashboard = () => {
   const navigate = useNavigate();
 
@@ -65,7 +65,7 @@ const WarehouseDashboard = () => {
       {/* HEADER */}
       <div className="top-header">
         <div className="header-left">
-          <img src="/logo.png" className="logo" alt="logo" />
+          <img src={Logo} className="logo" alt="logo" />
         </div>
 
         <h1 className="title">Warehouse Dashboard</h1>

@@ -3,7 +3,7 @@ import "./OrderHistory.css";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-
+import Logo from "../images/logo.png";
 export default function OrderHistory() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -112,7 +112,7 @@ export default function OrderHistory() {
       {/* header */}
       <div className="oh-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
-        <img src="/logo.png" alt="logo" className="oh-logo" />
+        <img src={Logo} alt="logo" className="oh-logo" />
         <button className="share-btn" onClick={handleLogout}>Logout</button>
       </div>
 

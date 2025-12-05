@@ -3,7 +3,7 @@ import "./AssociateDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useLocation } from "react-router-dom";
-
+import Logo from "../images/logo.png";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -173,7 +173,7 @@ export default function Dashboard() {
       {/* ---------------- HEADER ---------------- */}
       <div className="top-header">
         <div className="header-left">
-          <img src="/logo.png" className="logo" alt="logo" />
+          <img src={Logo} className="logo" alt="logo" />
         </div>
 
         <h1 className="title">My Dashboard</h1>

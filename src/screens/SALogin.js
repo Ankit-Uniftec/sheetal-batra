@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./SALogin.css";
+import Logo from "../images/logo.png";
 
 export default function SALogin() {
   const navigate = useNavigate();
@@ -71,7 +72,7 @@ const { data: { user } } = await supabase.auth.signInWithPassword({ email, passw
 
   return (
     <div className="screen1">
-      <img src="/logo.png" alt="logo" className="logo" />
+      <img src={Logo} alt="logo" className="logo" />
 
       <div className="card">
         <h2>Welcome to Sheetal Batra</h2>

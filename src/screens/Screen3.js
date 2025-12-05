@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "../screens/Screen3.css";
-
+import Logo from "../images/logo.png";
 function Screen3() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,7 +66,7 @@ function Screen3() {
   return (
     <div className="screen3-root">
       <div className="card3">
-        <img src="/logo.png" className="logo3" />
+        <img src={Logo} className="logo3" />
 
         <h2>Personal information</h2>
 
