@@ -8,6 +8,7 @@ import Screen7 from "./screens/Screen7";
 import SALogin from "./screens/SALogin";
 import AssociateDashboard from "./screens/AssociateDashboard";
 import WarehouseDashboard from "./screens/WarehouseDashboard";
+import OrderHistory from "./screens/OrderHistory";
 function App() {
   return (
     <BrowserRouter>
@@ -21,6 +22,8 @@ function App() {
         <Route path="/payment" element={<Screen7/>}/>
         <Route path="/AssociateDashboard" element={<AssociateDashboard />} />
         <Route path="/warehouseDashboard" element={<WarehouseDashboard />} />
+        <Route path="/orderHistory" element={<OrderHistory />} />
+
       </Routes>
     </BrowserRouter>
   );

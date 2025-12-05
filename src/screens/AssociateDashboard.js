@@ -2,9 +2,12 @@ import React, { useEffect, useState } from "react";
 import "./AssociateDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useLocation } from "react-router-dom";
+
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [salesperson, setSalesperson] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -41,12 +44,16 @@ export default function Dashboard() {
   }, []);
 
   //----------------Ask for password if associate person come back to dashboard
+  // Ask for password when associate returns from OTP screen
+  // Ask for password when associate returns from OTP screen
   useEffect(() => {
-    const mustVerify = sessionStorage.getItem("requireDashboardPassword");
-    if (mustVerify === "true") {
+    const cameFromVerification = location.state?.fromBuyerVerification;
+    if (cameFromVerification) {
       setShowPasswordModal(true);
     }
-  }, []);
+  }, [location]);
+
+
   //password verification function:
   const verifyPassword = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -127,6 +134,8 @@ export default function Dashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/");
+    localStorage.removeItem("sp_email");
+    localStorage.removeItem("sp_id");
   };
 
   // ---------------------------------------------
@@ -230,7 +239,7 @@ export default function Dashboard() {
               <button className="view-btn">View All</button>
             </div>
 
-            <div className="card-box">
+            <div className="card-box" style={{ overflow: 'auto', height: '200px' }}>
               {activeOrders.length === 0 ? (
                 <p>No active orders</p>
               ) : (
@@ -260,13 +269,30 @@ export default function Dashboard() {
       {/* ADD ORDER */}
       <button
         className="add-btn"
-        onClick={() => {
-          sessionStorage.setItem("requireDashboardPassword", "true");
-          navigate("/buyerVerification");
+        onClick={async () => {
+          // 1. save current associate session
+          const { data: { session } } = await supabase.auth.getSession();
+
+          if (session) {
+            sessionStorage.setItem(
+              "associateSession",
+              JSON.stringify({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token,
+              })
+            );
+          }
+
+          // 2. flag that app should return to associate after customer logout
+          sessionStorage.setItem("returnToAssociate", "true");
+
+          // 3. navigate to customer phone/OTP verification
+          navigate("/buyerVerification", { state: { fromAssociate: true } });
         }}
       >
         +
       </button>
+
 
       {/* BACK */}
       <button className="back-btn" onClick={() => { navigate("/") }}>‹</button>

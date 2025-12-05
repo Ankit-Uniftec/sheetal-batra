@@ -293,6 +293,10 @@
     padding: 14px;
     width: 170px;
   }
+  .card-box{
+    
+    overflow: auto;
+  }
 
   .stat-value {
     font-size: 26px;

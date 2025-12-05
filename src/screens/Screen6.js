@@ -21,6 +21,72 @@ export default function Screen6() {
   const [billingCompany, setBillingCompany] = useState("");
   const [billingGST, setBillingGST] = useState("");
 
+
+  // Auto-pick salesperson using the logged-in user's email
+// 1) Kill stale state when user changes, then fetch salesperson for THIS login
+// helper to normalize emails
+// helper to normalize
+const norm = (v) => (v || "").trim();
+
+useEffect(() => {
+  // IMPORTANT: do NOT rely on auth user (now it's the customer after OTP)
+  const cachedEmail = norm(localStorage.getItem("sp_email"));
+
+  let cancelled = false;
+  setSelectedSP(null);
+
+  (async () => {
+    // still load profile for delivery section (this may be customer's profile)
+    if (user?.id) {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      if (!cancelled) setProfile(prof || null);
+    }
+
+    if (!cachedEmail) {
+      console.warn("No salesperson email in localStorage (sp_email).");
+      if (!cancelled) setSelectedSP(null);
+      return;
+    }
+
+    // 1) exact match by email
+    const { data: eqRows, error: eqErr } = await supabase
+      .from("salesperson")
+      .select("*")
+      .eq("email", cachedEmail)
+      .limit(1);
+
+    if (eqErr) console.warn("salesperson eq(email) error:", eqErr);
+
+    let sp = eqRows?.[0];
+
+    // 2) fallback: case-insensitive exact (ilike w/o %)
+    if (!sp) {
+      const { data: ilikeRows, error: ilikeErr } = await supabase
+        .from("salesperson")
+        .select("*")
+        .ilike("email", cachedEmail)
+        .limit(1);
+
+      if (ilikeErr) console.warn("salesperson ilike(email) error:", ilikeErr);
+      sp = ilikeRows?.[0] || null;
+    }
+
+    if (!cancelled) {
+      setSelectedSP(sp);
+      if (!sp) console.warn("No salesperson found for sp_email:", cachedEmail);
+    }
+  })();
+
+  return () => { cancelled = true; };
+}, [user?.id]); // run when screen mounts / profile user changes
+
+
+
+
   useEffect(() => {
     if (!user) return;
     loadProfile();
@@ -77,7 +143,7 @@ export default function Screen6() {
       // Salesperson
       salesperson: selectedSP?.saleperson || null,
       salesperson_phone: selectedSP?.phone || null,
-      salesperson_email: selectedSP?.email || null,
+     salesperson_email: selectedSP?.email || localStorage.getItem("sp_email") || null,
 
       created_at: new Date().toISOString(),
     };
@@ -87,7 +153,7 @@ export default function Screen6() {
     if (error) return alert(error.message);
 
     alert("Order placed successfully!");
-    navigate("/payment");
+    navigate("/orderHistory");
   };
 
   if (!profile || !order) return <p>Loading...</p>;
@@ -99,7 +165,7 @@ export default function Screen6() {
       <div className="screen6-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
         <img src="/logo.png" className="sheetal-logo" alt="logo" />
-        <button className="share-btn">Share</button>
+        <button className="sharebtn">Share</button>
       </div>
 
       <h2 className="title">Confirm Your Details</h2>
@@ -218,36 +284,28 @@ export default function Screen6() {
         </div>
 
         {/* SALESPERSON DETAILS */}
-        <div className="section-box">
-          <h3>Salesperson Details</h3>
+<div className="section-box" style={{display:'none'}}>
+  <h3>Salesperson Details</h3>
+  <div className="row3">
+    <div className="field">
+      <label>Salesperson:</label>
+      <span>
+        {selectedSP?.saleperson || selectedSP?.salesperson || selectedSP?.name || "—"}
+      </span>
+    </div>
+    <div className="field">
+      <label>Salesperson Phone:</label>
+      <span>{selectedSP?.phone || "—"}</span>
+    </div>
+    <div className="field">
+      <label>Salesperson Email:</label>
+      <span>{selectedSP?.email || localStorage.getItem("sp_email") || "—"}</span>
+    </div>
+  </div>
+</div>
 
-          <div className="row3">
-            <div className="field">
-              <label>Salesperson:</label>
-              <select
-                className="input-select"
-                onChange={(e) => handleSPChange(e.target.value)}
-              >
-                <option value="">Select</option>
-                {salespersons.map((sp) => (
-                  <option key={sp.id} value={sp.id}>
-                    {sp.saleperson}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            <div className="field">
-              <label>Salesperson Phone:</label>
-              <span>{selectedSP?.phone || "—"}</span>
-            </div>
 
-            <div className="field">
-              <label>Salesperson Email:</label>
-              <span>{selectedSP?.email || "—"}</span>
-            </div>
-          </div>
-        </div>
 
         {/* PRODUCT DETAILS — HIDDEN PERMANENTLY */}
 

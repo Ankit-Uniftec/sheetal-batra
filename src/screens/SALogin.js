@@ -52,6 +52,15 @@ export default function SALogin() {
 
     // 3️⃣ ROLE-BASED NAVIGATION
     if (userRole === "salesperson") {
+      // after signInWithPassword()
+const { data: { user } } = await supabase.auth.signInWithPassword({ email, password });
+
+
+  localStorage.setItem("sp_email", user.email.trim());
+
+// optionally store id too if you have it
+// localStorage.setItem("sp_id", user.id);
+
       navigate("/associateDashboard");
     } else if (userRole === "warehouse") {
       navigate("/warehouseDashboard");

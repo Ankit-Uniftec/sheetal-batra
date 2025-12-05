@@ -1,8 +1,162 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen4.css";
+
+/**
+ * Generic Searchable Select (no external libs)
+ * - Keyboard: ↑/↓ to move, Enter to select, Esc to close
+ * - Click outside closes menu
+ * - Works with arrays of primitives or {label, value}
+ */
+export function SearchableSelect({
+  options,
+  value,
+  onChange,
+  placeholder = "Select…",
+  disabled = false,
+  className = "",
+}) {
+  const normalized = useMemo(() => {
+    return (options || []).map((o) =>
+      typeof o === "object" && o !== null && "label" in o && "value" in o
+        ? o
+        : { label: String(o), value: o }
+    );
+  }, [options]);
+
+  const current = useMemo(
+    () => normalized.find((o) => String(o.value) === String(value)) || null,
+    [normalized, value]
+  );
+
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [focusIdx, setFocusIdx] = useState(-1);
+  const rootRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return normalized;
+    return normalized.filter((o) => o.label.toLowerCase().includes(q));
+  }, [normalized, query]);
+
+  useEffect(() => {
+    const onDoc = (e) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target)) {
+        setOpen(false);
+        setFocusIdx(-1);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !listRef.current || focusIdx < 0) return;
+    const el = listRef.current.querySelector(`[data-idx="${focusIdx}"]`);
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  }, [focusIdx, open]);
+
+  const handleSelect = (opt) => {
+    onChange(opt?.value ?? "");
+    setOpen(false);
+    setQuery("");
+    setFocusIdx(-1);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const handleKeyDown = (e) => {
+    if (!open && (e.key === "ArrowDown" || e.key === "Enter")) {
+      setOpen(true);
+      setFocusIdx(0);
+      return;
+    }
+    if (!open) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setFocusIdx((i) => Math.min((filtered.length || 1) - 1, i + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setFocusIdx((i) => Math.max(0, i - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const opt = filtered[focusIdx];
+      if (opt) handleSelect(opt);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      setFocusIdx(-1);
+    }
+  };
+
+  const clear = (e) => {
+    e.stopPropagation();
+    onChange("");
+    setQuery("");
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div ref={rootRef} className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}>
+      <div className={`ss-control ${open ? "ss-open" : ""}`} onClick={() => !disabled && setOpen((o) => !o)}>
+        <input
+          ref={inputRef}
+          className="ss-input"
+          placeholder={current ? current.label : placeholder}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!open) setOpen(true);
+            setFocusIdx(0);
+          }}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+        />
+        {current && (
+          <button className="ss-clear" title="Clear" onClick={clear}>
+            ×
+          </button>
+        )}
+        <span className="ss-caret">▾</span>
+      </div>
+
+      {open && (
+        <div className="ss-menu" role="listbox">
+          {filtered.length === 0 ? (
+            <div className="ss-empty">No matches</div>
+          ) : (
+            <ul ref={listRef} className="ss-list">
+              {filtered.map((opt, idx) => {
+                const selected = String(opt.value) === String(value);
+                const focused = idx === focusIdx;
+                return (
+                  <li
+                    key={String(opt.value)}
+                    data-idx={idx}
+                    className={`ss-option ${selected ? "is-selected" : ""} ${focused ? "is-focused" : ""}`}
+                    onMouseEnter={() => setFocusIdx(idx)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleSelect(opt)}
+                    role="option"
+                    aria-selected={selected}
+                  >
+                    {opt.label}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Screen4() {
   const navigate = useNavigate();
@@ -12,8 +166,7 @@ export default function Screen4() {
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [comments, setComments] = useState("");
-const [attachments, setAttachments] = useState("");
-
+  const [attachments, setAttachments] = useState("");
 
   const [colors, setColors] = useState([]);
   const [tops, setTops] = useState([]);
@@ -41,6 +194,8 @@ const [attachments, setAttachments] = useState("");
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [activeCategory, setActiveCategory] = useState("Shirts");
+
+  const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
 
   const measurementCategories = [
     "Shirts",
@@ -77,6 +232,20 @@ const [attachments, setAttachments] = useState("");
     "Lehnga Length": ["Waist", "Length"],
   };
 
+  // tiny id helper so list keys are stable
+  const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  // update helpers
+  const toggleExpand = (id) =>
+    setExpandedRowIds((e) => ({ ...e, [id]: !e[id] }));
+
+  const handleDelete = (id) =>
+    setOrderItems((prev) => prev.filter((it) => it._id !== id));
+
+  const updateItem = (id, patch) =>
+    setOrderItems((prev) =>
+      prev.map((it) => (it._id === id ? { ...it, ...patch } : it))
+    );
+
   // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
@@ -107,6 +276,7 @@ const [attachments, setAttachments] = useState("");
     if (!selectedProduct) return alert("Please select a product");
 
     const newProduct = {
+      _id: makeId(),
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
       sku_id: selectedProduct.sku_id,
@@ -148,63 +318,62 @@ const [attachments, setAttachments] = useState("");
 
   // SAVE ORDER
   const saveOrder = () => {
-  // VALIDATION
-  if (!deliveryDate) return alert("Enter delivery date");
-  if (!modeOfDelivery) return alert("Select mode of delivery");
-  if (!orderFlag) return alert("Select order flag");
+    // VALIDATION
+    if (!deliveryDate) return alert("Enter delivery date");
+    if (!modeOfDelivery) return alert("Select mode of delivery");
+    if (!orderFlag) return alert("Select order flag");
 
-  let finalItems = [...orderItems];
+    let finalItems = [...orderItems];
 
-  // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT"
-  if (orderItems.length === 0 && selectedProduct) {
-    finalItems.push({
-      product_id: selectedProduct.id,
-      product_name: selectedProduct.name,
-      sku_id: selectedProduct.sku_id,
-      color: selectedColor,
-      top: selectedTop,
-      bottom: selectedBottom,
-      extra: selectedExtra,
-      size: selectedSize,
-      quantity,
-      price: selectedProduct.price || 0,
-      measurements,
-    });
-  }
+    // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT"
+    if (orderItems.length === 0 && selectedProduct) {
+      finalItems.push({
+        product_id: selectedProduct.id,
+        product_name: selectedProduct.name,
+        sku_id: selectedProduct.sku_id,
+        color: selectedColor,
+        top: selectedTop,
+        bottom: selectedBottom,
+        extra: selectedExtra,
+        size: selectedSize,
+        quantity,
+        price: selectedProduct.price || 0,
+        measurements,
+      });
+    }
 
-  const orderPayload = {
-    user_id: user?.id,
+    const orderPayload = {
+      user_id: user?.id,
 
-    // Product level details
-    items: finalItems,
+      // Product level details
+      items: finalItems,
 
-    // Delivery Details
-    delivery_date: deliveryDate,
-    mode_of_delivery: modeOfDelivery,
-    order_flag: orderFlag,
+      // Delivery Details
+      delivery_date: deliveryDate,
+      mode_of_delivery: modeOfDelivery,
+      order_flag: orderFlag,
 
-    // Extra fields
-    comments: comments,
-    attachments: attachments,
+      // Extra fields
+      comments: comments,
+      attachments: attachments,
 
-    // Totals
-    subtotal: subtotal,
-    taxes: taxes,
-    grand_total: totalOrder,
-    total_quantity: totalQuantity,
+      // Totals
+      subtotal: subtotal,
+      taxes: taxes,
+      grand_total: totalOrder,
+      total_quantity: totalQuantity,
 
-    // Timestamp
-    created_at: new Date().toISOString(),
+      // Timestamp
+      created_at: new Date().toISOString(),
+    };
+
+    navigate("/confirmDetail", { state: { orderPayload } });
   };
 
-  navigate("/confirmDetail", { state: { orderPayload } });
-};
-
+  const toOptions = (arr = []) => arr.map((x) => ({ label: String(x), value: x }));
 
   return (
     <div className="screen4-bg">
-      {/* ADDED PRODUCTS INSIDE CARD */}
-
       {/* HEADER */}
       <div className="header">
         <img src="/logo.png" className="logo4" alt="logo" />
@@ -213,120 +382,202 @@ const [attachments, setAttachments] = useState("");
 
       <div className="screen4-card">
         <h2 className="product-title">Product</h2>
+
+        {/* ADDED PRODUCTS INSIDE CARD */}
         {orderItems.length > 0 && (
           <div className="added-products-box added-products-top">
-            
+            {orderItems.map((item, i) => {
+              const productMeta = products.find((p) => p.id === item.product_id) || {};
+              const expanded = !!expandedRowIds[item._id];
 
-            {orderItems.map((item, i) => (
-              <div className="added-product-row" key={i}>
-                <span>
-                  {i + 1}. {item.product_name} ({item.size}) × {item.quantity}
-                </span>
-              </div>
-            ))}
+              return (
+                <div className="added-product-row" key={item._id}>
+                  <span className="product-info">
+                    {i + 1}. Name: {item.product_name}, Size: {item.size}, Qty: {item.quantity}, Price: ₹{item.price}
+                  </span>
+
+                  <div className="product-buttons">
+                    <button
+                      className="expand"
+                      onClick={() => toggleExpand(item._id)}
+                      title={expanded ? "Collapse" : "Expand to edit"}
+                    >
+                      {expanded ? "−" : "✚"}
+                    </button>
+                    <button className="delete" onClick={() => handleDelete(item._id)} title="Remove">
+                      🗑
+                    </button>
+                  </div>
+
+                  {/* Simple editable form (plain inputs) */}
+                  {expanded && (
+                    <div className="row expand-panel simple-edit">
+                      {/* Color */}
+                      <div className="field">
+                        <label>Color</label>
+                        <input
+                          type="text"
+                          className="input-line"
+                          value={item.color || ""}
+                          onChange={(e) => updateItem(item._id, { color: e.target.value })}
+                          placeholder="Enter color"
+                        />
+                      </div>
+
+                      {/* Top */}
+                      <div className="field">
+                        <label>Top</label>
+                        <input
+                          type="text"
+                          className="input-line"
+                          value={item.top || ""}
+                          onChange={(e) => updateItem(item._id, { top: e.target.value })}
+                          placeholder="Enter top"
+                        />
+                      </div>
+
+                      {/* Bottom */}
+                      <div className="field">
+                        <label>Bottom</label>
+                        <input
+                          type="text"
+                          className="input-line"
+                          value={item.bottom || ""}
+                          onChange={(e) => updateItem(item._id, { bottom: e.target.value })}
+                          placeholder="Enter bottom"
+                        />
+                      </div>
+
+                      {/* Extra */}
+                      <div className="field">
+                        <label>Extra</label>
+                        <input
+                          type="text"
+                          className="input-line"
+                          value={item.extra || ""}
+                          onChange={(e) => updateItem(item._id, { extra: e.target.value })}
+                          placeholder="Enter extra"
+                        />
+                      </div>
+
+                      {/* Size */}
+                      <div className="field">
+                        <label>Size</label>
+                        <input
+                          type="text"
+                          className="input-line"
+                          value={item.size || ""}
+                          onChange={(e) => updateItem(item._id, { size: e.target.value })}
+                          placeholder="e.g. S / M / L or custom"
+                        />
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="field" style={{ maxWidth: 160 }}>
+                        <label>Quantity</label>
+                        <input
+                          type="number"
+                          min={1}
+                          className="input-line"
+                          value={item.quantity ?? 1}
+                          onChange={(e) =>
+                            updateItem(item._id, {
+                              quantity: Math.max(1, Number(e.target.value || 1)),
+                            })
+                          }
+                        />
+                      </div>
+
+                      {/* Price */}
+                      <div className="field" style={{ maxWidth: 200 }}>
+                        <label>Price (₹)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="input-line"
+                          value={item.price ?? 0}
+                          onChange={(e) => updateItem(item._id, { price: Number(e.target.value || 0) })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
         {/* PRODUCT ROW */}
-       <div className="row">
-  {/* PRODUCT SELECT */}
-  <div className="field">
-    {/* <label>Select Product</label> */}
-    <select
-      value={selectedProduct?.id || ""}
-      onChange={(e) =>
-        setSelectedProduct(products.find((p) => p.id == e.target.value))
-      }
-    >
-      <option value="" > Select Product</option>
-      {products.map((p) => (
-        <option key={p.id} value={p.id} >
-          {p.name}
-        </option>
-      ))}
-    </select>
+        <div className="row">
+          {/* PRODUCT SELECT */}
+          <div className="field">
+            <SearchableSelect
+              options={products.map((p) => ({ label: p.name, value: p.id }))}
+              value={selectedProduct?.id || ""}
+              onChange={(val) =>
+                setSelectedProduct(
+                  products.find((p) => String(p.id) === String(val)) || null
+                )
+              }
+              placeholder="Select Product"
+            />
 
-    {/* PRICE DISPLAY */}
-    {selectedProduct && (
-      <p className="product-price">
-        Price: <strong>₹{selectedProduct.price}</strong>
-      </p>
-    )}
-  </div>
+            {/* PRICE DISPLAY */}
+            {selectedProduct && (
+              <p className="product-price">
+                Price: <strong>₹{selectedProduct.price}</strong>
+              </p>
+            )}
+          </div>
 
-  {/* COLOR */}
-  <div className="field">
-    {/* <label>Select Color</label> */}
-    <select
-      value={selectedColor}
-      onChange={(e) => setSelectedColor(e.target.value)}
-    >
-      <option value="" >Select Color</option>
-      {colors.map((c, i) => (
-        <option key={i} value={c}>
-          {c}
-        </option>
-      ))}
-    </select>
-  </div>
+          {/* COLOR */}
+          <div className="field">
+            <SearchableSelect
+              options={toOptions(colors)}
+              value={selectedColor}
+              onChange={setSelectedColor}
+              placeholder="Select Color"
+            />
+          </div>
 
-  {/* QUANTITY */}
-  <div className="qty-field">
-    <label>Qty</label>
-    <div className="qty-controls">
-      <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}>−</button>
-      <span>{quantity}</span>
-      <button onClick={() => setQuantity((q) => q + 1)}>+</button>
-    </div>
-  </div>
-</div>
-
+          {/* QUANTITY */}
+          <div className="qty-field">
+            <label>Qty</label>
+            <div className="qty-controls">
+              <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}>−</button>
+              <span>{quantity}</span>
+              <button onClick={() => setQuantity((q) => q + 1)}>+</button>
+            </div>
+          </div>
+        </div>
 
         {/* TOP / BOTTOM / EXTRA */}
         <div className="row">
           <div className="field">
-            {/* <label>Select Top</label> */}
-            <select
+            <SearchableSelect
+              options={toOptions(tops)}
               value={selectedTop}
-              onChange={(e) => setSelectedTop(e.target.value)}
-            >
-              <option value="" >Select Top</option>
-              {tops.map((t, i) => (
-                <option key={i} value={t} >
-                  {t}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedTop}
+              placeholder="Select Top"
+            />
           </div>
 
           <div className="field">
-            {/* <label>Select Bottom</label> */}
-            <select
+            <SearchableSelect
+              options={toOptions(bottoms)}
               value={selectedBottom}
-              onChange={(e) => setSelectedBottom(e.target.value)}
-            >
-              <option value="" >Select Bottom</option>
-              {bottoms.map((b, i) => (
-                <option key={i} value={b} >
-                  {b}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedBottom}
+              placeholder="Select Bottom"
+            />
           </div>
 
           <div className="field">
-            {/* <label>Select Extras</label> */}
-            <select
+            <SearchableSelect
+              options={toOptions(extras)}
               value={selectedExtra}
-              onChange={(e) => setSelectedExtra(e.target.value)}
-            >
-              <option value="" >Select Extra</option>
-              {extras.map((x, i) => (
-                <option key={i} value={x} >
-                  {x}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedExtra}
+              placeholder="Select Extra"
+            />
           </div>
         </div>
 
@@ -349,10 +600,7 @@ const [attachments, setAttachments] = useState("");
         {/* MEASUREMENTS */}
         <div className="measure-bar">
           <span>Custom Measurements</span>
-          <button
-            className="plus-btn"
-            onClick={() => setShowMeasurements(!showMeasurements)}
-          >
+          <button className="plus-btn" onClick={() => setShowMeasurements(!showMeasurements)}>
             {showMeasurements ? "−" : "+"}
           </button>
         </div>
@@ -363,11 +611,7 @@ const [attachments, setAttachments] = useState("");
               {measurementCategories.map((cat) => (
                 <div
                   key={cat}
-                  className={
-                    activeCategory === cat
-                      ? "measure-item active"
-                      : "measure-item"
-                  }
+                  className={activeCategory === cat ? "measure-item active" : "measure-item"}
                   onClick={() => setActiveCategory(cat)}
                 >
                   {cat}
@@ -393,7 +637,7 @@ const [attachments, setAttachments] = useState("");
         {/* DELIVERY */}
         <div className="row">
           <div className="field">
-            <label >Delivery Date</label>
+            <label>Delivery Date</label>
             <input
               type="date"
               className="input-line"
@@ -403,50 +647,50 @@ const [attachments, setAttachments] = useState("");
           </div>
 
           <div className="field">
-            {/* <label>Mode of Delivery</label> */}
-            <select
+            <SearchableSelect
+              options={[
+                { label: "Home Delivery", value: "Home Delivery" },
+                { label: "Store Pickup", value: "Store Pickup" },
+              ]}
               value={modeOfDelivery}
-              onChange={(e) => setModeOfDelivery(e.target.value)}
-            >
-              <option value="" > Mode of Delivery</option>
-              <option value="Home Delivery" >Home Delivery</option>
-              <option value="Store Pickup" >Store Pickup</option>
-            </select>
+              onChange={setModeOfDelivery}
+              placeholder="Mode of Delivery"
+            />
           </div>
 
           <div className="field">
-            {/* <label>Order Flag</label> */}
-            <select
+            <SearchableSelect
+              options={[
+                { label: "Urgent", value: "Urgent" },
+                { label: "Normal", value: "Normal" },
+              ]}
               value={orderFlag}
-              onChange={(e) => setOrderFlag(e.target.value)}
-            >
-              <option value="" >Order Flag</option>
-              <option value="Urgent" >Urgent</option>
-              <option value="Normal" >Normal</option>
-            </select>
+              onChange={setOrderFlag}
+              placeholder="Order Flag"
+            />
           </div>
         </div>
 
         {/* COMMENTS */}
         <div className="row">
           <div className="field">
-            <label >Comments</label>
+            <label>Comments</label>
             <input
-  className="input-line"
-  placeholder=""
-  value={comments}
-  onChange={(e) => setComments(e.target.value)}
-/>
+              className="input-line"
+              placeholder=""
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+            />
           </div>
 
           <div className="field">
-            <label >Attachments</label>
+            <label>Attachments</label>
             <input
-  className="input-line"
-  placeholder=""
-  value={attachments}
-  onChange={(e) => setAttachments(e.target.value)}
-/>
+              className="input-line"
+              placeholder=""
+              value={attachments}
+              onChange={(e) => setAttachments(e.target.value)}
+            />
           </div>
         </div>
 
@@ -486,3 +730,5 @@ const [attachments, setAttachments] = useState("");
     </div>
   );
 }
+
+
