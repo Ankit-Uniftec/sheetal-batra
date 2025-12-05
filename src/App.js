@@ -13,7 +13,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<SALogin />} />
+        <Route path="/login" element={<SALogin />} />
         <Route path="/buyerVerification" element={<Screen1 />} />
         <Route path="/otp" element={<Screen2 />} />
         <Route path="/userinfo" element={<Screen3 />} /> 

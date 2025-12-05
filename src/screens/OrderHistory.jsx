@@ -95,10 +95,10 @@ export default function OrderHistory() {
           return;
         }
       }
-      navigate("/", { replace: true });
+      navigate("/login", { replace: true });
     } catch (e) {
       console.error("Logout restore error", e);
-      navigate("/", { replace: true });
+      navigate("/login", { replace: true });
     }
   };
 

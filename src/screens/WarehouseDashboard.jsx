@@ -12,7 +12,7 @@ const WarehouseDashboard = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/");
+    navigate("/login");
   };
 
   // Format measurements safely

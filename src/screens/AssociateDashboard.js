@@ -133,7 +133,7 @@ export default function Dashboard() {
   // ---------------------------------------------
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/");
+    navigate("/login");
     localStorage.removeItem("sp_email");
     localStorage.removeItem("sp_id");
   };
