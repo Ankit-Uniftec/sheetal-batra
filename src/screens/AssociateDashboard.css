@@ -3,12 +3,15 @@
 }
 
 .dashboard-wrapper {
-  height: 100%;
+  
+  min-height: 100vh;
   width: 100%;
+
+
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
   background-position: center;
-  background-repeat: repeat;
+  background-repeat: no-repeat;
   background-attachment: fixed;
   padding: 40px 60px;
   display: flex;
@@ -329,6 +332,7 @@
     width: 45px;
     height: 45px;
   }
+  
 }
 .password-modal {
   position: fixed;
@@ -372,4 +376,85 @@
 .error-text {
   color: red;
   margin-top: 10px;
+}
+
+
+.order-details-tab {
+  padding: 20px;
+  grid-column: 2 / -1; /* span full width */
+  width: 100%;
+}
+
+
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Center & size order cards same as OrderHistory */
+.order-details-tab .order-card {
+  width: 760px;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 16px !important;
+  padding: 14px !important;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(0,0,0,.06) !important;
+  position: relative;
+}
+
+/* Thumbnail image identical to OrderHistory */
+.order-details-tab .thumb img {
+  width: 140px !important;
+  height: 190px !important;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+/* Ensure layout spacing matches */
+.order-details-tab .order-row {
+  display: flex;
+  gap: 16px;
+}
+
+/* Align badge same as OrderHistory */
+.order-details-tab .state-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+/* Make grid layout match */
+.order-details-tab .grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px 18px !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .order-details-tab .order-card {
+    width: 700px;
+  }
+}
+
+@media (max-width: 700px) {
+  .order-details-tab .order-card {
+    width: 100%;
+  }
+
+  .order-details-tab .order-row {
+    flex-direction: column;
+  }
+
+  .order-details-tab .thumb img {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  .order-details-tab .grid-2 {
+    grid-template-columns: 1fr;
+  }
 }
