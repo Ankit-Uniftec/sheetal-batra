@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "../screens/Screen3.css";
 import Logo from "../images/logo.png";
+
 function Screen3() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -14,62 +15,66 @@ function Screen3() {
   const [gender, setGender] = useState("");
   const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [pincode, setPincode] = useState("");
   const [loading, setLoading] = useState(false);
 
   const saveUserInfo = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) {
-    alert("User not logged in.");
-    return;
-  }
+    if (!user) {
+      alert("User not logged in.");
+      return;
+    }
 
-  if (!fullName || !email) {
-    alert("Full Name and Email are required.");
-    return;
-  }
+    if (!fullName || !email) {
+      alert("Full Name and Email are required.");
+      return;
+    }
 
-  setLoading(true);
+    setLoading(true);
 
-  const normalized = "+91" + phoneNumber.replace(/\D/g, "").slice(-10);
+    const normalized = "+91" + phoneNumber.replace(/\D/g, "").slice(-10);
 
-  const { error } = await supabase.from("profiles").upsert({
-    id: user.id,          // VERY IMPORTANT
-    full_name: fullName,
-    gender,
-    phone: normalized,
-    email,
-    dob,
-    address,
-    city,
-    state,
-    pincode,
-    created_at: new Date(),
-  });
+    const { error } = await supabase.from("profiles").upsert({
+      id: user.id,
+      full_name: fullName,
+      gender,
+      phone: normalized,
+      email,
+      dob,
+      created_at: new Date(),
+    });
 
-  setLoading(false);
+    setLoading(false);
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-  alert("Profile saved successfully!");
-  navigate("/product");
-};
+    alert("Profile saved successfully!");
+    navigate("/product");
+  };
 
+  const handleBack = () => {
+    if (location.state?.fromAssociate) {
+      // Send flag so dashboard will require password again
+      navigate("/buyerVerification", {
+
+      });
+    } else {
+      navigate(-1);
+    }
+  };
 
   return (
     <div className="screen3-root">
+      <button className="back-btn" onClick={handleBack}>←</button>
       <div className="card3">
-        <img src={Logo} className="logo3" />
+        <img src={Logo} className="logo3" alt="logo" />
 
-        <h2>Personal information</h2>
+        <h2>Personal Details</h2>
 
+        {/* Row 1 */}
         <div className="row">
           <div className="input-box">
             <label>Full name*</label>
@@ -78,10 +83,16 @@ function Screen3() {
 
           <div className="input-box">
             <label>Gender</label>
-            <input value={gender} onChange={(e) => setGender(e.target.value)} />
+            <select value={gender} onChange={(e) => setGender(e.target.value)}>
+              <option value="">⏷</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
           </div>
+
         </div>
 
+        {/* Row 2 */}
         <div className="row">
           <div className="input-box">
             <label>Phone number*</label>
@@ -94,30 +105,8 @@ function Screen3() {
           </div>
 
           <div className="input-box">
-            <label>DOB</label>
+            <label>Date of Birth</label>
             <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="input-box">
-          <label>Address</label>
-          <input value={address} onChange={(e) => setAddress(e.target.value)} />
-        </div>
-
-        <div className="row">
-          <div className="input-box">
-            <label>City</label>
-            <input value={city} onChange={(e) => setCity(e.target.value)} />
-          </div>
-
-          <div className="input-box">
-            <label>State</label>
-            <input value={state} onChange={(e) => setState(e.target.value)} />
-          </div>
-
-          <div className="input-box">
-            <label>Pincode</label>
-            <input value={pincode} onChange={(e) => setPincode(e.target.value)} />
           </div>
         </div>
 
