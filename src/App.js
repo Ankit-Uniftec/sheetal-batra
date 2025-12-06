@@ -9,10 +9,13 @@ import SALogin from "./screens/SALogin";
 import AssociateDashboard from "./screens/AssociateDashboard";
 import WarehouseDashboard from "./screens/WarehouseDashboard";
 import OrderHistory from "./screens/OrderHistory";
+import {  Navigate } from "react-router-dom";
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<SALogin />} />
         <Route path="/buyerVerification" element={<Screen1 />} />
         <Route path="/otp" element={<Screen2 />} />
