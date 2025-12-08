@@ -626,7 +626,7 @@ export default function Screen4() {
               <div className="measure-grid">
                 {measurementFields[activeCategory].map((field) => (
                   <div className="measure-field" key={field}>
-                    <label>{field} *</label>
+                    <label>{field} </label>
                     <input placeholder={`Enter ${field.toLowerCase()}..`} />
                   </div>
                 ))}
