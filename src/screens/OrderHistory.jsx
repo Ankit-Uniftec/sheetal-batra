@@ -218,9 +218,9 @@ export default function OrderHistory() {
                           </div>
 
                           {/* flag */}
-                          <span className={`flag ${flagClass}`}>
+                          {/* <span className={`flag ${flagClass}`}>
                             {order.order_flag || "—"}
-                          </span>
+                          </span> */}
                         </div>
 
                         <div className="grid-2">

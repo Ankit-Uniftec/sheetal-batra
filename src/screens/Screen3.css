@@ -118,20 +118,36 @@ h2 {
   margin-bottom: 15px;
   flex-wrap: wrap; /* fixes overflow */
 }
+/* MATCH SELECT WITH INPUT */
+/* MATCH SELECT WITH INPUT — FIX BORDER NOT SHOWING */
 select {
   padding: 12px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  background-color: #FFFFFF !important; /* force white */
+  padding-right: 35px;           /* space for arrow — prevents border overlap */
+  border-radius: 3px;
+  border: 1px solid #ccc !important;   /* ensure border shows */
+
+  background-color: #FFFFFF !important;
+  background-clip: padding-box;  /* FIX: keeps border visible */
+  
   font-size: 14px;
-  appearance: none;        /* removes default arrow (optional) */
+  height: 44px;                  /* exact height match */
+
+  appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
+
+  /* Custom dropdown arrow */
+  background-image: url("data:image/svg+xml;utf8,<svg fill='gray' height='14' viewBox='0 0 20 20' width='14' xmlns='http://www.w3.org/2000/svg'><polygon points='0,0 20,0 10,10'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
 }
 
 
 
-.input-box {
+
+
+.input-box { 
   flex: 1;
   min-width: 150px; /* ensures it stays inside card */
   display: flex;

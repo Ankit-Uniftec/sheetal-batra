@@ -376,6 +376,52 @@ select,
 }
 
 
+/* Hide the ugly default file input */
+.custom-file-upload input[type="file"] {
+  display: none;
+}
+
+/* Your custom upload button */
+.upload-btn {
+  display: inline-block;
+        /* Gold color like your theme */
+  color: white;
+  padding: 10px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* On hover */
+/* .upload-btn:hover {
+  background: #b99845;
+} */
+
+/* Preview box */
+/* Preview container aligned horizontally */
+.attachment-preview {
+  margin-top: 8px;
+  display: flex;
+  gap: 12px;            /* spacing between file names */
+  flex-wrap: wrap;      /* wrap when too long */
+  align-items: center;  /* aligns with the label horizontally */
+}
+
+/* Preview text (file names) */
+.file-item {
+  color: #000 !important;     /* black text */
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none !important;  /* remove underline completely */
+  cursor: default;             /* not clickable */
+  margin-bottom: 7px;
+}
+
+
+
+
+
 @media (max-width: 700px) {
   .summary-box-fixed {
     position: relative;

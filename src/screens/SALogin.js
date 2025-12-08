@@ -96,7 +96,7 @@ const { data: { user } } = await supabase.auth.signInWithPassword({ email, passw
           />
 
           <button className="btn" onClick={handleLogin} disabled={loading}>
-            {loading ? "Signing in..." : "Signin"}
+            {loading ? "Signing in..." : "Sign In"}
           </button>
         </div>
 

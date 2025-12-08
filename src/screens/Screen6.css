@@ -121,12 +121,35 @@
   color: #000 !important;
 }
 
+.input-select {
+  background-color: transparent !important;   /* remove white */
+  border: none !important;                    /* remove border */
+  padding: 12px;
+  border-radius: 5px;
+  font-size: 15px;
+  font-family: "Jost", sans-serif;
+  outline: none !important;                   /* remove focus border */
+  appearance: none;                           
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  color: #111;
+  
+  
+}
+
+/* Also remove border in dropdown list */
+.input-select option {
+  border: none !important;
+  background-color: #f5f5f5 !important; /* match your card */
+  color: #111;
+}
+
 
 
 /* Dropdown option text */
 .input-select option {
   color: #000;
-  background: #fff;
+  
 }
 .full-width {
   grid-column: span 3;

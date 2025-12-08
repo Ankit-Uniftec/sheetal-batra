@@ -167,7 +167,8 @@ export default function Screen4() {
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [comments, setComments] = useState("");
-  const [attachments, setAttachments] = useState("");
+  const [attachments, setAttachments] = useState([]);
+
 
   const [colors, setColors] = useState([]);
   const [tops, setTops] = useState([]);
@@ -197,6 +198,7 @@ export default function Screen4() {
   const [activeCategory, setActiveCategory] = useState("Shirts");
 
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
+  const [availableSizes, setAvailableSizes] = useState([]);
 
   const measurementCategories = [
     "Shirts",
@@ -265,6 +267,10 @@ export default function Screen4() {
     setBottoms(selectedProduct.bottom_options || []);
     setExtras(selectedProduct.extra_options || []);
 
+    //dynamic sizes
+    setAvailableSizes(selectedProduct.available_size || []);
+    setSelectedSize(selectedProduct.available_size?.[0] || "");
+
     setSelectedColor("");
     setSelectedTop("");
     setSelectedBottom("");
@@ -316,6 +322,45 @@ export default function Screen4() {
   const subtotal = orderItems.length > 0 ? cartSubtotal : liveSubtotal;
   const taxes = subtotal * 0.18;
   const totalOrder = subtotal + taxes;
+
+  const handleFileUpload = async (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const uploadedUrls = [];
+
+    for (const file of files) {
+      const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const fileName = `${Date.now()}_${cleanName}`;
+      const filePath = `attachments/${fileName}`;
+
+      console.log("Uploading:", filePath);
+
+      const { data, error } = await supabase.storage
+        .from("attachments")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type || "application/octet-stream",
+        });
+
+      if (error) {
+        console.error("Upload failed:", error);
+        alert("Upload failed: " + error.message);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("attachments")
+        .getPublicUrl(filePath);
+
+      uploadedUrls.push(urlData.publicUrl);
+    }
+
+    setAttachments(uploadedUrls);
+  };
+
+
 
   // SAVE ORDER
   const saveOrder = () => {
@@ -473,6 +518,7 @@ export default function Screen4() {
                         />
                       </div>
 
+
                       {/* Quantity */}
                       <div className="field" style={{ maxWidth: 160 }}>
                         <label>Quantity</label>
@@ -583,20 +629,27 @@ export default function Screen4() {
         </div>
 
         {/* SIZE */}
+
         <div className="size-box">
           <span className="size-label">Size:</span>
+
           <div className="sizes">
-            {["XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL"].map((s, i) => (
-              <button
-                key={i}
-                className={selectedSize === s ? "size-btn active" : "size-btn"}
-                onClick={() => setSelectedSize(s)}
-              >
-                {s}
-              </button>
-            ))}
+            {Array.isArray(availableSizes) && availableSizes.length > 0 ? (
+              availableSizes.map((s, i) => (
+                <button
+                  key={i}
+                  className={selectedSize === s ? "size-btn active" : "size-btn"}
+                  onClick={() => setSelectedSize(s)}
+                >
+                  {s}
+                </button>
+              ))
+            ) : (
+              <span style={{ opacity: 0.6 }}>No sizes available</span>
+            )}
           </div>
         </div>
+
 
         {/* MEASUREMENTS */}
         <div className="measure-bar">
@@ -684,15 +737,35 @@ export default function Screen4() {
             />
           </div>
 
+
           <div className="field">
             <label>Attachments</label>
-            <input
-              className="input-line"
-              placeholder=""
-              value={attachments}
-              onChange={(e) => setAttachments(e.target.value)}
-            />
+
+            <div className="custom-file-upload">
+              <label className="upload-btn">
+                Upload Files
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx"
+                  multiple
+                  onChange={handleFileUpload}
+                />
+              </label>
+            </div>
+
+            {attachments && attachments.length > 0 && (
+              <div className="attachment-preview">
+                {attachments.map((url, idx) => (
+                  <span key={idx} className="file-item">
+                    {url.split("/").pop()}
+                  </span>
+                ))}
+              </div>
+            )}
+
           </div>
+
+
         </div>
 
         {/* ALWAYS-VISIBLE SUMMARY */}

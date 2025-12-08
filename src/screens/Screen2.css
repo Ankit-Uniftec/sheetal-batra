@@ -70,8 +70,10 @@ body { margin: 0; }
 .otp-text {
   
   /* margin: 10px 0; */
+  
   color: #555;
   font-family: "Jost", sans-serif !important;
+  font-size: 15px ! important;
 }
 
 /* Inputs area mirrors .input width/height from screen1 */
@@ -83,6 +85,8 @@ body { margin: 0; }
   margin: 18px auto;
   
   
+  
+  
 }
 .otpBox{
   margin-top: 80px;
@@ -90,20 +94,21 @@ body { margin: 0; }
 
 /* Each OTP input aligns with screen1 input height and border */
 .otp-input {
-  width: 45px;
+  width: 55px;
   height: 56px;
   border: 1px solid #aaa;
   border-radius: 3px;
   font-size: 18px;
   text-align: center;
-   /* same vertical rhythm as .input on screen1 */
+   
   margin-right: 8px;
   outline: none;
 }
 
+
 /* Button matches .btn from screen1 */
 .btn2 {
-  width: 90%;
+  width: 99%;
   margin-top: 24px;
   height: 56px;
   padding: 12px;

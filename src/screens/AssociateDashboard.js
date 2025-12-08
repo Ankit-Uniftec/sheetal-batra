@@ -218,7 +218,8 @@ export default function Dashboard() {
               <div className="orders-card">
                 <div className="card-header">
                   <span className="card-title">Active Orders</span>
-                  <button className="view-btn">View All</button>
+                  <button className="view-btn" onClick={() => setActiveTab("orders")}>View All</button>
+                  
                 </div>
 
                 <div className="card-box" style={{ overflow: "auto", height: "200px" }}>
@@ -249,95 +250,87 @@ export default function Dashboard() {
 
         {/* ------------- ORDER DETAILS TAB (OrderHistory UI) ------------ */}
         {activeTab === "orders" && (
-  <div className="order-details-tab oh-card-stack">
-    <h2 className="order-title">Order Details</h2>
+          <div className="order-details-wrapper">
 
-    {orders.length === 0 && (
-      <p className="muted">No orders found for this associate.</p>
-    )}
+            <h2 className="order-title">Order Details</h2>
 
-    {orders.map((order) => {
-      const item = order.items?.[0] || {};
-      const imgSrc = item.image || "/placeholder.png";
+            <div className="order-list-scroll">
+              {orders.length === 0 && (
+                <p className="muted">No orders found for this associate.</p>
+              )}
 
-      return (
-        <div key={order.id} className="order-card">
+              {orders.map((order) => {
+                const item = order.items?.[0] || {};
+                const imgSrc = item.image || "/placeholder.png";
 
-          {/* Status Badge */}
-          <div className={`state-badge ${order.status === "complete" ? "complete" : "active"}`}>
-            {order.status === "complete" ? "Complete" : "Active"}
-          </div>
+                return (
+                  <div key={order.id} className="order-card">
+                    {/* Status Badge */}
+                    <div className={`state-badge ${order.status === "complete" ? "complete" : "active"}`}>
+                      {order.status === "complete" ? "Complete" : "Active"}
+                    </div>
 
-          <div className="order-row">
+                    <div className="order-row">
+                      <div className="thumb">
+                        <img src={imgSrc} alt={item.product_name || "Product"} />
+                      </div>
 
-            {/* Product Thumbnail */}
-            <div className="thumb">
-              <img src={imgSrc} alt={item.product_name || "Product"} />
-            </div>
+                      <div className="details">
+                        <div className="row space">
+                          <div className="kv"></div>
+                          <div className="kv"></div>
+                          <div className="kv">
+                            <div className="small muted">EDD</div>
+                            <div>{order.delivery_date || "—"}</div>
+                          </div>
+                        </div>
 
-            {/* Details Section */}
-            <div className="details">
+                        <div className="grid-2">
+                          <div className="kv">
+                            <div className="label">Product Name</div>
+                            <div className="value">{item.product_name || "—"}</div>
+                          </div>
 
-              {/* Top Row (EDD only) */}
-              <div className="row space">
-                
-                <div className="kv"></div>
-                <div className="kv"></div>
+                          <div className="kv">
+                            <div className="label">Amount</div>
+                            <div className="value">₹{order.grand_total ?? "—"}</div>
+                          </div>
 
-                <div className="kv">
-                  <div className="small muted">EDD</div>
-                  <div>{order.delivery_date || "—"}</div>
-                </div>
-              </div>
+                          <div className="kv">
+                            <div className="label">Qty</div>
+                            <div className="value">{order.total_quantity ?? "—"}</div>
+                          </div>
 
-              {/* Two Column Grid */}
-              <div className="grid-2">
+                          <div className="kv">
+                            <div className="label">Color</div>
+                            <div className="value">{item.color || "—"}</div>
+                          </div>
 
-                <div className="kv">
-                  <div className="label">Product Name</div>
-                  <div className="value">{item.product_name || "—"}</div>
-                </div>
+                          <div className="kv">
+                            <div className="label">Size</div>
+                            <div className="value">{item.size || "—"}</div>
+                          </div>
 
-                <div className="kv">
-                  <div className="label">Amount</div>
-                  <div className="value">₹{order.grand_total ?? "—"}</div>
-                </div>
+                          <div className="kv">
+                            <div className="label">SA</div>
+                            <div className="value">
+                              {order.salesperson || "-"}{" "}
+                              {order.salesperson_phone ? `(${order.salesperson_phone})` : ""}
+                            </div>
+                          </div>
+                        </div>
 
-                <div className="kv">
-                  <div className="label">Qty</div>
-                  <div className="value">{order.total_quantity ?? "—"}</div>
-                </div>
-
-                <div className="kv">
-                  <div className="label">Color</div>
-                  <div className="value">{item.color || "—"}</div>
-                </div>
-
-                <div className="kv">
-                  <div className="label">Size</div>
-                  <div className="value">{item.size || "—"}</div>
-                </div>
-
-                <div className="kv">
-                  <div className="label">SA</div>
-                  <div className="value">
-                    {order.salesperson || "-"}{" "}
-                    {order.salesperson_phone ? `(${order.salesperson_phone})` : ""}
+                        {/* <button className="view-btn">View order details</button> */}
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-              </div>
-
-              {/* Button */}
-              <button className="view-btn">View order details</button>
-
+                );
+              })}
             </div>
+
           </div>
-        </div>
-      );
-    })}
-  </div>
-)}
+        )}
+
 
       </div>
 

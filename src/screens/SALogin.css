@@ -51,10 +51,10 @@
 }
 
 .input {
-  width: 90%;
+  width: 99%;
   height: 56px;
   padding: 12px;
-  margin-top: 40px;
+  margin-top: 65px;
   border-radius: 3px;
   border: 1px solid #aaa;
   box-sizing: border-box;
@@ -62,7 +62,7 @@
 }
 
 .btn {
-  width: 90%;
+  width: 99%;
   margin-top: 30px;
   height: 56px;
   padding: 12px;

@@ -12,7 +12,7 @@ function Screen3() {
 
   // State
   const [fullName, setFullName] = useState("");
-  const [gender, setGender] = useState("");
+  const [gender, setGender] = useState("Female");
   const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
   const [loading, setLoading] = useState(false);
@@ -87,6 +87,7 @@ function Screen3() {
               <option value="">⏷</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
+              <option value="Others">Others</option>
             </select>
           </div>
 
