@@ -87,4 +87,29 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+} 
+
+.password-wrapper {
+  position: relative;
+  width: 100%;
 }
+
+.eye-icon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-9%);  /* <-- FIXED FOR YOUR EXACT INPUT STYLE */
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+
+
+
+.password-wrapper .input {
+  padding-right: 45px !important; /* Add spacing so text doesn't overlap */
+}
+

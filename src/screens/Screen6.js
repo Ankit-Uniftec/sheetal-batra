@@ -137,10 +137,10 @@ export default function Screen6() {
       <div className="screen6-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
         <img src={Logo} className="sheetal-logo" alt="logo" />
-        <button className="sharebtn">Share</button>
+        
       </div>
 
-      <h2 className="title">Confirm Your Details</h2>
+      <h2 className="title">Order Form</h2>
 
       <div className="screen6-container">
 
