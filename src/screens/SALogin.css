@@ -98,7 +98,7 @@
   position: absolute;
   right: 14px;
   top: 50%;
-  transform: translateY(-9%);  /* <-- FIXED FOR YOUR EXACT INPUT STYLE */
+  transform: translateY(10%);  /* <-- FIXED FOR YOUR EXACT INPUT STYLE */
   cursor: pointer;
   font-size: 22px;
   line-height: 1;

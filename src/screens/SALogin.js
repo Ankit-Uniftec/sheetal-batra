@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./SALogin.css";
 import Logo from "../images/logo.png";
+import eye from "../images/eye.svg"
+import eyeOff from "../images/eyeOff.svg"
 
 export default function SALogin() {
   const navigate = useNavigate();
@@ -81,12 +83,18 @@ export default function SALogin() {
               style={{ marginTop: "24px" }}
             />
 
-            <span
+            {/* <span
               className="eye-icon"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? "" : ""}
+              {showPassword ? {eye} : ""}
+            </span> */}
+           
+
+            <span className="eye-icon" onClick={() => setShowPassword(!showPassword)}>
+              <img src={showPassword ? eyeOff : eye} alt="toggle visibility" width={20} />
             </span>
+
           </div>
           {/* *************************************** */}
 
@@ -102,3 +110,4 @@ export default function SALogin() {
     </div>
   );
 }
+
