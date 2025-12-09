@@ -180,7 +180,7 @@ export default function Screen4() {
   const [selectedBottom, setSelectedBottom] = useState("");
   const [selectedExtra, setSelectedExtra] = useState("");
 
-  const [selectedSize, setSelectedSize] = useState("S");
+  const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
 
   const [modeOfDelivery, setModeOfDelivery] = useState("");
@@ -252,11 +252,24 @@ export default function Screen4() {
   // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
-      const { data } = await supabase.from("products").select("*");
-      setProducts(data || []);
+      const { data: productsData, error } = await supabase
+        .from("products")
+        .select(`
+        *,
+        product_extra_prices (*)
+      `);
+
+      if (error) {
+        console.error("Error fetching products:", error);
+        return;
+      }
+
+      setProducts(productsData || []);
     };
+
     fetchProducts();
   }, []);
+
 
   // When product changes, load options
   useEffect(() => {
@@ -265,7 +278,11 @@ export default function Screen4() {
     setColors(selectedProduct.colors || []);
     setTops(selectedProduct.top_options || []);
     setBottoms(selectedProduct.bottom_options || []);
-    setExtras(selectedProduct.extra_options || []);
+    // LOAD extras FROM extra price table
+    const extraList =
+      selectedProduct.product_extra_prices?.map((e) => e.extra_option) || [];
+
+    setExtras(extraList);
 
     //dynamic sizes
     setAvailableSizes(selectedProduct.available_size || []);
@@ -293,7 +310,7 @@ export default function Screen4() {
       extra: selectedExtra,
       size: selectedSize,
       quantity: quantity,
-      price: selectedProduct.price || 0,
+      price: getLivePrice(),
       measurements,
     };
 
@@ -315,7 +332,24 @@ export default function Screen4() {
   const cartSubtotal = orderItems.reduce((a, b) => a + b.price * b.quantity, 0);
 
   const liveQuantity = quantity;
-  const livePrice = selectedProduct?.price || 0;
+  const getLivePrice = () => {
+    if (!selectedProduct) return 0;
+
+    // BASE PRICE FIRST
+    let price = selectedProduct.base_price ?? 0;
+
+    // IF EXTRA SELECTED → FIND ITS FINAL PRICE
+    if (selectedExtra) {
+      const extraRow = selectedProduct.product_extra_prices?.find(
+        (e) => e.extra_option === selectedExtra
+      );
+
+      if (extraRow) price = extraRow.final_price;
+    }
+
+    return price;
+  };
+  const livePrice = getLivePrice();
   const liveSubtotal = livePrice * liveQuantity;
 
   const totalQuantity = orderItems.length > 0 ? cartQuantity : liveQuantity;
@@ -572,9 +606,10 @@ export default function Screen4() {
             {/* PRICE DISPLAY */}
             {selectedProduct && (
               <p className="product-price">
-                Price: <strong>₹{selectedProduct.price}</strong>
+                Price: <strong>₹{getLivePrice()}</strong>
               </p>
             )}
+
           </div>
 
           {/* COLOR */}
