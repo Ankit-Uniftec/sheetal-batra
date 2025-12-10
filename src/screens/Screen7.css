@@ -1,0 +1,114 @@
+
+@import "./Screen6.css";
+
+/* Overrides specific to Screen7 layout */
+.screen7 {
+  background-image: url("../images/Screen1bg.png");
+  background-size: cover;
+  background-position: center;
+  min-height: 100vh;
+  padding: 40px;
+}
+
+.screen7-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  text-align: center;
+  font-size: 32px;
+  margin: 40px 0 20px;
+  color: #D5B85A;
+}
+
+/**************** PRODUCT BOX (copied from Screen6) ***************/
+.product-box {
+  display: flex;
+  gap: 25px;
+  margin-top: 25px;
+}
+
+.prod-img {
+  width: 140px;
+  height: 180px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #f2e9d3;
+}
+/* Color name + dot wrapper */
+
+
+
+.product-fields {
+  margin-top: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Make first row Product Name span 2 columns */
+.product-row1 {
+  grid-template-columns: 2fr 1fr !important;
+}
+
+.span2 {
+  grid-column: span 2;
+}
+
+/* Flex row for product name + color */
+.row-flex {
+  display: flex;
+  justify-content: space-between;
+  gap: 40px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+/* Left side (Product Name) takes more width */
+.field-wide {
+  flex: 2;
+}
+
+/* Right side (Color) takes less width */
+.field-small {
+  flex: 1;
+}
+
+/* Ensure both fields show underline correctly */
+.field-wide span,
+.field-small span {
+  width: 100%;
+  display: block;
+}
+
+
+/**************** BUTTON ***************/
+.confirm-btn {
+  display: block;
+  margin: 40px auto;
+  background: #D5B85A;
+  color: white;
+  padding: 14px 50px;
+  font-size: 18px;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+/**************** MOBILE MATCHES SCREEN6 ***************/
+@media (max-width: 600px) {
+  .product-box {
+    flex-direction: column;
+  }
+
+  .prod-row2 {
+    grid-template-columns: 1fr;
+  }
+
+  .prod-img {
+    width: 100%;
+    height: 240px;
+  }
+}

@@ -1,3 +1,5 @@
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 import React, { useEffect, useState } from "react";
 import "./Screen6.css";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -77,9 +79,9 @@ export default function Screen6() {
   if (!profile || !order) return <p>Loading...</p>;
 
   // ------------------------------------------
-  // CONFIRM ORDER
+  // PLACE ORDER -> GO TO SCREEN 7 (NO DB SAVE)
   // ------------------------------------------
-  const confirmOrder = async () => {
+  const confirmOrder = () => {
     // If billing is different, validate
     if (!billingSame) {
       if (!billingAddress || !billingCity || !billingState || !billingPincode) {
@@ -124,11 +126,13 @@ export default function Screen6() {
       created_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("orders").insert(payload);
-    if (error) return alert(error.message);
-
-    alert("Order placed successfully!");
-    navigate("/orderHistory");
+    // ⛔ NO DATABASE SAVE HERE
+    // ✅ JUST NAVIGATE TO SCREEN 7 WITH DATA
+    navigate("/orderDetail", {
+      state: {
+        orderPayload: payload,
+      },
+    });
   };
 
   return (
@@ -137,13 +141,11 @@ export default function Screen6() {
       <div className="screen6-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
         <img src={Logo} className="sheetal-logo" alt="logo" />
-        
       </div>
 
       <h2 className="title">Order Form</h2>
 
       <div className="screen6-container">
-
         {/* DELIVERY DETAILS */}
         {order.mode_of_delivery === "Home Delivery" && (
           <div className="section-box">
@@ -236,9 +238,6 @@ export default function Screen6() {
             </div>
           </div>
 
-          {/* Company & GST Always Visible */}
-         
-
           {/* BILLING ADDRESS — ONLY IF DIFFERENT */}
           {!billingSame && (
             <div className="row3">
@@ -301,8 +300,13 @@ export default function Screen6() {
         <button className="confirm-btn" onClick={confirmOrder}>
           Place Order
         </button>
-
       </div>
     </div>
   );
 }
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+

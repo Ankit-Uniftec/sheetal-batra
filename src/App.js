@@ -22,7 +22,7 @@ function App() {
         <Route path="/userinfo" element={<Screen3 />} /> 
         <Route path="/product" element={<Screen4 />} />
         <Route path="/confirmDetail" element={<Screen6/>}/>
-        <Route path="/payment" element={<Screen7/>}/>
+        <Route path="/orderDetail" element={<Screen7/>}/>
         <Route path="/AssociateDashboard" element={<AssociateDashboard />} />
         <Route path="/warehouseDashboard" element={<WarehouseDashboard />} />
         <Route path="/orderHistory" element={<OrderHistory />} />

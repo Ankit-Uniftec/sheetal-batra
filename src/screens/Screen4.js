@@ -312,6 +312,7 @@ export default function Screen4() {
       quantity: quantity,
       price: getLivePrice(),
       measurements,
+       image_url: selectedProduct.image_url || selectedProduct.image || null,
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -419,6 +420,7 @@ export default function Screen4() {
         quantity,
         price: selectedProduct.price || 0,
         measurements,
+         image_url: selectedProduct.image_url || selectedProduct.image || null,
       });
     }
 

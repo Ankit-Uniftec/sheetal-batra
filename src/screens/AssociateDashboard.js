@@ -222,14 +222,14 @@ export default function Dashboard() {
                   
                 </div>
 
-                <div className="card-box" style={{ overflow: "auto", height: "200px" }}>
+                <div className="card-box" style={{ overflow: "auto", height: "100px",padding:'3px' }}>
                   {activeOrders.length === 0 ? (
                     <p>No active orders</p>
                   ) : (
                     activeOrders.map((o) => (
-                      <div className="order-item" key={o.id}>
-                        <p><b>Order:</b> {o.id}</p>
-                        <p><b>Total:</b> ₹{o.grand_total}</p>
+                      <div className="order-item" key={o.id} >
+                        <p><b>Order No:</b> {o.id}</p>
+                        {/* <p><b>Total:</b> ₹{o.grand_total}</p> */}
                         <p><b>Status:</b> {o.status}</p>
                       </div>
                     ))
