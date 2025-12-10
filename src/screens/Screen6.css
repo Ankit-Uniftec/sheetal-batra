@@ -129,9 +129,9 @@
   font-size: 15px;
   font-family: "Jost", sans-serif;
   outline: none !important;                   /* remove focus border */
-  appearance: none;                           
+  -moz-appearance: none;                           
   -webkit-appearance: none;
-  -moz-appearance: none;
+  appearance: none;
   color: #111;
   
   

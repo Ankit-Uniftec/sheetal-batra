@@ -1,5 +1,3 @@
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 import React, { useEffect, useState } from "react";
 import "./Screen6.css";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -304,8 +302,6 @@ export default function Screen6() {
     </div>
   );
 }
-
-//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 
