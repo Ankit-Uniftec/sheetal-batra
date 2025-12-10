@@ -184,7 +184,7 @@ export default function OrderHistory() {
 
               {orders.map((order) => {
                 const item = order.items?.[0] || {};
-                const imgSrc = publicImageUrl(item.image);
+                const imgSrc = publicImageUrl(item.image_url);
                 const flagClass =
                   order.order_flag?.toLowerCase() === "urgent"
                     ? "flag-urgent"
@@ -255,12 +255,12 @@ export default function OrderHistory() {
                           </div>
                         </div>
 
-                        <button
+                        {/* <button
                           className="view-btn"
                           onClick={() => goToOrderDetails(order)}
                         >
                           View order details
-                        </button>
+                        </button> */}
                       </div>
                     </div>
                   </div>

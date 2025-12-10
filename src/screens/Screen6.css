@@ -336,3 +336,57 @@
     padding-right: max(18px, env(safe-area-inset-right));
   }
 }
+
+
+
+/*signature modal css*/
+.signature-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.signature-box {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  width: 600px;
+  text-align: center;
+  position: relative;
+}
+
+.sig-canvas {
+  border: 2px solid #D5B85A;
+  border-radius: 10px;
+  background: #fffdf4;
+  margin-top: 15px;
+}
+
+.sig-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+}
+
+.sig-buttons button {
+  background: #D5B85A;
+  color: white;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.close-modal {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
