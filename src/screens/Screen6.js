@@ -4,7 +4,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Logo from "../images/logo.png";
-import SignatureCanvas from "react-signature-canvas";
 
 export default function Screen6() {
   const navigate = useNavigate();
@@ -30,10 +29,6 @@ export default function Screen6() {
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryState, setDeliveryState] = useState("");
   const [deliveryPincode, setDeliveryPincode] = useState("");
-
-  // Signature Modal
-  const [showSignature, setShowSignature] = useState(false);
-  const [sigPad, setSigPad] = useState(null);
 
   const norm = (v) => (v || "").trim();
 
@@ -81,7 +76,7 @@ export default function Screen6() {
   if (!profile || !order) return <p>Loading...</p>;
 
   // -------------------------------
-  // STEP 1 → OPEN SIGNATURE MODAL
+  // CONTINUE TO NEXT SCREEN
   // -------------------------------
   const confirmOrder = () => {
     if (!billingSame) {
@@ -90,91 +85,40 @@ export default function Screen6() {
         return;
       }
     }
-    setShowSignature(true); // Open signature modal
-  };
 
-  // -------------------------------
-  // STEP 2 → SAVE SIGNATURE + CONTINUE
-  // -------------------------------
-  const saveSignatureAndContinue = async () => {
-    if (!sigPad || sigPad.isEmpty()) {
-      alert("Please provide signature before continuing.");
-      return;
-    }
+    // Build payload without signature (signature will be added in Screen7)
+    const finalBillingAddress = billingSame
+      ? `${deliveryAddress}, ${deliveryCity}, ${deliveryState} - ${deliveryPincode}`
+      : `${billingAddress}, ${billingCity}, ${billingState} - ${billingPincode}`;
 
-    try {
-      // Convert signature to PNG data URL
-      const dataUrl = sigPad.toDataURL("image/png");
+    const payload = {
+      ...order,
+      user_id: user.id,
 
-      // Convert data URL -> Blob
-      const blob = await (await fetch(dataUrl)).blob();
+      // DELIVERY
+      delivery_name: profile.full_name,
+      delivery_email: profile.email,
+      delivery_phone: profile.phone,
+      delivery_address: deliveryAddress,
+      delivery_city: deliveryCity,
+      delivery_state: deliveryState,
+      delivery_pincode: deliveryPincode,
 
-      // ---- IMPORTANT: clean, unique path ----
-      const timestamp = Date.now();
-      const filePath = `${user.id}/signature_${timestamp}.png`;
+      // BILLING
+      billing_same: billingSame,
+      billing_address: finalBillingAddress,
+      billing_company: billingCompany || null,
+      billing_gstin: billingGST || null,
 
-      // ---- Upload to Supabase Storage ----
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("signature") // 👈 bucket name (must match dashboard)
-        .upload(filePath, blob, {
-          contentType: "image/png",
-          upsert: true,
-        });
+      // SALESPERSON
+      salesperson: selectedSP?.saleperson || null,
+      salesperson_phone: selectedSP?.phone || null,
+      salesperson_email:
+        selectedSP?.email || localStorage.getItem("sp_email") || null,
+    };
 
-      if (uploadError) {
-        console.error("Signature upload error:", uploadError);
-        alert("Signature upload failed: " + uploadError.message);
-        return;
-      }
-
-      // ---- Get public URL of uploaded file ----
-      const { data: publicData } = supabase.storage
-        .from("signature")
-        .getPublicUrl(filePath);
-
-      const signatureUrl = publicData.publicUrl;
-
-      // ---- Build final payload with signature URL ----
-      const finalBillingAddress = billingSame
-        ? `${deliveryAddress}, ${deliveryCity}, ${deliveryState} - ${deliveryPincode}`
-        : `${billingAddress}, ${billingCity}, ${billingState} - ${billingPincode}`;
-
-      const payload = {
-        ...order,
-        user_id: user.id,
-
-        // DELIVERY
-        delivery_name: profile.full_name,
-        delivery_email: profile.email,
-        delivery_phone: profile.phone,
-        delivery_address: deliveryAddress,
-        delivery_city: deliveryCity,
-        delivery_state: deliveryState,
-        delivery_pincode: deliveryPincode,
-
-        // BILLING
-        billing_same: billingSame,
-        billing_address: finalBillingAddress,
-        billing_company: billingCompany || null,
-        billing_gstin: billingGST || null,
-
-        // SALESPERSON
-        salesperson: selectedSP?.saleperson || null,
-        salesperson_phone: selectedSP?.phone || null,
-        salesperson_email:
-          selectedSP?.email || localStorage.getItem("sp_email") || null,
-
-        // SIGNATURE
-        signature_url: signatureUrl,
-      };
-
-      // Close modal & navigate
-      setShowSignature(false);
-      navigate("/orderDetail", { state: { orderPayload: payload } });
-    } catch (err) {
-      console.error("Unexpected error while saving signature:", err);
-      alert("Unexpected error while saving signature.");
-    }
+    // Navigate directly to Screen7
+    navigate("/orderDetail", { state: { orderPayload: payload } });
   };
 
   return (
@@ -345,37 +289,6 @@ export default function Screen6() {
           Continue
         </button>
       </div>
-
-      {/* SIGNATURE MODAL */}
-      {showSignature && (
-        <div className="signature-modal">
-          <div className="signature-box">
-            <h3>Please Sign Below</h3>
-
-            <SignatureCanvas
-              penColor="black"
-              ref={setSigPad}
-              canvasProps={{
-                width: 500,
-                height: 200,
-                className: "sig-canvas",
-              }}
-            />
-
-            <div className="sig-buttons">
-              <button onClick={() => sigPad.clear() } style={{height:'40px',width:'70px' , textAlign:'center'}}>Clear</button>
-
-              <button className="confirm-btn" onClick={saveSignatureAndContinue}>
-                Save & Continue
-              </button>
-            </div>
-
-            <button className="close-modal" onClick={() => setShowSignature(false)}>
-              ✖
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -238,7 +238,12 @@ export default function OrderHistory() {
                           </div>
                           <div className="kv">
                             <div className="label">Color</div>
-                            <div className="value">{item.color || "—"}</div>
+                            <div className="value"><div style={{
+                                background: item.color,
+                                height: "15px",
+                                width: "30px",
+                                borderRadius: "14px",
+                                marginBottom: "5px",}}></div>{item.color || "—"}</div>
                           </div>
                           <div className="kv">
                             <div className="label">Size</div>

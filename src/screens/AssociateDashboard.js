@@ -219,15 +219,15 @@ export default function Dashboard() {
                 <div className="card-header">
                   <span className="card-title">Active Orders</span>
                   <button className="view-btn" onClick={() => setActiveTab("orders")}>View All</button>
-                  
+
                 </div>
 
-                <div className="card-box" style={{ overflow: "auto", height: "250px",padding:'3px' }}>
+                <div className="card-box" style={{ overflow: "auto", height: "250px", padding: '3px' }}>
                   {activeOrders.length === 0 ? (
                     <p>No active orders</p>
                   ) : (
                     activeOrders.map((o) => (
-                      <div className="order-item" key={o.id} style={{borderBottom:'1px solid #d5b85a'}}>
+                      <div className="order-item" key={o.id} style={{ borderBottom: '1px solid #d5b85a' }}>
                         <p><b>Order No:</b> {o.id}</p>
                         {/* <p><b>Total:</b> ₹{o.grand_total}</p> */}
                         <p><b>Status:</b> {o.status}</p>
@@ -303,7 +303,16 @@ export default function Dashboard() {
 
                           <div className="kv">
                             <div className="label">Color</div>
-                            <div className="value">{item.color || "—"}</div>
+
+                            <div className="value"> <div
+                              style={{
+                                background: item.color,
+                                height: "15px",
+                                width: "30px",
+                                borderRadius: "14px",
+                                marginBottom: "5px",
+                              }}
+                            />{item.color || "—"}</div>
                           </div>
 
                           <div className="kv">

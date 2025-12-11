@@ -1,18 +1,25 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
 import Logo from "../images/logo.png";
+import SignatureCanvas from "react-signature-canvas";
 import "./Screen7.css";
 
 export default function Screen7() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const order = location.state?.orderPayload;
 
   const [loading, setLoading] = useState(false);
   const [sendTo, setSendTo] = useState(
     order?.delivery_phone || order?.phone || ""
   );
+
+  // Signature Modal
+  const [showSignature, setShowSignature] = useState(false);
+  const [sigPad, setSigPad] = useState(null);
 
   if (!order) {
     return <div style={{ padding: 20 }}>No order data found.</div>;
@@ -24,12 +31,77 @@ export default function Screen7() {
     phone: src?.delivery_phone || src?.phone || "",
   });
 
-  const saveOrderToDB = async () => {
+  // -------------------------------
+  // STEP 1 → OPEN SIGNATURE MODAL
+  // -------------------------------
+  const handlePlaceOrder = () => {
+    setShowSignature(true); // Open signature modal
+  };
+
+  // -------------------------------
+  // STEP 2 → SAVE SIGNATURE + SAVE ORDER
+  // -------------------------------
+  const saveSignatureAndContinue = async () => {
+    if (!sigPad || sigPad.isEmpty()) {
+      alert("Please provide signature before continuing.");
+      return;
+    }
+
+    try {
+      // Convert signature to PNG data URL
+      const dataUrl = sigPad.toDataURL("image/png");
+
+      // Convert data URL -> Blob
+      const blob = await (await fetch(dataUrl)).blob();
+
+      // ---- IMPORTANT: clean, unique path ----
+      const timestamp = Date.now();
+      const filePath = `${user.id}/signature_${timestamp}.png`;
+
+      // ---- Upload to Supabase Storage ----
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("signature") // 👈 bucket name (must match dashboard)
+        .upload(filePath, blob, {
+          contentType: "image/png",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("Signature upload error:", uploadError);
+        alert("Signature upload failed: " + uploadError.message);
+        return;
+      }
+
+      // ---- Get public URL of uploaded file ----
+      const { data: publicData } = supabase.storage
+        .from("signature")
+        .getPublicUrl(filePath);
+
+      const signatureUrl = publicData.publicUrl;
+
+      // ---- Update order with signature URL ----
+      const orderWithSignature = {
+        ...order,
+        signature_url: signatureUrl,
+      };
+
+      // Close modal
+      setShowSignature(false);
+
+      // Now save order to DB and send PDF
+      await saveOrderToDB(orderWithSignature);
+    } catch (err) {
+      console.error("Unexpected error while saving signature:", err);
+      alert("Unexpected error while saving signature.");
+    }
+  };
+
+  const saveOrderToDB = async (orderToSave = order) => {
     setLoading(true);
     try {
       const { data: inserted, error } = await supabase
         .from("orders")
-        .insert(order)
+        .insert(orderToSave)
         .select()
         .single();
 
@@ -274,11 +346,58 @@ export default function Screen7() {
         <button
           className="confirm-btn"
           disabled={loading}
-          onClick={saveOrderToDB}
+          onClick={handlePlaceOrder}
         >
-          {loading ? "Saving..." : "Placed Order"}
+          {loading ? "Saving..." : "Place Order"}
         </button>
       </div>
+
+      {/* SIGNATURE MODAL */}
+      {showSignature && (
+        <div className="signature-modal">
+          <div className="signature-box">
+            <h3>Please Sign Below</h3>
+
+            <SignatureCanvas
+              penColor="black"
+              ref={setSigPad}
+              canvasProps={{
+                width: 500,
+                height: 200,
+                className: "sig-canvas",
+              }}
+            />
+
+            <div className="sig-buttons">
+              <button
+                onClick={() => sigPad.clear()}
+                style={{
+                  height: "40px",
+                  width: "70px",
+                  textAlign: "center",
+                }}
+              >
+                Clear
+              </button>
+
+              <button
+                className="confirm-btn"
+                onClick={saveSignatureAndContinue}
+                disabled={loading}
+              >
+                {loading ? "Saving..." : "Save & Continue"}
+              </button>
+            </div>
+
+            <button
+              className="close-modal"
+              onClick={() => setShowSignature(false)}
+            >
+              ✖
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

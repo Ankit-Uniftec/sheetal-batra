@@ -9,7 +9,8 @@
         "ignore": [
           "backdrop-filter",
           "user-select",
-          "-webkit-overflow-scrolling"
+          "-webkit-overflow-scrolling",
+          "inset"
         ]
       }
     ]
