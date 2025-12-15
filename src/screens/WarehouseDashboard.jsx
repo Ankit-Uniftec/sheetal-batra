@@ -17,15 +17,36 @@ const WarehouseDashboard = () => {
 
   // Format measurements safely
   const renderMeasurements = (m) => {
-    if (!m || Object.keys(m).length === 0) {
+    if (!m || typeof m !== "object") {
       return <span>-</span>;
     }
-    return Object.entries(m).map(([key, value]) => (
-      <p key={key} className="measure-line">
-        <strong>{key}:</strong> {value}
-      </p>
-    ));
+
+    return Object.entries(m).map(([key, value]) => {
+      // CASE 1: value is a nested object (Blouse, Salwar, etc.)
+      if (typeof value === "object" && value !== null) {
+        return (
+          <div key={key} className="measurement-group">
+            <p className="measure-title"><strong>{key}</strong></p>
+            <div className="measure-sub">
+              {Object.entries(value).map(([subKey, subValue]) => (
+                <p key={subKey} className="measure-line">
+                  {subKey}: {subValue}
+                </p>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      // CASE 2: value is a primitive
+      return (
+        <p key={key} className="measure-line">
+          {key}: {value}
+        </p>
+      );
+    });
   };
+
 
   const fetchOrders = async () => {
     const { data, error } = await supabase
@@ -101,11 +122,25 @@ const WarehouseDashboard = () => {
                     <h3 className="dropdown-title">Product Details</h3>
 
                     <div className="dropdown-content">
-                      
+
                       {/* IMAGE — you currently do NOT send image, so hiding */}
-                      <div className="placeholder-img-box">
-                        <span>No Image</span>
+                      <div className="dropdown-img">
+                        {firstItem.image_url ? (
+                          <img
+                            src={firstItem.image_url}
+                            alt={firstItem.product_name || "Product"}
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = "/placeholder.png";
+                            }}
+                          />
+                        ) : (
+                          <div className="placeholder-img-box">
+                            <span>No Image</span>
+                          </div>
+                        )}
                       </div>
+
 
                       <div className="dropdown-info">
                         <p><strong>Product Name:</strong> {firstItem.product_name}</p>
