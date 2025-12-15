@@ -43,6 +43,7 @@ h3 {
   border-radius: 12px;
   object-fit: cover;
   border: 2px solid #f2e9d3;
+  cursor: pointer;
 }
 /* Color name + dot wrapper */
 

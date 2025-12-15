@@ -46,7 +46,7 @@ select option[value=""] {
 
 .logo4 {
   width: 150px;
-  
+  cursor: pointer;
   margin-top: 29px;
 }
 

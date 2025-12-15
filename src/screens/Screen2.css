@@ -41,6 +41,7 @@ body {
 .logo2 {
   width: 150px;
   margin-bottom: 20px;
+  cursor: pointer;
 }
 
 /* ---------- CARD ---------- */

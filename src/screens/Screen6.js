@@ -121,12 +121,39 @@ export default function Screen6() {
     navigate("/orderDetail", { state: { orderPayload: payload } });
   };
 
+  const handleLogout = async () => {
+        try {
+          await supabase.auth.signOut();
+    
+          const raw = sessionStorage.getItem("associateSession");
+          const saved = raw ? JSON.parse(raw) : null;
+    
+          if (saved?.access_token && saved?.refresh_token) {
+            const { error } = await supabase.auth.setSession({
+              access_token: saved.access_token,
+              refresh_token: saved.refresh_token,
+            });
+    
+            if (!error) {
+              sessionStorage.removeItem("associateSession");
+              sessionStorage.removeItem("returnToAssociate");
+              navigate("/AssociateDashboard", { replace: true });
+              return;
+            }
+          }
+          navigate("/login", { replace: true });
+        } catch (e) {
+          console.error("Logout restore error", e);
+          navigate("/login", { replace: true });
+        }
+      };
+
   return (
     <div className="screen6">
       {/* HEADER */}
       <div className="screen6-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
-        <img src={Logo} className="sheetal-logo" alt="logo" />
+        <img src={Logo} className="sheetal-logo" alt="logo"  onClick={handleLogout}/>
       </div>
 
       <h2 className="title">Order Form</h2>

@@ -193,7 +193,7 @@ export default function Screen1() {
         ←
       </button>
 
-      <img src={Logo} alt="logo" className="logo" />
+      <img src={Logo} alt="logo" className="logo" onClick={handleBack} />
 
       <div className="card">
         <div

@@ -113,7 +113,7 @@ export default function OrderHistory() {
       {/* header */}
       <div className="oh-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
-        <img src={Logo} alt="logo" className="oh-logo" />
+        <img src={Logo} alt="logo" className="oh-logo" onClick={handleLogout}/>
         <button className="share-btn" onClick={handleLogout}>Logout</button>
       </div>
 

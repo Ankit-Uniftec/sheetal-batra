@@ -270,9 +270,22 @@ export default function Screen2() {
     inputRefs.current[0]?.focus();
   };
 
+  const handleBack = () => {
+    if (location.state?.fromAssociate) {
+      navigate("/AssociateDashboard", {
+        state: { fromBuyerVerification: true },
+      });
+    } else {
+      navigate(-1);
+    }
+  };
+
   return (
     <div className="screen2-bg">
-      <img src={Logo} alt="logo" className="logo2" />
+      <img src={Logo} alt="logo" className="logo2"  onClick={handleBack}/>
+      <button className="back-btn" onClick={()=>{navigate(-1)}} >
+        ←
+      </button>
 
       <div className="card2">
         <h2 className="title">Welcome to Sheetal Batra</h2>
