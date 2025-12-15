@@ -4,6 +4,7 @@ import "./OrderHistory.css"; // reuse same card UI
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
+import formatIndianNumber from "../utils/formatIndianNumber";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -115,9 +116,8 @@ export default function Dashboard() {
     status === "complete" ? "complete" : "active";
 
   return (
-    <div className="dashboard-wrapper">
-
-      {/* PASSWORD MODAL */}
+<div>
+    {/* PASSWORD MODAL */}
       {showPasswordModal && (
         <div className="password-modal">
           <div className="password-box">
@@ -134,6 +134,10 @@ export default function Dashboard() {
         </div>
       )}
 
+    <div className={`dashboard-wrapper ${showPasswordModal ? "blurred" : "none"}`}>
+
+
+      
       {/* HEADER */}
       <div className="top-header">
         <div className="header-left">
@@ -150,9 +154,13 @@ export default function Dashboard() {
 
         {/* SIDEBAR */}
         <aside className="sidebar">
-          <div className="hello-box">
+          <div
+            className="hello-box clickable"
+            onClick={() => setActiveTab("profile")}
+          >
             Hello, {salesperson?.saleperson || "Associate"}
           </div>
+
 
           <nav className="menu">
             <a
@@ -182,15 +190,16 @@ export default function Dashboard() {
         {activeTab === "dashboard" && (
           <>
             <div className="cell total-revenue">
-              <StatCard title="Total Revenue" value={`₹${totalRevenue.toLocaleString()}`} change="+10.6%" />
+              {/* i have removed the change value  */}
+              <StatCard title="Total Revenue" value={`₹${formatIndianNumber(totalRevenue)}`} />
             </div>
 
             <div className="cell total-orders">
-              <StatCard title="Total Orders" value={totalOrders} change="+2.6%" />
+              <StatCard title="Total Orders" value={formatIndianNumber(totalOrders)} />
             </div>
 
             <div className="cell total-clients">
-              <StatCard title="Total Clients" value={totalClients} change="+2.6%" />
+              <StatCard title="Total Clients" value={formatIndianNumber(totalClients)} />
             </div>
 
             <div className="cell sales-target">
@@ -200,12 +209,12 @@ export default function Dashboard() {
                     <p className="sales-label">Sales Target</p>
                     <p className="sales-progress">In Progress</p>
                   </div>
-                  <p className="sales-total">Sales Target <b>8L</b></p>
+                  <p className="sales-total">Sales Target <b>{formatIndianNumber(800000)}</b></p>
                 </div>
 
                 <div className="sales-scale">
-                  <span>5L</span>
-                  <span>8L</span>
+                  <span>{formatIndianNumber(500000)}</span>
+                  <span>{formatIndianNumber(800000)}</span>
                 </div>
 
                 <div className="progress-bar">
@@ -222,7 +231,7 @@ export default function Dashboard() {
 
                 </div>
 
-                <div className="card-box" style={{ overflow: "auto", height: "250px", padding: '3px' }}>
+                <div className="cardbox" >
                   {activeOrders.length === 0 ? (
                     <p>No active orders</p>
                   ) : (
@@ -293,12 +302,12 @@ export default function Dashboard() {
 
                           <div className="kv">
                             <div className="label">Amount</div>
-                            <div className="value">₹{order.grand_total ?? "—"}</div>
+                            <div className="value">₹{formatIndianNumber(order.grand_total)}</div>
                           </div>
 
                           <div className="kv">
                             <div className="label">Qty</div>
-                            <div className="value">{order.total_quantity ?? "—"}</div>
+                            <div className="value">{formatIndianNumber(order.total_quantity)}</div>
                           </div>
 
                           <div className="kv">
@@ -340,6 +349,46 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* ----------- SALES PERSON PROFILE TAB ----------- */}
+        {activeTab === "profile" && salesperson && (
+          <div className="order-details-wrapper profile-wrapper">
+
+            <h2 className="profile-title">My Profile</h2>
+
+            <div className="profile-card">
+              <div className="profile-row">
+                <span className="label">Name</span>
+                <span className="value">{salesperson.saleperson}</span>
+              </div>
+
+              <div className="profile-row">
+                <span className="label">Email</span>
+                <span className="value">{salesperson.email}</span>
+              </div>
+
+              <div className="profile-row">
+                <span className="label">Phone</span>
+                <span className="value">{salesperson.phone}</span>
+              </div>
+
+              <div className="profile-row">
+                <span className="label">Joined On</span>
+                <span className="value">
+                  {salesperson.created_at
+                    ? new Date(salesperson.created_at).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                    : "—"}
+                </span>
+
+              </div>
+            </div>
+          </div>
+        )}
+
+
 
       </div>
 
@@ -360,6 +409,7 @@ export default function Dashboard() {
 
       {/* BACK */}
       <button className="back-btn" onClick={() => navigate("/")}>‹</button>
+    </div>
     </div>
   );
 }

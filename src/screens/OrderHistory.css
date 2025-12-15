@@ -272,8 +272,9 @@
 }
 
 .profile-card h3 {
+  font-family: "Athleas", serif !important;
   margin: 0 0 10px;
-  color: #5a5133
+  color: #d5b85a !important;
 }
 
 .profile-grid {

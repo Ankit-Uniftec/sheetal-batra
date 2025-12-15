@@ -6,6 +6,7 @@ import SignatureCanvas from "react-signature-canvas";
 import Logo from "../images/logo.png";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
 
 export default function Screen7() {
@@ -337,7 +338,7 @@ if (order.billing_same) {
     // PAYMENT
     section("Payment Details");
     draw("Total Amount:", margin, y, 12, true);
-    draw(`INR ${order.grand_total}`, margin + 150, y, 12, true);
+    draw(`INR ${formatIndianNumber(order.grand_total)}`, margin + 150, y, 12, true);
 
 
    // =====================
@@ -594,7 +595,7 @@ if (sig) {
           <div className="row3">
             <div className="field">
               <label>Total Amount:</label>
-              <span>{order.grand_total}</span>
+              <span>₹{formatIndianNumber(order.grand_total)}</span>
             </div>
           </div>
         </div>

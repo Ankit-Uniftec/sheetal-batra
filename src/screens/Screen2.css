@@ -1,14 +1,28 @@
 
+
+
+/* ---------- RESET ---------- */
 *,
 *::before,
-*::after { box-sizing: border-box; }
-html, body { height: 100%; }
-body { margin: 0; }
-
-/* ---- Screen 2 (matches screen1) ---- */
-*{
-  font-family: "Jost", sans-serif !important;
+*::after {
+  box-sizing: border-box;
 }
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* ---------- GLOBAL FONT (NO COLOR HERE) ---------- */
+* {
+  font-family: "Futura", sans-serif !important;
+}
+
+/* ---------- BACKGROUND ---------- */
 .screen2-bg {
   min-height: 100vh;
   width: 100%;
@@ -16,141 +30,115 @@ body { margin: 0; }
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed; /* same as screen1 */
+  background-attachment: fixed;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
+/* ---------- LOGO ---------- */
 .logo2 {
   width: 150px;
- 
   margin-bottom: 20px;
 }
 
-/* Card matches .card from screen1 */
+/* ---------- CARD ---------- */
 .card2 {
+  /* width: 100%; */
   max-width: 480px;
   height: 500px;
-  background: #FFFFFF73;            /* rgba(255,255,255,0.45) */
+  background: rgba(255, 255, 255, 0.45);
   padding: 25px;
   border-radius: 20px;
   text-align: center;
   box-shadow: rgba(0, 0, 0, 0.1) 0 4px 20px;
-  margin: 0 16px;                   /* small safety padding on tiny screens */
+  margin: 0 16px;
+
+  
 }
 
-/* Title matches .card h2 in screen1 */
-.title{
-  font-family: "Jost", sans-serif !important;
-  font-style: normal;
+/* ---------- TITLE ---------- */
+.card2 .title {
+  
+  font-family: "Athleas", serif !important;
   font-weight: 500;
   font-size: 32px;
-  color: #D5B85A;
-  margin: 0 auto;
-  display: block;
+  color: #d5b85a !important;
+  margin: 0;
   text-align: center;
   line-height: 1.2;
-  width: 100%;
+  margin-top: 45px !important;
 }
 
-/* Subtitle matches .card p in screen1 */
-.subtitle{
-  font-family: "Jost", sans-serif !important;
-  font-size: 20px;
-  font-style: normal;
-  font-weight: 400;
-  margin-top: 21px;
-  width: 100%;
+/* ---------- SUBTITLE (FIXED BLACK) ---------- */
+.card2 .subtitle {
+  font-family: "Futura", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  margin-top: 21px !important;
   text-align: center;
-  color: #111;                      /* optional: ensure good contrast */
+  color: #000000 !important;
 }
 
-.otp-text {
-  
-  /* margin: 10px 0; */
-  
-  color: #555;
-  font-family: "Jost", sans-serif !important;
-  font-size: 15px ! important;
+/* ---------- OTP TEXT ---------- */
+.card2 .otp-text {
+  margin-top: 20px;
+  color: #555 !important;
+  font-size: 15px;
 }
 
-/* Inputs area mirrors .input width/height from screen1 */
-.otp-box {
-  display: flex;
-  justify-content: space-between;
-  width: 90%;
-  height: 56px;
-  margin: 18px auto;
-  
-  
-  
-  
-}
-.otpBox{
-  margin-top: 80px;
+/* ---------- OTP INPUTS ---------- */
+.otpBox {
+  margin-top: 60px;
 }
 
-/* Each OTP input aligns with screen1 input height and border */
 .otp-input {
-  width: 55px;
+  width: 47px;
   height: 56px;
   border: 1px solid #aaa;
   border-radius: 3px;
   font-size: 18px;
   text-align: center;
-   
-  margin-right: 8px;
+  margin: 4px;
   outline: none;
 }
 
-
-/* Button matches .btn from screen1 */
+/* ---------- BUTTON ---------- */
 .btn2 {
-  width: 99%;
+  width: 97%;
   margin-top: 24px;
   height: 56px;
-  padding: 12px;
-  background: #D5B85A;
-  color: #fff;
+  background: #d5b85a;
+  color: #ffffff !important;
   border: none;
   border-radius: 3px;
   cursor: pointer;
   font-size: 16px;
-  font-family: inherit;
 }
 
-/* Accessible focus states (optional but recommended) */
-.btn2:focus,
-.otp-input:focus {
-  outline: 2px solid #D5B85A;
-  outline-offset: 2px;
-}
-
-/* Timer styled similar to screen1 <small> */
-.timer {
-  display: block;
-  margin-top: 110px;               /* align with screen1 small spacing */
-  color: #5E677C;
+/* ---------- TIMER ---------- */
+.timer-text {
+  margin-top: 11px;
+  color: #5e677c !important;
   font-size: 14px;
-  font-family: "Jost", sans-serif !important;
   text-align: center;
-  font-weight: 400;
-  font-style: normal;
 }
 
-/* Small responsive nicety */
-@media (max-width: 520px) {
-  .card2 { height: auto; }
-  .otp-input { margin-top: 48px; }
-}
+/* ---------- RESEND ---------- */
 .resend-btn {
   background: none;
   border: none;
-  color: #D5B85A;
+  color: #d5b85a;
   font-size: 16px;
   cursor: pointer;
   margin-top: 12px;
   text-decoration: underline;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 520px) {
+  .card2 {
+    height: auto;
+  }
 }

@@ -1,5 +1,6 @@
 *{
-  font-family: "Jost", sans-serif !important;
+  font-family: "Futura", sans-serif !important;
+  color: #000000 !important;
 }
 .screen1 {
   min-height: 100vh;
@@ -34,36 +35,33 @@
   box-shadow: rgba(0, 0, 0, 0.1) 0 4px 20px;
   
 }
-.card p{
-  font-family: jost;
-  font-size: 20px;
+.card-p{
+  font-family: "Futura", sans-serif !important;
+  font-size: 16px !important;
   font-style: regular;
-  font-weight: 400;
-  margin-top: 21px;
+  font-weight: 400 !important;
+  margin-top: 21px !important;
    width: 100%;
   text-align: center;
+  color: #000000 !important;
 }
 .card h2{
-  /* font-weight: 500;
-  font-size: 32px;
-  
-  
-  color: #D5B85A; */
-  font-family: jost;
+  font-family: "Athleas", serif !important;
   font-style: medium;
   font-weight: 500;
   font-size: 32px;
-  color: #D5B85A;
+  color: #d5b85a !important;
   margin: 0 auto;      /* centers with consistent spacing */
   display: block;      /* ensures correct centering in card */
   text-align: center;  /* explicitly center text */
   line-height: 1.2; 
   width: 100%;
+  margin-top: 15px !important;
   
 }
 
 .input {
-  width: 99%;
+  width: 91% !important;
   height: 56px;
   padding: 12px;
   margin-top: 80px;
@@ -73,7 +71,7 @@
 }
 
 .btn {
-  width: 99%;
+  width: 91% !important;
   margin-top: 24px;
   height: 56px;
   padding: 12px;
@@ -96,3 +94,34 @@ small {
   font-style: regular;
 }
 
+.phone-wrapper {
+  display: flex;
+  gap: 10px;
+  margin-top: 80px;
+  width: 91%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.country-code {
+  width: 32%;
+  height: 56px;
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  padding: 8px;
+  font-size: 15px;
+  background: #fff;
+}
+
+.phone-input {
+  width: 68%;
+  height: 56px;
+  padding: 12px;
+  border-radius: 3px;
+  border: 1px solid #aaa;
+  box-sizing: border-box;
+}
+a{
+  color: #D5B85A !important;
+  text-decoration: none;
+}

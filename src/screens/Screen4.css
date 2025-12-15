@@ -17,7 +17,8 @@ select option[value=""] {
   color: #777 !important;
 }
 *{
-  font-family: "Jost", sans-serif !important;
+  font-family: "Futura", sans-serif !important;
+  color: #000000 !important;
 }
 
 .screen4-bg {
@@ -50,13 +51,12 @@ select option[value=""] {
 }
 
 .order-title {
+  font-family: "Athleas", serif !important;
   margin-top: 79px;
-  color: #D5B85A;
+  color: #d5b85a !important;
   font-size: 26px;
   font-weight: 600;
   font-style: semibold;
-  font-family: "Jost", sans-serif !important;
-  font-size: Typography/Font Size/Display 6;
 }
 
 .screen4-card {
@@ -70,8 +70,9 @@ select option[value=""] {
 }
 
 .product-title {
+  font-family: "Athleas", serif !important;
   font-size: 28px;
-  color: #D5B85A;
+  color: #d5b85a !important;
   font-weight: 600;
   margin-bottom: 30px;
 }
@@ -280,9 +281,10 @@ select,
 }
 
 .measure-title {
+  font-family: "Athleas", serif !important;
   font-size: 22px;
   font-weight: 600;
-  color: #D5B85A;
+  color: #d5b85a !important;
   margin-bottom: 25px;
 }
 
@@ -360,7 +362,8 @@ select,
 }
 
 .summary-box-fixed h3 {
-  color: #D5B85A;
+  font-family: "Athleas", serif !important;
+  color: #d5b85a !important;
   margin-bottom: 10px;
 }
 

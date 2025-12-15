@@ -1,13 +1,37 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+/* Global font styles - All headings use Athleas, all text uses Futura */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Fallback fonts - replace with actual Athleas and Futura font imports if available */
+body, * {
+  font-family: 'Futura', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+    sans-serif !important;
+  color: #000000 !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* All headings use Athleas font and #d5b85a color */
+h1, h2, h3, h4, h5, h6,
+.title, .card-title, .order-title, .product-title, .measure-title, .dropdown-title, .alerts-title, .stat-title,
+.card h2, .section-box h3, .profile-card h3 {
+  font-family: 'Athleas', 'Inter', serif !important;
+  color: #d5b85a !important;
+}
+
+/* Ensure all text elements use Futura and black */
+p, span, div, label, input, textarea, select, button, a, li, td, th {
+  font-family: 'Futura', 'Inter', sans-serif !important;
+  color: #000000 !important;
+}
+
+/* Buttons and links can have different colors for visibility */
+button, a {
+  color: inherit;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+  color: #000000 !important;
 }

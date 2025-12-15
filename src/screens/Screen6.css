@@ -1,5 +1,6 @@
 *{
-  font-family: "Jost", sans-serif !important;
+  font-family: "Futura", sans-serif !important;
+  color: #000000 !important;
 }
 .screen6 {
   background-image: url("../images/Screen1bg.png");
@@ -49,10 +50,11 @@
 
 
 .title {
+  font-family: "Athleas", serif !important;
   text-align: center;
   font-size: 32px;
   margin: 40px 0 20px;
-  color: #D5B85A;
+  color: #d5b85a !important;
 }
 
 /* MAIN CARD CONTAINER */
@@ -70,7 +72,8 @@
 }
 
 .section-box h3 {
-  color: #D5B85A;
+  font-family: "Athleas", serif !important;
+  color: #d5b85a !important;
   font-size: 20px;
   margin-bottom: 20px;
 }

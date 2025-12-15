@@ -1,5 +1,6 @@
 * {
-  font-family: "Jost", sans-serif !important;
+  font-family: "Futura", sans-serif !important;
+  color: #000000 !important;
 }
 
 .screen1 {
@@ -33,37 +34,52 @@
 }
 
 .card h2 {
-  font-family: jost;
+  font-family: "Athleas", serif !important;
   font-style: medium;
   font-weight: 500;
   font-size: 32px;
-  color: #D5B85A;
+  color: #d5b85a !important;
   margin: 0 auto;
   text-align: center;
   line-height: 1.2;
 }
 
+.login-title {
+  font-family: "Athleas", serif !important;
+  font-size: 32px;
+  font-weight: 500;
+  color: #d5b85a !important;
+  margin: 80px auto 0 auto;
+  text-align: center;
+  line-height: 1.2;
+}
+
 .card p {
-  font-size: 20px;
+  font-size: 30px;
   font-weight: 400;
-  margin-top: 10px;
-  color: #111;
+  margin-top: 60px;
+  color: #d5b85a !important;
+  
 }
 
 .input {
   width: 99%;
   height: 56px;
   padding: 12px;
-  margin-top: 65px;
+  margin-top: 0;
   border-radius: 3px;
   border: 1px solid #aaa;
   box-sizing: border-box;
   font-size: 15px;
 }
 
+.input:first-of-type {
+  margin-top: 80px;
+}
+
 .btn {
   width: 99%;
-  margin-top: 30px;
+  margin-top: 24px;
   height: 56px;
   padding: 12px;
   background: #D5B85A;
@@ -96,7 +112,7 @@
 
 .eye-icon {
   position: absolute;
-  right: 14px;
+  right: 25px;
   top: 50%;
   transform: translateY(10%);  /* <-- FIXED FOR YOUR EXACT INPUT STYLE */
   cursor: pointer;

@@ -1,5 +1,6 @@
 * {
-  font-family: jost, sans-serif;
+  font-family: "Futura", sans-serif !important;
+  color: #000000 !important;
 }
 
 /* --- PAGE WRAPPER --- */
@@ -37,9 +38,10 @@
 }
 
 .title {
+  font-family: "Athleas", serif !important;
   text-align: center;
   font-size: 34px;
-  color: #d5b85a;
+  color: #d5b85a !important;
 }
 
 /* --- ORDERS LIST --- */
@@ -54,8 +56,9 @@
 
 /* --- BOX BUTTON --- */
 .order-box {
-  width: 140px;
-  height: 28px;
+  width: 500px;
+  height: 60px;
+  padding: 5px;
   background: #d5b85a;
   color: white;
   border-radius: 6px;
@@ -90,10 +93,11 @@
 }
 
 .dropdown-title {
+  font-family: "Athleas", serif !important;
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 15px;
-  color: #444;
+  color: #d5b85a !important;
 }
 
 /* --- DROPDOWN GRID --- */

@@ -1,5 +1,6 @@
 * {
-  font-family: jost, sans-serif;
+  font-family: "Futura", sans-serif !important;
+  color: #000000 !important;
 }
 
 .dashboard-wrapper {
@@ -19,6 +20,12 @@
   align-items: center;
   
 }
+.blurred {
+  filter: blur(6px);
+  pointer-events: none;
+  user-select: none;
+}
+
 
 /* ---------------- HEADER ---------------- */
 
@@ -42,11 +49,12 @@
 }
 
 .title {
+  font-family: "Athleas", serif !important;
   justify-self: center; /* PERFECT center */
   text-align: center;
   font-size: 32px;
   font-weight: 500;
-  color: #d5b85a;
+  color: #d5b85a !important;
 }
 
 
@@ -80,6 +88,10 @@
   border-radius: 8px;
   font-weight: 500;
 }
+.clickable {
+  cursor: pointer;
+}
+
 
 .menu {
   margin-top: 20px;
@@ -98,6 +110,54 @@
   font-weight: bold;
   color: #d5b85a;
 }
+
+
+.profile-wrapper {
+  padding-top: 0;        /* same as Order Details */
+}
+
+
+.profile-title {
+  font-family: "Athleas", serif !important;
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0 0 15px 0;    /* EXACT same as Order Details */
+  padding-left: 5px;
+  color: #d5b85a !important;
+}
+
+
+.profile-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 520px;
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+}
+
+.profile-row .label {
+  font-weight: 500;
+  color: #777;
+}
+
+.profile-row .value {
+  font-weight: 600;
+}
+.password-modal {
+  filter: none !important;
+}
+
 
 /* ---------------- GRID CELLS ---------------- */
 
@@ -136,6 +196,8 @@
 }
 
 .alerts-title {
+  font-family: "Athleas", serif !important;
+  color: #d5b85a !important;
   font-size: 16px;
   font-weight: 600;
   color: #d5b85a;
@@ -166,6 +228,8 @@
 }
 
 .stat-title {
+  font-family: "Futura", sans-serif !important;
+  color: black !important;
   font-size: 14px;
   color: #777;
 }
@@ -234,19 +298,27 @@
 .orders-card {
   background: #FFFFFFB0;
   height: 320px;
-  padding: 20px;
+  padding: 15px !important;
   border-radius: 12px;
   border: 1px solid #D4D4D4;
+  overflow: hidden;
 }
-
+ 
 .card-header {
   display: flex;
   justify-content: space-between;
 }
 
 .card-title {
+  font-family: "Athleas", serif !important;
   font-size: 16px;
-  color: #d5b85a;
+  color: #d5b85a !important;
+}
+.cardbox {
+  height: 250px !important;
+  overflow-y: auto;
+  overflow-x: auto;   /* ✅ STOPS sideways overflow */
+  padding-right: 6px;
 }
 
 /* Floating Add Button */
@@ -296,9 +368,10 @@
     padding: 14px;
     width: 170px;
   }
-  .card-box{
+  .cardbox{
     
-    overflow: auto;
+    
+    overflow: auto !important;
   }
 
   .stat-value {
@@ -312,6 +385,7 @@
   .orders-card {
     height: 260px;
     padding: 16px;
+    
   }
 
   .alerts-box {
@@ -367,7 +441,7 @@
   margin-top: 15px;
   padding: 12px 20px;
   background: black;
-  color: white;
+  color: white !important;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -473,10 +547,12 @@
 
 /* The title aligned to top at same horizontal level as sidebar */
 .order-details-wrapper .order-title {
+  font-family: "Athleas", serif !important;
   font-size: 26px;
   font-weight: 600;
   margin: 0 0 15px 0;
   padding-left: 5px;
+  color: #d5b85a !important;
 }
 
 /* Scroll area for only the cards */

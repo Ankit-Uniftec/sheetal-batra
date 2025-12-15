@@ -17,10 +17,17 @@
 }
 
 .title {
+  font-family: "Athleas", serif !important;
   text-align: center;
   font-size: 32px;
   margin: 40px 0 20px;
-  color: #D5B85A;
+  color: #d5b85a !important;
+}
+
+/* Ensure all h3 elements use Athleas font and gold color */
+h3 {
+  font-family: "Athleas", serif !important;
+  color: #d5b85a !important;
 }
 
 /**************** PRODUCT BOX (copied from Screen6) ***************/

@@ -849,6 +849,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen4.css";
 import Logo from "../images/logo.png";
+import formatIndianNumber from "../utils/formatIndianNumber";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -1320,7 +1321,7 @@ export default function Screen4() {
               return (
                 <div className="added-product-row" key={item._id}>
                   <span className="product-info">
-                    {i + 1}. Name: {item.product_name}, Size: {item.size}, Qty: {item.quantity}, Price: ₹{item.price}
+                    {i + 1}. Name: {item.product_name}, Size: {item.size}, Qty: {formatIndianNumber(item.quantity)}, Price: ₹{formatIndianNumber(item.price)}
                   </span>
 
                   <div className="product-buttons">
@@ -1453,7 +1454,7 @@ export default function Screen4() {
             {/* PRICE DISPLAY */}
             {selectedProduct && (
               <p className="product-price">
-                Price: <strong>₹{getLivePrice()}</strong>
+                Price: <strong>₹{formatIndianNumber(getLivePrice())}</strong>
               </p>
             )}
 
@@ -1672,17 +1673,17 @@ export default function Screen4() {
           <h3>Order Summary</h3>
 
           <p>
-            Total Quantity: <strong>{totalQuantity}</strong>
+            Total Quantity: <strong>{formatIndianNumber(totalQuantity)}</strong>
           </p>
           <p>
-            Subtotal: <strong>₹{subtotal.toFixed(2)}</strong>
+            Subtotal: <strong>₹{formatIndianNumber(subtotal.toFixed(2))}</strong>
           </p>
           <p>
-            Taxes (18%): <strong>₹{taxes.toFixed(2)}</strong>
+            Taxes (18%): <strong>₹{formatIndianNumber(taxes.toFixed(2))}</strong>
           </p>
 
           <p className="grand-total">
-            Total: <strong>₹{totalOrder.toFixed(2)}</strong>
+            Total: <strong>₹{formatIndianNumber(totalOrder.toFixed(2))}</strong>
           </p>
         </div>
 

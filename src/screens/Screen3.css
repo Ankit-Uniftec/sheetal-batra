@@ -1,6 +1,7 @@
 
 * {
-  font-family: "Jost", sans-serif !important;
+  font-family: "Futura", sans-serif !important;
+  color: #000000 !important;
 }
 
 .screen3-root {
@@ -33,8 +34,9 @@
 }
 
 h2 {
+  font-family: "Athleas", serif !important;
   margin-top: 97px;
-  color: #D5B85A;
+  color: #d5b85a !important;
   margin-bottom: 25px;
   text-align: left;
 }

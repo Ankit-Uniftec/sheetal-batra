@@ -61,8 +61,7 @@ export default function SALogin() {
       <img src={Logo} alt="logo" className="logo" />
 
       <div className="card">
-        <h2>Welcome to Sheetal Batra</h2>
-        <p>SA Login</p>
+        <p className="login-title">SA Login</p>
 
         <div style={{ width: "372px", margin: "0 auto" }}>
           <input

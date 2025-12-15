@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Logo from "../images/logo.png";
+import formatIndianNumber from "../utils/formatIndianNumber";
 export default function OrderHistory() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -230,11 +231,11 @@ export default function OrderHistory() {
                           </div>
                           <div className="kv">
                             <div className="label">Amount</div>
-                            <div className="value">₹{order.grand_total ?? "—"}</div>
+                            <div className="value">₹{formatIndianNumber(order.grand_total)}</div>
                           </div>
                           <div className="kv">
                             <div className="label">Qty</div>
-                            <div className="value">{order.total_quantity ?? "—"}</div>
+                            <div className="value">{formatIndianNumber(order.total_quantity)}</div>
                           </div>
                           <div className="kv">
                             <div className="label">Color</div>
