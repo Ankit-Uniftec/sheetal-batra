@@ -82,7 +82,8 @@ export default function Screen7() {
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const fontB = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-    const page = pdf.addPage([A4.w, A4.h]);
+    let page = pdf.addPage([A4.w, A4.h]);
+
     let y = A4.h - margin;
 
     const draw = (t, x, y, s = 11, b = false) =>
@@ -110,6 +111,53 @@ export default function Screen7() {
       }
     };
 
+    const COLOR_MAP = {
+  pink: "#FFC0CB",
+  orange: "#FFA500",
+  ivory: "#FFFFF0",
+  blue: "#0000FF",
+  purple: "#800080",
+  red: "#FF0000",
+  gold: "#C9A24D",
+  green: "#008000",
+  mustard: "#FFDB58",
+  "off rose": "#F4C2C2",
+};
+
+    //function to draw the color dot:
+    const drawColorDot = (colorValue, x, y, size = 6) => {
+  try {
+    if (!colorValue) return;
+
+    let hex = null;
+
+    // Already hex
+    if (colorValue.startsWith("#")) {
+      hex = colorValue;
+    } else {
+      // Named color → map
+      hex = COLOR_MAP[colorValue.toLowerCase()];
+    }
+
+    // Fallback if unknown
+    if (!hex || hex.length !== 7) hex = "#000000";
+
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+
+    page.drawCircle({
+      x,
+      y,
+      size,
+      color: rgb(r, g, b),
+    });
+  } catch {
+    // silent fail
+  }
+};
+
+
     // LOGO
     const logo = await embedImage(logoUrl);
     if (logo) {
@@ -124,7 +172,29 @@ export default function Screen7() {
       y -= h + 20;
     }
 
-    draw("Review Your Order", margin, y, 18, true);
+    const wrapText = (text, maxWidth, fontSize = 10) => {
+      const words = String(text || "").split(" ");
+      const lines = [];
+      let line = "";
+
+      for (const word of words) {
+        const testLine = line ? `${line} ${word}` : word;
+        const width = font.widthOfTextAtSize(testLine, fontSize);
+
+        if (width > maxWidth) {
+          if (line) lines.push(line);
+          line = word;
+        } else {
+          line = testLine;
+        }
+      }
+
+      if (line) lines.push(line);
+      return lines;
+    };
+
+
+    draw("Order Invoice", margin, y, 18, true);
     y -= 22;
     draw(`Order ID: ${order.id}`, margin, y);
     draw(
@@ -161,7 +231,15 @@ export default function Screen7() {
 
       const fx = margin + 100;
       field("Product Name", item.product_name, fx, y);
-      field("Color", item.color, fx + 260, y);
+      // COLOR LABEL
+      draw("Color", fx + 260, y, 10, true);
+
+      // Color dot
+      drawColorDot(item.color, fx + 270, y - 18, 5);
+
+      // Color name
+      draw(item.color || "—", fx + 285, y - 22, 10);
+
       y -= 40;
       field("Top", item.top, fx, y);
       field("Bottom", item.bottom, fx + 160, y);
@@ -172,11 +250,82 @@ export default function Screen7() {
     // DELIVERY
     if (order.mode_of_delivery === "Home Delivery") {
       section("Delivery Details");
+
       field("Name", order.delivery_name, margin, y);
       field("Email", order.delivery_email, margin + 180, y);
       field("Phone", order.delivery_phone, margin + 360, y);
-      y -= 60;
+      y -= 40;
+
+      // ✅ DELIVERY ADDRESS
+      const fullAddress = [
+        order.delivery_address,
+        order.delivery_city,
+        order.delivery_state,
+        order.delivery_pincode,
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      draw("Delivery Address", margin, y, 10, true);
+      y -= 14;
+
+      const addrLines = wrapText(fullAddress, A4.w - margin * 2, 10);
+      addrLines.forEach((line) => {
+        draw(line, margin, y, 10);
+        y -= 14;
+      });
+
+      y -= 20;
     }
+// =====================
+// BILLING DETAILS
+// =====================
+section("Billing Details");
+
+if (order.billing_same) {
+  draw("Billing Address", margin, y, 10, true);
+  y -= 14;
+  draw("Same as delivery address", margin, y, 10);
+  y -= 24;
+} else {
+  if (order.billing_company) {
+    field("Company", order.billing_company, margin, y);
+    y -= 30;
+  }
+
+  if (order.billing_gstin) {
+    field("GSTIN", order.billing_gstin, margin, y);
+    y -= 30;
+  }
+
+  const billingAddress = [
+    order.billing_address,
+    order.billing_city,
+    order.billing_state,
+    order.billing_pincode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  if (billingAddress) {
+    draw("Billing Address", margin, y, 10, true);
+    y -= 14;
+
+    const billLines = wrapText(
+      billingAddress,
+      A4.w - margin * 2,
+      10
+    );
+
+    billLines.forEach((line) => {
+      draw(line, margin, y, 10);
+      y -= 14;
+    });
+
+    y -= 20;
+  }
+}
+
 
     // SALESPERSON
     section("Salesperson Details");
@@ -191,17 +340,54 @@ export default function Screen7() {
     draw(`INR ${order.grand_total}`, margin + 150, y, 12, true);
 
 
-    // SIGNATURE
-    const sig = await embedImage(order.signature_url);
-    if (sig) {
-      page.drawImage(sig, {
-        x: A4.w - margin - 160,
-        y: 90,
-        width: 160,
-        height: 60,
-      });
-      draw("Authorized Signature", A4.w - margin - 160, 160, 10, true);
-    }
+   // =====================
+// SIGNATURE (AUTO POSITIONED)
+// =====================
+// =====================
+// SIGNATURE (AUTO POSITIONED – SAFE)
+// =====================
+const sig = await embedImage(order.signature_url);
+
+if (sig) {
+  const sigWidth = 160;
+  const sigHeight = 60;
+  const labelHeight = 14;
+  const spacing = 30;
+
+  // If not enough space → new page
+  if (y < sigHeight + labelHeight + margin + spacing) {
+    page = pdf.addPage([A4.w, A4.h]);
+    y = A4.h - margin;
+  }
+
+  // Move cursor down
+  y -= spacing;
+
+  const sigX = A4.w - margin - sigWidth;
+  const sigY = y - sigHeight;
+
+  // Draw signature
+  page.drawImage(sig, {
+    x: sigX,
+    y: sigY,
+    width: sigWidth,
+    height: sigHeight,
+  });
+
+  // Label
+  draw(
+    "Authorized Signature",
+    sigX,
+    sigY - labelHeight,
+    10,
+    true
+  );
+
+  // Update cursor
+  y = sigY - labelHeight - 20;
+}
+
+
 
     return pdf.save();
   }
@@ -304,6 +490,7 @@ export default function Screen7() {
         {order.mode_of_delivery === "Home Delivery" && (
           <div className="section-box">
             <h3>Delivery Details</h3>
+
             <div className="row3">
               <div className="field">
                 <label>Name:</label>
@@ -318,8 +505,69 @@ export default function Screen7() {
                 <span>{order.delivery_phone}</span>
               </div>
             </div>
+
+            {/* ✅ DELIVERY ADDRESS */}
+            <div className="field field-wide" style={{ marginTop: "12px" }}>
+              <label>Delivery Address:</label>
+              <span>
+                {[
+                  order.delivery_address,
+                  order.delivery_city,
+                  order.delivery_state,
+                  order.delivery_pincode,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
+              </span>
+            </div>
           </div>
         )}
+
+   {/* Billing Details */}
+<div className="section-box">
+  <h3>Billing Details</h3>
+
+  {order.billing_same ? (
+    <div className="field field-wide">
+      <label>Billing Address:</label>
+      <span>Same as delivery address</span>
+    </div>
+  ) : (
+    <>
+      {/* Company + GSTIN (same row like other sections) */}
+      {(order.billing_company || order.billing_gstin) && (
+        <div className="row3">
+          <div className="field">
+            <label>Company Name:</label>
+            <span>{order.billing_company || "—"}</span>
+          </div>
+
+          <div className="field">
+            <label>GSTIN:</label>
+            <span>{order.billing_gstin || "—"}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Billing Address */}
+      <div className="field field-wide" style={{ marginTop: "12px" }}>
+        <label>Billing Address:</label>
+        <span>
+          {[
+            order.billing_address,
+            order.billing_city,
+            order.billing_state,
+            order.billing_pincode,
+          ]
+            .filter(Boolean)
+            .join(", ")}
+        </span>
+      </div>
+    </>
+  )}
+</div>
+
+
 
         {/* Salesperson */}
         <div className="section-box">
