@@ -38,7 +38,7 @@ select option[value=""] {
 .header {
   display: flex;
   justify-content: space-between;
-  width: 90%;
+  width: 100%;
   max-width: 1300px;
   margin: auto;
   align-items: center;
@@ -63,7 +63,7 @@ select option[value=""] {
   width: 95%;
   max-width: 1300px;
   margin: 20px auto;
-  padding: 35px 50px;
+  
   border-radius: 20px;
   
   

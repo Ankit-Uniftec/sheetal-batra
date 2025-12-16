@@ -35,7 +35,7 @@ cursor: pointer;
   box-shadow: rgba(0, 0, 0, 0.1) 0 4px 20px;
   
 }
-.card-p{
+.card .cardp{
   font-family: "Futura", sans-serif !important;
   font-size: 16px !important;
   font-style: regular;
@@ -43,7 +43,8 @@ cursor: pointer;
   margin-top: 21px !important;
    width: 100%;
   text-align: center;
-  color: #000000 !important;
+  color:black !important;
+  
 }
 .card h2{
   font-family: "Athleas", serif !important;
