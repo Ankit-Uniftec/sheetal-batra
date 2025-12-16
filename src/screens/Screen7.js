@@ -43,18 +43,36 @@ export default function Screen7() {
   // ===============================
   // SIGNATURE FLOW
   // ===============================
-  const handlePlaceOrder = () => {
-    const resp = window.prompt("Enter discount percentage (0-100):", "0");
-    if (resp === null) return; // user cancelled
+  const handlePlaceOrder = async () => {
+    const codeInput = window.prompt("Enter Collector code:");
+    if (codeInput === null) return; // cancelled
 
-    const val = Number(resp);
-    if (isNaN(val) || val < 0 || val > 100) {
-      alert("Please enter a valid discount between 0 and 100.");
+    const code = codeInput.trim();
+    if (!code) {
+      alert("Please enter a valid collector code.");
       return;
     }
 
-    setDiscountPercent(val);
-    setShowSignature(true);
+    try {
+      const { data, error } = await supabase
+        .from("discount")
+        .select("percent")
+        .eq("code", code)
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) {
+        alert("Invalid or expired discount code.");
+        return;
+      }
+
+      const pct = Number(data.percent) || 0;
+      setDiscountPercent(pct);
+      setShowSignature(true);
+    } catch (e) {
+      console.error("Discount lookup failed", e);
+      alert("Could not validate discount code. Please try again.");
+    }
   };
 
   const saveSignatureAndContinue = async () => {
@@ -142,50 +160,50 @@ export default function Screen7() {
     };
 
     const COLOR_MAP = {
-  pink: "#FFC0CB",
-  orange: "#FFA500",
-  ivory: "#FFFFF0",
-  blue: "#0000FF",
-  purple: "#800080",
-  red: "#FF0000",
-  gold: "#C9A24D",
-  green: "#008000",
-  mustard: "#FFDB58",
-  "off rose": "#F4C2C2",
-};
+      pink: "#FFC0CB",
+      orange: "#FFA500",
+      ivory: "#FFFFF0",
+      blue: "#0000FF",
+      purple: "#800080",
+      red: "#FF0000",
+      gold: "#C9A24D",
+      green: "#008000",
+      mustard: "#FFDB58",
+      "off rose": "#F4C2C2",
+    };
 
     //function to draw the color dot:
     const drawColorDot = (colorValue, x, y, size = 6) => {
-  try {
-    if (!colorValue) return;
+      try {
+        if (!colorValue) return;
 
-    let hex = null;
+        let hex = null;
 
-    // Already hex
-    if (colorValue.startsWith("#")) {
-      hex = colorValue;
-    } else {
-      // Named color → map
-      hex = COLOR_MAP[colorValue.toLowerCase()];
-    }
+        // Already hex
+        if (colorValue.startsWith("#")) {
+          hex = colorValue;
+        } else {
+          // Named color → map
+          hex = COLOR_MAP[colorValue.toLowerCase()];
+        }
 
-    // Fallback if unknown
-    if (!hex || hex.length !== 7) hex = "#000000";
+        // Fallback if unknown
+        if (!hex || hex.length !== 7) hex = "#000000";
 
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
+        const r = parseInt(hex.slice(1, 3), 16) / 255;
+        const g = parseInt(hex.slice(3, 5), 16) / 255;
+        const b = parseInt(hex.slice(5, 7), 16) / 255;
 
-    page.drawCircle({
-      x,
-      y,
-      size,
-      color: rgb(r, g, b),
-    });
-  } catch {
-    // silent fail
-  }
-};
+        page.drawCircle({
+          x,
+          y,
+          size,
+          color: rgb(r, g, b),
+        });
+      } catch {
+        // silent fail
+      }
+    };
 
 
     // LOGO
@@ -307,54 +325,54 @@ export default function Screen7() {
 
       y -= 20;
     }
-// =====================
-// BILLING DETAILS
-// =====================
-section("Billing Details");
+    // =====================
+    // BILLING DETAILS
+    // =====================
+    section("Billing Details");
 
-if (order.billing_same) {
-  draw("Billing Address", margin, y, 10, true);
-  y -= 14;
-  draw("Same as delivery address", margin, y, 10);
-  y -= 24;
-} else {
-  if (order.billing_company) {
-    field("Company", order.billing_company, margin, y);
-    y -= 30;
-  }
-
-  if (order.billing_gstin) {
-    field("GSTIN", order.billing_gstin, margin, y);
-    y -= 30;
-  }
-
-  const billingAddress = [
-    order.billing_address,
-    order.billing_city,
-    order.billing_state,
-    order.billing_pincode,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  if (billingAddress) {
-    draw("Billing Address", margin, y, 10, true);
-    y -= 14;
-
-    const billLines = wrapText(
-      billingAddress,
-      A4.w - margin * 2,
-      10
-    );
-
-    billLines.forEach((line) => {
-      draw(line, margin, y, 10);
+    if (order.billing_same) {
+      draw("Billing Address", margin, y, 10, true);
       y -= 14;
-    });
+      draw("Same as delivery address", margin, y, 10);
+      y -= 24;
+    } else {
+      if (order.billing_company) {
+        field("Company", order.billing_company, margin, y);
+        y -= 30;
+      }
 
-    y -= 20;
-  }
-}
+      if (order.billing_gstin) {
+        field("GSTIN", order.billing_gstin, margin, y);
+        y -= 30;
+      }
+
+      const billingAddress = [
+        order.billing_address,
+        order.billing_city,
+        order.billing_state,
+        order.billing_pincode,
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      if (billingAddress) {
+        draw("Billing Address", margin, y, 10, true);
+        y -= 14;
+
+        const billLines = wrapText(
+          billingAddress,
+          A4.w - margin * 2,
+          10
+        );
+
+        billLines.forEach((line) => {
+          draw(line, margin, y, 10);
+          y -= 14;
+        });
+
+        y -= 20;
+      }
+    }
 
 
     // SALESPERSON
@@ -367,76 +385,76 @@ if (order.billing_same) {
     // PAYMENT
     section("Payment Details");
     draw("Total Amount:", margin, y, 12, true);
-  draw(`INR ${formatIndianNumber(totalAmount)}`, margin + 150, y, 12, true);
-  y -= 20;
+    draw(`INR ${formatIndianNumber(totalAmount)}`, margin + 150, y, 12, true);
+    y -= 20;
 
-  draw("Discount (%):", margin, y, 10, true);
-  draw(`${pricing.discountPercent}%`, margin + 150, y, 10);
-  y -= 16;
+    draw("Discount (%):", margin, y, 10, true);
+    draw(`${pricing.discountPercent}%`, margin + 150, y, 10);
+    y -= 16;
 
-  draw("Discount Amount:", margin, y, 10, true);
-  draw(`INR ${formatIndianNumber(pricing.discountAmount)}`, margin + 150, y, 10);
-  y -= 16;
+    draw("Discount Amount:", margin, y, 10, true);
+    draw(`INR ${formatIndianNumber(pricing.discountAmount)}`, margin + 150, y, 10);
+    y -= 16;
 
-  draw("Net Payable:", margin, y, 10, true);
-  draw(`INR ${formatIndianNumber(pricing.netPayable)}`, margin + 150, y, 10);
-  y -= 16;
+    draw("Net Payable:", margin, y, 10, true);
+    draw(`INR ${formatIndianNumber(pricing.netPayable)}`, margin + 150, y, 10);
+    y -= 16;
 
-  draw("Advance Payment:", margin, y, 10, true);
-  draw(`INR ${formatIndianNumber(order.advance_payment ?? 0)}`, margin + 150, y, 10);
-  y -= 16;
+    draw("Advance Payment:", margin, y, 10, true);
+    draw(`INR ${formatIndianNumber(order.advance_payment ?? 0)}`, margin + 150, y, 10);
+    y -= 16;
 
-  draw("Remaining Payment:", margin, y, 10, true);
-  draw(`INR ${formatIndianNumber(pricing.remaining)}`, margin + 150, y, 10);
-  y -= 30;
+    draw("Remaining Payment:", margin, y, 10, true);
+    draw(`INR ${formatIndianNumber(pricing.remaining)}`, margin + 150, y, 10);
+    y -= 30;
 
 
-   // =====================
-// SIGNATURE (AUTO POSITIONED)
-// =====================
-// =====================
-// SIGNATURE (AUTO POSITIONED – SAFE)
-// =====================
-const sig = await embedImage(order.signature_url);
+    // =====================
+    // SIGNATURE (AUTO POSITIONED)
+    // =====================
+    // =====================
+    // SIGNATURE (AUTO POSITIONED – SAFE)
+    // =====================
+    const sig = await embedImage(order.signature_url);
 
-if (sig) {
-  const sigWidth = 160;
-  const sigHeight = 60;
-  const labelHeight = 14;
-  const spacing = 30;
+    if (sig) {
+      const sigWidth = 160;
+      const sigHeight = 60;
+      const labelHeight = 14;
+      const spacing = 30;
 
-  // If not enough space → new page
-  if (y < sigHeight + labelHeight + margin + spacing) {
-    page = pdf.addPage([A4.w, A4.h]);
-    y = A4.h - margin;
-  }
+      // If not enough space → new page
+      if (y < sigHeight + labelHeight + margin + spacing) {
+        page = pdf.addPage([A4.w, A4.h]);
+        y = A4.h - margin;
+      }
 
-  // Move cursor down
-  y -= spacing;
+      // Move cursor down
+      y -= spacing;
 
-  const sigX = A4.w - margin - sigWidth;
-  const sigY = y - sigHeight;
+      const sigX = A4.w - margin - sigWidth;
+      const sigY = y - sigHeight;
 
-  // Draw signature
-  page.drawImage(sig, {
-    x: sigX,
-    y: sigY,
-    width: sigWidth,
-    height: sigHeight,
-  });
+      // Draw signature
+      page.drawImage(sig, {
+        x: sigX,
+        y: sigY,
+        width: sigWidth,
+        height: sigHeight,
+      });
 
-  // Label
-  draw(
-    "Authorized Signature",
-    sigX,
-    sigY - labelHeight,
-    10,
-    true
-  );
+      // Label
+      draw(
+        "Authorized Signature",
+        sigX,
+        sigY - labelHeight,
+        10,
+        true
+      );
 
-  // Update cursor
-  y = sigY - labelHeight - 20;
-}
+      // Update cursor
+      y = sigY - labelHeight - 20;
+    }
 
 
 
@@ -477,31 +495,31 @@ if (sig) {
 
   //logo click logout
   const handleLogout = async () => {
-        try {
-          await supabase.auth.signOut();
-    
-          const raw = sessionStorage.getItem("associateSession");
-          const saved = raw ? JSON.parse(raw) : null;
-    
-          if (saved?.access_token && saved?.refresh_token) {
-            const { error } = await supabase.auth.setSession({
-              access_token: saved.access_token,
-              refresh_token: saved.refresh_token,
-            });
-    
-            if (!error) {
-              sessionStorage.removeItem("associateSession");
-              sessionStorage.removeItem("returnToAssociate");
-              navigate("/AssociateDashboard", { replace: true });
-              return;
-            }
-          }
-          navigate("/login", { replace: true });
-        } catch (e) {
-          console.error("Logout restore error", e);
-          navigate("/login", { replace: true });
+    try {
+      await supabase.auth.signOut();
+
+      const raw = sessionStorage.getItem("associateSession");
+      const saved = raw ? JSON.parse(raw) : null;
+
+      if (saved?.access_token && saved?.refresh_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: saved.access_token,
+          refresh_token: saved.refresh_token,
+        });
+
+        if (!error) {
+          sessionStorage.removeItem("associateSession");
+          sessionStorage.removeItem("returnToAssociate");
+          navigate("/AssociateDashboard", { replace: true });
+          return;
         }
-      };
+      }
+      navigate("/login", { replace: true });
+    } catch (e) {
+      console.error("Logout restore error", e);
+      navigate("/login", { replace: true });
+    }
+  };
   // ==========================
   // JSX UI BELOW
   // ==========================
@@ -521,7 +539,7 @@ if (sig) {
         <h2 className="title">Order Form</h2>
       </div>
 
-      
+
 
       <div className="screen7-container">
         {/* PRODUCT DETAILS */}
@@ -607,49 +625,49 @@ if (sig) {
           </div>
         )}
 
-   {/* Billing Details */}
-<div className="section-box">
-  <h3>Billing Details</h3>
+        {/* Billing Details */}
+        <div className="section-box">
+          <h3>Billing Details</h3>
 
-  {order.billing_same ? (
-    <div className="field field-wide">
-      <label>Billing Address:</label>
-      <span>Same as delivery address</span>
-    </div>
-  ) : (
-    <>
-      {/* Company + GSTIN (same row like other sections) */}
-      {(order.billing_company || order.billing_gstin) && (
-        <div className="row3">
-          <div className="field">
-            <label>Company Name:</label>
-            <span>{order.billing_company || "—"}</span>
-          </div>
+          {order.billing_same ? (
+            <div className="field field-wide">
+              <label>Billing Address:</label>
+              <span>Same as delivery address</span>
+            </div>
+          ) : (
+            <>
+              {/* Company + GSTIN (same row like other sections) */}
+              {(order.billing_company || order.billing_gstin) && (
+                <div className="row3">
+                  <div className="field">
+                    <label>Company Name:</label>
+                    <span>{order.billing_company || "—"}</span>
+                  </div>
 
-          <div className="field">
-            <label>GSTIN:</label>
-            <span>{order.billing_gstin || "—"}</span>
-          </div>
+                  <div className="field">
+                    <label>GSTIN:</label>
+                    <span>{order.billing_gstin || "—"}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Billing Address */}
+              <div className="field field-wide" style={{ marginTop: "12px" }}>
+                <label>Billing Address:</label>
+                <span>
+                  {[
+                    order.billing_address,
+                    order.billing_city,
+                    order.billing_state,
+                    order.billing_pincode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
+              </div>
+            </>
+          )}
         </div>
-      )}
-
-      {/* Billing Address */}
-      <div className="field field-wide" style={{ marginTop: "12px" }}>
-        <label>Billing Address:</label>
-        <span>
-          {[
-            order.billing_address,
-            order.billing_city,
-            order.billing_state,
-            order.billing_pincode,
-          ]
-            .filter(Boolean)
-            .join(", ")}
-        </span>
-      </div>
-    </>
-  )}
-</div>
 
 
 
@@ -681,20 +699,6 @@ if (sig) {
               <span>₹{formatIndianNumber(totalAmount)}</span>
             </div>
             <div className="field">
-              <label>Discount %:</label>
-              <span>{pricing.discountPercent}%</span>
-            </div>
-            <div className="field">
-              <label>Discount Amount:</label>
-              <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
-            </div>
-          </div>
-          <div className="row3">
-            <div className="field">
-              <label>Net Payable:</label>
-              <span>₹{formatIndianNumber(pricing.netPayable)}</span>
-            </div>
-            <div className="field">
               <label>Advance Payment:</label>
               <span>₹{formatIndianNumber(advancePayment)}</span>
             </div>
@@ -702,6 +706,25 @@ if (sig) {
               <label>Remaining Payment:</label>
               <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
+
+          </div>
+          <div className="row3">
+            {/* <div className="field">
+              <label>Net Payable:</label>
+              <span>₹{formatIndianNumber(pricing.netPayable)}</span>
+            </div>
+
+            <div className="field">
+              <label>Discount %:</label>
+              <span>{pricing.discountPercent}%</span>
+            </div>
+            <div className="field">
+              <label>Discount Amount:</label>
+              <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
+            </div> */}
+
+
+
           </div>
         </div>
 
