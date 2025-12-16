@@ -491,6 +491,15 @@ export default function Screen4() {
       <div className="header">
         <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
         <h2 className="order-title">Order Form</h2>
+        {selectedProduct && (selectedProduct.image_url || selectedProduct.image) && (
+          <div className="order-product-thumb">
+            <img
+              src={selectedProduct.image_url || selectedProduct.image}
+              alt={selectedProduct.name || "Selected product"}
+              className="order-product-thumb-img"
+            />
+          </div>
+        )}
       </div>
 
       <div className="screen4-card">
@@ -857,6 +866,8 @@ export default function Screen4() {
 
         {/* ALWAYS-VISIBLE SUMMARY */}
         <div className="summary-box-fixed">
+          
+
           <h3>Order Summary</h3>
 
           <p>
