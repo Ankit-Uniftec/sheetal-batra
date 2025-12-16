@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./Screen6.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Logo from "../images/logo.png";
+import formatIndianNumber from "../utils/formatIndianNumber";
 
 export default function Screen6() {
   const navigate = useNavigate();
@@ -14,6 +15,9 @@ export default function Screen6() {
 
   const [profile, setProfile] = useState(null);
   const [selectedSP, setSelectedSP] = useState(null);
+
+  // Payment
+  const [advancePayment, setAdvancePayment] = useState("");
 
   // Billing
   const [billingSame, setBillingSame] = useState(true);
@@ -31,6 +35,23 @@ export default function Screen6() {
   const [deliveryPincode, setDeliveryPincode] = useState("");
 
   const norm = (v) => (v || "").trim();
+
+  const totalAmount = useMemo(
+    () => Number(order?.grand_total) || 0,
+    [order?.grand_total]
+  );
+
+  const sanitizedAdvance = useMemo(() => {
+    const num = parseFloat(advancePayment);
+    if (isNaN(num) || num < 0) return 0;
+    if (num > totalAmount) return totalAmount;
+    return num;
+  }, [advancePayment, totalAmount]);
+
+  const remainingAmount = useMemo(
+    () => Math.max(0, totalAmount - sanitizedAdvance),
+    [totalAmount, sanitizedAdvance]
+  );
 
   // Load user profile + salesperson
   useEffect(() => {
@@ -94,6 +115,8 @@ export default function Screen6() {
     const payload = {
       ...order,
       user_id: user.id,
+      advance_payment: sanitizedAdvance,
+      remaining_payment: remainingAmount,
 
       // DELIVERY
       delivery_name: profile.full_name,
@@ -154,9 +177,10 @@ export default function Screen6() {
       <div className="screen6-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
         <img src={Logo} className="sheetal-logo" alt="logo"  onClick={handleLogout}/>
+        <h2 className="title">Order Form</h2>
       </div>
 
-      <h2 className="title">Order Form</h2>
+      
 
       <div className="screen6-container">
 
@@ -310,6 +334,32 @@ export default function Screen6() {
           )}
         </div>
 
+        {/* PAYMENT DETAILS */}
+        <div className="section-box">
+          <h3>Payment Details</h3>
+          <div className="row3">
+            <div className="field">
+              <label>Total Amount:</label>
+              <span>₹{formatIndianNumber(totalAmount)}</span>
+            </div>
+            <div className="field">
+              <label>Advance Payment:</label>
+              <input
+                type="number"
+                className="input-line"
+                min="0"
+                max={totalAmount}
+                value={advancePayment}
+                onChange={(e) => setAdvancePayment(e.target.value)}
+                placeholder="Enter advance amount"
+              />
+            </div>
+            <div className="field">
+              <label>Remaining Payment:</label>
+              <span>₹{formatIndianNumber(remainingAmount)}</span>
+            </div>
+          </div>
+        </div>
 
         {/* CONFIRM BUTTON */}
         <button className="confirm-btn" onClick={confirmOrder}>

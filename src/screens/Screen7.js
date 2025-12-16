@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -18,8 +18,18 @@ export default function Screen7() {
   const [loading, setLoading] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
+  const [discountPercent, setDiscountPercent] = useState(0);
 
-  if (!order) return <div>No order found</div>;
+  const totalAmount = Number(order.grand_total) || 0;
+  const advancePayment = Number(order.advance_payment) || 0;
+
+  const pricing = useMemo(() => {
+    const pct = Math.min(100, Math.max(0, Number(discountPercent) || 0));
+    const discountAmount = (totalAmount * pct) / 100;
+    const netPayable = Math.max(0, totalAmount - discountAmount);
+    const remaining = Math.max(0, netPayable - advancePayment);
+    return { discountPercent: pct, discountAmount, netPayable, remaining };
+  }, [discountPercent, totalAmount, advancePayment]);
 
   // ===============================
   // PROFILE
@@ -33,7 +43,19 @@ export default function Screen7() {
   // ===============================
   // SIGNATURE FLOW
   // ===============================
-  const handlePlaceOrder = () => setShowSignature(true);
+  const handlePlaceOrder = () => {
+    const resp = window.prompt("Enter discount percentage (0-100):", "0");
+    if (resp === null) return; // user cancelled
+
+    const val = Number(resp);
+    if (isNaN(val) || val < 0 || val > 100) {
+      alert("Please enter a valid discount between 0 and 100.");
+      return;
+    }
+
+    setDiscountPercent(val);
+    setShowSignature(true);
+  };
 
   const saveSignatureAndContinue = async () => {
     if (!sigPad || sigPad.isEmpty()) {
@@ -57,10 +79,17 @@ export default function Screen7() {
         .from("signature")
         .getPublicUrl(path);
 
-      await saveOrderToDB({
+      const orderWithPricing = {
         ...order,
+        discount_percent: pricing.discountPercent,
+        discount_amount: pricing.discountAmount,
+        grand_total_after_discount: pricing.netPayable,
+        net_total: pricing.netPayable,
+        remaining_payment: pricing.remaining,
         signature_url: data.publicUrl,
-      });
+      };
+
+      await saveOrderToDB(orderWithPricing);
     } catch (e) {
       alert("Signature upload failed");
       console.error(e);
@@ -338,7 +367,28 @@ if (order.billing_same) {
     // PAYMENT
     section("Payment Details");
     draw("Total Amount:", margin, y, 12, true);
-    draw(`INR ${formatIndianNumber(order.grand_total)}`, margin + 150, y, 12, true);
+  draw(`INR ${formatIndianNumber(totalAmount)}`, margin + 150, y, 12, true);
+  y -= 20;
+
+  draw("Discount (%):", margin, y, 10, true);
+  draw(`${pricing.discountPercent}%`, margin + 150, y, 10);
+  y -= 16;
+
+  draw("Discount Amount:", margin, y, 10, true);
+  draw(`INR ${formatIndianNumber(pricing.discountAmount)}`, margin + 150, y, 10);
+  y -= 16;
+
+  draw("Net Payable:", margin, y, 10, true);
+  draw(`INR ${formatIndianNumber(pricing.netPayable)}`, margin + 150, y, 10);
+  y -= 16;
+
+  draw("Advance Payment:", margin, y, 10, true);
+  draw(`INR ${formatIndianNumber(order.advance_payment ?? 0)}`, margin + 150, y, 10);
+  y -= 16;
+
+  draw("Remaining Payment:", margin, y, 10, true);
+  draw(`INR ${formatIndianNumber(pricing.remaining)}`, margin + 150, y, 10);
+  y -= 30;
 
 
    // =====================
@@ -456,6 +506,10 @@ if (sig) {
   // JSX UI BELOW
   // ==========================
 
+  if (!order) {
+    return <div>No order found</div>;
+  }
+
   return (
     <div className="screen7">
       {/* Header */}
@@ -464,9 +518,10 @@ if (sig) {
           ←
         </button>
         <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
+        <h2 className="title">Order Form</h2>
       </div>
 
-      <h2 className="title">Order Form</h2>
+      
 
       <div className="screen7-container">
         {/* PRODUCT DETAILS */}
@@ -623,7 +678,29 @@ if (sig) {
           <div className="row3">
             <div className="field">
               <label>Total Amount:</label>
-              <span>₹{formatIndianNumber(order.grand_total)}</span>
+              <span>₹{formatIndianNumber(totalAmount)}</span>
+            </div>
+            <div className="field">
+              <label>Discount %:</label>
+              <span>{pricing.discountPercent}%</span>
+            </div>
+            <div className="field">
+              <label>Discount Amount:</label>
+              <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
+            </div>
+          </div>
+          <div className="row3">
+            <div className="field">
+              <label>Net Payable:</label>
+              <span>₹{formatIndianNumber(pricing.netPayable)}</span>
+            </div>
+            <div className="field">
+              <label>Advance Payment:</label>
+              <span>₹{formatIndianNumber(advancePayment)}</span>
+            </div>
+            <div className="field">
+              <label>Remaining Payment:</label>
+              <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
           </div>
         </div>

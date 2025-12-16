@@ -289,7 +289,8 @@ export default function Screen2() {
 
       <div className="card2">
         <h2 className="title">Welcome to Sheetal Batra</h2>
-        <p className="subtitle">Your personalised experience awaits.</p>
+         <p className="subtitle">Your personalised experience awaits.</p>
+       
 
         <div className="otpBox">
           <p className="otp-text">OTP has been sent to +91 {mobile}</p>

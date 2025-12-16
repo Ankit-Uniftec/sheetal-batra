@@ -24,9 +24,9 @@ cursor: pointer;
 }
 
 .card {
+  max-width: 480px !important;
+  height: 500px !important;
   
-  max-width: 480px;
-  height: 500px;
   background:#FFFFFF73;
   padding: 25px;
   border-radius: 20px;

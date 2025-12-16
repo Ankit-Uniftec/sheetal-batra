@@ -642,6 +642,8 @@ export default function Screen4() {
                 Price: <strong>₹{formatIndianNumber(getLivePrice())}</strong>
               </p>
             )}
+            
+            
 
           </div>
 

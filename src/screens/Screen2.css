@@ -49,7 +49,7 @@ body {
   /* width: 100%; */
   max-width: 480px;
   height: 500px;
-  background: rgba(255, 255, 255, 0.45);
+  background: #FFFFFF73;
   padding: 25px;
   border-radius: 20px;
   text-align: center;
@@ -66,18 +66,20 @@ body {
   font-weight: 500;
   font-size: 32px;
   color: #d5b85a !important;
-  margin: 0;
+  
   text-align: center;
   line-height: 1.2;
-  margin-top: 45px !important;
+  margin-top: 50px !important;
+  margin-bottom: 10px !important;
+  
 }
 
 /* ---------- SUBTITLE (FIXED BLACK) ---------- */
-.card2 .subtitle {
+.subtitle {
   font-family: "Futura", sans-serif !important;
   font-size: 16px !important;
   font-weight: 400 !important;
-  margin-top: 21px !important;
+  margin-top: 0px !important;
   text-align: center;
   color: #000000 !important;
 }
@@ -87,11 +89,13 @@ body {
   margin-top: 20px;
   color: #555 !important;
   font-size: 15px;
+  margin-left: 5px;
 }
 
 /* ---------- OTP INPUTS ---------- */
 .otpBox {
   margin-top: 60px;
+  text-align: left;
 }
 
 .otp-input {
