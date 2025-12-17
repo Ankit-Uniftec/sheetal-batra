@@ -1296,6 +1296,21 @@ export default function Screen4() {
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [urgentReason, setUrgentReason] = useState("");
 
+const SIZE_CHART_US = {
+  XXS: { Bust: 30, Waist: 24, Hip: 34 },
+  XS:  { Bust: 32, Waist: 26, Hip: 36 },
+  S:   { Bust: 34, Waist: 28, Hip: 38 },
+  M:   { Bust: 36, Waist: 30, Hip: 40 },
+  L:   { Bust: 38, Waist: 32, Hip: 42 },
+  XL:  { Bust: 40, Waist: 34, Hip: 44 },
+  "2XL": { Bust: 42, Waist: 36, Hip: 46 },
+  "3XL": { Bust: 44, Waist: 38, Hip: 48 },
+  "4XL": { Bust: 46, Waist: 40, Hip: 50 },
+  "5XL": { Bust: 48, Waist: 42, Hip: 52 },
+  "6XL": { Bust: 50, Waist: 44, Hip: 54 },
+  "7XL": { Bust: 52, Waist: 46, Hip: 56 },
+  "8XL": { Bust: 54, Waist: 48, Hip: 58 },
+};
 
   const measurementCategories = [
     "Basics",
@@ -1393,6 +1408,23 @@ export default function Screen4() {
   }, [selectedBottom]);
 
   //-----------------------------------------------
+// automatic size chart value filled
+  useEffect(() => {
+  if (!selectedSize) return;
+
+  const sizeData = SIZE_CHART_US[selectedSize];
+  if (!sizeData) return;
+
+  setMeasurements((prev) => ({
+    ...prev,
+    Basics: {
+      ...(prev.Basics || {}),
+      Bust: sizeData.Bust,
+      Waist: sizeData.Waist,
+      Hip: sizeData.Hip,
+    },
+  }));
+}, [selectedSize]);
 
 
   // When product changes, load options

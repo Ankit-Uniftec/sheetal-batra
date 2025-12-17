@@ -24,6 +24,7 @@ export default function Dashboard() {
     () => new Date().toISOString().slice(0, 10)
   );
   const [clientsLoading, setClientsLoading] = useState(false);
+  const [orderSearch, setOrderSearch] = useState("");
 
   // ------------ Stats -------------
   const totalRevenue = orders.reduce(
@@ -199,6 +200,26 @@ export default function Dashboard() {
     (o) => o.delivery_date && o.delivery_date.slice(0, 10) === calendarDate
   );
 
+  const filteredOrders = orders.filter((order) => {
+    if (!orderSearch.trim()) return true;
+
+    const q = orderSearch.toLowerCase();
+
+    const productName =
+      order.items?.[0]?.product_name?.toLowerCase() || "";
+
+    const productId = String(order.id || "").toLowerCase();
+
+    const clientName =
+      order.delivery_name?.toLowerCase() || "";
+
+    return (
+      productId.includes(q) ||
+      productName.includes(q) ||
+      clientName.includes(q)
+    );
+  });
+
 
 
 
@@ -356,13 +377,21 @@ export default function Dashboard() {
             <div className="order-details-wrapper">
 
               <h2 className="order-title">Order Details</h2>
+              <div className="order-search-bar">
+                <input
+                  type="text"
+                  placeholder="Search by Order ID, Product Name or Client Name"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                />
+              </div>
 
               <div className="order-list-scroll">
-                {orders.length === 0 && (
+                {filteredOrders.length === 0 && (
                   <p className="muted">No orders found for this associate.</p>
                 )}
 
-                {orders.map((order) => {
+                {filteredOrders.map((order) => {
                   const item = order.items?.[0] || {};
                   const imgSrc = item.image_url || "/placeholder.png";
 

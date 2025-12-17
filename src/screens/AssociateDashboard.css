@@ -695,3 +695,21 @@
     flex-shrink: 0;
   }
 }
+
+.order-search-bar {
+  margin: 12px 0 18px;
+}
+
+.order-search-bar input {
+  width: 100%;
+  max-width: 420px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #d5b85a;
+  font-size: 14px;
+  outline: none;
+}
+
+.order-search-bar input:focus {
+  border-color: #b79b3d;
+}

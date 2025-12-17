@@ -18,18 +18,20 @@ export default function Screen7() {
   const [loading, setLoading] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
-  const [discountPercent, setDiscountPercent] = useState(0);
 
   const totalAmount = Number(order.grand_total) || 0;
   const advancePayment = Number(order.advance_payment) || 0;
+  const discountPercent = Number(order.discount_percent) || 0;
+  const discountAmount = Number(order.discount_amount) || 0;
+  const netPayable = Number(order.net_total) || 0;
+  const remaining = Number(order.remaining_payment) || 0;
 
-  const pricing = useMemo(() => {
-    const pct = Math.min(100, Math.max(0, Number(discountPercent) || 0));
-    const discountAmount = (totalAmount * pct) / 100;
-    const netPayable = Math.max(0, totalAmount - discountAmount);
-    const remaining = Math.max(0, netPayable - advancePayment);
-    return { discountPercent: pct, discountAmount, netPayable, remaining };
-  }, [discountPercent, totalAmount, advancePayment]);
+  const pricing = {
+    discountPercent,
+    discountAmount,
+    netPayable,
+    remaining,
+  };
 
   // ===============================
   // PROFILE
@@ -43,36 +45,8 @@ export default function Screen7() {
   // ===============================
   // SIGNATURE FLOW
   // ===============================
-  const handlePlaceOrder = async () => {
-    const codeInput = window.prompt("Enter Collector code:");
-    if (codeInput === null) return; // cancelled
-
-    const code = codeInput.trim();
-    if (!code) {
-      alert("Please enter a valid collector code.");
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("discount")
-        .select("percent")
-        .eq("code", code)
-        .limit(1)
-        .maybeSingle();
-
-      if (error || !data) {
-        alert("Invalid or expired discount code.");
-        return;
-      }
-
-      const pct = Number(data.percent) || 0;
-      setDiscountPercent(pct);
-      setShowSignature(true);
-    } catch (e) {
-      console.error("Discount lookup failed", e);
-      alert("Could not validate discount code. Please try again.");
-    }
+  const handlePlaceOrder = () => {
+    setShowSignature(true);
   };
 
   const saveSignatureAndContinue = async () => {

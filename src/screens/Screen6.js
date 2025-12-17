@@ -17,7 +17,9 @@ export default function Screen6() {
   const [selectedSP, setSelectedSP] = useState(null);
 
   // Payment
-  const [advancePayment, setAdvancePayment] = useState("");
+  const [advancePayment, setAdvancePayment] = useState("25");
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [discountApplied, setDiscountApplied] = useState(false);
 
   // Billing
   const [billingSame, setBillingSame] = useState(true);
@@ -34,6 +36,10 @@ export default function Screen6() {
   const [deliveryState, setDeliveryState] = useState("");
   const [deliveryPincode, setDeliveryPincode] = useState("");
 
+  const [paymentMode, setPaymentMode] = useState("UPI");
+  const COD_CHARGE = 250;
+
+
   const norm = (v) => (v || "").trim();
 
   const totalAmount = useMemo(
@@ -42,16 +48,38 @@ export default function Screen6() {
   );
 
   const sanitizedAdvance = useMemo(() => {
-    const num = parseFloat(advancePayment);
-    if (isNaN(num) || num < 0) return 0;
-    if (num > totalAmount) return totalAmount;
-    return num;
+    const percentage = parseFloat(advancePayment);
+    if (isNaN(percentage) || percentage <= 0) return 0;
+    const calculatedAdvance = (totalAmount * percentage) / 100;
+    return Math.min(calculatedAdvance, totalAmount);
   }, [advancePayment, totalAmount]);
 
   const remainingAmount = useMemo(
     () => Math.max(0, totalAmount - sanitizedAdvance),
     [totalAmount, sanitizedAdvance]
   );
+
+  const pricing = useMemo(() => {
+    const pct = Math.min(100, Math.max(0, Number(discountPercent) || 0));
+    const discountAmount = (totalAmount * pct) / 100;
+
+    let netPayable = Math.max(0, totalAmount - discountAmount);
+
+    // ✅ Add COD charge
+    if (paymentMode === "COD") {
+      netPayable += COD_CHARGE;
+    }
+
+    const remaining = Math.max(0, netPayable - sanitizedAdvance);
+
+    return {
+      discountPercent: pct,
+      discountAmount,
+      netPayable,
+      remaining,
+    };
+  }, [discountPercent, totalAmount, sanitizedAdvance, paymentMode]);
+
 
   // Load user profile + salesperson
   useEffect(() => {
@@ -116,7 +144,11 @@ export default function Screen6() {
       ...order,
       user_id: user.id,
       advance_payment: sanitizedAdvance,
-      remaining_payment: remainingAmount,
+      remaining_payment: pricing.remaining,
+      discount_percent: pricing.discountPercent,
+      discount_amount: pricing.discountAmount,
+      grand_total_after_discount: pricing.netPayable,
+      net_total: pricing.netPayable,
 
       // DELIVERY
       delivery_name: profile.full_name,
@@ -132,6 +164,9 @@ export default function Screen6() {
       billing_address: finalBillingAddress,
       billing_company: billingCompany || null,
       billing_gstin: billingGST || null,
+      payment_mode: paymentMode,
+cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
+
 
       // SALESPERSON
       salesperson: selectedSP?.saleperson || null,
@@ -144,43 +179,76 @@ export default function Screen6() {
     navigate("/orderDetail", { state: { orderPayload: payload } });
   };
 
+  const handleDiscount = async () => {
+    const codeInput = window.prompt("Enter Collector code:");
+    if (codeInput === null) return; // cancelled
+
+    const code = codeInput.trim();
+    if (!code) {
+      alert("Please enter a valid collector code.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("discount")
+        .select("percent")
+        .eq("code", code)
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) {
+        alert("Invalid or expired discount code.");
+        return;
+      }
+
+      const pct = Number(data.percent) || 0;
+      setDiscountPercent(pct);
+      setDiscountApplied(true);
+
+    } catch (e) {
+      console.error("Discount lookup failed", e);
+      alert("Could not validate discount code. Please try again.");
+    }
+  };
+
   const handleLogout = async () => {
-        try {
-          await supabase.auth.signOut();
-    
-          const raw = sessionStorage.getItem("associateSession");
-          const saved = raw ? JSON.parse(raw) : null;
-    
-          if (saved?.access_token && saved?.refresh_token) {
-            const { error } = await supabase.auth.setSession({
-              access_token: saved.access_token,
-              refresh_token: saved.refresh_token,
-            });
-    
-            if (!error) {
-              sessionStorage.removeItem("associateSession");
-              sessionStorage.removeItem("returnToAssociate");
-              navigate("/AssociateDashboard", { replace: true });
-              return;
-            }
-          }
-          navigate("/login", { replace: true });
-        } catch (e) {
-          console.error("Logout restore error", e);
-          navigate("/login", { replace: true });
+    try {
+      await supabase.auth.signOut();
+
+      const raw = sessionStorage.getItem("associateSession");
+      const saved = raw ? JSON.parse(raw) : null;
+
+      if (saved?.access_token && saved?.refresh_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: saved.access_token,
+          refresh_token: saved.refresh_token,
+        });
+
+        if (!error) {
+          sessionStorage.removeItem("associateSession");
+          sessionStorage.removeItem("returnToAssociate");
+          navigate("/AssociateDashboard", { replace: true });
+          return;
         }
-      };
+      }
+      navigate("/login", { replace: true });
+    } catch (e) {
+      console.error("Logout restore error", e);
+      navigate("/login", { replace: true });
+    }
+  };
 
   return (
     <div className="screen6">
       {/* HEADER */}
       <div className="screen6-header">
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
-        <img src={Logo} className="sheetal-logo" alt="logo"  onClick={handleLogout}/>
+        <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
         <h2 className="title">Order Form</h2>
       </div>
 
-      
+
 
       <div className="screen6-container">
 
@@ -336,30 +404,73 @@ export default function Screen6() {
 
         {/* PAYMENT DETAILS */}
         <div className="section-box">
-          <h3>Payment Details</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3>Payment Details</h3>
+            <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px" }}>Collector Code</button>
+          </div>
           <div className="row3">
+            <div className="field">
+              <label>Mode of Payment:</label>
+              <select
+                className="input-select"
+                value={paymentMode}
+                onChange={(e) => setPaymentMode(e.target.value)}
+              >
+                <option value="UPI">UPI</option>
+                <option value="COD">COD</option>
+              </select>
+
+              {/* {paymentMode === "COD" && (
+                <small style={{ color: "#b8860b" }}>
+                  + ₹{COD_CHARGE} COD charges applied
+                </small>
+              )} */}
+            </div>
+
             <div className="field">
               <label>Total Amount:</label>
               <span>₹{formatIndianNumber(totalAmount)}</span>
             </div>
             <div className="field">
-              <label>Advance Payment:</label>
-              <input
-                type="number"
-                className="input-line"
-                min="0"
-                max={totalAmount}
+              <label>Advance Payment (%):</label>
+              <select
+                className="input-select"
                 value={advancePayment}
                 onChange={(e) => setAdvancePayment(e.target.value)}
-                placeholder="Enter advance amount"
-              />
+              >
+                <option value="25">25%</option>
+                <option value="50">50%</option>
+                <option value="75">75%</option>
+              </select>
             </div>
             <div className="field">
-              <label>Remaining Payment:</label>
-              <span>₹{formatIndianNumber(remainingAmount)}</span>
+              <label>Advance Amount:</label>
+              <span>₹{formatIndianNumber(sanitizedAdvance)}</span>
             </div>
           </div>
-          
+          {discountApplied && (
+            <div className="row3">
+              <div className="field">
+                <label>Discount %:</label>
+                <span>{pricing.discountPercent}%</span>
+              </div>
+              <div className="field">
+                <label>Discount Amount:</label>
+                <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
+              </div>
+              <div className="field">
+                <label>Net Payable:</label>
+                <span>₹{formatIndianNumber(pricing.netPayable)}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="row3">
+            <div className="field">
+              <label>Remaining Payment:</label>
+              <span>₹{formatIndianNumber(pricing.remaining)}</span>
+            </div>
+          </div>
         </div>
 
         {/* CONFIRM BUTTON */}
