@@ -20,6 +20,9 @@ export default function Dashboard() {
   const [enteredPassword, setEnteredPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [clients, setClients] = useState([]);
+  const [calendarDate, setCalendarDate] = useState(
+    () => new Date().toISOString().slice(0, 10)
+  );
   const [clientsLoading, setClientsLoading] = useState(false);
 
   // ------------ Stats -------------
@@ -192,6 +195,10 @@ export default function Dashboard() {
   const statusBadge = (status) =>
     status === "complete" ? "complete" : "active";
 
+  const calendarOrders = orders.filter(
+    (o) => o.delivery_date && o.delivery_date.slice(0, 10) === calendarDate
+  );
+
 
 
 
@@ -258,6 +265,13 @@ export default function Dashboard() {
               </a>
 
               <a
+                className={`menu-item ${activeTab === "calendar" ? "active" : ""}`}
+                onClick={() => setActiveTab("calendar")}
+              >
+                Calendar
+              </a>
+
+              <a
                 className={`menu-item ${activeTab === "clients" ? "active" : ""}`}
                 onClick={() => setActiveTab("clients")}
               >
@@ -293,8 +307,8 @@ export default function Dashboard() {
                   </div>
 
                   <div className="sales-scale">
-                    <span>{formatIndianNumber(500000)}</span>
-                    <span>{formatIndianNumber(800000)}</span>
+                    <span>₹{formatIndianNumber(500000)}</span>
+                    <span>₹{formatIndianNumber(800000)}</span>
                   </div>
 
                   <div className="progress-bar">
@@ -426,6 +440,97 @@ export default function Dashboard() {
                 })}
               </div>
 
+            </div>
+          )}
+
+          {/* ------------- CALENDAR TAB ------------ */}
+          {activeTab === "calendar" && (
+            <div className="order-details-wrapper">
+              <h2 className="order-title">Calendar</h2>
+
+              <div className="calendar-filter-row">
+                <label className="calendar-label">
+                  Select Date:&nbsp;
+                  <input
+                    type="date"
+                    value={calendarDate}
+                    onChange={(e) => setCalendarDate(e.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="order-list-scroll">
+                {calendarOrders.length === 0 ? (
+                  <p className="muted">No orders on this date.</p>
+                ) : (
+                  calendarOrders.map((order) => {
+                    const item = order.items?.[0] || {};
+                    const imgSrc = item.image_url || "/placeholder.png";
+
+                    return (
+                      <div key={order.id} className="order-card">
+                        <div className={`state-badge ${statusBadge(order.status)}`}>
+                          {order.status === "complete" ? "Complete" : "Active"}
+                        </div>
+
+                        <div className="order-row">
+                          <div className="thumb">
+                            <img src={imgSrc} alt={item.product_name || "Product"} />
+                          </div>
+
+                          <div className="details">
+                            <div className="row space">
+                              <div className="kv"></div>
+                              <div className="kv"></div>
+                              <div className="kv">
+                                <div className="small muted">EDD</div>
+                                <div>{order.delivery_date || "—"}</div>
+                              </div>
+                            </div>
+
+                            <div className="grid-2">
+                              <div className="kv">
+                                <div className="label">Product Name</div>
+                                <div className="value">{item.product_name || "—"}</div>
+                              </div>
+
+                              <div className="kv">
+                                <div className="label">Amount</div>
+                                <div className="value">
+                                  ₹{formatIndianNumber(order.grand_total)}
+                                </div>
+                              </div>
+
+                              <div className="kv">
+                                <div className="label">Qty</div>
+                                <div className="value">
+                                  {formatIndianNumber(order.total_quantity)}
+                                </div>
+                              </div>
+
+                              <div className="kv">
+                                <div className="label">Color</div>
+                                <div className="value">
+                                  <div
+                                    style={{
+                                      background: item.color,
+                                      height: "15px",
+                                      width: "30px",
+                                      borderRadius: "14px",
+                                      marginBottom: "5px",
+                                    }}
+                                  />
+                                  {item.color || "—"}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
 

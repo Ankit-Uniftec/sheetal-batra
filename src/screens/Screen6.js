@@ -359,6 +359,7 @@ export default function Screen6() {
               <span>₹{formatIndianNumber(remainingAmount)}</span>
             </div>
           </div>
+          
         </div>
 
         {/* CONFIRM BUTTON */}

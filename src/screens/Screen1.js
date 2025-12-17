@@ -155,6 +155,7 @@ export default function Screen1() {
           By continuing, you agree to our{" "}
           <a
             href="https://sheetalbatra.com/pages/privacy-policy"
+            target="new"
            
           >
             Terms & Privacy Policy

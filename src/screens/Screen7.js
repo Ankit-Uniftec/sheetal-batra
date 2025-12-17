@@ -709,7 +709,7 @@ export default function Screen7() {
 
           </div>
           <div className="row3">
-            {/* <div className="field">
+            <div className="field">
               <label>Net Payable:</label>
               <span>₹{formatIndianNumber(pricing.netPayable)}</span>
             </div>
@@ -721,7 +721,7 @@ export default function Screen7() {
             <div className="field">
               <label>Discount Amount:</label>
               <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
-            </div> */}
+            </div>
 
 
 

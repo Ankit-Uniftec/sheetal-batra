@@ -10,7 +10,9 @@
           "backdrop-filter",
           "user-select",
           "-webkit-overflow-scrolling",
-          "inset"
+          "inset",
+          "position: sticky",
+          "position: sticky !mportant"
         ]
       }
     ]
