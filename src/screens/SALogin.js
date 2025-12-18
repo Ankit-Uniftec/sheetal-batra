@@ -102,9 +102,7 @@ export default function SALogin() {
           </button>
         </div>
 
-        <div className="back-btn" onClick={() => navigate(-1)}>
-          <span>&#8592;</span>
-        </div>
+        
       </div>
     </div>
   );

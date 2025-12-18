@@ -586,9 +586,23 @@ export default function Dashboard() {
                 </div>
 
                 <div className="profile-row">
-                  <span className="label">Join On</span>
+                  <span className="label">Joining On</span>
                   <span className="value">
                     {salesperson.join_date}
+                  </span>
+
+                </div>
+                <div className="profile-row">
+                  <span className="label">Store Name</span>
+                  <span className="value">
+                    {salesperson.store_name}
+                  </span>
+
+                </div>
+                <div className="profile-row">
+                  <span className="label">Designation</span>
+                  <span className="value">
+                    {salesperson.designation}
                   </span>
 
                 </div>
