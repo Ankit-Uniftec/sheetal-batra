@@ -1,6 +1,6 @@
 * {
   font-family: "Futura", sans-serif !important;
-  color: #000000 !important;
+  color:black;
 }
 
 .dashboard-wrapper {
@@ -39,16 +39,26 @@
 .header-left {
   justify-self: start; /* left side */
 }
-
-.logout-btn {
+.header-right {
   justify-self: end; /* right side */
+
+}
+.logout-btn {
+  
   border: 1px solid #d5b85a;
   height: 50px;
   width: 50px;
   cursor: pointer;
+    color: #fff !important;
 }
 
 .title {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  padding:20px 32px;
+  position: relative;
+  width:100%;
   font-family: "Athleas", serif !important;
   justify-self: center; /* PERFECT center */
   text-align: center;
@@ -78,18 +88,22 @@
   background: #FFFFFFB0;
   border: 1px solid #D4D4D4;
   border-radius: 8px;
+  overflow:visible;
+ 
   
 }
 
 .hello-box {
   background: #d5b85a;
   padding: 10px;
-  color: white;
+  color:white !important;
   border-radius: 8px;
   font-weight: 500;
+
 }
 .clickable {
   cursor: pointer;
+    color:white !important;
 }
 
 
@@ -109,6 +123,19 @@
 .menu-item.active {
   font-weight: bold;
   color: #d5b85a;
+  position: relative; /* Needed for pseudo-element positioning */
+}
+
+.menu-item.active::after {
+  content: "";
+  position: absolute;
+  left: 12px; /* Align with padding */
+  bottom: 4px;
+  width: 95px;
+
+  height: 3px;
+  background-color: #d5b85a;
+  border-radius: 2px;
 }
 
 
@@ -198,9 +225,8 @@
 .alerts-title {
   font-family: "Athleas", serif !important;
   color: #d5b85a !important;
-  font-size: 16px;
-  font-weight: 600;
-  color: #d5b85a;
+  font-size: 16px !important;
+  
 }
 
 .alerts-body {
@@ -220,6 +246,10 @@
 
 /* ---------------- CARDS ---------------- */
 
+.gold-text {
+  color:#d5b85a !important;
+}
+
 .stat-card {
   background: #FFFFFFB0;
   padding: 18px;
@@ -228,16 +258,16 @@
 }
 
 .stat-title {
-  font-family: "Futura", sans-serif !important;
-  color: black !important;
-  font-size: 14px;
-  color: #777;
+  font-family: "Athleas", serif !important;
+ font-size: 16px !important;
+ color: #d5b85a !important;
 }
 
 .stat-content {
   display: flex;
   justify-content: space-between;
   margin-top: 10px;
+  color: #d5b85a !important;
 }
 
 .stat-value {
@@ -247,7 +277,7 @@
 }
 
 .stat-change {
-  color: #1dbf4f;
+ color: #d5b85a !important;
 }
 
 /* Sales Card */
@@ -264,13 +294,15 @@
 }
 
 .sales-label {
-  font-size: 14px;
-  color: #888;
+  font-family: "Athleas", serif !important;
+  font-size: 16px !important;
+  color: #d5b85a !important;
 }
 
 .sales-progress {
   font-size: 16px;
   font-weight: 500;
+  color: #d5b85a;
 }
 
 .sales-scale {
@@ -311,7 +343,7 @@
 
 .card-title {
   font-family: "Athleas", serif !important;
-  font-size: 16px;
+  font-size: 16px !important;
   color: #d5b85a !important;
 }
 .cardbox {
@@ -365,8 +397,10 @@
   }
 
   .stat-card {
+    
     padding: 14px;
     width: 170px;
+
   }
   .cardbox{
     
@@ -376,6 +410,7 @@
 
   .stat-value {
     font-size: 26px;
+    color:black !important;
   }
 
   .sales-card {

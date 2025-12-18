@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen2.css";
 import Logo from "../images/logo.png";
+import formatPhoneNumber from "../utils/formatPhoneNumber";
 
 export default function Screen2() {
   const location = useLocation();
@@ -129,7 +130,7 @@ export default function Screen2() {
        
 
         <div className="otpBox">
-          <p className="otp-text">OTP has been sent to +91 {mobile}</p>
+          <p className="otp-text">OTP has been sent to {formatPhoneNumber(mobile)}</p>
 
           {otp.map((v, i) => (
             <input

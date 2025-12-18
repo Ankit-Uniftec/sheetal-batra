@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
+import formatPhoneNumber from "../utils/formatPhoneNumber";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -263,28 +264,22 @@ export default function Dashboard() {
           {/* SIDEBAR */}
           <aside className="sidebar">
             <div
-              className="hello-box clickable"
+              className={`hello-box clickable ${activeTab === "profile" ? "active" : ""}`}
               onClick={() => setActiveTab("profile")}
             >
               Hello, {salesperson?.saleperson || "Associate"}
             </div>
+           
 
 
             <nav className="menu">
+               
               <a
                 className={`menu-item ${activeTab === "dashboard" ? "active" : ""}`}
                 onClick={() => setActiveTab("dashboard")}
               >
                 Dashboard
               </a>
-
-              <a
-                className={`menu-item ${activeTab === "orders" ? "active" : ""}`}
-                onClick={() => setActiveTab("orders")}
-              >
-                Order Details
-              </a>
-
               <a
                 className={`menu-item ${activeTab === "calendar" ? "active" : ""}`}
                 onClick={() => setActiveTab("calendar")}
@@ -293,10 +288,19 @@ export default function Dashboard() {
               </a>
 
               <a
+                className={`menu-item ${activeTab === "orders" ? "active" : ""}`}
+                onClick={() => setActiveTab("orders")}
+              >
+                Order History
+              </a>
+
+              
+
+              <a
                 className={`menu-item ${activeTab === "clients" ? "active" : ""}`}
                 onClick={() => setActiveTab("clients")}
               >
-                Clients Book
+                Client Book
               </a>
             </nav>
           </aside>
@@ -310,7 +314,7 @@ export default function Dashboard() {
               </div>
 
               <div className="cell total-orders">
-                <StatCard title="Total Orders" value={formatIndianNumber(totalOrders)} />
+                <StatCard title="Total Orders" className="gold-text" value={formatIndianNumber(totalOrders)} />
               </div>
 
               <div className="cell total-clients">
@@ -341,7 +345,7 @@ export default function Dashboard() {
               <div className="cell active-orders">
                 <div className="orders-card">
                   <div className="card-header">
-                    <span className="card-title">Active Orders</span>
+                    <span className="card-title">Today's Orders</span>
                     <button className="view-btn" onClick={() => setActiveTab("orders")}>View All</button>
 
                   </div>
@@ -456,7 +460,7 @@ export default function Dashboard() {
                               <div className="label">SA</div>
                               <div className="value">
                                 {order.salesperson || "-"}{" "}
-                                {order.salesperson_phone ? `(${order.salesperson_phone})` : ""}
+                                {order.salesperson_phone ? `(${formatPhoneNumber(order.salesperson_phone)})` : ""}
                               </div>
                             </div>
                           </div>
@@ -582,7 +586,7 @@ export default function Dashboard() {
 
                 <div className="profile-row">
                   <span className="label">Phone</span>
-                  <span className="value">{salesperson.phone}</span>
+                  <span className="value">{formatPhoneNumber(salesperson.phone)}</span>
                 </div>
 
                 <div className="profile-row">
@@ -636,7 +640,7 @@ export default function Dashboard() {
                         <tr key={i}>
                           <td data-label="Name">{c.name}</td>
                           <td data-label="Email">{c.email}</td>
-                          <td data-label="Phone">{c.phone}</td>
+                          <td data-label="Phone">{formatPhoneNumber(c.phone)}</td>
                           <td data-label="Gender">{c.gender}</td>
                           <td data-label="Date of Birth">{c.dob}</td>
                         </tr>

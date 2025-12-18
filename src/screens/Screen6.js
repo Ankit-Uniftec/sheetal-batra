@@ -5,6 +5,21 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
+import formatPhoneNumber from "../utils/formatPhoneNumber"; // Import the new utility
+import { SearchableSelect } from "../components/SearchableSelect";
+
+const countryOptions = [
+  { label: "India", value: "India" },
+  { label: "United States", value: "United States" },
+  { label: "Canada", value: "Canada" },
+  { label: "United Kingdom", value: "United Kingdom" },
+  { label: "Australia", value: "Australia" },
+  { label: "Germany", value: "Germany" },
+  { label: "France", value: "France" },
+  { label: "Japan", value: "Japan" },
+  { label: "China", value: "China" },
+  { label: "Brazil", value: "Brazil" },
+];
 
 export default function Screen6() {
   const navigate = useNavigate();
@@ -17,13 +32,14 @@ export default function Screen6() {
   const [selectedSP, setSelectedSP] = useState(null);
 
   // Payment
-  const [advancePayment, setAdvancePayment] = useState("25");
+  const [advancePayment, setAdvancePayment] = useState(0); // Changed to amount
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountApplied, setDiscountApplied] = useState(false);
 
   // Billing
   const [billingSame, setBillingSame] = useState(true);
   const [billingAddress, setBillingAddress] = useState("");
+  const [billingCountry, setBillingCountry] = useState("");
   const [billingCity, setBillingCity] = useState("");
   const [billingState, setBillingState] = useState("");
   const [billingPincode, setBillingPincode] = useState("");
@@ -32,12 +48,17 @@ export default function Screen6() {
 
   // Delivery
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryCountry, setDeliveryCountry] = useState("India");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryState, setDeliveryState] = useState("");
   const [deliveryPincode, setDeliveryPincode] = useState("");
 
   const [paymentMode, setPaymentMode] = useState("UPI");
   const COD_CHARGE = 250;
+  const SHIPPING_CHARGE_AMOUNT = 2500; // Define shipping charge amount
+  const SHIPPING_THRESHOLD = 30000; // Define the threshold for shipping charge
+
+  const [shippingCharge, setShippingCharge] = useState(0); // State to hold shipping charge
 
 
   const norm = (v) => (v || "").trim();
@@ -48,10 +69,9 @@ export default function Screen6() {
   );
 
   const sanitizedAdvance = useMemo(() => {
-    const percentage = parseFloat(advancePayment);
-    if (isNaN(percentage) || percentage <= 0) return 0;
-    const calculatedAdvance = (totalAmount * percentage) / 100;
-    return Math.min(calculatedAdvance, totalAmount);
+    const amount = parseFloat(advancePayment);
+    if (isNaN(amount) || amount <= 0) return 0;
+    return Math.min(amount, totalAmount);
   }, [advancePayment, totalAmount]);
 
   const remainingAmount = useMemo(
@@ -64,6 +84,14 @@ export default function Screen6() {
     const discountAmount = (totalAmount * pct) / 100;
 
     let netPayable = Math.max(0, totalAmount - discountAmount);
+    let currentShippingCharge = 0;
+
+    // Apply shipping charge if country is not India and total is under 30000
+    if (order.mode_of_delivery === "Home Delivery" && deliveryCountry !== "India" && totalAmount < SHIPPING_THRESHOLD) {
+      netPayable += SHIPPING_CHARGE_AMOUNT;
+      currentShippingCharge = SHIPPING_CHARGE_AMOUNT;
+    }
+    setShippingCharge(currentShippingCharge); // Update shipping charge state
 
     // ✅ Add COD charge
     if (paymentMode === "COD") {
@@ -77,8 +105,9 @@ export default function Screen6() {
       discountAmount,
       netPayable,
       remaining,
+      shippingCharge: currentShippingCharge, // Include shipping charge in pricing object
     };
-  }, [discountPercent, totalAmount, sanitizedAdvance, paymentMode]);
+  }, [discountPercent, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery]);
 
 
   // Load user profile + salesperson
@@ -137,8 +166,8 @@ export default function Screen6() {
 
     // Build payload without signature (signature will be added in Screen7)
     const finalBillingAddress = billingSame
-      ? `${deliveryAddress}, ${deliveryCity}, ${deliveryState} - ${deliveryPincode}`
-      : `${billingAddress}, ${billingCity}, ${billingState} - ${billingPincode}`;
+      ? `${deliveryAddress}, ${deliveryCountry}, ${deliveryCity}, ${deliveryState} - ${deliveryPincode}`
+      : `${billingAddress}, ${billingCountry}, ${billingCity}, ${billingState} - ${billingPincode}`;
 
     const payload = {
       ...order,
@@ -155,6 +184,7 @@ export default function Screen6() {
       delivery_email: profile.email,
       delivery_phone: profile.phone,
       delivery_address: deliveryAddress,
+      delivery_country: deliveryCountry,
       delivery_city: deliveryCity,
       delivery_state: deliveryState,
       delivery_pincode: deliveryPincode,
@@ -162,15 +192,17 @@ export default function Screen6() {
       // BILLING
       billing_same: billingSame,
       billing_address: finalBillingAddress,
+      billing_country: billingCountry,
       billing_company: billingCompany || null,
       billing_gstin: billingGST || null,
       payment_mode: paymentMode,
-cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
+      cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
+      shipping_charge: pricing.shippingCharge, // Include shipping charge in payload
 
 
       // SALESPERSON
       salesperson: selectedSP?.saleperson || null,
-      salesperson_phone: selectedSP?.phone || null,
+      salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : null,
       salesperson_email:
         selectedSP?.email || localStorage.getItem("sp_email") || null,
     };
@@ -260,8 +292,8 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
 
             <div className="row3">
               <div className="field">
-                <label>Full Name:</label>
-                <span>{profile.full_name}</span>
+                <label>Phone:</label>
+                <span>{formatPhoneNumber(profile.phone)}</span>
               </div>
 
               <div className="field">
@@ -271,7 +303,7 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
 
               <div className="field">
                 <label>Phone:</label>
-                <span>{profile.phone}</span>
+                <span>{formatPhoneNumber(profile.phone)}</span>
               </div>
             </div>
 
@@ -282,6 +314,16 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
                   className="input-line"
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value)}
+                />
+              </div>
+
+              <div className="field">
+                <label>Country:</label>
+                <SearchableSelect
+                  options={countryOptions}
+                  value={deliveryCountry}
+                  onChange={setDeliveryCountry}
+                  placeholder="Select Country"
                 />
               </div>
 
@@ -313,6 +355,29 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
               </div>
             </div>
 
+            <div className="row3">
+              <div className="field">
+                <label>Delivery Date:</label>
+                <span>{order.delivery_date}</span>
+              </div>
+
+              <div className="field">
+                <label>Delivery Notes:</label>
+                <span>{order.comments || "—"}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {order.mode_of_delivery === "Store Pickup" && (
+          <div className="section-box">
+            <h3>Delivery Details</h3>
+            <div className="row3">
+              <div className="field full-width-field">
+                <label>Store Address:</label>
+                <span>S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048</span>
+              </div>
+            </div>
             <div className="row3">
               <div className="field">
                 <label>Delivery Date:</label>
@@ -373,6 +438,16 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
               </div>
 
               <div className="field">
+                <label>Country:</label>
+                <SearchableSelect
+                  options={countryOptions}
+                  value={billingCountry}
+                  onChange={setBillingCountry}
+                  placeholder="Select Country"
+                />
+              </div>
+
+              <div className="field">
                 <label>City:</label>
                 <input
                   className="input-line"
@@ -406,7 +481,7 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
         <div className="section-box">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3>Payment Details</h3>
-            <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px" }}>Collector Code</button>
+            <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px" , color:'white !important'}}>Collector Code</button>
           </div>
           <div className="row3">
             <div className="field">
@@ -418,13 +493,13 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
               >
                 <option value="UPI">UPI</option>
                 <option value="COD">COD</option>
+                <option value="Credit Card">Credit Card</option>
+                <option value="Debit Card">Debit Card</option>
+                <option value="Net Banking">Net Banking</option>
               </select>
 
-              {/* {paymentMode === "COD" && (
-                <small style={{ color: "#b8860b" }}>
-                  + ₹{COD_CHARGE} COD charges applied
-                </small>
-              )} */}
+             
+              
             </div>
 
             <div className="field">
@@ -432,16 +507,13 @@ cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
               <span>₹{formatIndianNumber(totalAmount)}</span>
             </div>
             <div className="field">
-              <label>Advance Payment (%):</label>
-              <select
-                className="input-select"
+              <label>Advance Payment (Amount):</label>
+              <input
+                className="input-line"
+                type="number"
                 value={advancePayment}
                 onChange={(e) => setAdvancePayment(e.target.value)}
-              >
-                <option value="25">25%</option>
-                <option value="50">50%</option>
-                <option value="75">75%</option>
-              </select>
+              />
             </div>
             <div className="field">
               <label>Advance Amount:</label>

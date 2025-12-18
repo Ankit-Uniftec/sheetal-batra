@@ -17,7 +17,7 @@
 .share-btn {
   border-radius: 3px;
   background: #D5B85A;
-  color: white;
+  color: #fff !important;
   padding: 12px 28px;
   border: none;
   height: 45px;

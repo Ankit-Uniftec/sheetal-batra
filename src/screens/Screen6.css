@@ -88,32 +88,60 @@
 .field {
   border-bottom: 2px solid #D5B85A;
   display: flex;
-  align-items: center;
+  align-items: center; /* Align content to the center */
   gap: 10px;       /* space between label and value */
+  padding-bottom: 8px; /* Consistent spacing from content to underline */
+  padding-top: 8px; /* Consistent spacing from top of field */
+  min-height: 40px; /* Ensure a minimum height for consistent spacing even with less content */
 }
 
 .field label {
-  white-space: nowrap; 
+  white-space: nowrap;
   font-size: 13px;
   color: #D5B85A;
   font-weight: 500;
-  
+  /* Ensure label doesn't have extra padding affecting alignment */
+  padding: 0;
+  margin: 0;
 }
 
-
-
- .input-line,
+.input-line,
 .input-select,
 .field span {
-  display: block;
+  flex: 1; /* Allow to take available space */
   border: none;
-  
-  padding-bottom: 6px;
-  padding-top: 0px;
+  /* Remove internal padding that might push content away from the bottom */
+  padding: 0;
+  margin: 0;
   font-size: 13px;
   background: transparent;
   outline: none;
   width: 100%;
+  line-height: 1.2; /* Adjust line-height for consistent vertical alignment */
+}
+
+/* Adjust SearchableSelect component when inside a .field */
+.field .ss-root {
+  flex: 1; /* Allow SearchableSelect to take available space */
+  padding: 0;
+  margin: 0;
+  display: flex; /* Ensure its internal content aligns */
+  align-items: center; /* Align its content to the center */
+}
+
+.field .ss-control {
+  padding: 0;
+  margin: 0;
+  border: none; /* Remove any default border from ss-control */
+  background: transparent; /* Ensure background is transparent */
+  height: auto; /* Allow height to adjust to content */
+}
+
+.field .ss-input {
+  padding: 0;
+  margin: 0;
+  height: auto; /* Allow height to adjust to content */
+  line-height: 1.2; /* Match line-height for consistency */
 }
 
 /* FORCE TEXT VISIBLE */
@@ -155,6 +183,10 @@
   
 }
 .full-width {
+  grid-column: span 3;
+}
+
+.full-width-field {
   grid-column: span 3;
 }
 
@@ -213,7 +245,7 @@
   margin: 40px auto;
   
   background: #D5B85A;
-  color: white;
+  color: #fff !important;
   padding: 14px 50px;
   font-size: 18px;
   border: none;
@@ -322,6 +354,7 @@
     padding: 14px;
     font-size: 16px;
     margin: 24px 0 40px;
+    color: #fff !important;
   }
 }
 
@@ -329,7 +362,7 @@
 @media (max-width: 420px) {
   .sheetal-logo { width: 120px; }
   .title { font-size: 22px; }
-  .confirm-btn { padding: 12px; font-size: 15px; }
+  .confirm-btn { padding: 12px; font-size: 15px;color:white; }
 }
 
 /* Optional: respect safe areas (iPhone notches) */
@@ -377,7 +410,7 @@
 
 .sig-buttons button {
   background: #D5B85A;
-  color: white;
+  color: white !important;
   border: none;
   padding: 10px 22px;
   border-radius: 6px;

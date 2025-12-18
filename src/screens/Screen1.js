@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen1.css";
 import Logo from "../images/logo.png";
+import formatPhoneNumber from "../utils/formatPhoneNumber";
 
 /* ----------------------------------
    COUNTRY CODE CONFIG (OBJECT ARRAY)
@@ -142,7 +143,7 @@ export default function Screen1() {
           <input
             className="phone-input"
             placeholder="Enter mobile number"
-            value={mobile}
+            value={formatPhoneNumber(mobile)}
             onChange={(e) => setMobile(e.target.value)}
           />
         </div>

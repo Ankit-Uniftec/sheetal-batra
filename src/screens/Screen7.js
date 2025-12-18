@@ -725,9 +725,9 @@ export default function Screen7() {
                 className: "sig-canvas",
               }}
             />
-            <div className="sig-buttons">
-              <button onClick={() => sigPad.clear()}>Clear</button>
-              <button onClick={saveSignatureAndContinue}>
+            <div className="sig-buttons" >
+              <button style={{color:"white"}} onClick={() => sigPad.clear()}>Clear </button>
+              <button  style={{color:"white !important"}}  onClick={saveSignatureAndContinue}>
                 Save & Continue
               </button>
             </div>

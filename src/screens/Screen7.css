@@ -97,12 +97,12 @@ h3 {
   display: block;
   margin: 40px auto;
   background: #D5B85A;
-  color: white;
   padding: 14px 50px;
   font-size: 18px;
   border: none;
   cursor: pointer;
   border-radius: 6px;
+  color: #fff !important;
 }
 
 /**************** MOBILE MATCHES SCREEN6 ***************/

@@ -99,11 +99,11 @@ input {
 .btn3 {
   padding: 12px 28px;
   background: #D5B85A;
-  color: white;
   font-size: 18px;
   border: none;
   border-radius: 3px;
   cursor: pointer;
+  color: #fff !important;
 
   /* Position bottom-right inside card */
   align-self: flex-end;
