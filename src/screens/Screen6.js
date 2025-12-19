@@ -275,7 +275,7 @@ export default function Screen6() {
     <div className="screen6">
       {/* HEADER */}
       <div className="screen6-header">
-        <button className="back-btn" onClick={() => navigate(-1)}>←</button>
+        
         <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
         <h2 className="title">Order Form</h2>
       </div>
@@ -549,6 +549,7 @@ export default function Screen6() {
         <button className="confirm-btn" onClick={confirmOrder}>
           Continue
         </button>
+        <button className="back-btn" onClick={() => navigate(-1)}>←</button>
       </div>
     </div>
   );

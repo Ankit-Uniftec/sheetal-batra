@@ -7,22 +7,32 @@
   background-size: cover;
   background-position: center;
   min-height: 100vh;
-  padding: 40px;
+  width: 100%; /* Use 100% instead of 100vw to avoid potential scrollbar issues */
+  padding: 0;
   position: relative;
   font-family: 'Jost';
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* HEADER */ 
+
 .screen6-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid !important; /* Changed to grid layout */
+  grid-template-columns: auto 1fr auto !important; /* Logo, flexible space, Title */
+  width: 100% !important;
+  align-items: center !important;
+  position: relative !important;
+  box-sizing: border-box; /* Include padding in width calculation */
+  padding: 20px; /* Apply consistent padding to the header */
 }
 
 .sheetal-logo {
   width: 150px;
   cursor: pointer;
-  margin-top: -15px;
+  margin-top: 29px !important;
+  grid-column: 1; /* Place logo in the first column */
 }
 
 .back-btn {
@@ -51,15 +61,22 @@
 
 .title {
   font-family: "Athleas", serif !important;
-  text-align: center;
-  font-size: 32px;
-  margin: -55px 0 60px !important;
   color: #d5b85a !important;
+  font-size: 26px !important;
+  font-weight: 600 !important;
+  font-style: semibold !important;
+  text-align: right !important; /* Right align the text within its grid cell */
+  grid-column: 3; /* Place title in the third column */
+  margin-right: 0 !important; /* Remove negative margin */
 }
 
 /* MAIN CARD CONTAINER */
 .screen6-container {
   width: 100%;
+  max-width: 100%;
+  padding: 20px; /* Apply consistent padding to the container */
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* SECTION BOXES */
@@ -355,6 +372,19 @@
     font-size: 16px;
     margin: 24px 0 40px;
     color: #fff !important;
+  }
+}
+
+/* ------- Tablet view ------- */
+@media (min-width: 601px) and (max-width: 1024px) {
+  .screen6 {
+    padding: 0; /* Ensure no padding on the screen itself */
+  }
+  .screen6-container {
+    padding: 20px; /* Apply padding directly to the container for tablet view */
+  }
+  .screen6-header {
+    padding: 20px; /* Apply padding to the header in tablet view */
   }
 }
 

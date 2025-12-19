@@ -65,8 +65,8 @@ body {
   
   font-family: "Athleas", serif !important;
   font-style: medium;
-  font-weight: 500;
-  font-size: 32px;
+  font-weight: 500 !important;
+  font-size: 32px !important;
   color: #d5b85a !important;
   margin: 0 auto !important;      /* centers with consistent spacing */
   display: block;      /* ensures correct centering in card */
@@ -118,7 +118,7 @@ body {
 
 /* ---------- BUTTON ---------- */
 .btn2 {
-  width: 81% !important;
+  width: 82% !important;
   margin-top: 24px !important;
   height: 56px !important;
   background: #d5b85a !important;

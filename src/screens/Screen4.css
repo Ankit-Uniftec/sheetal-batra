@@ -59,6 +59,7 @@
   font-size: 26px;
   font-weight: 600;
   font-style: semibold;
+  
 }
 
 .order-product-thumb {
@@ -586,6 +587,8 @@ select,
   padding: 8px 12px;
   cursor: text;
   color: #111;
+
+  
 }
 
 .ss-input {
@@ -594,28 +597,33 @@ select,
   flex: 1;
   font-size: 14px;
   background: transparent;
-  color: black !important;
+  color: #888 !important; /* Default grey color */
 }
 
 .ss-input::placeholder {
   /* For Chrome, Firefox, Opera, Safari 10.1+ */
-  color: black !important;
+  color: #888 !important; /* Placeholder text color */
   opacity: 1;
   /* Firefox */
 }
 
 .ss-input:-ms-input-placeholder {
   /* Internet Explorer 10-11 */
-  color: black !important;
+  color: #888 !important;
 }
 
 .ss-input::-ms-input-placeholder {
   /* Microsoft Edge */
+  color: #888 !important;
+}
+
+/* Change text color to black when input has a value */
+.ss-input:not(:placeholder-shown) {
   color: black !important;
 }
 
 .ss-caret {
-  margin-left: 8px;
+  
   user-select: none;
   color: #000;
 }

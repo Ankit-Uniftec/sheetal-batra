@@ -127,7 +127,7 @@ export function SearchableSelect({
             ×
           </button>
         )}
-        <span className="ss-caret">▾</span>
+        {/* <span className="ss-caret">▾</span> */}
       </div>
 
       {open && (
