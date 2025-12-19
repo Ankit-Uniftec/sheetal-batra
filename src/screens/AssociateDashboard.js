@@ -37,7 +37,7 @@ export default function Dashboard() {
 
   const activeOrders = orders.filter(
     (o) => o.status !== "completed" && o.status !== "cancelled" &&
-           o.created_at.slice(0, 10) === new Date().toISOString().slice(0, 10)
+      o.created_at.slice(0, 10) === new Date().toISOString().slice(0, 10)
   );
 
 
@@ -55,6 +55,30 @@ export default function Dashboard() {
       setShowPasswordModal(true);
     }
   }, [location]);
+
+  useEffect(() => {
+    const fromBuyerVerification =
+      location.state?.fromBuyerVerification ||
+      sessionStorage.getItem("fromBuyerVerification") === "true";
+
+    if (fromBuyerVerification) {
+      setShowPasswordModal(true);
+      sessionStorage.removeItem("fromBuyerVerification");
+    }
+  }, []);
+
+  useEffect(() => {
+    const requireLogoutVerification = sessionStorage.getItem("requirePasswordVerificationOnDashboard") === "true";
+    const requireReturnVerification = sessionStorage.getItem("requirePasswordVerificationOnReturn") === "true";
+
+    if (requireLogoutVerification || requireReturnVerification) {
+      setShowPasswordModal(true);
+      sessionStorage.removeItem("requirePasswordVerificationOnDashboard");
+      sessionStorage.removeItem("requirePasswordVerificationOnReturn");
+    }
+  }, [location]);
+
+
 
   const verifyPassword = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -188,6 +212,7 @@ export default function Dashboard() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    sessionStorage.setItem("requirePasswordVerificationOnDashboard", "true");
     navigate("/login");
   };
 
@@ -233,7 +258,7 @@ export default function Dashboard() {
 
 
   return (
-    <div>
+    <div className="dashboardContent">
       {/* PASSWORD MODAL */}
       {showPasswordModal && (
         <div className="password-modal">
@@ -256,14 +281,23 @@ export default function Dashboard() {
 
 
         {/* HEADER */}
-        <div className="top-header">
-          <div className="header-left">
+        {/* <div className="top-header">
+          
             <img src={Logo} className="logo" alt="logo" />
-          </div>
+            <h1 className="title">My Dashboard</h1>
+            <button className="logout-btn" onClick={handleLogout}>↪</button>
+          
 
-          <h1 className="title">My Dashboard</h1>
+          
 
+          
+        </div> */}
+
+        <div className="top-header">
+          <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
+          <h1 className="order-title">My Dashboard</h1>
           <button className="logout-btn" onClick={handleLogout}>↪</button>
+
         </div>
 
         {/* MAIN TABLE */}
@@ -277,11 +311,11 @@ export default function Dashboard() {
             >
               Hello, {salesperson?.saleperson || "Associate"}
             </div>
-           
+
 
 
             <nav className="menu">
-               
+
               <a
                 className={`menu-item ${activeTab === "dashboard" ? "active" : ""}`}
                 onClick={() => setActiveTab("dashboard")}
@@ -302,7 +336,7 @@ export default function Dashboard() {
                 Order History
               </a>
 
-              
+
 
               <a
                 className={`menu-item ${activeTab === "clients" ? "active" : ""}`}
@@ -318,7 +352,7 @@ export default function Dashboard() {
             <>
               <div className="cell total-revenue">
                 {/* i have removed the change value  */}
-                <StatCard  title="Total Revenue" value={`₹${formatIndianNumber(totalRevenue)}`}  />
+                <StatCard title="Total Revenue" value={`₹${formatIndianNumber(totalRevenue)}`} />
               </div>
 
               <div className="cell total-orders">
@@ -638,6 +672,7 @@ export default function Dashboard() {
               sessionStorage.setItem("associateSession", JSON.stringify(session));
             }
             sessionStorage.setItem("returnToAssociate", "true");
+            sessionStorage.setItem("requirePasswordVerificationOnReturn", "true"); // Set flag before navigating away
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}
         >
@@ -645,7 +680,10 @@ export default function Dashboard() {
         </button>
 
         {/* BACK */}
-        <button className="back-btn" onClick={() => navigate("/")}>‹</button>
+        <button className="back-btn" onClick={() => {
+          sessionStorage.setItem("requirePasswordVerificationOnReturn", "true"); // Set flag before navigating away
+          navigate("/");
+        }}>‹</button>
       </div>
     </div>
   );

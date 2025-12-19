@@ -504,18 +504,16 @@ export default function Screen7() {
 
   return (
     <div className="screen7">
-      {/* Header */}
-      <div className="screen7-header">
-        <button className="back-btn" onClick={() => navigate(-1)}>
-          ←
-        </button>
+      {/* HEADER */}
+      <div className="screen6-header">
+        
         <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
-        <h2 className="title">Order Form</h2>
+        <h2 className="title">Review Detail</h2>
       </div>
 
 
 
-      <div className="screen7-container">
+      <div className="screen6-container">
         {/* PRODUCT DETAILS */}
         <div className="section-box">
           <h3>Product Details</h3>
@@ -531,15 +529,17 @@ export default function Screen7() {
                   </div>
                   <div className="field field-small">
                     <label>Color:</label>
-                    <div
-                      style={{
-                        background: item.color,
-                        height: "15px",
-                        width: "30px",
-                        borderRadius: "10px",
-                      }}
-                    ></div>
-                    <span>{item.color}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <div
+                        style={{
+                          background: item.color,
+                          height: "15px",
+                          width: "30px",
+                          borderRadius: "10px",
+                        }}
+                      ></div>
+                      <span>{item.color}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -555,6 +555,10 @@ export default function Screen7() {
                   <div className="field">
                     <label>Extras:</label>
                     <span>{item.extra}</span>
+                  </div>
+                  <div className="field">
+                    <label>Size:</label>
+                    <span>{item.size}</span>
                   </div>
                 </div>
               </div>
@@ -708,6 +712,9 @@ export default function Screen7() {
           onClick={handlePlaceOrder}
         >
           {loading ? "Saving..." : "Place Order"}
+        </button>
+        <button className="back-btn" onClick={() => navigate(-1)}>
+          ←
         </button>
       </div>
 

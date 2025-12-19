@@ -30,45 +30,44 @@
 /* ---------------- HEADER ---------------- */
 
 .top-header {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr; /* 3-column grid */
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !; /* 3-column grid */
   align-items: center;
 }
-
-.header-left {
-  justify-self: start; /* left side */
+.logout-btn{
+  margin-top:40px ;
+  background-color: #d5b85a !important;
+  color: white !important;
 }
-.header-right {
-  justify-self: end; /* right side */
 
-}
-.logout-btn {
-  
+/* .logout-btn {
+  display: grid !important;
   border: 1px solid #d5b85a;
   background-color: #d5b85a !important;
   height: 50px;
   width: 50px;
   cursor: pointer;
   color: #fff !important;
-  margin-bottom: 25px !important;
-}
+   margin-bottom: 25px !important; 
+   text-align: center !important;
+} */
 
-.title {
-  display: grid;
+/* .title {
+  display: grid !important;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   padding:20px 32px;
   position: relative;
   width:100%;
   font-family: "Athleas", serif !important;
-  justify-self: center; /* PERFECT center */
+  justify-self: center; 
   text-align: center;
   font-size: 32px;
   font-weight: 500;
   color: #d5b85a !important;
- margin-left: 200px !important;
-}
+ 
+} */
 
 
 /* ---------------- MAIN GRID (3 ROW × 4 COLUMN) ---------------- */
@@ -637,6 +636,14 @@
   .grid-table {
     overflow-x: hidden !important;
   }
+}
+
+@media (max-width:768px) {
+  .dashboardContent{
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+  
 }
 
 /* Calendar Styles */

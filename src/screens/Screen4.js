@@ -653,32 +653,65 @@ const totalOrder = inclusiveSubtotal;
   };
   //Logo click logout
 
+  // const handleLogout = async () => {
+  //   try {
+  //     await supabase.auth.signOut();
+
+  //     const raw = sessionStorage.getItem("associateSession");
+  //     const saved = raw ? JSON.parse(raw) : null;
+
+  //     if (saved?.access_token && saved?.refresh_token) {
+  //       const { error } = await supabase.auth.setSession({
+  //         access_token: saved.access_token,
+  //         refresh_token: saved.refresh_token,
+  //       });
+
+  //       if (!error) {
+  //         sessionStorage.removeItem("associateSession");
+  //         sessionStorage.removeItem("returnToAssociate");
+  //         navigate("/AssociateDashboard", { replace: true });
+  //         return;
+  //       }
+  //     }
+  //     navigate("/login", { replace: true });
+  //   } catch (e) {
+  //     console.error("Logout restore error", e);
+  //     navigate("/login", { replace: true });
+  //   }
+  // };
+
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut();
 
-      const raw = sessionStorage.getItem("associateSession");
-      const saved = raw ? JSON.parse(raw) : null;
+    const raw = sessionStorage.getItem("associateSession");
+    const saved = raw ? JSON.parse(raw) : null;
 
-      if (saved?.access_token && saved?.refresh_token) {
-        const { error } = await supabase.auth.setSession({
-          access_token: saved.access_token,
-          refresh_token: saved.refresh_token,
-        });
+    if (saved?.access_token && saved?.refresh_token) {
+      const { error } = await supabase.auth.setSession({
+        access_token: saved.access_token,
+        refresh_token: saved.refresh_token,
+      });
 
-        if (!error) {
-          sessionStorage.removeItem("associateSession");
-          sessionStorage.removeItem("returnToAssociate");
-          navigate("/AssociateDashboard", { replace: true });
-          return;
-        }
+      if (!error) {
+        // 🔴 FORCE verification again
+        sessionStorage.setItem("requireVerification", "true");
+
+        sessionStorage.removeItem("associateSession");
+        sessionStorage.removeItem("returnToAssociate");
+
+        navigate("/AssociateDashboard", { replace: true });
+        return;
       }
-      navigate("/login", { replace: true });
-    } catch (e) {
-      console.error("Logout restore error", e);
-      navigate("/login", { replace: true });
     }
-  };
+
+    navigate("/login", { replace: true });
+  } catch (e) {
+    console.error("Logout restore error", e);
+    navigate("/login", { replace: true });
+  }
+};
+
 
 
 
