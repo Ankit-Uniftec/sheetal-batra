@@ -5,6 +5,27 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
+import formatPhoneNumber from "../utils/formatPhoneNumber"; // Import formatPhoneNumber
+
+function ColorDotDisplay({ colorValue }) {
+  if (!colorValue) return null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+      <div
+        style={{
+          background: colorValue, // Directly use colorValue as background
+          height: "15px",
+          width: "30px",
+          borderRadius: "10px",
+          border: "1px solid #ccc", // Add a border for visibility on light colors
+        }}
+      ></div>
+      <span>{colorValue}</span>
+    </div>
+  );
+}
+
 export default function OrderHistory() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -224,40 +245,67 @@ export default function OrderHistory() {
                           </span> */}
                         </div>
 
-                        <div className="grid-2">
-                          <div className="kv">
-                            <div className="label">Product Name</div>
-                            <div className="value">{item.product_name || "—"}</div>
+                        <div className="row-flex">
+                          <div className="field field-wide">
+                            <label>Product Name:</label>
+                            <span>{item.product_name}</span>
                           </div>
-                          <div className="kv">
-                            <div className="label">Amount</div>
-                            <div className="value">₹{formatIndianNumber(order.grand_total)}</div>
+                          <div className="field field-small">
+                            <label>Color:</label>
+                            <ColorDotDisplay colorValue={item.color} />
                           </div>
-                          <div className="kv">
-                            <div className="label">Qty</div>
-                            <div className="value">{formatIndianNumber(order.total_quantity)}</div>
+                        </div>
+
+                        <div className="row3">
+                          <div className="field">
+                            <label>Top:</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span>{item.top}</span>
+                              {item.top_color && <ColorDotDisplay colorValue={item.top_color} />}
+                            </div>
                           </div>
-                          <div className="kv">
-                            <div className="label">Color</div>
-                            <div className="value"><div style={{
-                                background: item.color,
-                                height: "15px",
-                                width: "30px",
-                                borderRadius: "14px",
-                                marginBottom: "5px",}}></div>{item.color || "—"}</div>
+                          <div className="field">
+                            <label>Bottom:</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span>{item.bottom}</span>
+                              {item.bottom_color && <ColorDotDisplay colorValue={item.bottom_color} />}
+                            </div>
                           </div>
-                          <div className="kv">
-                            <div className="label">Size</div>
-                            <div className="value">{item.size || "—"}</div>
+                          <div className="field">
+                            <label>Size:</label>
+                            <span>{item.size}</span>
                           </div>
-                          <div className="kv">
-                            <div className="label">SA</div>
-                            <div className="value">
+                          {item.extras && item.extras.length > 0 && (
+                            <div className="field field-wide">
+                              <label>Extras:</label>
+                              <div className="extras-display">
+                                {item.extras.map((extra, idx) => (
+                                  <div key={idx} className="extra-item-display">
+                                    <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
+                                    {extra.color && <ColorDotDisplay colorValue={extra.color} />}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="row3">
+                          <div className="field">
+                            <label>Amount:</label>
+                            <span>₹{formatIndianNumber(order.grand_total)}</span>
+                          </div>
+                          <div className="field">
+                            <label>Qty:</label>
+                            <span>{formatIndianNumber(order.total_quantity)}</span>
+                          </div>
+                          <div className="field">
+                            <label>SA:</label>
+                            <span>
                               {order.salesperson || "-"}{" "}
                               {order.salesperson_phone
                                 ? `(${order.salesperson_phone})`
                                 : ""}
-                            </div>
+                            </span>
                           </div>
                         </div>
 
@@ -289,7 +337,7 @@ export default function OrderHistory() {
                 <div className="profile-grid">
                   <div><strong>Name:</strong> {profile.full_name || "—"}</div>
                   <div><strong>Gender:</strong> {profile.gender || "—"}</div>
-                  <div><strong>Phone:</strong> {profile.phone || "—"}</div>
+                  <div><strong>Phone:</strong> {formatPhoneNumber(profile.phone) || "—"}</div>
                   <div><strong>Email:</strong> {profile.email || "—"}</div>
                   <div><strong>DOB:</strong> {profile.dob || "—"}</div>
                   <div><strong>Address:</strong> {profile.address || "—"}</div>

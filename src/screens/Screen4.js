@@ -624,6 +624,7 @@ const totalOrder = inclusiveSubtotal;
     // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT"
     if (orderItems.length === 0 && selectedProduct) {
       finalItems.push({
+        _id: makeId(), // Ensure a unique ID for the item
         product_id: selectedProduct.id,
         product_name: selectedProduct.name,
         sku_id: selectedProduct.sku_id,
@@ -632,10 +633,10 @@ const totalOrder = inclusiveSubtotal;
         top_color: selectedTopColor,
         bottom: selectedBottom,
         bottom_color: selectedBottomColor,
-        extra: selectedExtra,
+        extras: selectedExtrasWithColors, // Use the array of extras
         size: selectedSize,
         quantity,
-        price: selectedProduct.price || 0,
+        price: getLivePrice(), // Use getLivePrice to calculate price including extras
         measurements,
         image_url: selectedProduct.image_url || selectedProduct.image || null,
       });

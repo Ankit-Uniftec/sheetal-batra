@@ -9,6 +9,25 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
 
+function ColorDotDisplay({ colorValue }) {
+  if (!colorValue) return null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+      <div
+        style={{
+          background: colorValue, // Directly use colorValue as background
+          height: "15px",
+          width: "30px",
+          borderRadius: "10px",
+          border: "1px solid #ccc", // Add a border for visibility on light colors
+        }}
+      ></div>
+      <span>{colorValue}</span>
+    </div>
+  );
+}
+
 export default function Screen7() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -529,37 +548,42 @@ export default function Screen7() {
                   </div>
                   <div className="field field-small">
                     <label>Color:</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <div
-                        style={{
-                          background: item.color,
-                          height: "15px",
-                          width: "30px",
-                          borderRadius: "10px",
-                        }}
-                      ></div>
-                      <span>{item.color}</span>
-                    </div>
+                    <ColorDotDisplay colorValue={item.color} />
                   </div>
                 </div>
 
                 <div className="row3">
                   <div className="field">
                     <label>Top:</label>
-                    <span>{item.top}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span>{item.top}</span>
+                      {item.top_color && <ColorDotDisplay colorValue={item.top_color} />}
+                    </div>
                   </div>
                   <div className="field">
                     <label>Bottom:</label>
-                    <span>{item.bottom}</span>
-                  </div>
-                  <div className="field">
-                    <label>Extras:</label>
-                    <span>{item.extra}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span>{item.bottom}</span>
+                      {item.bottom_color && <ColorDotDisplay colorValue={item.bottom_color} />}
+                    </div>
                   </div>
                   <div className="field">
                     <label>Size:</label>
                     <span>{item.size}</span>
                   </div>
+                  {item.extras && item.extras.length > 0 && (
+                    <div className="field field-wide">
+                      <label>Extras:</label>
+                      <div className="extras-display">
+                        {item.extras.map((extra, idx) => (
+                          <div key={idx} className="extra-item-display">
+                            <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
+                            {extra.color && <ColorDotDisplay colorValue={extra.color} />}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
