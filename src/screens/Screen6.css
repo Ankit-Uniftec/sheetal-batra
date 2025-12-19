@@ -392,6 +392,9 @@
   .screen6-header {
     padding: 20px; /* Apply padding to the header in tablet view */
   }
+  .row3 {
+    grid-template-columns: repeat(2, 1fr); /* Change to 2 columns for better spacing */
+  }
 }
 
 /* ------- Small phones ------- */
