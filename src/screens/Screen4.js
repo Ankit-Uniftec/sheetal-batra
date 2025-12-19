@@ -1037,7 +1037,7 @@ const totalOrder = inclusiveSubtotal;
                   />
                 </div>
               )}
-              <button className="add-extra-btn"style={{background:"#d5b85a", border:'none', color:'white',borderRadius:'3px'}} onClick={handleAddExtra} disabled={!selectedExtra}>
+              <button className="add-extra-btn"style={{background:"#d5b85a", border:'none', color:'white',borderRadius:"3px"}} onClick={handleAddExtra} disabled={!selectedExtra}>
                 Add Extra
               </button>
             </div>
