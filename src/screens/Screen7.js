@@ -29,6 +29,30 @@ function ColorDotDisplay({ colorValue }) {
   );
 }
 
+// ===============================
+// DATE HELPERS (POSTGRES SAFE)
+// ===============================
+const toISODate = (value) => {
+  if (!value) return null;
+
+  // Already ISO
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+
+  // Convert DD-MM-YYYY → YYYY-MM-DD
+  if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+    const [dd, mm, yyyy] = value.split("-");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Fallback (Date object / timestamp)
+  try {
+    return new Date(value).toISOString().slice(0, 10);
+  } catch {
+    return null;
+  }
+};
+
+
 export default function Screen7() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -246,6 +270,12 @@ export default function Screen7() {
     );
     y -= 30;
 
+    if (order.order_flag === "Urgent" && order.urgent_reason) {
+      draw("Urgent Reason:", margin, y, 10, true);
+      draw(order.urgent_reason, margin + 100, y, 10);
+      y -= 20;
+    }
+
     const section = (title) => {
       page.drawRectangle({
         x: margin,
@@ -286,7 +316,19 @@ export default function Screen7() {
       field("Top", item.top, fx, y);
       field("Bottom", item.bottom, fx + 160, y);
       field("Extras", item.extra || "—", fx + 320, y);
-      y -= 70;
+      y -= 40; // Adjust Y position for notes
+
+      if (item.notes) {
+        draw("Product Notes", fx, y, 10, true);
+        y -= 14;
+        const productNotesLines = wrapText(item.notes, A4.w - margin - fx, 10);
+        productNotesLines.forEach((line) => {
+          draw(line, fx, y, 10);
+          y -= 14;
+        });
+        y -= 20; // Additional spacing after product notes
+      }
+      y -= 30; // Adjust Y position for next product item or section
     }
 
     // DELIVERY
@@ -318,6 +360,28 @@ export default function Screen7() {
       });
 
       y -= 20;
+
+      if (order.delivery_notes) {
+        draw("Delivery Notes", margin, y, 10, true);
+        y -= 14;
+        const deliveryNotesLines = wrapText(order.delivery_notes, A4.w - margin * 2, 10);
+        deliveryNotesLines.forEach((line) => {
+          draw(line, margin, y, 10);
+          y -= 14;
+        });
+        y -= 20;
+      }
+
+      if (order.comments) {
+        draw("General Order Comments", margin, y, 10, true);
+        y -= 14;
+        const commentsLines = wrapText(order.comments, A4.w - margin * 2, 10);
+        commentsLines.forEach((line) => {
+          draw(line, margin, y, 10);
+          y -= 14;
+        });
+        y -= 20;
+      }
     }
     // =====================
     // BILLING DETAILS
@@ -458,16 +522,39 @@ export default function Screen7() {
   // ===============================
   // SAVE ORDER
   // ===============================
+  // ===============================
+  // SAVE ORDER (DATE SAFE)
+  // ===============================
   const saveOrderToDB = async (orderToSave) => {
     try {
+      // 🔴 FIX: Normalize ALL date fields here
+      const normalizedOrder = {
+        ...orderToSave,
+
+        // Dates
+        created_at: orderToSave.created_at
+          ? new Date(orderToSave.created_at).toISOString()
+          : new Date().toISOString(),
+
+        delivery_date: toISODate(orderToSave.delivery_date),
+        join_date: toISODate(orderToSave.join_date),
+
+        // Optional safety (if these exist)
+        billing_date: toISODate(orderToSave.billing_date),
+        expected_delivery: toISODate(orderToSave.expected_delivery),
+      };
+
       const { data, error } = await supabase
         .from("orders")
-        .insert(orderToSave)
+        .insert(normalizedOrder)
         .select()
         .single();
 
       if (error) throw error;
 
+      // ---------------------------
+      // PDF GENERATION (UNCHANGED)
+      // ---------------------------
       const logoUrl = new URL(Logo, window.location.origin).href;
       const pdfBytes = await buildInvoicePdfBytes(data, logoUrl);
 
@@ -478,13 +565,14 @@ export default function Screen7() {
           contentType: "application/pdf",
         });
 
-      alert("Order saved & invoice sent!");
+      alert("✅ Order saved & invoice generated!");
       navigate("/orderHistory");
     } catch (e) {
-      alert("Failed to save order");
-      console.error(e);
+      console.error("❌ Order save failed:", e);
+      alert(e.message || "Failed to save order");
     }
   };
+
 
 
   //logo click logout
@@ -526,7 +614,7 @@ export default function Screen7() {
     <div className="screen7">
       {/* HEADER */}
       <div className="screen6-header">
-        
+
         <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
         <h2 className="title">Review Detail</h2>
       </div>
@@ -552,6 +640,13 @@ export default function Screen7() {
                     <ColorDotDisplay colorValue={item.color} />
                   </div>
                 </div>
+
+                {item.notes && (
+                  <div className="field field-wide" style={{ marginTop: "12px" }}>
+                    <label>Product Notes:</label>
+                    <span>{item.notes}</span>
+                  </div>
+                )}
 
                 <div className="row3">
                   <div className="field">
@@ -625,6 +720,20 @@ export default function Screen7() {
                   .join(", ")}
               </span>
             </div>
+
+            {order.delivery_notes && (
+              <div className="field field-wide" style={{ marginTop: "12px" }}>
+                <label>Delivery Notes:</label>
+                <span>{order.delivery_notes}</span>
+              </div>
+            )}
+
+            {order.comments && (
+              <div className="field field-wide" style={{ marginTop: "12px" }}>
+                <label>General Order Comments:</label>
+                <span>{order.comments}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -706,7 +815,7 @@ export default function Screen7() {
               <span>₹{formatIndianNumber(advancePayment)}</span>
             </div>
             <div className="field">
-              <label>Remaining Payment:</label>
+              <label>Balance:</label>
               <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
 
@@ -758,8 +867,8 @@ export default function Screen7() {
               }}
             />
             <div className="sig-buttons" >
-              <button style={{color:"white"}} onClick={() => sigPad.clear()}>Clear </button>
-              <button  style={{color:"white !important"}}  onClick={saveSignatureAndContinue}>
+              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>Clear </button>
+              <button style={{ color: "white !important" }} onClick={saveSignatureAndContinue}>
                 Save & Continue
               </button>
             </div>

@@ -357,12 +357,6 @@ export default function Screen6() {
                   onChange={(e) => setDeliveryAddress(e.target.value)}
                 />
               </div>
-
-
-
-
-
-
             </div>
 
             <div className="row3">
@@ -373,9 +367,16 @@ export default function Screen6() {
 
               <div className="field">
                 <label>Delivery Notes:</label>
-                <span>{order.comments || "—"}</span>
+                <span>{order.delivery_notes || "—"}</span>
               </div>
             </div>
+
+            {order.comments && (
+              <div className="field field-wide" style={{ marginTop: "12px" }}>
+                <label>General Order Comments:</label>
+                <span>{order.comments}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -391,14 +392,21 @@ export default function Screen6() {
             <div className="row3">
               <div className="field">
                 <label>Delivery Date:</label>
-                <span>{formatDate(order.delivery_date)}</span>
+                <span>{order.delivery_date}</span>
               </div>
 
               <div className="field">
                 <label>Delivery Notes:</label>
-                <span>{order.comments || "—"}</span>
+                <span>{order.delivery_notes || "—"}</span>
               </div>
             </div>
+
+            {order.comments && (
+              <div className="field field-wide" style={{ marginTop: "12px" }}>
+                <label>General Order Comments:</label>
+                <span>{order.comments}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -552,7 +560,7 @@ export default function Screen6() {
 
           <div className="row3">
             <div className="field">
-              <label>Remaining Payment:</label>
+              <label>Balance:</label>
               <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
           </div>

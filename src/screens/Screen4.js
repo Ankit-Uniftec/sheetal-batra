@@ -185,7 +185,8 @@ export default function Screen4() {
   // PRODUCT STATES
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [comments, setComments] = useState("");
+  const [comments, setComments] = useState(""); // General order comments
+  const [deliveryNotes, setDeliveryNotes] = useState(""); // Order-wide delivery notes
   const [attachments, setAttachments] = useState([]);
 
 
@@ -226,7 +227,8 @@ export default function Screen4() {
 
   // URGENT POPUP
   const [showUrgentModal, setShowUrgentModal] = useState(false);
-  const [urgentReason, setUrgentReason] = useState("");
+  const [urgentReason, setUrgentReason] = useState(""); // Selected reason from dropdown
+  const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
 
   const KIDS_SIZE_OPTIONS = [
     "0-1 Years", "1-2 Years", "2-3 Years", "3-4 Years", "4-5 Years",
@@ -500,6 +502,7 @@ export default function Screen4() {
       price: getLivePrice(),
       measurements,
       image_url: selectedProduct.image_url || selectedProduct.image || null,
+      notes: "", // Initialize notes as empty for new products
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -640,6 +643,7 @@ const totalOrder = inclusiveSubtotal;
         price: getLivePrice(), // Use getLivePrice to calculate price including extras
         measurements,
         image_url: selectedProduct.image_url || selectedProduct.image || null,
+        notes: "", // Initialize notes as empty for auto-added products
       });
     }
 
@@ -654,10 +658,13 @@ const totalOrder = inclusiveSubtotal;
       mode_of_delivery: modeOfDelivery,
       order_flag: orderFlag,
 
-      urgent_reason: orderFlag === "Urgent" ? urgentReason : null,
+      urgent_reason: orderFlag === "Urgent"
+        ? (urgentReason === "Others" ? otherUrgentReason : urgentReason)
+        : null,
 
       // Extra fields
-      comments: comments,
+      comments: comments, // General order comments
+      delivery_notes: deliveryNotes, // Order-wide delivery notes
       attachments: attachments,
 
       // Totals
@@ -921,6 +928,18 @@ const totalOrder = inclusiveSubtotal;
                               onChange={(e) => updateItem(item._id, { price: Number(e.target.value || 0) })}
                             />
                           </div>
+
+                          {/* Product Notes */}
+                          <div className="field full-width-field">
+                            <label>Notes:</label>
+                            <textarea
+                              className="input-line"
+                              placeholder="Add notes for this product item..."
+                              value={item.notes || ""}
+                              onChange={(e) => updateItem(item._id, { notes: e.target.value })}
+                              rows={2}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1059,8 +1078,6 @@ const totalOrder = inclusiveSubtotal;
 
             {/* TOP / BOTTOM COLORS */}
             
-
-
             {/* SIZE */}
 
             <div className="size-box">
@@ -1192,7 +1209,9 @@ const totalOrder = inclusiveSubtotal;
               </div>
             </div>
 
-            {/* COMMENTS */}
+            
+
+            {/* GENERAL ORDER COMMENTS */}
             <div className="row">
               <div className="field">
                 <label>Notes:</label>
@@ -1290,21 +1309,42 @@ const totalOrder = inclusiveSubtotal;
             <h3>Urgent Order</h3>
 
             <label>Reason for Urgent</label>
-            <textarea
-              className="input-line"
-              placeholder="Enter reason..."
+            <SearchableSelect
+              options={[
+                { label: "Client Escalation", value: "Client Escalation" },
+                { label: "VIP Order", value: "VIP Order" },
+                { label: "Celebrity Order", value: "Celebrity Order" },
+                { label: "Others", value: "Others" },
+              ]}
               value={urgentReason}
-              onChange={(e) => setUrgentReason(e.target.value)}
-              rows={4}
+              onChange={(val) => {
+                setUrgentReason(val);
+                if (val !== "Others") {
+                  setOtherUrgentReason(""); // Clear other reason if not 'Others'
+                }
+              }}
+              placeholder="Select Urgent Reason"
             />
+
+            {urgentReason === "Others" && (
+              <textarea
+                className="input-line"
+                placeholder="Specify other reason..."
+                value={otherUrgentReason}
+                onChange={(e) => setOtherUrgentReason(e.target.value)}
+                rows={2}
+                style={{ marginTop: "10px" }}
+              />
+            )}
 
             <div className="modal-actions">
               <button
                 className="cancel-btn"
                 onClick={() => {
                   setShowUrgentModal(false);
-                  setOrderFlag("");
+                  setOrderFlag("Normal"); // Revert order flag if cancelled
                   setUrgentReason("");
+                  setOtherUrgentReason("");
                 }}
               >
                 Cancel
@@ -1313,8 +1353,9 @@ const totalOrder = inclusiveSubtotal;
               <button
                 className="confirm-btn"
                 onClick={() => {
-                  if (!urgentReason.trim()) {
-                    alert("Please enter reason for urgent order");
+                  const finalReason = urgentReason === "Others" ? otherUrgentReason : urgentReason;
+                  if (!finalReason.trim()) {
+                    alert("Please select or enter a reason for urgent order");
                     return;
                   }
                   setOrderFlag("Urgent");
