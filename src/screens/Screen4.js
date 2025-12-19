@@ -196,9 +196,11 @@ export default function Screen4() {
   const [selectedColor, setSelectedColor] = useState("");
   const [selectedTopColor, setSelectedTopColor] = useState("");
   const [selectedBottomColor, setSelectedBottomColor] = useState("");
+  const [selectedExtraColor, setSelectedExtraColor] = useState(""); // Temporary state for extra color selection
   const [selectedTop, setSelectedTop] = useState("");
   const [selectedBottom, setSelectedBottom] = useState("");
-  const [selectedExtra, setSelectedExtra] = useState("");
+  const [selectedExtra, setSelectedExtra] = useState(""); // Temporary state for extra selection
+  const [selectedExtrasWithColors, setSelectedExtrasWithColors] = useState([]); // Array to hold multiple selected extras with their colors
 
   const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -315,6 +317,21 @@ export default function Screen4() {
     setOrderItems((prev) =>
       prev.map((it) => (it._id === id ? { ...it, ...patch } : it))
     );
+
+  const handleAddExtra = () => {
+    if (!selectedExtra) return;
+    const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
+    setSelectedExtrasWithColors((prev) => [
+      ...prev,
+      { name: selectedExtra, color: selectedExtraColor, price: extraDetails?.price || 0 },
+    ]);
+    setSelectedExtra("");
+    setSelectedExtraColor("");
+  };
+
+  const handleRemoveExtra = (index) => {
+    setSelectedExtrasWithColors((prev) => prev.filter((_, i) => i !== index));
+  };
 
   // Fetch products
   useEffect(() => {
@@ -476,7 +493,7 @@ export default function Screen4() {
       top_color: selectedTopColor,
       bottom: selectedBottom,
       bottom_color: selectedBottomColor,
-      extra: selectedExtra,
+      extras: selectedExtrasWithColors, // Use the array of extras
       size: selectedSize,
       quantity: quantity,
       price: getLivePrice(),
@@ -492,6 +509,8 @@ export default function Screen4() {
     setSelectedTop("");
     setSelectedBottom("");
     setSelectedExtra("");
+    setSelectedExtraColor("");
+    setSelectedExtrasWithColors([]); // Reset the array of selected extras
     setSelectedSize("S");
     setQuantity(1);
     setMeasurements({});
@@ -509,12 +528,12 @@ export default function Screen4() {
     let price = Number(selectedProduct.base_price || 0);
 
     // ADD EXTRA PRICE (if selected)
-    if (selectedExtra) {
-      const extraRow = globalExtras.find((e) => e.name === selectedExtra);
+    selectedExtrasWithColors.forEach((extraItem) => {
+      const extraRow = globalExtras.find((e) => e.name === extraItem.name);
       if (extraRow) {
         price += Number(extraRow.price || 0);
       }
-    }
+    });
 
     return price;
   };
@@ -724,8 +743,9 @@ const totalOrder = inclusiveSubtotal;
     }));
   const toExtraOptions = (extras = []) =>
     extras.map((e) => ({
-      label: `${e.name} `,
+      label: `${e.name} (₹${formatIndianNumber(e.price)})`,
       value: e.name,
+      price: e.price, // Also store price in the option object
     }));
 
   return (
@@ -819,16 +839,44 @@ const totalOrder = inclusiveSubtotal;
                             />
                           </div>
 
-                          {/* Extra */}
+                          {/* Extras */}
                           <div className="field">
-                            <label>Extra</label>
-                            <input
-                              type="text"
-                              className="input-line"
-                              value={item.extra || ""}
-                              onChange={(e) => updateItem(item._id, { extra: e.target.value })}
-                              placeholder="Enter extra"
-                            />
+                            <label>Extras</label>
+                            {item.extras && item.extras.length > 0 ? (
+                              item.extras.map((extraItem, idx) => (
+                                <div key={idx} className="added-extra-item-edit">
+                                  <input
+                                    type="text"
+                                    className="input-line"
+                                    value={extraItem.name || ""}
+                                    onChange={(e) => {
+                                      const newExtras = [...item.extras];
+                                      newExtras[idx].name = e.target.value;
+                                      updateItem(item._id, { extras: newExtras });
+                                    }}
+                                    placeholder="Extra name"
+                                  />
+                                  <input
+                                    type="text"
+                                    className="input-line"
+                                    value={extraItem.color || ""}
+                                    onChange={(e) => {
+                                      const newExtras = [...item.extras];
+                                      newExtras[idx].color = e.target.value;
+                                      updateItem(item._id, { extras: newExtras });
+                                    }}
+                                    placeholder="Extra color"
+                                  />
+                                  <span className="extra-price">₹{formatIndianNumber(extraItem.price)}</span>
+                                  <button onClick={() => {
+                                    const newExtras = item.extras.filter((_, i) => i !== idx);
+                                    updateItem(item._id, { extras: newExtras });
+                                  }}>x</button>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="muted">No extras added</p>
+                            )}
                           </div>
 
                           {/* Size */}
@@ -977,10 +1025,35 @@ const totalOrder = inclusiveSubtotal;
                   onChange={setSelectedExtra}
                   placeholder="Select Extra"
                 />
-
               </div>
+
+              {selectedExtra && (
+                <div className="field">
+                  <SearchableSelect
+                    options={toColorOptions(colors)}
+                    value={selectedExtraColor}
+                    onChange={setSelectedExtraColor}
+                    placeholder="Select Extra Color"
+                  />
+                </div>
+              )}
+              <button className="add-extra-btn"style={{background:"#d5b85a", border:'none', color:'white',borderRadius:'3px'}} onClick={handleAddExtra} disabled={!selectedExtra}>
+                Add Extra
+              </button>
             </div>
 
+            {/* Display selected extras */}
+            {selectedExtrasWithColors.length > 0 && (
+              <div className="selected-extras-list">
+                <h4>Added Extras:</h4>
+                {selectedExtrasWithColors.map((extra, index) => (
+                  <div key={index} className="selected-extra-item">
+                    <span>{extra.name} (₹{formatIndianNumber(extra.price)}) {extra.color && `(${extra.color})`}</span>
+                    <button onClick={() => handleRemoveExtra(index)}>x</button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* TOP / BOTTOM COLORS */}
             

@@ -74,7 +74,7 @@ body {
   line-height: 1.2; 
   width: 100%;
   margin-top: 30px !important;
-  margin-bottom: -20px !important;
+  
   
 }
 
@@ -84,7 +84,7 @@ body {
   font-size: 16px !important;
   font-style: regular;
   font-weight: 400 !important;
- 
+ margin-bottom: 80px !important;
    width: 100%;
   text-align: center;
   color:black !important;
@@ -118,7 +118,7 @@ body {
 
 /* ---------- BUTTON ---------- */
 .btn2 {
-  width: 82% !important;
+  width: 95% !important;
   margin-top: 24px !important;
   height: 56px !important;
   background: #d5b85a !important;
