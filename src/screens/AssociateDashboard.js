@@ -36,9 +36,8 @@ export default function Dashboard() {
   const totalClients = new Set(orders.map((o) => o.user_id)).size;
 
   const activeOrders = orders.filter(
-    (o) => o.status !== "completed" && o.status !== "cancelled"
-
-
+    (o) => o.status !== "completed" && o.status !== "cancelled" &&
+           o.created_at.slice(0, 10) === new Date().toISOString().slice(0, 10)
   );
 
 
@@ -310,7 +309,7 @@ export default function Dashboard() {
             <>
               <div className="cell total-revenue">
                 {/* i have removed the change value  */}
-                <StatCard title="Total Revenue" value={`₹${formatIndianNumber(totalRevenue)}`} />
+                <StatCard  title="Total Revenue" value={`₹${formatIndianNumber(totalRevenue)}`}  />
               </div>
 
               <div className="cell total-orders">
@@ -346,7 +345,7 @@ export default function Dashboard() {
                 <div className="orders-card">
                   <div className="card-header">
                     <span className="card-title">Today's Orders</span>
-                    <button className="view-btn" onClick={() => setActiveTab("orders")}>View All</button>
+                    <button className="view-btn" onClick={() => setActiveTab("orders")} >View All</button>
 
                   </div>
 
@@ -380,7 +379,7 @@ export default function Dashboard() {
           {activeTab === "orders" && (
             <div className="order-details-wrapper">
 
-              <h2 className="order-title">Order Details</h2>
+              <h2 className="order-title">Order History</h2>
               <div className="order-search-bar">
                 <input
                   type="text"
@@ -590,7 +589,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="profile-row">
-                  <span className="label">Joining On</span>
+                  <span className="label">Joining Date</span>
                   <span className="value">
                     {salesperson.join_date}
                   </span>
