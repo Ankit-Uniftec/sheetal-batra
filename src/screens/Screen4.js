@@ -42,13 +42,6 @@ export function SearchableSelect({
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
-  // Reset query when value becomes empty
-  useEffect(() => {
-    if (!value && query) {
-      setQuery("");
-    }
-  }, [value, query]);
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return normalized;
@@ -120,7 +113,7 @@ export function SearchableSelect({
           ref={inputRef}
           className="ss-input"
           placeholder={placeholder}
-          value={open ? query : current?.label || ""}
+          value={current ? (open ? query : current.label) : query}
           onChange={(e) => {
             setQuery(e.target.value);
             if (!open) setOpen(true);
