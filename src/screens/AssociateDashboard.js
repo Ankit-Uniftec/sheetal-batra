@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
+import formatDate from "../utils/formatDate"; // Import formatDate
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function Dashboard() {
   const [passwordError, setPasswordError] = useState("");
   const [clients, setClients] = useState([]);
   const [calendarDate, setCalendarDate] = useState(
-    () => new Date().toLocaleDateString('en-CA')
+    () => new Date() // Initialize with a Date object
   );
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
@@ -37,7 +38,7 @@ export default function Dashboard() {
 
   const activeOrders = orders.filter(
     (o) => o.status !== "completed" && o.status !== "cancelled" &&
-      o.created_at.slice(0, 10) === new Date().toISOString().slice(0, 10)
+           formatDate(o.created_at) === formatDate(new Date())
   );
 
 
@@ -198,7 +199,7 @@ export default function Dashboard() {
         email: c.email,
         phone: c.phone,
         gender: profileMap.get(c.email)?.gender || "—",
-        dob: profileMap.get(c.email)?.dob || "—",
+        dob: formatDate(profileMap.get(c.email)?.dob),
       }));
 
       setClients(finalClients);
@@ -222,12 +223,12 @@ export default function Dashboard() {
     status === "complete" ? "complete" : "active";
 
   const calendarOrders = orders.filter(
-    (o) => o.delivery_date && o.delivery_date.slice(0, 10) === calendarDate
+    (o) => o.delivery_date && formatDate(o.delivery_date) === formatDate(calendarDate)
   );
 
   // Group orders by delivery date for calendar view
   const ordersByDate = orders.reduce((acc, order) => {
-    const date = order.delivery_date?.slice(0, 10);
+    const date = order.delivery_date ? formatDate(order.delivery_date) : null;
     if (date) {
       acc[date] = (acc[date] || 0) + 1;
     }
@@ -401,6 +402,7 @@ export default function Dashboard() {
                           <p><b>Order No:</b> {o.id}</p>
                           {/* <p><b>Total:</b> ₹{o.grand_total}</p> */}
                           <p><b>Status:</b> {o.status}</p>
+                          <p><b>Delivery Date:</b> {formatDate(o.delivery_date)}</p>
                         </div>
                       ))
                     )}
@@ -527,13 +529,13 @@ export default function Dashboard() {
                 <button onClick={() => setCalendarDate(prev => {
                   const d = new Date(prev);
                   d.setMonth(d.getMonth() - 1);
-                  return d.toISOString().slice(0, 10);
+                  return d; // Return Date object
                 })}>{'<'}</button>
                 <span>{new Date(calendarDate).toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
                 <button onClick={() => setCalendarDate(prev => {
                   const d = new Date(prev);
                   d.setMonth(d.getMonth() + 1);
-                  return d.toISOString().slice(0, 10);
+                  return d; // Return Date object
                 })}>{'>'}</button>
               </div>
 
@@ -545,8 +547,8 @@ export default function Dashboard() {
                   const firstDayOfMonth = new Date(new Date(calendarDate).getFullYear(), new Date(calendarDate).getMonth(), 1).getDay();
                   const date = i - firstDayOfMonth + 1;
                   const currentDay = new Date(new Date(calendarDate).getFullYear(), new Date(calendarDate).getMonth(), date);
-                  const fullDate = currentDay.toLocaleDateString('en-CA'); // Ensure local date for comparison
-                  const todayDate = new Date().toLocaleDateString('en-CA'); // 'en-CA' formats as YYYY-MM-DD locally
+                  const fullDate = formatDate(currentDay); // Use formatDate
+                  const todayDate = formatDate(new Date()); // Use formatDate
                   const orderCount = ordersByDate[fullDate] || 0;
 
                   return (
@@ -555,7 +557,7 @@ export default function Dashboard() {
                       className={`calendar-date-box ${date > 0 ? '' : 'empty'} ${fullDate === todayDate ? 'today' : ''}`}
                       onClick={() => {
                         if (orderCount > 0) {
-                          setOrderSearch(fullDate);
+                          // setOrderSearch(fullDate);
                           setActiveTab("orders");
                         }
                       }}
@@ -600,7 +602,7 @@ export default function Dashboard() {
                 <div className="profile-row">
                   <span className="label">Joining Date</span>
                   <span className="value">
-                    {salesperson.join_date}
+                    {formatDate(salesperson.join_date)}
                   </span>
 
                 </div>
@@ -650,7 +652,7 @@ export default function Dashboard() {
                           <td data-label="Email">{c.email}</td>
                           <td data-label="Phone">{formatPhoneNumber(c.phone)}</td>
                           <td data-label="Gender">{c.gender}</td>
-                          <td data-label="Date of Birth">{c.dob}</td>
+                          <td data-label="Date of Birth">{formatDate(c.dob)}</td>
                         </tr>
                       ))}
                     </tbody>

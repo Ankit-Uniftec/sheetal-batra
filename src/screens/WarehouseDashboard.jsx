@@ -1,9 +1,9 @@
-
 import React, { useEffect, useState } from "react";
 import "./WarehouseDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
+import formatDate from "../utils/formatDate"; // Import formatDate
 const WarehouseDashboard = () => {
   const navigate = useNavigate();
 
@@ -154,6 +154,9 @@ const WarehouseDashboard = () => {
                           <strong>Measurements:</strong>
                           {renderMeasurements(firstItem.measurements)}
                         </div>
+
+                        <p><strong>Order Date:</strong> {formatDate(order.created_at)}</p>
+                        <p><strong>Delivery Date:</strong> {formatDate(order.delivery_date)}</p>
 
                         <button
                           className="complete-btn"

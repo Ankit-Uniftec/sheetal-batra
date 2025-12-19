@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber"; // Import the new utility
+import formatDate from "../utils/formatDate"; // Import formatDate
 import { SearchableSelect } from "../components/SearchableSelect";
 
 const countryOptions = [
@@ -367,7 +368,7 @@ export default function Screen6() {
             <div className="row3">
               <div className="field">
                 <label>Delivery Date:</label>
-                <span>{order.delivery_date}</span>
+                <span>{formatDate(order.delivery_date)}</span>
               </div>
 
               <div className="field">
@@ -390,7 +391,7 @@ export default function Screen6() {
             <div className="row3">
               <div className="field">
                 <label>Delivery Date:</label>
-                <span>{order.delivery_date}</span>
+                <span>{formatDate(order.delivery_date)}</span>
               </div>
 
               <div className="field">

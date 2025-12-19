@@ -7,6 +7,7 @@ import "./Screen4.css";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
+import formatDate from "../utils/formatDate"; // Import formatDate
 
 /**
  * Generic Searchable Select (no external libs)
@@ -649,7 +650,7 @@ const totalOrder = inclusiveSubtotal;
       items: finalItems,
 
       // Delivery Details
-      delivery_date: deliveryDate,
+      delivery_date: formatDate(deliveryDate), // Use formatDate
       mode_of_delivery: modeOfDelivery,
       order_flag: orderFlag,
 

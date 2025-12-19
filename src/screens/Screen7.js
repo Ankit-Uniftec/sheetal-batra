@@ -7,6 +7,7 @@ import Logo from "../images/logo.png";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import formatIndianNumber from "../utils/formatIndianNumber";
+import formatDate from "../utils/formatDate"; // Import formatDate
 import "./Screen7.css";
 
 function ColorDotDisplay({ colorValue }) {
@@ -239,7 +240,7 @@ export default function Screen7() {
     y -= 22;
     draw(`Order ID: ${order.id}`, margin, y);
     draw(
-      `Date: ${new Date(order.created_at || Date.now()).toLocaleString()}`,
+      `Date: ${formatDate(order.created_at || Date.now())}`,
       margin + 260,
       y
     );

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber"; // Import formatPhoneNumber
+import formatDate from "../utils/formatDate"; // Import formatDate
 
 function ColorDotDisplay({ colorValue }) {
   if (!colorValue) return null;
@@ -232,11 +233,11 @@ export default function OrderHistory() {
                           </div>
                           <div className="kv">
                             <div className="small muted">Order Date</div>
-                            <div>{order.created_at?.split("T")[0]}</div>
+                            <div>{formatDate(order.created_at)}</div>
                           </div>
                           <div className="kv">
                             <div className="small muted">EDD</div>
-                            <div>{order.delivery_date || "—"}</div>
+                            <div>{formatDate(order.delivery_date)}</div>
                           </div>
 
                           {/* flag */}
@@ -339,12 +340,12 @@ export default function OrderHistory() {
                   <div><strong>Gender:</strong> {profile.gender || "—"}</div>
                   <div><strong>Phone:</strong> {formatPhoneNumber(profile.phone) || "—"}</div>
                   <div><strong>Email:</strong> {profile.email || "—"}</div>
-                  <div><strong>DOB:</strong> {profile.dob || "—"}</div>
+                  <div><strong>DOB:</strong> {formatDate(profile.dob)}</div>
                   <div><strong>Address:</strong> {profile.address || "—"}</div>
                   <div><strong>City:</strong> {profile.city || "—"}</div>
                   <div><strong>State:</strong> {profile.state || "—"}</div>
                   <div><strong>Pincode:</strong> {profile.pincode || "—"}</div>
-                  <div><strong>Joined:</strong> {profile.created_at?.split("T")[0] || "—"}</div>
+                  <div><strong>Joined:</strong> {formatDate(profile.created_at)}</div>
                 </div>
               )}
             </div>

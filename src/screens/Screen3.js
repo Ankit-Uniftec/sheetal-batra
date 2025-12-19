@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "../screens/Screen3.css";
 import Logo from "../images/logo.png";
+import formatDate from "../utils/formatDate"; // Import formatDate
 
 function Screen3() {
   const navigate = useNavigate();
@@ -68,7 +69,7 @@ function Screen3() {
       gender,
       phone: normalizedPhone,
       email: email.trim().toLowerCase(),
-      dob,
+      dob: formatDate(dob), // Use formatDate
       created_at: new Date(),
     });
 
