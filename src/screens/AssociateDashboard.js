@@ -22,7 +22,7 @@ export default function Dashboard() {
   const [passwordError, setPasswordError] = useState("");
   const [clients, setClients] = useState([]);
   const [calendarDate, setCalendarDate] = useState(
-    () => new Date().toISOString().slice(0, 10)
+    () => new Date().toLocaleDateString('en-CA')
   );
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
@@ -199,6 +199,15 @@ export default function Dashboard() {
   const calendarOrders = orders.filter(
     (o) => o.delivery_date && o.delivery_date.slice(0, 10) === calendarDate
   );
+
+  // Group orders by delivery date for calendar view
+  const ordersByDate = orders.reduce((acc, order) => {
+    const date = order.delivery_date?.slice(0, 10);
+    if (date) {
+      acc[date] = (acc[date] || 0) + 1;
+    }
+    return acc;
+  }, {});
 
   const filteredOrders = orders.filter((order) => {
     if (!orderSearch.trim()) return true;
@@ -480,88 +489,54 @@ export default function Dashboard() {
             <div className="order-details-wrapper">
               <h2 className="order-title">Calendar</h2>
 
-              <div className="calendar-filter-row">
-                <label className="calendar-label">
-                  Select Date:&nbsp;
-                  <input
-                    type="date"
-                    value={calendarDate}
-                    onChange={(e) => setCalendarDate(e.target.value)}
-                  />
-                </label>
+              <div className="calendar-controls">
+                <button onClick={() => setCalendarDate(prev => {
+                  const d = new Date(prev);
+                  d.setMonth(d.getMonth() - 1);
+                  return d.toISOString().slice(0, 10);
+                })}>{'<'}</button>
+                <span>{new Date(calendarDate).toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+                <button onClick={() => setCalendarDate(prev => {
+                  const d = new Date(prev);
+                  d.setMonth(d.getMonth() + 1);
+                  return d.toISOString().slice(0, 10);
+                })}>{'>'}</button>
               </div>
 
-              <div className="order-list-scroll">
-                {calendarOrders.length === 0 ? (
-                  <p className="muted">No orders on this date.</p>
-                ) : (
-                  calendarOrders.map((order) => {
-                    const item = order.items?.[0] || {};
-                    const imgSrc = item.image_url || "/placeholder.png";
+              <div className="calendar-grid">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="calendar-day-label">{day}</div>
+                ))}
+                {Array.from({ length: new Date(new Date(calendarDate).getFullYear(), new Date(calendarDate).getMonth() + 1, 0).getDate() + new Date(new Date(calendarDate).getFullYear(), new Date(calendarDate).getMonth(), 1).getDay() }).map((_, i) => {
+                  const firstDayOfMonth = new Date(new Date(calendarDate).getFullYear(), new Date(calendarDate).getMonth(), 1).getDay();
+                  const date = i - firstDayOfMonth + 1;
+                  const currentDay = new Date(new Date(calendarDate).getFullYear(), new Date(calendarDate).getMonth(), date);
+                  const fullDate = currentDay.toLocaleDateString('en-CA'); // Ensure local date for comparison
+                  const todayDate = new Date().toLocaleDateString('en-CA'); // 'en-CA' formats as YYYY-MM-DD locally
+                  const orderCount = ordersByDate[fullDate] || 0;
 
-                    return (
-                      <div key={order.id} className="order-card">
-                        <div className={`state-badge ${statusBadge(order.status)}`}>
-                          {order.status === "complete" ? "Complete" : "Active"}
-                        </div>
-
-                        <div className="order-row">
-                          <div className="thumb">
-                            <img src={imgSrc} alt={item.product_name || "Product"} />
-                          </div>
-
-                          <div className="details">
-                            <div className="row space">
-                              <div className="kv"></div>
-                              <div className="kv"></div>
-                              <div className="kv">
-                                <div className="small muted">EDD</div>
-                                <div>{order.delivery_date || "—"}</div>
-                              </div>
-                            </div>
-
-                            <div className="grid-2">
-                              <div className="kv">
-                                <div className="label">Product Name</div>
-                                <div className="value">{item.product_name || "—"}</div>
-                              </div>
-
-                              <div className="kv">
-                                <div className="label">Amount</div>
-                                <div className="value">
-                                  ₹{formatIndianNumber(order.grand_total)}
-                                </div>
-                              </div>
-
-                              <div className="kv">
-                                <div className="label">Qty</div>
-                                <div className="value">
-                                  {formatIndianNumber(order.total_quantity)}
-                                </div>
-                              </div>
-
-                              <div className="kv">
-                                <div className="label">Color</div>
-                                <div className="value">
-                                  <div
-                                    style={{
-                                      background: item.color,
-                                      height: "15px",
-                                      width: "30px",
-                                      borderRadius: "14px",
-                                      marginBottom: "5px",
-                                    }}
-                                  />
-                                  {item.color || "—"}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                  return (
+                    <div
+                      key={i}
+                      className={`calendar-date-box ${date > 0 ? '' : 'empty'} ${fullDate === todayDate ? 'today' : ''}`}
+                      onClick={() => {
+                        if (orderCount > 0) {
+                          setOrderSearch(fullDate);
+                          setActiveTab("orders");
+                        }
+                      }}
+                    >
+                      {date > 0 && (
+                        <>
+                          <span className="date-number">{date}</span>
+                          {orderCount > 0 && (
+                            <span className="order-count">{orderCount} Orders</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
