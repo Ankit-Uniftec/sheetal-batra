@@ -70,8 +70,9 @@ export default function Screen6() {
 
   const sanitizedAdvance = useMemo(() => {
     const amount = parseFloat(advancePayment);
-    if (isNaN(amount) || amount <= 0) return 0;
-    return Math.min(amount, totalAmount);
+    const minAdvance = totalAmount * 0.25; // 25% of total amount
+    if (isNaN(amount) || amount <= 0) return minAdvance; // If no advance or invalid, default to 25%
+    return Math.max(minAdvance, Math.min(amount, totalAmount)); // Ensure it's at least 25% and not more than total
   }, [advancePayment, totalAmount]);
 
   const remainingAmount = useMemo(
@@ -275,9 +276,9 @@ export default function Screen6() {
     <div className="screen6">
       {/* HEADER */}
       <div className="screen6-header">
-        
+
         <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
-        <h2 className="title">Order Form</h2>
+        <h2 className="title">Order Detail</h2>
       </div>
 
 
@@ -308,14 +309,6 @@ export default function Screen6() {
             </div>
 
             <div className="row3">
-              <div className="field">
-                <label>Delivery Address:</label>
-                <input
-                  className="input-line"
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                />
-              </div>
 
               <div className="field">
                 <label>Country:</label>
@@ -328,13 +321,15 @@ export default function Screen6() {
               </div>
 
               <div className="field">
-                <label>City:</label>
+                <label>Pincode:</label>
                 <input
                   className="input-line"
-                  value={deliveryCity}
-                  onChange={(e) => setDeliveryCity(e.target.value)}
+                  value={deliveryPincode}
+                  onChange={(e) => setDeliveryPincode(e.target.value)}
                 />
               </div>
+
+
 
               <div className="field">
                 <label>State:</label>
@@ -346,13 +341,27 @@ export default function Screen6() {
               </div>
 
               <div className="field">
-                <label>Pincode:</label>
+                <label>City:</label>
                 <input
                   className="input-line"
-                  value={deliveryPincode}
-                  onChange={(e) => setDeliveryPincode(e.target.value)}
+                  value={deliveryCity}
+                  onChange={(e) => setDeliveryCity(e.target.value)}
                 />
               </div>
+              <div className="field">
+                <label>Delivery Address:</label>
+                <input
+                  className="input-line"
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                />
+              </div>
+
+
+
+
+
+
             </div>
 
             <div className="row3">
@@ -481,7 +490,7 @@ export default function Screen6() {
         <div className="section-box">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3>Payment Details</h3>
-            <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px" , color:'white !important'}}>Collector Code</button>
+            <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white !important' }}>Collector Code</button>
           </div>
           <div className="row3">
             <div className="field">
@@ -498,8 +507,8 @@ export default function Screen6() {
                 <option value="Net Banking">Net Banking</option>
               </select>
 
-             
-              
+
+
             </div>
 
             <div className="field">
@@ -516,8 +525,11 @@ export default function Screen6() {
               />
             </div>
             <div className="field">
-              <label>Advance Amount:</label>
-              <span>₹{formatIndianNumber(sanitizedAdvance)}</span>
+              <label> Minimum Advance Amount Required:</label>
+              <span>
+                ₹{formatIndianNumber(sanitizedAdvance)}
+                {totalAmount > 0 && ` (${((sanitizedAdvance / totalAmount) * 100).toFixed(2)}%)`}
+              </span>
             </div>
           </div>
           {discountApplied && (
@@ -543,6 +555,23 @@ export default function Screen6() {
               <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
           </div>
+
+          {(paymentMode === "COD" || pricing.shippingCharge > 0) && (
+            <div className="row3">
+              {paymentMode === "COD" && (
+                <div className="field">
+                  <label>COD Charge:</label>
+                  <span>₹{formatIndianNumber(COD_CHARGE)}</span>
+                </div>
+              )}
+              {pricing.shippingCharge > 0 && (
+                <div className="field">
+                  <label>Shipping Charge:</label>
+                  <span>₹{formatIndianNumber(pricing.shippingCharge)}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* CONFIRM BUTTON */}

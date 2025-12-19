@@ -19,19 +19,20 @@
 /* HEADER */ 
 
 .screen6-header {
+  
   display: grid !important; /* Changed to grid layout */
   grid-template-columns: auto 1fr auto !important; /* Logo, flexible space, Title */
   width: 100% !important;
   align-items: center !important;
   position: relative !important;
   box-sizing: border-box; /* Include padding in width calculation */
-  padding: 20px; /* Apply consistent padding to the header */
+  padding: 2px !important; /* Apply consistent padding to the header */
+  margin-top: 50px; /* Adjust this value to align vertically with cards */
 }
 
 .sheetal-logo {
   width: 150px;
   cursor: pointer;
-  margin-top: 29px !important;
   grid-column: 1; /* Place logo in the first column */
 }
 
@@ -65,9 +66,9 @@
   font-size: 26px !important;
   font-weight: 600 !important;
   font-style: semibold !important;
-  text-align: right !important; /* Right align the text within its grid cell */
+  
   grid-column: 3; /* Place title in the third column */
-  margin-right: 0 !important; /* Remove negative margin */
+  margin-right: -60px !important; /* Remove negative margin */
 }
 
 /* MAIN CARD CONTAINER */
@@ -75,6 +76,7 @@
   width: 100%;
   max-width: 100%;
   padding: 20px; /* Apply consistent padding to the container */
+  padding-top: 20px; /* Add padding-top to create space between header and cards */
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -268,6 +270,10 @@
   border: none;
   
   cursor: pointer;
+}
+
+.apply-discount-btn {
+  color: white !important;
 }
 
 
