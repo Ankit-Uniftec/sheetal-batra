@@ -1,6 +1,7 @@
 
 
 
+
 /* ---------- RESET ---------- */
 *,
 *::before,
@@ -24,17 +25,17 @@ body {
 
 /* ---------- BACKGROUND ---------- */
 .screen2-bg {
-  min-height: 100vh;
-  width: 100%;
+  min-height: 100vh ;
+  width: 100% ;
   background-image: url("../images/Screen1bg.png");
-  background-size: cover;
+  background-size: cover ;
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  display: flex;
+  display: flex ;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: center ;
+  justify-content: center ;
 }
 
 /* ---------- LOGO ---------- */
@@ -46,14 +47,14 @@ body {
 
 /* ---------- CARD ---------- */
 .card2 {
-  /* width: 100%; */
-  max-width: 480px;
-  height: 500px;
-  background: #FFFFFF73;
+   /* width: 70% !important;  */
+  max-width: 480px !important ;
+  min-height: 500px ; /* Changed from height to min-height */
+  background: #FFFFFF73 ;
   padding: 25px;
-  border-radius: 20px;
-  text-align: center;
-  box-shadow: rgba(0, 0, 0, 0.1) 0 4px 20px;
+  border-radius: 20px ;
+  text-align: center ;
+  box-shadow: rgba(0, 0, 0, 0.1) 0 4px 20px ;
   margin: 0 16px;
 
   
@@ -63,14 +64,17 @@ body {
 .card2 .title {
   
   font-family: "Athleas", serif !important;
+  font-style: medium;
   font-weight: 500;
   font-size: 32px;
   color: #d5b85a !important;
-  
-  text-align: center;
-  line-height: 1.2;
-  margin-top: 50px !important;
-  margin-bottom: 10px !important;
+  margin: 0 auto !important;      /* centers with consistent spacing */
+  display: block;      /* ensures correct centering in card */
+  text-align: center !important;  /* explicitly center text */
+  line-height: 1.2; 
+  width: 100%;
+  margin-top: 30px !important;
+  margin-bottom: -20px !important;
   
 }
 
@@ -78,72 +82,94 @@ body {
 .subtitle {
   font-family: "Futura", sans-serif !important;
   font-size: 16px !important;
+  font-style: regular;
   font-weight: 400 !important;
-  margin-top: 0px !important;
+ 
+   width: 100%;
   text-align: center;
-  color: #000000 !important;
+  color:black !important;
 }
 
 /* ---------- OTP TEXT ---------- */
 .card2 .otp-text {
-  margin-top: 20px;
+  margin-top: 20px !important;
   color: #555 !important;
-  font-size: 15px;
-  margin-left: 5px;
+  font-size: 15px !important;
+  margin-left: 5px !important;
 }
 
 /* ---------- OTP INPUTS ---------- */
 .otpBox {
-  margin-top: 60px;
-  text-align: left;
+  margin-top: 60px !important;
+  text-align: center !important; /* Changed to center alignment */
+
 }
 
 .otp-input {
-  width: 47px;
-  height: 56px;
-  border: 1px solid #aaa;
-  border-radius: 3px;
-  font-size: 18px;
-  text-align: center;
-  margin: 4px;
-  outline: none;
+  width: 47px !important; 
+  height: 56px !important;
+  border: 1px solid #aaa !important;
+  border-radius: 3px !important;
+  font-size: 18px !important;
+  text-align: center !important;
+  margin: 4px !important;
+  outline: none !important;
 }
 
 /* ---------- BUTTON ---------- */
 .btn2 {
-  width: 97%;
-  margin-top: 24px;
-  height: 56px;
-  background: #d5b85a;
+  width: 81% !important;
+  margin-top: 24px !important;
+  height: 56px !important;
+  background: #d5b85a !important;
   color: #ffffff !important;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 16px;
+  border: none !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+  font-size: 16px !important;
 }
 
 /* ---------- TIMER ---------- */
 .timer-text {
-  margin-top: 11px;
+  margin-top: 11px !important;
   color: #5e677c !important;
-  font-size: 14px;
-  text-align: center;
+  font-size: 14px !important;
+  text-align: center !important;
 }
 
 /* ---------- RESEND ---------- */
 .resend-btn {
-  background: none;
-  border: none;
-  color: #fff !important;
-  font-size: 16px;
-  cursor: pointer;
-  margin-top: 12px;
-  text-decoration: underline;
+  background: none !important;
+  border: none !important;
+  color: black !important;
+  font-size: 16px !important;
+  cursor: pointer !important;
+  margin-top: 12px !important;
+  text-decoration: underline !important;
 }
 
 /* ---------- RESPONSIVE ---------- */
+.back-btn {
+  position: fixed; /* Changed to fixed to ensure it stays in place relative to the viewport */
+  bottom: 40px; /* Changed from top to bottom */
+  left: 40px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #d5b85a !important;
+  color: white !important;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  z-index: 1000; /* Ensure it's above other content */
+}
+
 @media (max-width: 520px) {
   .card2 {
     height: auto;
+  }
+  .back-btn {
+    bottom: 20px; /* Adjusted for smaller screens */
+    left: 20px;
   }
 }

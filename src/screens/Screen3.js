@@ -79,7 +79,7 @@ function Screen3() {
       return;
     }
 
-    alert("Detail saved");
+    alert("Welcome to the world of Sheetal Batra");
     navigate("/product");
   };
 
@@ -102,7 +102,7 @@ function Screen3() {
         {/* ROW 1 */}
         <div className="row">
           <div className="input-box">
-            <label>Full name *</label>
+            <label>Full Name *</label>
             <input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -128,7 +128,7 @@ function Screen3() {
         {/* ROW 2 */}
         <div className="row">
           <div className="input-box">
-            <label>Phone number *</label>
+            <label>Phone *</label>
             <input type="text" value={phoneNumber} readOnly />
           </div>
 

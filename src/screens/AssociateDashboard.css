@@ -389,9 +389,9 @@
 /* Back Button */
 .back-btn {
   position: fixed;
-  bottom: 40px;
-  left: 40px;
-  width: 48px;
+  bottom: 40px !important;
+  left: 40px !important;
+  width: 48px !important;
   height: 48px;
   border-radius: 50%;
   background: #d5b85a !important;

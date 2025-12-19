@@ -126,3 +126,26 @@ a{
   color: #D5B85A !important;
   text-decoration: none;
 }
+
+/* Back Button */
+.back-btn {
+  position: fixed;
+  bottom: 40px;
+  left: 40px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #d5b85a !important;
+  color: white !important;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+@media (max-width: 520px) {
+  .back-btn {
+    bottom: 20px;
+    left: 20px;
+  }
+}
