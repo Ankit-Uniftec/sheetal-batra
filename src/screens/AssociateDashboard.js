@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [salesperson, setSalesperson] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(false); // New state for sidebar visibility
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [enteredPassword, setEnteredPassword] = useState("");
@@ -298,17 +299,21 @@ export default function Dashboard() {
           <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
           <h1 className="order-title">My Dashboard</h1>
           <button className="logout-btn" onClick={handleLogout}>↪</button>
-
+          <div className="hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
+            <div className="bar"></div>
+            <div className="bar"></div>
+            <div className="bar"></div>
+          </div>
         </div>
 
         {/* MAIN TABLE */}
-        <div className="grid-table">
+        <div className={`grid-table ${showSidebar ? "sidebar-open" : ""}`}>
 
           {/* SIDEBAR */}
-          <aside className="sidebar">
+          <aside className={`sidebar ${showSidebar ? "open" : ""}`}>
             <div
               className={`hello-box clickable ${activeTab === "profile" ? "active" : ""}`}
-              onClick={() => setActiveTab("profile")}
+              onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}
             >
               Hello, {salesperson?.saleperson || "Associate"}
             </div>
@@ -319,20 +324,20 @@ export default function Dashboard() {
 
               <a
                 className={`menu-item ${activeTab === "dashboard" ? "active" : ""}`}
-                onClick={() => setActiveTab("dashboard")}
+                onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}
               >
                 Dashboard
               </a>
               <a
                 className={`menu-item ${activeTab === "calendar" ? "active" : ""}`}
-                onClick={() => setActiveTab("calendar")}
+                onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}
               >
                 Calendar
               </a>
 
               <a
                 className={`menu-item ${activeTab === "orders" ? "active" : ""}`}
-                onClick={() => setActiveTab("orders")}
+                onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}
               >
                 Order History
               </a>
@@ -341,7 +346,7 @@ export default function Dashboard() {
 
               <a
                 className={`menu-item ${activeTab === "clients" ? "active" : ""}`}
-                onClick={() => setActiveTab("clients")}
+                onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}
               >
                 Client Book
               </a>
