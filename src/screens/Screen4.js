@@ -50,6 +50,16 @@ export function SearchableSelect({
   }, [normalized, query]);
 
   useEffect(() => {
+    // When the external value changes to null or empty, reset the internal query
+    if (!value && query !== "") {
+      setQuery("");
+    } else if (current && query !== current.label && !open) {
+      // If a value is selected and the menu is closed, ensure query matches label
+      setQuery(current.label);
+    }
+  }, [value, current, open, query]);
+
+  useEffect(() => {
     const onDoc = (e) => {
       if (!rootRef.current) return;
       if (!rootRef.current.contains(e.target)) {
