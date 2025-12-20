@@ -44,7 +44,7 @@
 
 /* Hamburger Icon */
 .hamburger-icon {
-  display: none; /* Hidden by default */
+  display: none; /* Hidden by default, shown in media query */
   flex-direction: column;
   justify-content: space-around;
   width: 30px;
@@ -839,23 +839,51 @@
   font-size: 14px;
 }
 
+/*css to movile view dashboard.........................................................................*/
+
 /* ---------- MOBILE VIEW (max-width: 767px) ---------- */
 @media (max-width: 767px) {
   .dashboard-wrapper {
     padding: 20px; /* Adjust padding for smaller screens */
   }
 
-  .top-header {
-    grid-template-columns: auto 1fr auto !important; /* Logo, Title, Logout/Hamburger */
+.top-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: center;
+    padding: 10px 0;
+  }
+
+  /* Logo */
+  .top-header .logo {
+    justify-self: start;
+    margin-left: 12px;
+  }
+
+  /* Title */
+  .dashboard-title {
+    justify-self: center;
+    white-space: nowrap;
+  }
+
+  /* Logout / Hamburger */
+  .top-header .logout-btn {
+    justify-self: end;
+    margin-right: 12px;
   }
 
   .hamburger-icon {
     display: flex; /* Show hamburger icon */
+    position: fixed; /* Allow it to flow with the grid */
+    transform: none;
+    /* margin-left: auto;  */
+    top: 0;
+    left: 0;
+    margin-left: 10px;
+    margin-top: 10px;
   }
 
-  .logout-btn {
-    margin-top: 0; /* Adjust margin */
-  }
+ 
 
   .grid-table {
     grid-template-columns: 1fr; /* Single column layout */
@@ -922,46 +950,13 @@
   }
 
   .add-btn {
-    right: 20px !important;
+    /* right: 20px !important; */
     left: auto !important;
   }
 
-  .clients-table thead {
-    display: none;
-  }
-
-  .clients-table,
-  .clients-table tbody,
-  .clients-table tr {
-    display: block;
-    width: 100%;
-  }
-
-  .clients-table tr {
-    background: #fff;
-    border-radius: 14px;
-    margin-bottom: 14px;
-    padding: 12px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-  }
-
-  .clients-table td {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 6px 0;
-    border: none;
-    font-size: 13px;
-    white-space: normal;
-  }
-
-  .clients-table td::before {
-    content: attr(data-label);
-    font-weight: 600;
-    color: #666;
-    flex-shrink: 0;
-  }
 }
+
+/*////////////////////////////////////////////////////////////////*/
 
 .order-search-bar {
   margin: 12px 0 18px;
