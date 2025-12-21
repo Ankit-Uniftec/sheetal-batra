@@ -298,7 +298,9 @@ export default function Dashboard() {
         <div className="top-header">
           <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
           <h1 className="order-title">My Dashboard</h1>
-          <button className="logout-btn" onClick={handleLogout}>↪</button>
+          {/* Logout button for larger screens */}
+          <button className="logout-btn desktop-logout-btn" onClick={handleLogout}>↪</button>
+          {/* Hamburger icon for smaller screens */}
           <div className="hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
             <div className="bar"></div>
             <div className="bar"></div>
@@ -317,6 +319,8 @@ export default function Dashboard() {
             >
               Hello, {salesperson?.saleperson || "Associate"}
             </div>
+            {/* Logout button for mobile sidebar */}
+            
 
 
 
@@ -349,6 +353,12 @@ export default function Dashboard() {
                 onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}
               >
                 Client Book
+              </a>
+              <a
+                className={`menu-item-logout `}
+                onClick={ handleLogout }
+              >
+                Log Out
               </a>
             </nav>
           </aside>

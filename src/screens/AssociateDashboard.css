@@ -144,6 +144,9 @@
   font-size: 15px;
   cursor: pointer;
 }
+.menu-item-logout {
+  display: none;
+}
 
 .menu-item.active {
   font-weight: bold;
@@ -867,22 +870,28 @@
   }
 
   /* Logout / Hamburger */
-  .top-header .logout-btn {
-    justify-self: end;
-    margin-right: 12px;
+  .top-header .desktop-logout-btn {
+    display: none; /* Hide desktop logout button on mobile */
   }
 
   .hamburger-icon {
     display: flex; /* Show hamburger icon */
-    position: fixed; /* Allow it to flow with the grid */
-    transform: none;
-    /* margin-left: auto;  */
-    top: 0;
-    left: 0;
-    margin-left: 10px;
-    margin-top: 10px;
+    position: absolute; /* Position relative to top-header */
+     /* left: 20px; */
+   
+    top: 60%;
+    transform: translateY(-50%);
+    z-index: 1001; /* Above other content */
   }
 
+ 
+.menu-item-logout {
+  display: block;
+  padding: 8px 12px;
+  font-size: 15px;
+  cursor: pointer;
+  margin-left: 10px;
+}
  
 
   .grid-table {
