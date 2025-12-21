@@ -962,6 +962,16 @@
     /* right: 20px !important; */
     left: auto !important;
   }
+  .view-btn {
+  width: 60px !important; /* Reduced width */
+  padding: 2px 5px !important;
+  border-radius: 3px !important;
+  background-color: #d5b85a;
+  color: white !important;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+}
 
 }
 
