@@ -913,21 +913,21 @@ const BRAND = {
 };
 
 
-function ColorDotDisplay({ colorValue }) {
-  if (!colorValue) return null;
+function ColorDotDisplay({ colorObject }) {
+  if (!colorObject || !colorObject.hex) return null;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
       <div
         style={{
-          background: colorValue, // Directly use colorValue as background
+          background: colorObject.hex, // Use hex value for background
           height: "15px",
           width: "30px",
           borderRadius: "10px",
           border: "1px solid #ccc", // Add a border for visibility on light colors
         }}
       ></div>
-      <span>{colorValue}</span>
+      <span>{colorObject.name}</span>
     </div>
   );
 }
@@ -1835,7 +1835,7 @@ async function buildWarehouseOrderPdf(order, logoUrl) {
                   </div>
                   <div className="field field-small">
                     <label>Color:</label>
-                    <ColorDotDisplay colorValue={item.color} />
+                    <ColorDotDisplay colorObject={item.color} />
                   </div>
                 </div>
 
@@ -1851,14 +1851,14 @@ async function buildWarehouseOrderPdf(order, logoUrl) {
                     <label>Top:</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span>{item.top}</span>
-                      {item.top_color && <ColorDotDisplay colorValue={item.top_color} />}
+                      {item.top_color && <ColorDotDisplay colorObject={item.top_color} />}
                     </div>
                   </div>
                   <div className="field">
                     <label>Bottom:</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span>{item.bottom}</span>
-                      {item.bottom_color && <ColorDotDisplay colorValue={item.bottom_color} />}
+                      {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
                     </div>
                   </div>
                   <div className="field">
@@ -1872,7 +1872,7 @@ async function buildWarehouseOrderPdf(order, logoUrl) {
                         {item.extras.map((extra, idx) => (
                           <div key={idx} className="extra-item-display">
                             <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
-                            {extra.color && <ColorDotDisplay colorValue={extra.color} />}
+                            {extra.color && <ColorDotDisplay colorObject={extra.color} />}
                           </div>
                         ))}
                       </div>

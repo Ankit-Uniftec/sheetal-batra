@@ -244,10 +244,10 @@ export default function Screen4() {
   const [bottoms, setBottoms] = useState([]);
   const [globalExtras, setGlobalExtras] = useState([]);
 
-  const [selectedColor, setSelectedColor] = useState("");
-  const [selectedTopColor, setSelectedTopColor] = useState("");
-  const [selectedBottomColor, setSelectedBottomColor] = useState("");
-  const [selectedExtraColor, setSelectedExtraColor] = useState(""); // Temporary state for extra color selection
+  const [selectedColor, setSelectedColor] = useState({ name: "", hex: "" });
+  const [selectedTopColor, setSelectedTopColor] = useState({ name: "", hex: "" });
+  const [selectedBottomColor, setSelectedBottomColor] = useState({ name: "", hex: "" });
+  const [selectedExtraColor, setSelectedExtraColor] = useState({ name: "", hex: "" }); // Temporary state for extra color selection
   const [selectedTop, setSelectedTop] = useState("");
   const [selectedBottom, setSelectedBottom] = useState("");
   const [selectedExtra, setSelectedExtra] = useState(""); // Temporary state for extra selection
@@ -540,11 +540,11 @@ export default function Screen4() {
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
       sku_id: selectedProduct.sku_id,
-      color: selectedColor,
+      color: selectedColor, // Now an object { name, hex }
       top: selectedTop,
-      top_color: selectedTopColor,
+      top_color: selectedTopColor, // Now an object { name, hex }
       bottom: selectedBottom,
-      bottom_color: selectedBottomColor,
+      bottom_color: selectedBottomColor, // Now an object { name, hex }
       extras: selectedExtrasWithColors, // Use the array of extras
       size: selectedSize,
       quantity: quantity,
@@ -558,11 +558,13 @@ export default function Screen4() {
 
     // Reset inputs
     setSelectedProduct(null);
-    setSelectedColor("");
+    setSelectedColor({ name: "", hex: "" }); // Reset to initial object structure
     setSelectedTop("");
     setSelectedBottom("");
+    setSelectedTopColor({ name: "", hex: "" }); // Reset to initial object structure
+    setSelectedBottomColor({ name: "", hex: "" }); // Reset to initial object structure
     setSelectedExtra("");
-    setSelectedExtraColor("");
+    setSelectedExtraColor({ name: "", hex: "" }); // Reset to initial object structure
     setSelectedExtrasWithColors([]); // Reset the array of selected extras
     setSelectedSize("S");
     setQuantity(1);
@@ -796,7 +798,7 @@ const totalOrder = inclusiveSubtotal;
   const toColorOptions = (colors = []) =>
     colors.map((c) => ({
       label: c.name,
-      value: c.name,
+      value: { name: c.name, hex: c.hex }, // Store full object as value
       hex: c.hex
     }));
   const toExtraOptions = (extras = []) =>
@@ -864,12 +866,11 @@ const totalOrder = inclusiveSubtotal;
                           {/* Color */}
                           <div className="field">
                             <label>Color</label>
-                            <input
-                              type="text"
-                              className="input-line"
-                              value={item.color || ""}
-                              onChange={(e) => updateItem(item._id, { color: e.target.value })}
-                              placeholder="Enter color"
+                            <SearchableSelect
+                              options={toColorOptions(colors)}
+                              value={item.color?.name || ""}
+                              onChange={(colorObj) => updateItem(item._id, { color: colorObj })}
+                              placeholder="Select Color"
                             />
                           </div>
 
@@ -885,6 +886,17 @@ const totalOrder = inclusiveSubtotal;
                             />
                           </div>
 
+                          {/* Top Color */}
+                          <div className="field">
+                            <label>Top Color</label>
+                            <SearchableSelect
+                              options={toColorOptions(colors)}
+                              value={item.top_color?.name || ""}
+                              onChange={(colorObj) => updateItem(item._id, { top_color: colorObj })}
+                              placeholder="Select Top Color"
+                            />
+                          </div>
+
                           {/* Bottom */}
                           <div className="field">
                             <label>Bottom</label>
@@ -894,6 +906,17 @@ const totalOrder = inclusiveSubtotal;
                               value={item.bottom || ""}
                               onChange={(e) => updateItem(item._id, { bottom: e.target.value })}
                               placeholder="Enter bottom"
+                            />
+                          </div>
+
+                          {/* Bottom Color */}
+                          <div className="field">
+                            <label>Bottom Color</label>
+                            <SearchableSelect
+                              options={toColorOptions(colors)}
+                              value={item.bottom_color?.name || ""}
+                              onChange={(colorObj) => updateItem(item._id, { bottom_color: colorObj })}
+                              placeholder="Select Bottom Color"
                             />
                           </div>
 
@@ -914,17 +937,16 @@ const totalOrder = inclusiveSubtotal;
                                     }}
                                     placeholder="Extra name"
                                   />
-                                  <input
-                                    type="text"
-                                    className="input-line"
-                                    value={extraItem.color || ""}
-                                    onChange={(e) => {
-                                      const newExtras = [...item.extras];
-                                      newExtras[idx].color = e.target.value;
-                                      updateItem(item._id, { extras: newExtras });
-                                    }}
-                                    placeholder="Extra color"
-                                  />
+                                    <SearchableSelect
+                                      options={toColorOptions(colors)}
+                                      value={extraItem.color?.name || ""}
+                                      onChange={(colorObj) => {
+                                        const newExtras = [...item.extras];
+                                        newExtras[idx].color = colorObj;
+                                        updateItem(item._id, { extras: newExtras });
+                                      }}
+                                      placeholder="Select Extra Color"
+                                    />
                                   <span className="extra-price">₹{formatIndianNumber(extraItem.price)}</span>
                                   <button onClick={() => {
                                     const newExtras = item.extras.filter((_, i) => i !== idx);
@@ -1027,8 +1049,8 @@ const totalOrder = inclusiveSubtotal;
               <div className="field" >
                 <SearchableSelect
                   options={toColorOptions(colors)}
-                  value={selectedColor}
-                  onChange={setSelectedColor}
+                  value={selectedColor.name} // Display name, but onChange gets object
+                  onChange={(colorObj) => setSelectedColor(colorObj)}
                   placeholder="Select Color"
                 />
               </div>
@@ -1061,8 +1083,8 @@ const totalOrder = inclusiveSubtotal;
                   {/* <label>Top Color</label> */}
                   <SearchableSelect
                     options={toColorOptions(colors)}
-                    value={selectedTopColor}
-                    onChange={setSelectedTopColor}
+                    value={selectedTopColor.name} // Display name, but onChange gets object
+                    onChange={(colorObj) => setSelectedTopColor(colorObj)}
                     placeholder="Select Top Color"
                   />
                 </div>
@@ -1081,8 +1103,8 @@ const totalOrder = inclusiveSubtotal;
                   {/* <label>Bottom Color</label> */}
                   <SearchableSelect
                     options={toColorOptions(colors)}
-                    value={selectedBottomColor}
-                    onChange={setSelectedBottomColor}
+                    value={selectedBottomColor.name} // Display name, but onChange gets object
+                    onChange={(colorObj) => setSelectedBottomColor(colorObj)}
                     placeholder="Select Bottom Color"
                   />
                 </div>
@@ -1101,8 +1123,8 @@ const totalOrder = inclusiveSubtotal;
                 <div className="field">
                   <SearchableSelect
                     options={toColorOptions(colors)}
-                    value={selectedExtraColor}
-                    onChange={setSelectedExtraColor}
+                    value={selectedExtraColor.name} // Display name, but onChange gets object
+                    onChange={(colorObj) => setSelectedExtraColor(colorObj)}
                     placeholder="Select Extra Color"
                   />
                 </div>
