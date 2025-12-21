@@ -50,14 +50,15 @@ export function SearchableSelect({
   }, [normalized, query]);
 
   useEffect(() => {
-    // When the external value changes to null or empty, reset the internal query
-    if (!value && query !== "") {
+    // When the external value changes, update the internal query to reflect it.
+    // This handles cases where the parent component clears the value or sets a new one.
+    if (value === null || value === undefined || value === "") {
       setQuery("");
     } else if (current && query !== current.label && !open) {
       // If a value is selected and the menu is closed, ensure query matches label
       setQuery(current.label);
     }
-  }, [value, current, open, query]);
+  }, [value, current, open]); // Added open to dependencies
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -65,11 +66,15 @@ export function SearchableSelect({
       if (!rootRef.current.contains(e.target)) {
         setOpen(false);
         setFocusIdx(-1);
+        // When closing by clicking outside, if a value is selected, ensure query reflects its label
+        if (current) {
+          setQuery(current.label);
+        }
       }
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
+  }, [current]);
 
   useEffect(() => {
     if (!open || !listRef.current || focusIdx < 0) return;
@@ -89,6 +94,10 @@ export function SearchableSelect({
     if (!open && (e.key === "ArrowDown" || e.key === "Enter")) {
       setOpen(true);
       setFocusIdx(0);
+      // If opening with keyboard and a value is selected, clear query for new search
+      if (current) {
+        setQuery("");
+      }
       return;
     }
     if (!open) return;
@@ -107,6 +116,10 @@ export function SearchableSelect({
       e.preventDefault();
       setOpen(false);
       setFocusIdx(-1);
+      // When closing with Escape, if a value is selected, ensure query reflects its label
+      if (current) {
+        setQuery(current.label);
+      }
     }
   };
 
@@ -119,16 +132,42 @@ export function SearchableSelect({
 
   return (
     <div ref={rootRef} className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}>
-      <div className={`ss-control ${open ? "ss-open" : ""}`} onClick={() => !disabled && setOpen((o) => !o)}>
+      <div
+        className={`ss-control ${open ? "ss-open" : ""}`}
+        onClick={() => {
+          if (disabled) return;
+          if (!open) { // If currently closed, open it
+            setOpen(true);
+            // If an item is selected, clear query for new search when opening via click
+            if (current) {
+              setQuery("");
+            }
+          } else { // If currently open, close it
+            setOpen(false);
+            // When closing, if a value is selected, ensure query reflects its label
+            if (current) {
+              setQuery(current.label);
+            }
+          }
+          setFocusIdx(-1); // Reset focus index
+          requestAnimationFrame(() => inputRef.current?.focus()); // Focus input
+        }}
+      >
         <input
           ref={inputRef}
           className="ss-input"
           placeholder={placeholder}
-          value={current ? (open ? query : current.label) : query}
+          value={query} /* Always bind to query for typing */
           onChange={(e) => {
             setQuery(e.target.value);
             if (!open) setOpen(true);
             setFocusIdx(0);
+          }}
+          onFocus={() => { // When input is focused, if a value is selected, clear query for new search
+            if (current && query === current.label) {
+              setQuery("");
+            }
+            setOpen(true);
           }}
           onKeyDown={handleKeyDown}
           disabled={disabled}
@@ -653,7 +692,7 @@ const totalOrder = inclusiveSubtotal;
         price: getLivePrice(), // Use getLivePrice to calculate price including extras
         measurements,
         image_url: selectedProduct.image_url || selectedProduct.image || null,
-        notes: "", // Initialize notes as empty for auto-added products
+        notes: comments, // Initialize notes as empty for auto-added products
       });
     }
 

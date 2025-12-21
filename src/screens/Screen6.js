@@ -403,7 +403,7 @@ export default function Screen6() {
 
             {order.comments && (
               <div className="field field-wide" style={{ marginTop: "12px" }}>
-                <label>General Order Comments:</label>
+                <label>Notes:</label>
                 <span>{order.comments}</span>
               </div>
             )}
