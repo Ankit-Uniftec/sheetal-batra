@@ -1827,7 +1827,7 @@ export default function ProductForm() {
                 value={otherUrgentReason}
                 onChange={(e) => setOtherUrgentReason(e.target.value)}
                 rows={2}
-                style={{ marginTop: "10px" }}
+                style={{ marginTop: "20px",border:'1px solid #d5b85a',alignItems:"center" }}
               />
             )}
 

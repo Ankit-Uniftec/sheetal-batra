@@ -4,13 +4,12 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import SignatureCanvas from "react-signature-canvas";
 import Logo from "../images/logo.png";
-import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { pdf } from "@react-pdf/renderer";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatDate from "../utils/formatDate"; // Import formatDate
 import "./Screen7.css";
-import { buildCustomerOrderPdf } from "../pdf/customerPdf";
-import { buildWarehousePdf } from "../pdf/warehousePdf";
+import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
+import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
 
 
 
@@ -72,6 +71,19 @@ const toISODate = (value) => {
   }
 };
 
+// ===============================
+// LOCAL DOWNLOAD HELPER
+// ===============================
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
 export default function ReviewDetail() {
   const navigate = useNavigate();
@@ -80,6 +92,7 @@ export default function ReviewDetail() {
   const order = location.state?.orderPayload;
 
   const [loading, setLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
 
@@ -96,6 +109,94 @@ export default function ReviewDetail() {
     netPayable,
     remaining,
   };
+
+ // ===============================
+  // PREVIEW/DOWNLOAD PDFs (FOR TESTING)
+  // ===============================
+  const handlePreviewCustomerPdf = async () => {
+    try {
+      setPreviewLoading(true);
+      const logoUrl = new URL(Logo, window.location.origin).href;
+      
+      // Use current order data for preview
+      const previewOrder = {
+        ...order,
+        id: order.id || "PREVIEW-" + Date.now(),
+        created_at: order.created_at || new Date().toISOString(),
+      };
+
+      const blob = await pdf(
+        <CustomerOrderPdf order={previewOrder} logoUrl={logoUrl} />
+      ).toBlob();
+
+      downloadBlob(blob, `customer_preview_${Date.now()}.pdf`);
+    } catch (e) {
+      console.error("Customer PDF preview failed:", e);
+      alert("Failed to generate customer PDF: " + e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewWarehousePdf = async () => {
+    try {
+      setPreviewLoading(true);
+      const logoUrl = new URL(Logo, window.location.origin).href;
+
+      // Use current order data for preview
+      const previewOrder = {
+        ...order,
+        id: order.id || "PREVIEW-" + Date.now(),
+        created_at: order.created_at || new Date().toISOString(),
+      };
+
+      const blob = await pdf(
+        <WarehouseOrderPdf order={previewOrder} logoUrl={logoUrl} />
+      ).toBlob();
+
+      downloadBlob(blob, `warehouse_preview_${Date.now()}.pdf`);
+    } catch (e) {
+      console.error("Warehouse PDF preview failed:", e);
+      alert("Failed to generate warehouse PDF: " + e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewBothPdfs = async () => {
+    try {
+      setPreviewLoading(true);
+      const logoUrl = new URL(Logo, window.location.origin).href;
+
+      const previewOrder = {
+        ...order,
+        id: order.id || "PREVIEW-" + Date.now(),
+        created_at: order.created_at || new Date().toISOString(),
+      };
+
+      // Generate both PDFs
+      const [customerBlob, warehouseBlob] = await Promise.all([
+        pdf(<CustomerOrderPdf order={previewOrder} logoUrl={logoUrl} />).toBlob(),
+        pdf(<WarehouseOrderPdf order={previewOrder} logoUrl={logoUrl} />).toBlob(),
+      ]);
+
+      // Download both
+      downloadBlob(customerBlob, `customer_preview_${Date.now()}.pdf`);
+      setTimeout(() => {
+        downloadBlob(warehouseBlob, `warehouse_preview_${Date.now()}.pdf`);
+      }, 500); // Small delay to prevent browser blocking
+    } catch (e) {
+      console.error("PDF preview failed:", e);
+      alert("Failed to generate PDFs: " + e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+
+
+
+
 
   // ===============================
   // PROFILE
@@ -156,14 +257,6 @@ export default function ReviewDetail() {
   };
 
   // ===============================
-  // PDF BUILDER (SAFE)
-  // ===============================
-
-
-  // ===============================
-  // SAVE ORDER
-  // ===============================
-  // ===============================
   // SAVE ORDER (DATE SAFE)
   // ===============================
   const saveOrderToDB = async (orderToSave) => {
@@ -201,13 +294,16 @@ export default function ReviewDetail() {
       // GENERATE BOTH PDFs
       // ===============================
       const logoUrl = new URL(Logo, window.location.origin).href;
+//  handlePreviewBothPdfs();
+     // Generate Customer PDF
+      const customerPdfBlob = await pdf(
+        <CustomerOrderPdf order={data} logoUrl={logoUrl} />
+      ).toBlob();
 
-      // 🔹 Customer Order Copy
-      const customerPdfBytes = await buildCustomerOrderPdf(data, logoUrl);
-
-      // 🔹 Warehouse Order Copy
-      const warehousePdfBytes = await buildWarehousePdf(data, logoUrl);
-
+      // Generate Warehouse PDF
+      const warehousePdfBlob = await pdf(
+        <WarehouseOrderPdf order={data} logoUrl={logoUrl} />
+      ).toBlob();
       // ===============================
       // UPLOAD PDFs TO STORAGE
       // ===============================
@@ -216,7 +312,7 @@ export default function ReviewDetail() {
           .from("invoices")
           .upload(
             `orders/${data.id}_customer.pdf`,
-            new Blob([customerPdfBytes]),
+            customerPdfBlob,
             {
               upsert: true,
               contentType: "application/pdf",
@@ -227,7 +323,7 @@ export default function ReviewDetail() {
           .from("invoices")
           .upload(
             `orders/${data.id}_warehouse.pdf`,
-            new Blob([warehousePdfBytes]),
+            warehousePdfBlob,
             {
               upsert: true,
               contentType: "application/pdf",
@@ -310,10 +406,10 @@ export default function ReviewDetail() {
                     <label>Product Name:</label>
                     <span>{item.product_name}</span>
                   </div>
-                  <div className="field field-small">
+                  {/* <div className="field field-small">
                     <label>Color:</label>
                     <ColorDotDisplay colorObject={item.color} />
-                  </div>
+                  </div> */}
                 </div>
 
                 {item.notes && (
