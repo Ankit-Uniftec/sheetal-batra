@@ -68,7 +68,7 @@
   font-style: semibold !important;
   
   grid-column: 3; /* Place title in the third column */
-  margin-right: -60px !important; /* Remove negative margin */
+  
 }
 
 /* MAIN CARD CONTAINER */

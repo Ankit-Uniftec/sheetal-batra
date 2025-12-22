@@ -5,7 +5,7 @@ import "./Screen2.css";
 import Logo from "../images/logo.png";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 
-export default function Screen2() {
+export default function OtpDialogBox() {
   const location = useLocation();
   const navigate = useNavigate();
 

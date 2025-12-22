@@ -8,21 +8,34 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber"; // Import formatPhoneNumber
 import formatDate from "../utils/formatDate"; // Import formatDate
 
-function ColorDotDisplay({ colorValue }) {
-  if (!colorValue) return null;
+function ColorDotDisplay({ colorObject }) {
+  if (!colorObject) return null;
+
+  let displayColorName = "";
+  let displayColorHex = "#000000";
+
+  if (typeof colorObject === "string") {
+    displayColorName = colorObject;
+    displayColorHex = colorObject.startsWith("#") ? colorObject : "gray"; // Fallback to gray for unknown named colors
+  } else if (typeof colorObject === "object" && colorObject !== null) {
+    displayColorName = colorObject.name || "";
+    displayColorHex = colorObject.hex || "#000000";
+  } else {
+    return <span>Invalid Color</span>;
+  }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
       <div
         style={{
-          background: colorValue, // Directly use colorValue as background
-          height: "15px",
-          width: "30px",
-          borderRadius: "10px",
-          border: "1px solid #ccc", // Add a border for visibility on light colors
+          background: displayColorHex,
+          height: "14px",
+          width: "28px",
+          borderRadius: "8px",
+          border: "1px solid #ccc",
         }}
-      ></div>
-      <span>{colorValue}</span>
+      />
+      <span>{displayColorName}</span>
     </div>
   );
 }
@@ -253,7 +266,7 @@ export default function OrderHistory() {
                           </div>
                           <div className="field field-small">
                             <label>Color:</label>
-                            <ColorDotDisplay colorValue={item.color} />
+                            <ColorDotDisplay colorObject={item.color} />
                           </div>
                         </div>
 
@@ -262,14 +275,14 @@ export default function OrderHistory() {
                             <label>Top:</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <span>{item.top}</span>
-                              {item.top_color && <ColorDotDisplay colorValue={item.top_color} />}
+                              {item.top_color && <ColorDotDisplay colorObject={item.top_color} />}
                             </div>
                           </div>
                           <div className="field">
                             <label>Bottom:</label>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <span>{item.bottom}</span>
-                              {item.bottom_color && <ColorDotDisplay colorValue={item.bottom_color} />}
+                              {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
                             </div>
                           </div>
                           <div className="field">
@@ -283,7 +296,7 @@ export default function OrderHistory() {
                                 {item.extras.map((extra, idx) => (
                                   <div key={idx} className="extra-item-display">
                                     <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
-                                    {extra.color && <ColorDotDisplay colorValue={extra.color} />}
+                                    {extra.color && <ColorDotDisplay colorObject={extra.color} />}
                                   </div>
                                 ))}
                               </div>

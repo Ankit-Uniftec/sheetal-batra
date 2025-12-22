@@ -7,7 +7,7 @@ import "../screens/Screen3.css";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate"; // Import formatDate
 
-function Screen3() {
+export default function CustomerDetailForm() {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -161,5 +161,3 @@ function Screen3() {
     </div>
   );
 }
-
-export default Screen3;

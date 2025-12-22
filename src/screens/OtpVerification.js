@@ -49,7 +49,7 @@ const COUNTRY_CODES = [
 ];
 
 
-export default function Screen1() {
+export default function OtpVerification() {
   const navigate = useNavigate();
   const location = useLocation();
 

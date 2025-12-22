@@ -22,7 +22,7 @@ const countryOptions = [
   { label: "Brazil", value: "Brazil" },
 ];
 
-export default function Screen6() {
+export default function OrderDetails() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();

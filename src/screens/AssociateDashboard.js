@@ -499,15 +499,19 @@ export default function Dashboard() {
                             <div className="kv">
                               <div className="label">Color</div>
 
-                              <div className="value"> <div
-                                style={{
-                                  background: item.color,
-                                  height: "15px",
-                                  width: "30px",
-                                  borderRadius: "14px",
-                                  marginBottom: "5px",
-                                }}
-                              />{item.color || "—"}</div>
+                              <div className="value">
+                                <div
+                                  style={{
+                                    background: item.color?.hex || "transparent", // Use hex for background
+                                    height: "15px",
+                                    width: "30px",
+                                    borderRadius: "14px",
+                                    marginBottom: "5px",
+                                    border: item.color?.hex ? "1px solid #ccc" : "none", // Add border if color exists
+                                  }}
+                                />
+                                {item.color?.name || "—"} {/* Display the name property */}
+                              </div>
                             </div>
 
                             <div className="kv">

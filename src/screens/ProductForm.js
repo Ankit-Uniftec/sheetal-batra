@@ -58,7 +58,7 @@ export function SearchableSelect({
       // If a value is selected and the menu is closed, ensure query matches label
       setQuery(current.label);
     }
-  }, [value, current, open]); // Added open to dependencies
+  }, [ value,current,open]); // Added open to dependencies
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -134,6 +134,7 @@ export function SearchableSelect({
     <div ref={rootRef} className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}>
       <div
         className={`ss-control ${open ? "ss-open" : ""}`}
+        onMouseDown={(e) => e.stopPropagation()} // Prevent mousedown from bubbling to document
         onClick={() => {
           if (disabled) return;
           if (!open) { // If currently closed, open it
@@ -203,7 +204,7 @@ export function SearchableSelect({
 
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       {opt.hex && (
-                        <div 
+                        <div
                           style={{
                             width: '14px',
                             height: '14px',
@@ -227,7 +228,7 @@ export function SearchableSelect({
   );
 }
 
-export default function Screen4() {
+export default function ProductForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -280,14 +281,13 @@ export default function Screen4() {
   const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
 
   const KIDS_SIZE_OPTIONS = [
-    "0-1 Years", "1-2 Years", "2-3 Years", "3-4 Years", "4-5 Years",
+     "1-2 Years", "2-3 Years", "3-4 Years", "4-5 Years",
     "5-6 Years", "6-7 Years", "7-8 Years", "8-9 Years", "9-10 Years",
     "10-11 Years", "11-12 Years", "12-13 Years", "13-14 Years", "14-15 Years",
     "15-16 Years"
   ];
 
   const KIDS_SIZE_CHART = {
-    "0-1 Years": { Bust: 18, Waist: 17, Hip: 19, Length: 16 },
     "1-2 Years": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
     "2-3 Years": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
     "3-4 Years": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
@@ -304,6 +304,25 @@ export default function Screen4() {
     "14-15 Years": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
     "15-16 Years": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
   };
+
+  const KIDS_DISCOUNT_PERCENT = {
+  "1-2 Years": 65,
+  "2-3 Years": 60,
+  "3-4 Years":60,
+  "4-5 Years":55,
+  "5-6 Years":55,
+  "6-7 Years":50,
+  "7-8 Years":42,
+  "8-9 Years": 42,
+  "9-10 Years": 34,
+  "10-11 Years": 34,
+  "11-12 Years":34,
+  "12-13 Years": 20,
+  "13-14 Years":20,
+  "14-15 Years":20,
+  "15-16 Years":8
+
+};
 
   const KIDS_MEASUREMENT_FIELDS = {
     Kurta: ["Shoulder", "Neck", "Bust", "Sleeves", "Length"],
@@ -576,55 +595,57 @@ export default function Screen4() {
   const cartSubtotal = orderItems.reduce((a, b) => a + b.price * b.quantity, 0);
 
   const liveQuantity = quantity;
+
+
   const getLivePrice = () => {
-    if (!selectedProduct) return 0;
+  if (!selectedProduct) return 0;
 
-    // BASE PRICE
-    let price = Number(selectedProduct.base_price || 0);
+  // BASE PRICE
+  let price = Number(selectedProduct.base_price || 0);
 
-    // ADD EXTRA PRICE (if selected)
-    selectedExtrasWithColors.forEach((extraItem) => {
-      const extraRow = globalExtras.find((e) => e.name === extraItem.name);
-      if (extraRow) {
-        price += Number(extraRow.price || 0);
-      }
-    });
+  // 👶 APPLY KIDS DISCOUNT (ONLY IF KIDS + SIZE SELECTED)
+  if (isKidsProduct && selectedSize && KIDS_DISCOUNT_PERCENT[selectedSize]) {
+    const discountPercent = KIDS_DISCOUNT_PERCENT[selectedSize];
+    const discountAmount = (price * discountPercent) / 100;
+    price = price - discountAmount;
+  }
 
-    return price;
-  };
+  // ➕ ADD EXTRAS PRICE
+  selectedExtrasWithColors.forEach((extraItem) => {
+    const extraRow = globalExtras.find((e) => e.name === extraItem.name);
+    if (extraRow) {
+      price += Number(extraRow.price || 0);
+    }
+  });
 
-  // const livePrice = getLivePrice();
-  // const liveSubtotal = livePrice * liveQuantity;
+  return Math.round(price); // optional rounding
+};
 
-  // const totalQuantity = orderItems.length > 0 ? cartQuantity : liveQuantity;
-  // const subtotal = orderItems.length > 0 ? cartSubtotal : liveSubtotal;
-  // const taxes = subtotal * 0.18;
-  // const totalOrder = subtotal + taxes;
 
 
 
 
   //==================
   // livePrice is TAX-INCLUSIVE
-const gstRate = 0.18;
+  const gstRate = 0.18;
 
-// LIVE (single product)
-const livePrice = getLivePrice();
-const liveSubtotalInclTax = livePrice * liveQuantity;
+  // LIVE (single product)
+  const livePrice = getLivePrice();
+  const liveSubtotalInclTax = livePrice * liveQuantity;
 
-// CART vs LIVE inclusive subtotal
-const inclusiveSubtotal =
-  orderItems.length > 0 ? cartSubtotal : liveSubtotalInclTax;
+  // CART vs LIVE inclusive subtotal
+  const inclusiveSubtotal =
+    orderItems.length > 0 ? cartSubtotal : liveSubtotalInclTax;
 
-// Reverse GST calculation
-const subtotal = inclusiveSubtotal / (1 + gstRate); // taxable amount
-const taxes = inclusiveSubtotal - subtotal;          // GST amount
+  // Reverse GST calculation
+  const subtotal = inclusiveSubtotal / (1 + gstRate); // taxable amount
+  const taxes = inclusiveSubtotal - subtotal;          // GST amount
 
-const totalQuantity =
-  orderItems.length > 0 ? cartQuantity : liveQuantity;
+  const totalQuantity =
+    orderItems.length > 0 ? cartQuantity : liveQuantity;
 
-// Final payable (already tax-inclusive)
-const totalOrder = inclusiveSubtotal;
+  // Final payable (already tax-inclusive)
+  const totalOrder = inclusiveSubtotal;
 
   //====================
 
@@ -730,66 +751,39 @@ const totalOrder = inclusiveSubtotal;
 
     navigate("/confirmDetail", { state: { orderPayload } });
   };
-  //Logo click logout
 
-  // const handleLogout = async () => {
-  //   try {
-  //     await supabase.auth.signOut();
-
-  //     const raw = sessionStorage.getItem("associateSession");
-  //     const saved = raw ? JSON.parse(raw) : null;
-
-  //     if (saved?.access_token && saved?.refresh_token) {
-  //       const { error } = await supabase.auth.setSession({
-  //         access_token: saved.access_token,
-  //         refresh_token: saved.refresh_token,
-  //       });
-
-  //       if (!error) {
-  //         sessionStorage.removeItem("associateSession");
-  //         sessionStorage.removeItem("returnToAssociate");
-  //         navigate("/AssociateDashboard", { replace: true });
-  //         return;
-  //       }
-  //     }
-  //     navigate("/login", { replace: true });
-  //   } catch (e) {
-  //     console.error("Logout restore error", e);
-  //     navigate("/login", { replace: true });
-  //   }
-  // };
 
   const handleLogout = async () => {
-  try {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
 
-    const raw = sessionStorage.getItem("associateSession");
-    const saved = raw ? JSON.parse(raw) : null;
+      const raw = sessionStorage.getItem("associateSession");
+      const saved = raw ? JSON.parse(raw) : null;
 
-    if (saved?.access_token && saved?.refresh_token) {
-      const { error } = await supabase.auth.setSession({
-        access_token: saved.access_token,
-        refresh_token: saved.refresh_token,
-      });
+      if (saved?.access_token && saved?.refresh_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: saved.access_token,
+          refresh_token: saved.refresh_token,
+        });
 
-      if (!error) {
-        // 🔴 FORCE verification again
-        sessionStorage.setItem("requireVerification", "true");
+        if (!error) {
+          // 🔴 FORCE verification again
+          sessionStorage.setItem("requireVerification", "true");
 
-        sessionStorage.removeItem("associateSession");
-        sessionStorage.removeItem("returnToAssociate");
+          sessionStorage.removeItem("associateSession");
+          sessionStorage.removeItem("returnToAssociate");
 
-        navigate("/AssociateDashboard", { replace: true });
-        return;
+          navigate("/AssociateDashboard", { replace: true });
+          return;
+        }
       }
-    }
 
-    navigate("/login", { replace: true });
-  } catch (e) {
-    console.error("Logout restore error", e);
-    navigate("/login", { replace: true });
-  }
-};
+      navigate("/login", { replace: true });
+    } catch (e) {
+      console.error("Logout restore error", e);
+      navigate("/login", { replace: true });
+    }
+  };
 
 
 
@@ -814,7 +808,7 @@ const totalOrder = inclusiveSubtotal;
       <div className="header">
         <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
         <h2 className="order-title">Order Form</h2>
-       
+
       </div>
 
       <div className="screen4-card">
@@ -937,16 +931,16 @@ const totalOrder = inclusiveSubtotal;
                                     }}
                                     placeholder="Extra name"
                                   />
-                                    <SearchableSelect
-                                      options={toColorOptions(colors)}
-                                      value={extraItem.color?.name || ""}
-                                      onChange={(colorObj) => {
-                                        const newExtras = [...item.extras];
-                                        newExtras[idx].color = colorObj;
-                                        updateItem(item._id, { extras: newExtras });
-                                      }}
-                                      placeholder="Select Extra Color"
-                                    />
+                                  <SearchableSelect
+                                    options={toColorOptions(colors)}
+                                    value={extraItem.color?.name || ""}
+                                    onChange={(colorObj) => {
+                                      const newExtras = [...item.extras];
+                                      newExtras[idx].color = colorObj;
+                                      updateItem(item._id, { extras: newExtras });
+                                    }}
+                                    placeholder="Select Extra Color"
+                                  />
                                   <span className="extra-price">₹{formatIndianNumber(extraItem.price)}</span>
                                   <button onClick={() => {
                                     const newExtras = item.extras.filter((_, i) => i !== idx);
@@ -1129,7 +1123,7 @@ const totalOrder = inclusiveSubtotal;
                   />
                 </div>
               )}
-              <button className="add-extra-btn"style={{background:"#d5b85a", border:'none', color:'white',borderRadius:"3px"}} onClick={handleAddExtra} disabled={!selectedExtra}>
+              <button className="add-extra-btn" style={{ background: "#d5b85a", border: 'none', color: 'white', borderRadius: "3px" }} onClick={handleAddExtra} disabled={!selectedExtra}>
                 Add Extra
               </button>
             </div>
@@ -1148,7 +1142,7 @@ const totalOrder = inclusiveSubtotal;
             )}
 
             {/* TOP / BOTTOM COLORS */}
-            
+
             {/* SIZE */}
 
             <div className="size-box">
@@ -1280,7 +1274,7 @@ const totalOrder = inclusiveSubtotal;
               </div>
             </div>
 
-            
+
 
             {/* GENERAL ORDER COMMENTS */}
             <div className="row">
