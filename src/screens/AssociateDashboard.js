@@ -39,7 +39,7 @@ export default function Dashboard() {
 
   const activeOrders = orders.filter(
     (o) => o.status !== "completed" && o.status !== "cancelled" &&
-           formatDate(o.created_at) === formatDate(new Date())
+      formatDate(o.created_at) === formatDate(new Date())
   );
 
 
@@ -119,6 +119,18 @@ export default function Dashboard() {
 
     loadSalesperson();
   }, []);
+
+  // ----------------- order details component---------------
+
+  const handleViewDetails = (order) => {
+  navigate(`/order/${order.id}`, { state: { order } });
+};
+
+const handlePrintPdf = async (order) => {
+  // Your PDF generation logic
+  console.log("Print PDF for order:", order.id);
+};
+
 
   // ---------- Load orders belonging to this salesperson ----------
   useEffect(() => {
@@ -320,7 +332,7 @@ export default function Dashboard() {
               Hello, {salesperson?.saleperson || "Associate"}
             </div>
             {/* Logout button for mobile sidebar */}
-            
+
 
 
 
@@ -356,7 +368,7 @@ export default function Dashboard() {
               </a>
               <a
                 className={`menu-item-logout `}
-                onClick={ handleLogout }
+                onClick={handleLogout}
               >
                 Log Out
               </a>
@@ -460,77 +472,87 @@ export default function Dashboard() {
 
                   return (
                     <div key={order.id} className="order-card">
-                      {/* Status Badge */}
-                      <div className={`state-badge ${order.status === "complete" ? "complete" : "active"}`}>
-                        {order.status === "complete" ? "Complete" : "Active"}
+                      {/* Top Header Row */}
+                      <div className="order-header">
+                        <div className="header-info">
+                          <div className="header-item">
+                            <span className="header-label">Order No.:</span>
+                            <span className="header-value">{order.id?.slice(0, 8) || "—"}</span>
+                          </div>
+                          <div className="header-item">
+                            <span className="header-label">Order Date.:</span>
+                            <span className="header-value">{formatDate(order.created_at) || "—"}</span>
+                          </div>
+                          <div className="header-item">
+                            <span className="header-label">EDD:</span>
+                            <span className="header-value">{formatDate(order.delivery_date) || "—"}</span>
+                          </div>
+                        </div>
+                        <div className="header-actions">
+                          {/* <button className="view-details-btn" onClick={() => handleViewDetails(order)}>
+                            View order details
+                          </button> */}
+                          {/* <button className="print-pdf-btn" onClick={() => handlePrintPdf(order)}>
+                            <span className="pdf-icon">📄</span> Print PDF
+                          </button> */}
+                        </div>
                       </div>
 
-                      <div className="order-row">
-                        <div className="thumb">
+                      {/* Product Content Row */}
+                      <div className="order-content">
+                        <div className="product-thumb">
                           <img src={imgSrc} alt={item.product_name || "Product"} />
                         </div>
 
-                        <div className="details">
-                          <div className="row space">
-                            <div className="kv"></div>
-                            <div className="kv"></div>
-                            <div className="kv">
-                              <div className="small muted">EDD</div>
-                              <div>{order.delivery_date || "—"}</div>
+                        <div className="product-details">
+                          {/* Product Name Row with Status Badge */}
+                          <div className="product-name-row">
+                            <div className="product-name">
+                              <span className="order-label">Product Name:</span>
+                              <span className="value">{item.product_name || "—"}</span>
+                            </div>
+                            {/* <div className={`status-badge ${order.status === "complete" ? "complete" : "active"}`}>
+                              {order.status === "complete" ? "Complete" : "Active"}
+                            </div> */}
+                          </div>
+                            <div className="product-name">
+                              <span className="order-label">Client Name:</span>
+                              <span className="value">{order.delivery_name || "—"}</span>
+                            </div>
+
+                          {/* Details Grid */}
+                          <div className="details-grid">
+                            <div className="detail-item">
+                              <span className="order-label">Amount:</span>
+                              <span className="value">₹{formatIndianNumber(order.grand_total)}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="order-label">Qty:</span>
+                              <span className="value">{order.total_quantity || 1}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="order-label">Color:</span>
+                              <span className="value">{item.color?.name || "—"}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="order-label">Size:</span>
+                              <span className="value">{item.size || "—"}</span>
                             </div>
                           </div>
 
-                          <div className="grid-2">
-                            <div className="kv">
-                              <div className="label">Product Name</div>
-                              <div className="value">{item.product_name || "—"}</div>
-                            </div>
-
-                            <div className="kv">
-                              <div className="label">Amount</div>
-                              <div className="value">₹{formatIndianNumber(order.grand_total)}</div>
-                            </div>
-
-                            <div className="kv">
-                              <div className="label">Qty</div>
-                              <div className="value">{formatIndianNumber(order.total_quantity)}</div>
-                            </div>
-
-                            <div className="kv">
-                              <div className="label">Color</div>
-
-                              <div className="value">
-                                <div
-                                  style={{
-                                    background: item.color?.hex || "transparent", // Use hex for background
-                                    height: "15px",
-                                    width: "30px",
-                                    borderRadius: "14px",
-                                    marginBottom: "5px",
-                                    border: item.color?.hex ? "1px solid #ccc" : "none", // Add border if color exists
-                                  }}
-                                />
-                                {item.color?.name || "—"} {/* Display the name property */}
-                              </div>
-                            </div>
-
-                            <div className="kv">
-                              <div className="label">Size</div>
-                              <div className="value">{item.size || "—"}</div>
-                            </div>
-
-                            <div className="kv">
-                              <div className="label">SA</div>
-                              <div className="value">
-                                {order.salesperson || "-"}{" "}
-                                {order.salesperson_phone ? `(${formatPhoneNumber(order.salesperson_phone)})` : ""}
-                              </div>
-                            </div>
+                          {/* Sales Associate Row */}
+                          <div className="sa-row">
+                            <span className="order-label">SA:</span>
+                            <span className="value">
+                              {order.salesperson || "—"}
+                              {order.salesperson_phone ? ` (${formatPhoneNumber(order.salesperson_phone)})` : ""}
+                            </span>
                           </div>
-
-                          {/* <button className="view-btn">View order details</button> */}
                         </div>
                       </div>
+
+                      {/* Decorative Line */}
+                      <div className="decorative-line"></div>
                     </div>
                   );
                 })}

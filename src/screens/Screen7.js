@@ -3,16 +3,15 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import SignatureCanvas from "react-signature-canvas";
+import { pdf } from "@react-pdf/renderer";
 import Logo from "../images/logo.png";
-import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import formatDate from "../utils/formatDate"; // Import formatDate
+import formatDate from "../utils/formatDate";
 import "./Screen7.css";
-import { buildCustomerOrderPdf } from "../pdf/customerPdf";
-import { buildWarehousePdf } from "../pdf/warehousePdf";
 
-
+// Import PDF components
+import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
+import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -22,13 +21,11 @@ function ColorDotDisplay({ colorObject }) {
 
   if (typeof colorObject === "string") {
     displayColorName = colorObject;
-    // Attempt to convert common color names to hex if needed, or use a default
-    displayColorHex = colorObject.startsWith("#") ? colorObject : "gray"; // Fallback to gray for unknown named colors
+    displayColorHex = colorObject.startsWith("#") ? colorObject : "gray";
   } else if (typeof colorObject === "object" && colorObject !== null) {
     displayColorName = colorObject.name || "";
     displayColorHex = colorObject.hex || "#000000";
   } else {
-    // Fallback for any other unexpected type, prevent rendering the object
     return <span>Invalid Color</span>;
   }
 
@@ -47,7 +44,6 @@ function ColorDotDisplay({ colorObject }) {
     </div>
   );
 }
-
 
 // ===============================
 // DATE HELPERS (POSTGRES SAFE)
@@ -72,6 +68,19 @@ const toISODate = (value) => {
   }
 };
 
+// ===============================
+// LOCAL DOWNLOAD HELPER
+// ===============================
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
 export default function ReviewDetail() {
   const navigate = useNavigate();
@@ -80,6 +89,7 @@ export default function ReviewDetail() {
   const order = location.state?.orderPayload;
 
   const [loading, setLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
 
@@ -97,14 +107,88 @@ export default function ReviewDetail() {
     remaining,
   };
 
+    // ===============================
+  // PREVIEW/DOWNLOAD PDFs (FOR TESTING)
   // ===============================
-  // PROFILE
-  // ===============================
-  const profileFromOrder = (o) => ({
-    full_name: o?.delivery_name || "",
-    email: o?.delivery_email || "",
-    phone: o?.delivery_phone || "",
-  });
+  const handlePreviewCustomerPdf = async () => {
+    try {
+      setPreviewLoading(true);
+      const logoUrl = new URL(Logo, window.location.origin).href;
+      
+      // Use current order data for preview
+      const previewOrder = {
+        ...order,
+        id: order.id || "PREVIEW-" + Date.now(),
+        created_at: order.created_at || new Date().toISOString(),
+      };
+
+      const blob = await pdf(
+        <CustomerOrderPdf order={previewOrder} logoUrl={logoUrl} />
+      ).toBlob();
+
+      downloadBlob(blob, `customer_preview_${Date.now()}.pdf`);
+    } catch (e) {
+      console.error("Customer PDF preview failed:", e);
+      alert("Failed to generate customer PDF: " + e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewWarehousePdf = async () => {
+    try {
+      setPreviewLoading(true);
+      const logoUrl = new URL(Logo, window.location.origin).href;
+
+      // Use current order data for preview
+      const previewOrder = {
+        ...order,
+        id: order.id || "PREVIEW-" + Date.now(),
+        created_at: order.created_at || new Date().toISOString(),
+      };
+
+      const blob = await pdf(
+        <WarehouseOrderPdf order={previewOrder} logoUrl={logoUrl} />
+      ).toBlob();
+
+      downloadBlob(blob, `warehouse_preview_${Date.now()}.pdf`);
+    } catch (e) {
+      console.error("Warehouse PDF preview failed:", e);
+      alert("Failed to generate warehouse PDF: " + e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewBothPdfs = async () => {
+    try {
+      setPreviewLoading(true);
+      const logoUrl = new URL(Logo, window.location.origin).href;
+
+      const previewOrder = {
+        ...order,
+        id: order.id || "PREVIEW-" + Date.now(),
+        created_at: order.created_at || new Date().toISOString(),
+      };
+
+      // Generate both PDFs
+      const [customerBlob, warehouseBlob] = await Promise.all([
+        pdf(<CustomerOrderPdf order={previewOrder} logoUrl={logoUrl} />).toBlob(),
+        pdf(<WarehouseOrderPdf order={previewOrder} logoUrl={logoUrl} />).toBlob(),
+      ]);
+
+      // Download both
+      downloadBlob(customerBlob, `customer_preview_${Date.now()}.pdf`);
+      setTimeout(() => {
+        downloadBlob(warehouseBlob, `warehouse_preview_${Date.now()}.pdf`);
+      }, 500); // Small delay to prevent browser blocking
+    } catch (e) {
+      console.error("PDF preview failed:", e);
+      alert("Failed to generate PDFs: " + e.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   // ===============================
   // SIGNATURE FLOW
@@ -131,9 +215,7 @@ export default function ReviewDetail() {
 
       if (error) throw error;
 
-      const { data } = supabase.storage
-        .from("signature")
-        .getPublicUrl(path);
+      const { data } = supabase.storage.from("signature").getPublicUrl(path);
 
       const orderWithPricing = {
         ...order,
@@ -156,100 +238,89 @@ export default function ReviewDetail() {
   };
 
   // ===============================
-  // PDF BUILDER (SAFE)
-  // ===============================
-
-
-  // ===============================
-  // SAVE ORDER
-  // ===============================
-  // ===============================
   // SAVE ORDER (DATE SAFE)
   // ===============================
   const saveOrderToDB = async (orderToSave) => {
-  try {
-    // ===============================
-    // NORMALIZE DATE FIELDS (SAFE)
-    // ===============================
-    const normalizedOrder = {
-      ...orderToSave,
+    try {
+      // ===============================
+      // NORMALIZE DATE FIELDS (SAFE)
+      // ===============================
+      const normalizedOrder = {
+        ...orderToSave,
 
-      created_at: orderToSave.created_at
-        ? new Date(orderToSave.created_at).toISOString()
-        : new Date().toISOString(),
+        created_at: orderToSave.created_at
+          ? new Date(orderToSave.created_at).toISOString()
+          : new Date().toISOString(),
 
-      delivery_date: toISODate(orderToSave.delivery_date),
-      join_date: toISODate(orderToSave.join_date),
+        delivery_date: toISODate(orderToSave.delivery_date),
+        join_date: toISODate(orderToSave.join_date),
 
-      // Optional dates (safe even if undefined)
-      billing_date: toISODate(orderToSave.billing_date),
-      expected_delivery: toISODate(orderToSave.expected_delivery),
-    };
+        // Optional dates (safe even if undefined)
+        billing_date: toISODate(orderToSave.billing_date),
+        expected_delivery: toISODate(orderToSave.expected_delivery),
+      };
 
-    // ===============================
-    // SAVE ORDER TO DB
-    // ===============================
-    const { data, error } = await supabase
-      .from("orders")
-      .insert(normalizedOrder)
-      .select()
-      .single();
+      // ===============================
+      // SAVE ORDER TO DB
+      // ===============================
+      const { data, error } = await supabase
+        .from("orders")
+        .insert(normalizedOrder)
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) throw error;
 
-    // ===============================
-    // GENERATE BOTH PDFs
-    // ===============================
-    const logoUrl = new URL(Logo, window.location.origin).href;
+      // ===============================
+      // GENERATE BOTH PDFs USING REACT-PDF
+      // ===============================
+      const logoUrl = new URL(Logo, window.location.origin).href;
 
-    // 🔹 Customer Order Copy
-    const customerPdfBytes = await buildCustomerOrderPdf(data, logoUrl);
+      handlePreviewBothPdfs();
 
-    // 🔹 Warehouse Order Copy
-    const warehousePdfBytes = await buildWarehousePdf(data, logoUrl);
+      // Generate Customer PDF
+      const customerPdfBlob = await pdf(
+        <CustomerOrderPdf order={data} logoUrl={logoUrl} />
+      ).toBlob();
 
-    // ===============================
-    // UPLOAD PDFs TO STORAGE
-    // ===============================
-    const uploads = [
-      supabase.storage
-        .from("invoices")
-        .upload(
-          `orders/${data.id}_customer.pdf`,
-          new Blob([customerPdfBytes]),
-          {
+      // Generate Warehouse PDF
+      const warehousePdfBlob = await pdf(
+        <WarehouseOrderPdf order={data} logoUrl={logoUrl} />
+      ).toBlob();
+
+      // ===============================
+      // UPLOAD PDFs TO STORAGE
+      // ===============================
+      const uploads = [
+        supabase.storage
+          .from("invoices")
+          .upload(`orders/${data.id}_customer.pdf`, customerPdfBlob, {
             upsert: true,
             contentType: "application/pdf",
-          }
-        ),
+          }),
 
-      supabase.storage
-        .from("invoices")
-        .upload(
-          `orders/${data.id}_warehouse.pdf`,
-          new Blob([warehousePdfBytes]),
-          {
+        supabase.storage
+          .from("invoices")
+          .upload(`orders/${data.id}_warehouse.pdf`, warehousePdfBlob, {
             upsert: true,
             contentType: "application/pdf",
-          }
-        ),
-    ];
+          }),
+      ];
 
-    await Promise.all(uploads);
+      await Promise.all(uploads);
 
-    // ===============================
-    // DONE
-    // ===============================
-    alert("✅ Order saved & both PDFs generated successfully!");
-    navigate("/orderHistory");
-  } catch (e) {
-    console.error("❌ Order save failed:", e);
-    alert(e.message || "Failed to save order");
-  }
-};
+      // ===============================
+      // DONE
+      // ===============================
+      alert("✅ Order saved & both PDFs generated successfully!");
+      navigate("/orderHistory");
+    } catch (e) {
+      console.error("❌ Order save failed:", e);
+      alert(e.message || "Failed to save order");
+    }
+  };
 
-
-  //logo click logout
+  // Logo click logout
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -276,8 +347,9 @@ export default function ReviewDetail() {
       navigate("/login", { replace: true });
     }
   };
+
   // ==========================
-  // JSX UI BELOW
+  // JSX UI
   // ==========================
 
   if (!order) {
@@ -288,14 +360,80 @@ export default function ReviewDetail() {
     <div className="screen7">
       {/* HEADER */}
       <div className="screen6-header">
-
-        <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
+        <img
+          src={Logo}
+          className="sheetal-logo"
+          alt="logo"
+          onClick={handleLogout}
+        />
         <h2 className="title">Review Detail</h2>
       </div>
 
-
-
-      <div className="screen6-container">
+            <div className="screen6-container">
+        {/* ===============================
+            PDF PREVIEW BUTTONS (FOR TESTING)
+            Remove this section in production
+        =============================== */}
+        {/* <div
+          className="section-box"
+          style={{
+            backgroundColor: "#fff3cd",
+            border: "1px solid #ffc107",
+            marginBottom: "20px",
+          }}
+        >
+          <h3 style={{ color: "#856404", marginBottom: "10px" }}>
+            🧪 PDF Preview (Testing Only)
+          </h3>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              onClick={handlePreviewCustomerPdf}
+              disabled={previewLoading}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#C9A34A",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: previewLoading ? "not-allowed" : "pointer",
+                opacity: previewLoading ? 0.7 : 1,
+              }}
+            >
+              {previewLoading ? "Generating..." : "📄 Download Customer PDF"}
+            </button>
+            <button
+              onClick={handlePreviewWarehousePdf}
+              disabled={previewLoading}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#6c757d",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: previewLoading ? "not-allowed" : "pointer",
+                opacity: previewLoading ? 0.7 : 1,
+              }}
+            >
+              {previewLoading ? "Generating..." : "🏭 Download Warehouse PDF"}
+            </button>
+            <button
+              onClick={handlePreviewBothPdfs}
+              disabled={previewLoading}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#28a745",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: previewLoading ? "not-allowed" : "pointer",
+                opacity: previewLoading ? 0.7 : 1,
+              }}
+            >
+              {previewLoading ? "Generating..." : "📦 Download Both PDFs"}
+            </button>
+          </div>
+        </div> */}
+        {/* END PDF PREVIEW BUTTONS */}
         {/* PRODUCT DETAILS */}
         <div className="section-box">
           <h3>Product Details</h3>
@@ -316,7 +454,10 @@ export default function ReviewDetail() {
                 </div>
 
                 {item.notes && (
-                  <div className="field field-wide" style={{ marginTop: "12px" }}>
+                  <div
+                    className="field field-wide"
+                    style={{ marginTop: "12px" }}
+                  >
                     <label>Product Notes:</label>
                     <span>{item.notes}</span>
                   </div>
@@ -325,16 +466,32 @@ export default function ReviewDetail() {
                 <div className="row3">
                   <div className="field">
                     <label>Top:</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                      }}
+                    >
                       <span>{item.top}</span>
-                      {item.top_color && <ColorDotDisplay colorObject={item.top_color} />}
+                      {item.top_color && (
+                        <ColorDotDisplay colorObject={item.top_color} />
+                      )}
                     </div>
                   </div>
                   <div className="field">
                     <label>Bottom:</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                      }}
+                    >
                       <span>{item.bottom}</span>
-                      {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
+                      {item.bottom_color && (
+                        <ColorDotDisplay colorObject={item.bottom_color} />
+                      )}
                     </div>
                   </div>
                   <div className="field">
@@ -347,8 +504,12 @@ export default function ReviewDetail() {
                       <div className="extras-display">
                         {item.extras.map((extra, idx) => (
                           <div key={idx} className="extra-item-display">
-                            <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
-                            {extra.color && <ColorDotDisplay colorObject={extra.color} />}
+                            <span>
+                              {extra.name} (₹{formatIndianNumber(extra.price)})
+                            </span>
+                            {extra.color && (
+                              <ColorDotDisplay colorObject={extra.color} />
+                            )}
                           </div>
                         ))}
                       </div>
@@ -380,7 +541,7 @@ export default function ReviewDetail() {
               </div>
             </div>
 
-            {/* ✅ DELIVERY ADDRESS */}
+            {/* DELIVERY ADDRESS */}
             <div className="field field-wide" style={{ marginTop: "12px" }}>
               <label>Delivery Address:</label>
               <span>
@@ -422,7 +583,6 @@ export default function ReviewDetail() {
             </div>
           ) : (
             <>
-              {/* Company + GSTIN (same row like other sections) */}
               {(order.billing_company || order.billing_gstin) && (
                 <div className="row3">
                   <div className="field">
@@ -437,7 +597,6 @@ export default function ReviewDetail() {
                 </div>
               )}
 
-              {/* Billing Address */}
               <div className="field field-wide" style={{ marginTop: "12px" }}>
                 <label>Billing Address:</label>
                 <span>
@@ -454,8 +613,6 @@ export default function ReviewDetail() {
             </>
           )}
         </div>
-
-
 
         {/* Salesperson */}
         <div className="section-box">
@@ -492,14 +649,8 @@ export default function ReviewDetail() {
               <label>Balance:</label>
               <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
-
           </div>
           <div className="row3">
-            {/* <div className="field">
-              <label>Net Payable:</label>
-              <span>₹{formatIndianNumber(pricing.netPayable)}</span>
-            </div> */}
-
             <div className="field">
               <label>Discount %:</label>
               <span>{pricing.discountPercent}%</span>
@@ -508,9 +659,6 @@ export default function ReviewDetail() {
               <label>Discount Amount:</label>
               <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
             </div>
-
-
-
           </div>
         </div>
 
@@ -540,9 +688,14 @@ export default function ReviewDetail() {
                 className: "sig-canvas",
               }}
             />
-            <div className="sig-buttons" >
-              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>Clear </button>
-              <button style={{ color: "white !important" }} onClick={saveSignatureAndContinue}>
+            <div className="sig-buttons">
+              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>
+                Clear
+              </button>
+              <button
+                style={{ color: "white !important" }}
+                onClick={saveSignatureAndContinue}
+              >
                 Save & Continue
               </button>
             </div>
