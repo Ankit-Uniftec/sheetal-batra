@@ -256,7 +256,8 @@ export default function Dashboard() {
     );
   });
 
-
+// ---- constants 
+const MIN_CALENDAR_DATE = new Date(2025, 11, 1); // December 2025 (month is 0-based)
 
 
   return (
@@ -296,7 +297,7 @@ export default function Dashboard() {
         </div> */}
 
         <div className="top-header">
-          <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
+          <img src={Logo} className="logo4" alt="logo"  />
           <h1 className="order-title">My Dashboard</h1>
           {/* Logout button for larger screens */}
           <button className="logout-btn desktop-logout-btn" onClick={handleLogout}>↪</button>
@@ -313,18 +314,24 @@ export default function Dashboard() {
 
           {/* SIDEBAR */}
           <aside className={`sidebar ${showSidebar ? "open" : ""}`}>
-            <div
+            {/* <div
               className={`hello-box clickable ${activeTab === "profile" ? "active" : ""}`}
-              onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}
+             
             >
               Hello, {salesperson?.saleperson || "Associate"}
-            </div>
+            </div> */}
             {/* Logout button for mobile sidebar */}
             
 
 
 
             <nav className="menu">
+              <a
+                className={`menu-item ${activeTab === "profile" ? "active" : ""}`}
+                onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}
+              >
+                View Profile
+              </a>
 
               <a
                 className={`menu-item ${activeTab === "dashboard" ? "active" : ""}`}
@@ -540,7 +547,7 @@ export default function Dashboard() {
           )}
 
           {/* ------------- CALENDAR TAB ------------ */}
-          {activeTab === "calendar" && (
+          {/* {activeTab === "calendar" && (
             <div className="order-details-wrapper">
               <h2 className="order-title">Calendar</h2>
 
@@ -594,8 +601,112 @@ export default function Dashboard() {
                 })}
               </div>
             </div>
-          )}
+          )} */}
 
+
+{activeTab === "calendar" && (
+  <div className="order-details-wrapper">
+    <h2 className="order-title">Calendar</h2>
+
+    {/* ---------- CONTROLS ---------- */}
+    <div className="calendar-controls">
+      <button
+        disabled={
+          new Date(calendarDate).getFullYear() === 2025 &&
+          new Date(calendarDate).getMonth() === 11
+        }
+        onClick={() =>
+          setCalendarDate(prev => {
+            const d = new Date(prev);
+            d.setMonth(d.getMonth() - 1);
+
+            // block before December 2025
+            if (d < MIN_CALENDAR_DATE) return prev;
+
+            return d;
+          })
+        }
+      >
+        {"<"}
+      </button>
+
+      <span>
+        {new Date(calendarDate).toLocaleString("default", {
+          month: "long",
+          year: "numeric",
+        })}
+      </span>
+
+      <button
+        onClick={() =>
+          setCalendarDate(prev => {
+            const d = new Date(prev);
+            d.setMonth(d.getMonth() + 1);
+            return d;
+          })
+        }
+      >
+        {">"}
+      </button>
+    </div>
+
+    {/* ---------- GRID ---------- */}
+    <div className="calendar-grid">
+      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+        <div key={day} className="calendar-day-label">
+          {day}
+        </div>
+      ))}
+
+      {(() => {
+        const year = new Date(calendarDate).getFullYear();
+        const month = new Date(calendarDate).getMonth();
+
+        const firstDayOfMonth = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const totalCells = firstDayOfMonth + daysInMonth;
+
+        return Array.from({ length: totalCells }).map((_, i) => {
+          const date = i - firstDayOfMonth + 1;
+
+          if (date <= 0) {
+            return (
+              <div key={i} className="calendar-date-box empty" />
+            );
+          }
+
+          const currentDay = new Date(year, month, date);
+          const fullDate = formatDate(currentDay);
+          const todayDate = formatDate(new Date());
+          const orderCount = ordersByDate[fullDate] || 0;
+
+          return (
+            <div
+              key={i}
+              className={`calendar-date-box ${
+                fullDate === todayDate ? "today" : ""
+              }`}
+              onClick={() => {
+                if (orderCount > 0) {
+                  // setOrderSearch(fullDate);
+                  setActiveTab("orders");
+                }
+              }}
+            >
+              <span className="date-number">{date}</span>
+
+              {orderCount > 0 && (
+                <span className="order-count">
+                  {orderCount} Orders
+                </span>
+              )}
+            </div>
+          );
+        });
+      })()}
+    </div>
+  </div>
+)}
           {/* ----------- SALES PERSON PROFILE TAB ----------- */}
           {activeTab === "profile" && salesperson && (
             <div className="order-details-wrapper profile-wrapper">
@@ -615,7 +726,7 @@ export default function Dashboard() {
 
                 <div className="profile-row">
                   <span className="label">Phone</span>
-                  <span className="value">{formatPhoneNumber(salesperson.phone)}</span>
+                  <span className="value">{formatPhoneNumber(salesperson.personal_phone)}</span>
                 </div>
 
                 <div className="profile-row">
@@ -645,7 +756,7 @@ export default function Dashboard() {
 
           {activeTab === "clients" && (
             <div className="order-details-wrapper">
-              <h2 className="order-title">Clients Book</h2>
+              <h2 className="order-title">Client Book</h2>
 
               {clientsLoading ? (
                 <p className="loading-text">Loading clients...</p>
@@ -701,10 +812,10 @@ export default function Dashboard() {
         </button>
 
         {/* BACK */}
-        <button className="back-btn" onClick={() => {
+        {/* <button className="back-btn" onClick={() => {
           sessionStorage.setItem("requirePasswordVerificationOnReturn", "true"); // Set flag before navigating away
           navigate("/");
-        }}>‹</button>
+        }}>‹</button> */}
       </div>
     </div>
   );

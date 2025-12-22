@@ -33,7 +33,7 @@
   width: 100% !important;
   display: grid !important;
   grid-template-columns: 1fr auto 1fr !important; /* 3-column grid */
-  align-items: center;
+  align-items: center !important;
   position: relative; /* For positioning hamburger icon */
 }
 .logout-btn{

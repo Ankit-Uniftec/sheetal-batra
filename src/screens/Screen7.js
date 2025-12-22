@@ -167,86 +167,87 @@ export default function ReviewDetail() {
   // SAVE ORDER (DATE SAFE)
   // ===============================
   const saveOrderToDB = async (orderToSave) => {
-  try {
-    // ===============================
-    // NORMALIZE DATE FIELDS (SAFE)
-    // ===============================
-    const normalizedOrder = {
-      ...orderToSave,
+    try {
+      // ===============================
+      // NORMALIZE DATE FIELDS (SAFE)
+      // ===============================
+      const normalizedOrder = {
+        ...orderToSave,
 
-      created_at: orderToSave.created_at
-        ? new Date(orderToSave.created_at).toISOString()
-        : new Date().toISOString(),
+        created_at: orderToSave.created_at
+          ? new Date(orderToSave.created_at).toISOString()
+          : new Date().toISOString(),
 
-      delivery_date: toISODate(orderToSave.delivery_date),
-      join_date: toISODate(orderToSave.join_date),
+        delivery_date: toISODate(orderToSave.delivery_date),
+        join_date: toISODate(orderToSave.join_date),
 
-      // Optional dates (safe even if undefined)
-      billing_date: toISODate(orderToSave.billing_date),
-      expected_delivery: toISODate(orderToSave.expected_delivery),
-    };
+        // Optional dates (safe even if undefined)
+        billing_date: toISODate(orderToSave.billing_date),
+        expected_delivery: toISODate(orderToSave.expected_delivery),
+      };
 
-    // ===============================
-    // SAVE ORDER TO DB
-    // ===============================
-    const { data, error } = await supabase
-      .from("orders")
-      .insert(normalizedOrder)
-      .select()
-      .single();
+      // ===============================
+      // SAVE ORDER TO DB
+      // ===============================
+      const { data, error } = await supabase
+        .from("orders")
+        .insert(normalizedOrder)
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) throw error;
 
-    // ===============================
-    // GENERATE BOTH PDFs
-    // ===============================
-    const logoUrl = new URL(Logo, window.location.origin).href;
+      // ===============================
+      // GENERATE BOTH PDFs
+      // ===============================
+      const logoUrl = new URL(Logo, window.location.origin).href;
 
-    // 🔹 Customer Order Copy
-    const customerPdfBytes = await buildCustomerOrderPdf(data, logoUrl);
+      // 🔹 Customer Order Copy
+      const customerPdfBytes = await buildCustomerOrderPdf(data, logoUrl);
 
-    // 🔹 Warehouse Order Copy
-    const warehousePdfBytes = await buildWarehousePdf(data, logoUrl);
+      // 🔹 Warehouse Order Copy
+      const warehousePdfBytes = await buildWarehousePdf(data, logoUrl);
 
-    // ===============================
-    // UPLOAD PDFs TO STORAGE
-    // ===============================
-    const uploads = [
-      supabase.storage
-        .from("invoices")
-        .upload(
-          `orders/${data.id}_customer.pdf`,
-          new Blob([customerPdfBytes]),
-          {
-            upsert: true,
-            contentType: "application/pdf",
-          }
-        ),
+      // ===============================
+      // UPLOAD PDFs TO STORAGE
+      // ===============================
+      const uploads = [
+        supabase.storage
+          .from("invoices")
+          .upload(
+            `orders/${data.id}_customer.pdf`,
+            new Blob([customerPdfBytes]),
+            {
+              upsert: true,
+              contentType: "application/pdf",
+            }
+          ),
 
-      supabase.storage
-        .from("invoices")
-        .upload(
-          `orders/${data.id}_warehouse.pdf`,
-          new Blob([warehousePdfBytes]),
-          {
-            upsert: true,
-            contentType: "application/pdf",
-          }
-        ),
-    ];
+        supabase.storage
+          .from("invoices")
+          .upload(
+            `orders/${data.id}_warehouse.pdf`,
+            new Blob([warehousePdfBytes]),
+            {
+              upsert: true,
+              contentType: "application/pdf",
+            }
+          ),
+      ];
 
-    await Promise.all(uploads);
+      await Promise.all(uploads);
 
-    // ===============================
-    // DONE
-    // ===============================
-    alert("✅ Order saved & both PDFs generated successfully!");
-    navigate("/orderHistory");
-  } catch (e) {
-    console.error("❌ Order save failed:", e);
-    alert(e.message || "Failed to save order");
-  }
-};
+      // ===============================
+      // DONE
+      // ===============================
+      alert("✅ Order saved & both PDFs generated successfully!");
+      // navigate("/orderHistory");
+      handleLogout();
+    } catch (e) {
+      console.error("❌ Order save failed:", e);
+      alert(e.message || "Failed to save order");
+    }
+  };
 
 
   //logo click logout
@@ -494,24 +495,25 @@ export default function ReviewDetail() {
             </div>
 
           </div>
-          <div className="row3">
-            {/* <div className="field">
-              <label>Net Payable:</label>
-              <span>₹{formatIndianNumber(pricing.netPayable)}</span>
-            </div> */}
+          {pricing.discountPercent>0 && (
+            <div className="row3">
 
-            <div className="field">
-              <label>Discount %:</label>
-              <span>{pricing.discountPercent}%</span>
+
+              <div className="field">
+                <label>Discount %:</label>
+                <span>{pricing.discountPercent}%</span>
+              </div>
+              <div className="field">
+                <label>Discount Amount:</label>
+                <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
+              </div>
+
+
+
             </div>
-            <div className="field">
-              <label>Discount Amount:</label>
-              <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
-            </div>
+          )
 
-
-
-          </div>
+          }
         </div>
 
         <button

@@ -34,7 +34,7 @@ export default function OrderDetails() {
 
   // Payment
   const [advancePayment, setAdvancePayment] = useState(0); // Changed to amount
-  const [discountPercent, setDiscountPercent] = useState(0);
+  const [discountPercent, setDiscountPercent] = useState(null);
   const [discountApplied, setDiscountApplied] = useState(false);
 
   // Billing
@@ -53,7 +53,7 @@ export default function OrderDetails() {
   const [deliveryCity, setDeliveryCity] = useState("");
   const [deliveryState, setDeliveryState] = useState("");
   const [deliveryPincode, setDeliveryPincode] = useState("");
-
+  const [deliveryNotes, setDeliveryNotes] = useState("");
   const [paymentMode, setPaymentMode] = useState("UPI");
   const COD_CHARGE = 250;
   const SHIPPING_CHARGE_AMOUNT = 2500; // Define shipping charge amount
@@ -96,7 +96,7 @@ export default function OrderDetails() {
     setShippingCharge(currentShippingCharge); // Update shipping charge state
 
     // ✅ Add COD charge
-    if (paymentMode === "COD") {
+    if (paymentMode === "COD" && order.mode_of_delivery==="Home Delivery") {
       netPayable += COD_CHARGE;
     }
 
@@ -190,6 +190,7 @@ export default function OrderDetails() {
       delivery_city: deliveryCity,
       delivery_state: deliveryState,
       delivery_pincode: deliveryPincode,
+      delivery_notes: deliveryNotes,
 
       // BILLING
       billing_same: billingSame,
@@ -294,8 +295,8 @@ export default function OrderDetails() {
 
             <div className="row3">
               <div className="field">
-                <label>Phone:</label>
-                <span>{formatPhoneNumber(profile.phone)}</span>
+                <label>Name:</label>
+                <span>{profile.full_name}</span>
               </div>
 
               <div className="field">
@@ -362,12 +363,16 @@ export default function OrderDetails() {
             <div className="row3">
               <div className="field">
                 <label>Delivery Date:</label>
-                <span>{formatDate(order.delivery_date)}</span>
+                <span>{order.delivery_date}</span>
               </div>
 
               <div className="field">
                 <label>Delivery Notes:</label>
-                <span>{order.delivery_notes || "—"}</span>
+                <input
+                  className="input-line"
+                  value={deliveryNotes}
+                  onChange={(e) => setDeliveryNotes(e.target.value)}
+                />
               </div>
             </div>
 
@@ -380,7 +385,7 @@ export default function OrderDetails() {
           </div>
         )}
 
-        {order.mode_of_delivery === "Store Pickup" && (
+        {order.mode_of_delivery === "Delhi Store" && (
           <div className="section-box">
             <h3>Delivery Details</h3>
             <div className="row3">
@@ -395,9 +400,47 @@ export default function OrderDetails() {
                 <span>{order.delivery_date}</span>
               </div>
 
+             <div className="field">
+                <label>Delivery Notes:</label>
+                <input
+                  className="input-line"
+                  value={deliveryNotes}
+                  onChange={(e) => setDeliveryNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {order.comments && (
+              <div className="field field-wide" style={{ marginTop: "12px" }}>
+                <label>Notes:</label>
+                <span>{order.comments}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {order.mode_of_delivery === "Ludhiana Store" &&(
+          <div className="section-box">
+            <h3>Delivery Details</h3>
+            <div className="row3">
+              <div className="field full-width-field">
+                <label>Store Address:</label>
+                <span>S.C.O no. 22, Sun View Plaza Ludhiana, Punjab 142027</span>
+              </div>
+            </div>
+            <div className="row3">
+              <div className="field">
+                <label>Delivery Date:</label>
+                <span>{order.delivery_date}</span>
+              </div>
+
               <div className="field">
                 <label>Delivery Notes:</label>
-                <span>{order.delivery_notes || "—"}</span>
+                <input
+                  className="input-line"
+                  value={deliveryNotes}
+                  onChange={(e) => setDeliveryNotes(e.target.value)}
+                />
               </div>
             </div>
 
@@ -525,6 +568,13 @@ export default function OrderDetails() {
               <span>₹{formatIndianNumber(totalAmount)}</span>
             </div>
             <div className="field">
+              <label> Min. Advance:</label>
+              <span>
+                ₹{formatIndianNumber(sanitizedAdvance)}
+                {totalAmount > 0 && ` (${((sanitizedAdvance / totalAmount) * 100).toFixed(2)}%)`}
+              </span>
+            </div>
+            <div className="field">
               <label>Advance Payment (Amount):</label>
               <input
                 className="input-line"
@@ -533,15 +583,10 @@ export default function OrderDetails() {
                 onChange={(e) => setAdvancePayment(e.target.value)}
               />
             </div>
-            <div className="field">
-              <label> Minimum Advance Amount Required:</label>
-              <span>
-                ₹{formatIndianNumber(sanitizedAdvance)}
-                {totalAmount > 0 && ` (${((sanitizedAdvance / totalAmount) * 100).toFixed(2)}%)`}
-              </span>
-            </div>
+
+            
           </div>
-          {discountApplied && (
+           {discountApplied && (
             <div className="row3">
               <div className="field">
                 <label>Discount %:</label>
@@ -558,6 +603,7 @@ export default function OrderDetails() {
             </div>
           )}
 
+
           <div className="row3">
             <div className="field">
               <label>Balance:</label>
@@ -565,7 +611,7 @@ export default function OrderDetails() {
             </div>
           </div>
 
-          {(paymentMode === "COD" || pricing.shippingCharge > 0) && (
+          {((paymentMode === "COD" && order.mode_of_delivery==="Home Delivery") || pricing.shippingCharge > 0) && (
             <div className="row3">
               {paymentMode === "COD" && (
                 <div className="field">

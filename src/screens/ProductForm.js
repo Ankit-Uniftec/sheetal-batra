@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -58,7 +57,7 @@ export function SearchableSelect({
       // If a value is selected and the menu is closed, ensure query matches label
       setQuery(current.label);
     }
-  }, [ value,current,open]); // Added open to dependencies
+  }, [value, current, open, query]);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -131,19 +130,24 @@ export function SearchableSelect({
   };
 
   return (
-    <div ref={rootRef} className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}>
+    <div
+      ref={rootRef}
+      className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}
+    >
       <div
         className={`ss-control ${open ? "ss-open" : ""}`}
         onMouseDown={(e) => e.stopPropagation()} // Prevent mousedown from bubbling to document
         onClick={() => {
           if (disabled) return;
-          if (!open) { // If currently closed, open it
+          if (!open) {
+            // If currently closed, open it
             setOpen(true);
             // If an item is selected, clear query for new search when opening via click
             if (current) {
               setQuery("");
             }
-          } else { // If currently open, close it
+          } else {
+            // If currently open, close it
             setOpen(false);
             // When closing, if a value is selected, ensure query reflects its label
             if (current) {
@@ -164,7 +168,8 @@ export function SearchableSelect({
             if (!open) setOpen(true);
             setFocusIdx(0);
           }}
-          onFocus={() => { // When input is focused, if a value is selected, clear query for new search
+          onFocus={() => {
+            // When input is focused, if a value is selected, clear query for new search
             if (current && query === current.label) {
               setQuery("");
             }
@@ -194,20 +199,22 @@ export function SearchableSelect({
                   <li
                     key={String(opt.value)}
                     data-idx={idx}
-                    className={`ss-option ${selected ? "is-selected" : ""} ${focused ? "is-focused" : ""}`}
+                    className={`ss-option ${selected ? "is-selected" : ""} ${focused ? "is-focused" : ""
+                      }`}
                     onMouseEnter={() => setFocusIdx(idx)}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleSelect(opt)}
                     role="option"
                     aria-selected={selected}
                   >
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
                       {opt.hex && (
                         <div
                           style={{
-                            width: '14px',
-                            height: '14px',
+                            width: "14px",
+                            height: "14px",
                             borderRadius: "50%",
                             backgroundColor: opt.hex,
                             border: "1px solid #ccc",
@@ -216,7 +223,6 @@ export function SearchableSelect({
                       )}
                       {opt.label}
                     </div>
-
                   </li>
                 );
               })}
@@ -227,6 +233,424 @@ export function SearchableSelect({
     </div>
   );
 }
+
+const KIDS_SIZE_OPTIONS = [
+  "1-2 Years",
+  "2-3 Years",
+  "3-4 Years",
+  "4-5 Years",
+  "5-6 Years",
+  "6-7 Years",
+  "7-8 Years",
+  "8-9 Years",
+  "9-10 Years",
+  "10-11 Years",
+  "11-12 Years",
+  "12-13 Years",
+  "13-14 Years",
+  "14-15 Years",
+  "15-16 Years",
+];
+
+const KIDS_SIZE_CHART = {
+  "1-2 Years": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
+  "2-3 Years": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
+  "3-4 Years": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
+  "4-5 Years": { Bust: 23, Waist: 21.5, Hip: 24, Length: 24 },
+  "5-6 Years": { Bust: 24, Waist: 22, Hip: 25, Length: 26 },
+  "6-7 Years": { Bust: 25, Waist: 22.5, Hip: 26, Length: 28 },
+  "7-8 Years": { Bust: 26, Waist: 23, Hip: 27, Length: 30 },
+  "8-9 Years": { Bust: 27, Waist: 23.5, Hip: 28, Length: 32 },
+  "9-10 Years": { Bust: 28, Waist: 24, Hip: 29, Length: 34 },
+  "10-11 Years": { Bust: 29, Waist: 24.5, Hip: 30, Length: 36 },
+  "11-12 Years": { Bust: 30, Waist: 25, Hip: 31, Length: 38 },
+  "12-13 Years": { Bust: 31, Waist: 25.5, Hip: 32, Length: 40 },
+  "13-14 Years": { Bust: 32, Waist: 26, Hip: 33, Length: 42 },
+  "14-15 Years": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
+  "15-16 Years": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
+};
+
+const KIDS_DISCOUNT_PERCENT = {
+  "1-2 Years": 65,
+  "2-3 Years": 60,
+  "3-4 Years": 60,
+  "4-5 Years": 55,
+  "5-6 Years": 55,
+  "6-7 Years": 50,
+  "7-8 Years": 42,
+  "8-9 Years": 42,
+  "9-10 Years": 34,
+  "10-11 Years": 34,
+  "11-12 Years": 34,
+  "12-13 Years": 20,
+  "13-14 Years": 20,
+  "14-15 Years": 20,
+  "15-16 Years": 8,
+};
+
+const KIDS_MEASUREMENT_FIELDS = {
+  Choga: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  Kurta: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  ShortKurta: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  LongKurta: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  LongChoga: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  Blouse: [
+    "Shoulder",
+    "Front Neck",
+    "Back Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Length",
+    "Waist",
+    "Front Cross",
+    "Back Cross",
+  ],
+
+  Anarkali: [
+    "Shoulder",
+    "Bust",
+    "Upper Bust",
+    "Length",
+    "Sleeve",
+    "Biceps",
+    "Arm Hole",
+    "Dart Point",
+    "Waist",
+    "Yoke Length",
+  ],
+  Salwar: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Ankle",
+    "Thigh"
+  ],
+
+  TulipPant: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Knee",
+    "Calf"
+  ],
+
+  StraightPants: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Ankle",
+    "Knee"
+  ],
+
+  Palazzo: [
+    "Waist",
+    "Hip",
+    "Length"
+  ],
+
+  Sharara: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh"
+  ],
+
+  Garara: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Knee"
+  ],
+
+  Lehenga: [
+    "Waist",
+    "Hip",
+    "Length"
+  ]
+};
+
+const SIZE_CHART_US = {
+  XXS: { Bust: 30, Waist: 24, Hip: 34 },
+  XS: { Bust: 32, Waist: 26, Hip: 36 },
+  S: { Bust: 34, Waist: 28, Hip: 38 },
+  M: { Bust: 36, Waist: 30, Hip: 40 },
+  L: { Bust: 38, Waist: 32, Hip: 42 },
+  XL: { Bust: 40, Waist: 34, Hip: 44 },
+  "2XL": { Bust: 42, Waist: 36, Hip: 46 },
+  "3XL": { Bust: 44, Waist: 38, Hip: 48 },
+  "4XL": { Bust: 46, Waist: 40, Hip: 50 },
+  "5XL": { Bust: 48, Waist: 42, Hip: 52 },
+  "6XL": { Bust: 50, Waist: 44, Hip: 54 },
+  "7XL": { Bust: 52, Waist: 46, Hip: 56 },
+  "8XL": { Bust: 54, Waist: 48, Hip: 58 },
+};
+
+// 🔑 UI label → internal key mapping
+const CATEGORY_KEY_MAP = {
+  "Choga": "Choga",
+  "Kurta": "Kurta",
+  "Short Kurta": "ShortKurta",
+  "Long Kurta": "LongKurta",
+  "Long Choga": "LongChoga",
+  "Anarkali": "Anarkali",
+  "Blouse": "Blouse",
+  "Salwar": "Salwar",
+  "Tulip Pant": "TulipPant",
+  "Straight Paint": "StraightPants",
+  "Plazzo": "Palazzo",
+  "Sharara": "Sharara",
+  "Garara": "Garara",
+  "Lehenga": "Lehenga",
+};
+
+
+const measurementCategories = [
+  "Choga",
+  "Kurta",
+  "Short Kurta",
+  "Long Kurta",
+  "Long Choga",
+  "Anarkali",
+  "Blouse",
+  "Salwar",
+  "Tulip Pant",
+  "Straight Paint",
+  "Plazzo",
+  "Sharara",
+  "Garara",
+  "Lehenga"
+];
+
+
+
+const measurementFields = {
+  Choga: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  Kurta: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  ShortKurta: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  LongKurta: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  LongChoga: [
+    "Shoulder",
+    "Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Waist",
+    "Hip",
+    "Length",
+    "Front Cross",
+    "Back Cross",
+  ],
+  Blouse: [
+    "Shoulder",
+    "Front Neck",
+    "Back Neck",
+    "Upper Bust",
+    "Bust",
+    "Dart Point",
+    "Length",
+    "Waist",
+    "Front Cross",
+    "Back Cross",
+  ],
+
+  Anarkali: [
+    "Shoulder",
+    "Bust",
+    "Upper Bust",
+    "Length",
+    "Sleeve",
+    "Biceps",
+    "Arm Hole",
+    "Dart Point",
+    "Waist",
+    "Yoke Length",
+  ],
+  Salwar: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Ankle",
+    "Thigh"
+  ],
+
+  TulipPant: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Knee",
+    "Calf"
+  ],
+
+  StraightPants: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Ankle",
+    "Knee"
+  ],
+
+  Palazzo: [
+    "Waist",
+    "Hip",
+    "Length"
+  ],
+
+  Sharara: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh"
+  ],
+
+  Garara: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Knee"
+  ],
+
+  Lehenga: [
+    "Waist",
+    "Hip",
+    "Length"
+  ]
+};
 
 export default function ProductForm() {
   const navigate = useNavigate();
@@ -239,16 +663,24 @@ export default function ProductForm() {
   const [deliveryNotes, setDeliveryNotes] = useState(""); // Order-wide delivery notes
   const [attachments, setAttachments] = useState([]);
 
-
   const [colors, setColors] = useState([]);
   const [tops, setTops] = useState([]);
   const [bottoms, setBottoms] = useState([]);
   const [globalExtras, setGlobalExtras] = useState([]);
 
   const [selectedColor, setSelectedColor] = useState({ name: "", hex: "" });
-  const [selectedTopColor, setSelectedTopColor] = useState({ name: "", hex: "" });
-  const [selectedBottomColor, setSelectedBottomColor] = useState({ name: "", hex: "" });
-  const [selectedExtraColor, setSelectedExtraColor] = useState({ name: "", hex: "" }); // Temporary state for extra color selection
+  const [selectedTopColor, setSelectedTopColor] = useState({
+    name: "",
+    hex: "",
+  });
+  const [selectedBottomColor, setSelectedBottomColor] = useState({
+    name: "",
+    hex: "",
+  });
+  const [selectedExtraColor, setSelectedExtraColor] = useState({
+    name: "",
+    hex: "",
+  }); // Temporary state for extra color selection
   const [selectedTop, setSelectedTop] = useState("");
   const [selectedBottom, setSelectedBottom] = useState("");
   const [selectedExtra, setSelectedExtra] = useState(""); // Temporary state for extra selection
@@ -257,7 +689,7 @@ export default function ProductForm() {
   const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
 
-  const [modeOfDelivery, setModeOfDelivery] = useState("Store Pickup");
+  const [modeOfDelivery, setModeOfDelivery] = useState("Delhi Store");
   const [orderFlag, setOrderFlag] = useState("Normal");
   const [deliveryDate, setDeliveryDate] = useState("");
 
@@ -266,7 +698,6 @@ export default function ProductForm() {
 
   // CART
   const [orderItems, setOrderItems] = useState([]);
-
 
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
@@ -279,101 +710,6 @@ export default function ProductForm() {
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [urgentReason, setUrgentReason] = useState(""); // Selected reason from dropdown
   const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
-
-  const KIDS_SIZE_OPTIONS = [
-     "1-2 Years", "2-3 Years", "3-4 Years", "4-5 Years",
-    "5-6 Years", "6-7 Years", "7-8 Years", "8-9 Years", "9-10 Years",
-    "10-11 Years", "11-12 Years", "12-13 Years", "13-14 Years", "14-15 Years",
-    "15-16 Years"
-  ];
-
-  const KIDS_SIZE_CHART = {
-    "1-2 Years": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
-    "2-3 Years": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
-    "3-4 Years": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
-    "4-5 Years": { Bust: 23, Waist: 21.5, Hip: 24, Length: 24 },
-    "5-6 Years": { Bust: 24, Waist: 22, Hip: 25, Length: 26 },
-    "6-7 Years": { Bust: 25, Waist: 22.5, Hip: 26, Length: 28 },
-    "7-8 Years": { Bust: 26, Waist: 23, Hip: 27, Length: 30 },
-    "8-9 Years": { Bust: 27, Waist: 23.5, Hip: 28, Length: 32 },
-    "9-10 Years": { Bust: 28, Waist: 24, Hip: 29, Length: 34 },
-    "10-11 Years": { Bust: 29, Waist: 24.5, Hip: 30, Length: 36 },
-    "11-12 Years": { Bust: 30, Waist: 25, Hip: 31, Length: 38 },
-    "12-13 Years": { Bust: 31, Waist: 25.5, Hip: 32, Length: 40 },
-    "13-14 Years": { Bust: 32, Waist: 26, Hip: 33, Length: 42 },
-    "14-15 Years": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
-    "15-16 Years": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
-  };
-
-  const KIDS_DISCOUNT_PERCENT = {
-  "1-2 Years": 65,
-  "2-3 Years": 60,
-  "3-4 Years":60,
-  "4-5 Years":55,
-  "5-6 Years":55,
-  "6-7 Years":50,
-  "7-8 Years":42,
-  "8-9 Years": 42,
-  "9-10 Years": 34,
-  "10-11 Years": 34,
-  "11-12 Years":34,
-  "12-13 Years": 20,
-  "13-14 Years":20,
-  "14-15 Years":20,
-  "15-16 Years":8
-
-};
-
-  const KIDS_MEASUREMENT_FIELDS = {
-    Kurta: ["Shoulder", "Neck", "Bust", "Sleeves", "Length"],
-    Blouse: ["Shoulder", "Neck", "Bust", "Length"],
-    Salwar: ["Waist", "Length", "Ankle"],
-    Churidar: ["Waist", "Length", "Ankle"],
-    Sharara: ["Waist", "Length"],
-    Anarkali: ["Waist", "Length"],
-    Lehenga: ["Waist", "Length"],
-  };
-
-  const SIZE_CHART_US = {
-    XXS: { Bust: 30, Waist: 24, Hip: 34 },
-    XS: { Bust: 32, Waist: 26, Hip: 36 },
-    S: { Bust: 34, Waist: 28, Hip: 38 },
-    M: { Bust: 36, Waist: 30, Hip: 40 },
-    L: { Bust: 38, Waist: 32, Hip: 42 },
-    XL: { Bust: 40, Waist: 34, Hip: 44 },
-    "2XL": { Bust: 42, Waist: 36, Hip: 46 },
-    "3XL": { Bust: 44, Waist: 38, Hip: 48 },
-    "4XL": { Bust: 46, Waist: 40, Hip: 50 },
-    "5XL": { Bust: 48, Waist: 42, Hip: 52 },
-    "6XL": { Bust: 50, Waist: 44, Hip: 54 },
-    "7XL": { Bust: 52, Waist: 46, Hip: 56 },
-    "8XL": { Bust: 54, Waist: 48, Hip: 58 },
-  };
-
-  const measurementCategories = [
-
-    "Kurta",
-    "Blouse",
-    "Salwar",
-    "Churidar",
-    "Sharara",
-    "Anarkali",
-    "Lehenga"
-  ];
-
-  const measurementFields = {
-
-
-
-    Kurta: ["Shoulder", "Neck", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Bicep", "Arm Hole", "Waist", "Hip", "Length", "Front Cross", "Back Cross"],
-    Blouse: ["Shoulder", "Front Neck", "Back Neck", "Upper Bust", "Bust", "Dart Point", "Length", "Waist"],
-    Salwar: ["Waist", "Length", "Ankle"],
-    Churidar: ["Waist", "Thigh", "Knee", "Calf", "Ankle", "Length"],
-    Sharara: ["Waist", "Length", "Thigh"],
-    Anarkali: ["Waist", "Length"],
-    Lehenga: ["Waist", "Length"],
-
-  };
 
   // tiny id helper so list keys are stable
   const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -394,7 +730,11 @@ export default function ProductForm() {
     const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
     setSelectedExtrasWithColors((prev) => [
       ...prev,
-      { name: selectedExtra, color: selectedExtraColor, price: extraDetails?.price || 0 },
+      {
+        name: selectedExtra,
+        color: selectedExtraColor,
+        price: extraDetails?.price || 0,
+      },
     ]);
     setSelectedExtra("");
     setSelectedExtraColor("");
@@ -407,8 +747,7 @@ export default function ProductForm() {
   // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
-      const { data: productsData, error } = await supabase
-        .from("products")
+      const { data: productsData, error } = await supabase.from("products")
         .select(`
         *,
         product_extra_prices (*)
@@ -419,12 +758,16 @@ export default function ProductForm() {
         return;
       }
 
-      const sorted =
-        (productsData || []).slice().sort((a, b) =>
+      const sorted = (productsData || [])
+        .slice()
+        .sort((a, b) =>
           String(a.name || "").localeCompare(String(b.name || ""))
         );
 
       setProducts(sorted);
+
+      
+      
     };
 
     fetchProducts();
@@ -463,35 +806,49 @@ export default function ProductForm() {
   //-----------------------------------------------
   // automatic size chart value filled
   useEffect(() => {
-    if (!selectedSize || !activeCategory) return;
+  if (!selectedSize || !activeCategory) return;
 
-    const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
-    const sizeData = currentSizeChart[selectedSize];
-    if (!sizeData) return;
+  const categoryKey = CATEGORY_KEY_MAP[activeCategory];
+  if (!categoryKey) return;
 
-    setMeasurements((prev) => {
-      const newCategoryMeasurements = { ...(prev[activeCategory] || {}) };
-      const fieldsForCategory = isKidsProduct ? KIDS_MEASUREMENT_FIELDS[activeCategory] || [] : measurementFields[activeCategory] || [];
+  const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+  const sizeData = currentSizeChart[selectedSize];
+  if (!sizeData) return;
 
-      if (fieldsForCategory.includes("Bust") && sizeData.Bust !== undefined) {
-        newCategoryMeasurements.Bust = sizeData.Bust;
-      }
-      if (fieldsForCategory.includes("Waist") && sizeData.Waist !== undefined) {
-        newCategoryMeasurements.Waist = sizeData.Waist;
-      }
-      if (fieldsForCategory.includes("Hip") && sizeData.Hip !== undefined) {
-        newCategoryMeasurements.Hip = sizeData.Hip;
-      }
-      if (fieldsForCategory.includes("Length") && sizeData.Length !== undefined) {
-        newCategoryMeasurements.Length = sizeData.Length;
-      }
+  setMeasurements((prev) => {
+    const prevCategory = prev[categoryKey] || {};
 
-      return {
-        ...prev,
-        [activeCategory]: newCategoryMeasurements,
-      };
-    });
-  }, [selectedSize, activeCategory, isKidsProduct]); // Added isKidsProduct to dependencies
+    const fieldsForCategory = isKidsProduct
+      ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
+      : measurementFields[categoryKey] || [];
+
+    const nextCategory = { ...prevCategory };
+
+    if (fieldsForCategory.includes("Bust") && sizeData.Bust != null) {
+      nextCategory.Bust = sizeData.Bust;
+    }
+    if (fieldsForCategory.includes("Waist") && sizeData.Waist != null) {
+      nextCategory.Waist = sizeData.Waist;
+    }
+    if (fieldsForCategory.includes("Hip") && sizeData.Hip != null) {
+      nextCategory.Hip = sizeData.Hip;
+    }
+    if (fieldsForCategory.includes("Length") && sizeData.Length != null) {
+      nextCategory.Length = sizeData.Length;
+    }
+
+    // ⛔ prevent unnecessary rerender
+    if (JSON.stringify(prevCategory) === JSON.stringify(nextCategory)) {
+      return prev;
+    }
+
+    return {
+      ...prev,
+      [categoryKey]: nextCategory, // ✅ CORRECT
+    };
+  });
+}, [selectedSize, activeCategory, isKidsProduct]);
+
   // FETCH GLOBAL EXTRAS (ONE TIME)
   useEffect(() => {
     const fetchExtras = async () => {
@@ -511,7 +868,6 @@ export default function ProductForm() {
     fetchExtras();
   }, []);
 
-
   // When product or isKidsProduct changes, load options
   useEffect(() => {
     if (!selectedProduct) {
@@ -519,36 +875,51 @@ export default function ProductForm() {
       setBottoms([]);
       setAvailableSizes([]);
       setSelectedSize("");
-      setSelectedColor("");
+      setSelectedColor({ name: "", hex: "" });
       setSelectedTop("");
       setSelectedBottom("");
-      setSelectedTopColor("");
-      setSelectedBottomColor("");
+      setSelectedTopColor({ name: "", hex: "" });
+      setSelectedBottomColor({ name: "", hex: "" });
       setSelectedExtra("");
+      setSelectedExtraColor({ name: "", hex: "" });
+      setSelectedExtrasWithColors([]);
       setQuantity(1);
+      setMeasurements({});
       return;
     }
 
     setTops(selectedProduct.top_options || []);
     setBottoms(selectedProduct.bottom_options || []);
 
-    // Dynamic sizes based on isKidsProduct
-    if (isKidsProduct) {
-      setAvailableSizes(KIDS_SIZE_OPTIONS);
-      setSelectedSize(KIDS_SIZE_OPTIONS[0] || "");
-    } else {
-      setAvailableSizes(selectedProduct.available_size || []);
-      setSelectedSize(selectedProduct.available_size?.[0] || "");
+    // Calculate new available sizes and selected size
+    const newAvailableSizes = isKidsProduct
+      ? KIDS_SIZE_OPTIONS
+      : selectedProduct.available_size || [];
+    const newSelectedSize = isKidsProduct
+      ? KIDS_SIZE_OPTIONS[0] || ""
+      : selectedProduct.available_size?.[0] || "";
+
+    // Only update state if the new values are different from the current state
+    // This prevents infinite re-renders if the values are effectively the same
+    if (JSON.stringify(availableSizes) !== JSON.stringify(newAvailableSizes)) {
+      setAvailableSizes(newAvailableSizes);
+    }
+    if (selectedSize !== newSelectedSize) {
+      setSelectedSize(newSelectedSize);
     }
 
-    setSelectedColor("");
+    // Reset other related states
+    setSelectedColor({ name: "", hex: "" });
     setSelectedTop("");
     setSelectedBottom("");
-    setSelectedTopColor("");
-    setSelectedBottomColor("");
+    setSelectedTopColor({ name: "", hex: "" });
+    setSelectedBottomColor({ name: "", hex: "" });
     setSelectedExtra("");
+    setSelectedExtraColor({ name: "", hex: "" });
+    setSelectedExtrasWithColors([]);
     setQuantity(1);
-  }, [selectedProduct, isKidsProduct]); // Added isKidsProduct to dependencies
+    setMeasurements({});
+  }, [selectedProduct, isKidsProduct]);
 
   // ADD PRODUCT
   const handleAddProduct = () => {
@@ -596,34 +967,29 @@ export default function ProductForm() {
 
   const liveQuantity = quantity;
 
-
   const getLivePrice = () => {
-  if (!selectedProduct) return 0;
+    if (!selectedProduct) return 0;
 
-  // BASE PRICE
-  let price = Number(selectedProduct.base_price || 0);
+    // BASE PRICE
+    let price = Number(selectedProduct.base_price || 0);
 
-  // 👶 APPLY KIDS DISCOUNT (ONLY IF KIDS + SIZE SELECTED)
-  if (isKidsProduct && selectedSize && KIDS_DISCOUNT_PERCENT[selectedSize]) {
-    const discountPercent = KIDS_DISCOUNT_PERCENT[selectedSize];
-    const discountAmount = (price * discountPercent) / 100;
-    price = price - discountAmount;
-  }
-
-  // ➕ ADD EXTRAS PRICE
-  selectedExtrasWithColors.forEach((extraItem) => {
-    const extraRow = globalExtras.find((e) => e.name === extraItem.name);
-    if (extraRow) {
-      price += Number(extraRow.price || 0);
+    // 👶 APPLY KIDS DISCOUNT (ONLY IF KIDS + SIZE SELECTED)
+    if (isKidsProduct && selectedSize && KIDS_DISCOUNT_PERCENT[selectedSize]) {
+      const discountPercent = KIDS_DISCOUNT_PERCENT[selectedSize];
+      const discountAmount = (price * discountPercent) / 100;
+      price = price - discountAmount;
     }
-  });
 
-  return Math.round(price); // optional rounding
-};
+    // ➕ ADD EXTRAS PRICE
+    selectedExtrasWithColors.forEach((extraItem) => {
+      const extraRow = globalExtras.find((e) => e.name === extraItem.name);
+      if (extraRow) {
+        price += Number(extraRow.price || 0);
+      }
+    });
 
-
-
-
+    return Math.round(price); // optional rounding
+  };
 
   //==================
   // livePrice is TAX-INCLUSIVE
@@ -639,10 +1005,9 @@ export default function ProductForm() {
 
   // Reverse GST calculation
   const subtotal = inclusiveSubtotal / (1 + gstRate); // taxable amount
-  const taxes = inclusiveSubtotal - subtotal;          // GST amount
+  const taxes = inclusiveSubtotal - subtotal; // GST amount
 
-  const totalQuantity =
-    orderItems.length > 0 ? cartQuantity : liveQuantity;
+  const totalQuantity = orderItems.length > 0 ? cartQuantity : liveQuantity;
 
   // Final payable (already tax-inclusive)
   const totalOrder = inclusiveSubtotal;
@@ -662,7 +1027,7 @@ export default function ProductForm() {
 
       console.log("Uploading:", filePath);
 
-      const { data, error } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("attachments")
         .upload(filePath, file, {
           cacheControl: "3600",
@@ -670,11 +1035,12 @@ export default function ProductForm() {
           contentType: file.type || "application/octet-stream",
         });
 
-      if (error) {
-        console.error("Upload failed:", error);
-        alert("Upload failed: " + error.message);
+      if (uploadError) {
+        console.error("Upload failed:", uploadError);
+        alert("Upload failed: " + uploadError.message);
         return;
       }
+
 
       const { data: urlData } = supabase.storage
         .from("attachments")
@@ -685,8 +1051,6 @@ export default function ProductForm() {
 
     setAttachments(uploadedUrls);
   };
-
-
 
   // SAVE ORDER
   const saveOrder = () => {
@@ -719,6 +1083,11 @@ export default function ProductForm() {
       });
     }
 
+    // NEW VALIDATION: Ensure at least one product is in the order
+    if (finalItems.length === 0) {
+      return alert("Please add at least one product to the order.");
+    }
+
     const orderPayload = {
       user_id: user?.id,
 
@@ -730,9 +1099,12 @@ export default function ProductForm() {
       mode_of_delivery: modeOfDelivery,
       order_flag: orderFlag,
 
-      urgent_reason: orderFlag === "Urgent"
-        ? (urgentReason === "Others" ? otherUrgentReason : urgentReason)
-        : null,
+      urgent_reason:
+        orderFlag === "Urgent"
+          ? urgentReason === "Others"
+            ? otherUrgentReason
+            : urgentReason
+          : null,
 
       // Extra fields
       comments: comments, // General order comments
@@ -751,7 +1123,6 @@ export default function ProductForm() {
 
     navigate("/confirmDetail", { state: { orderPayload } });
   };
-
 
   const handleLogout = async () => {
     try {
@@ -785,15 +1156,13 @@ export default function ProductForm() {
     }
   };
 
-
-
-
-  const toOptions = (arr = []) => arr.map((x) => ({ label: String(x), value: x }));
+  const toOptions = (arr = []) =>
+    arr.map((x) => ({ label: String(x), value: x }));
   const toColorOptions = (colors = []) =>
     colors.map((c) => ({
       label: c.name,
       value: { name: c.name, hex: c.hex }, // Store full object as value
-      hex: c.hex
+      hex: c.hex,
     }));
   const toExtraOptions = (extras = []) =>
     extras.map((e) => ({
@@ -801,6 +1170,7 @@ export default function ProductForm() {
       value: e.name,
       price: e.price, // Also store price in the option object
     }));
+  const categoryKey = CATEGORY_KEY_MAP[activeCategory];
 
   return (
     <div className="screen4-bg">
@@ -808,7 +1178,6 @@ export default function ProductForm() {
       <div className="header">
         <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
         <h2 className="order-title">Order Form</h2>
-
       </div>
 
       <div className="screen4-card">
@@ -832,13 +1201,14 @@ export default function ProductForm() {
             {orderItems.length > 0 && (
               <div className="added-products-box added-products-top">
                 {orderItems.map((item, i) => {
-                  const productMeta = products.find((p) => p.id === item.product_id) || {};
                   const expanded = !!expandedRowIds[item._id];
 
                   return (
                     <div className="added-product-row" key={item._id}>
                       <span className="product-info">
-                        {i + 1}. Name: {item.product_name}, Size: {item.size}, Qty: {formatIndianNumber(item.quantity)}, Price: ₹{formatIndianNumber(item.price)}
+                        {i + 1}. Name: {item.product_name}, Size: {item.size},
+                        Qty: {formatIndianNumber(item.quantity)}, Price: ₹
+                        {formatIndianNumber(item.price)}
                       </span>
 
                       <div className="product-buttons">
@@ -849,7 +1219,11 @@ export default function ProductForm() {
                         >
                           {expanded ? "−" : "✚"}
                         </button>
-                        <button className="delete" onClick={() => handleDelete(item._id)} title="Remove">
+                        <button
+                          className="delete"
+                          onClick={() => handleDelete(item._id)}
+                          title="Remove"
+                        >
                           🗑
                         </button>
                       </div>
@@ -863,7 +1237,9 @@ export default function ProductForm() {
                             <SearchableSelect
                               options={toColorOptions(colors)}
                               value={item.color?.name || ""}
-                              onChange={(colorObj) => updateItem(item._id, { color: colorObj })}
+                              onChange={(colorObj) =>
+                                updateItem(item._id, { color: colorObj })
+                              }
                               placeholder="Select Color"
                             />
                           </div>
@@ -875,7 +1251,9 @@ export default function ProductForm() {
                               type="text"
                               className="input-line"
                               value={item.top || ""}
-                              onChange={(e) => updateItem(item._id, { top: e.target.value })}
+                              onChange={(e) =>
+                                updateItem(item._id, { top: e.target.value })
+                              }
                               placeholder="Enter top"
                             />
                           </div>
@@ -886,7 +1264,9 @@ export default function ProductForm() {
                             <SearchableSelect
                               options={toColorOptions(colors)}
                               value={item.top_color?.name || ""}
-                              onChange={(colorObj) => updateItem(item._id, { top_color: colorObj })}
+                              onChange={(colorObj) =>
+                                updateItem(item._id, { top_color: colorObj })
+                              }
                               placeholder="Select Top Color"
                             />
                           </div>
@@ -898,7 +1278,9 @@ export default function ProductForm() {
                               type="text"
                               className="input-line"
                               value={item.bottom || ""}
-                              onChange={(e) => updateItem(item._id, { bottom: e.target.value })}
+                              onChange={(e) =>
+                                updateItem(item._id, { bottom: e.target.value })
+                              }
                               placeholder="Enter bottom"
                             />
                           </div>
@@ -909,7 +1291,9 @@ export default function ProductForm() {
                             <SearchableSelect
                               options={toColorOptions(colors)}
                               value={item.bottom_color?.name || ""}
-                              onChange={(colorObj) => updateItem(item._id, { bottom_color: colorObj })}
+                              onChange={(colorObj) =>
+                                updateItem(item._id, { bottom_color: colorObj })
+                              }
                               placeholder="Select Bottom Color"
                             />
                           </div>
@@ -919,7 +1303,10 @@ export default function ProductForm() {
                             <label>Extras</label>
                             {item.extras && item.extras.length > 0 ? (
                               item.extras.map((extraItem, idx) => (
-                                <div key={idx} className="added-extra-item-edit">
+                                <div
+                                  key={idx}
+                                  className="added-extra-item-edit"
+                                >
                                   <input
                                     type="text"
                                     className="input-line"
@@ -927,7 +1314,9 @@ export default function ProductForm() {
                                     onChange={(e) => {
                                       const newExtras = [...item.extras];
                                       newExtras[idx].name = e.target.value;
-                                      updateItem(item._id, { extras: newExtras });
+                                      updateItem(item._id, {
+                                        extras: newExtras,
+                                      });
                                     }}
                                     placeholder="Extra name"
                                   />
@@ -937,15 +1326,27 @@ export default function ProductForm() {
                                     onChange={(colorObj) => {
                                       const newExtras = [...item.extras];
                                       newExtras[idx].color = colorObj;
-                                      updateItem(item._id, { extras: newExtras });
+                                      updateItem(item._id, {
+                                        extras: newExtras,
+                                      });
                                     }}
                                     placeholder="Select Extra Color"
                                   />
-                                  <span className="extra-price">₹{formatIndianNumber(extraItem.price)}</span>
-                                  <button onClick={() => {
-                                    const newExtras = item.extras.filter((_, i) => i !== idx);
-                                    updateItem(item._id, { extras: newExtras });
-                                  }}>x</button>
+                                  <span className="extra-price">
+                                    ₹{formatIndianNumber(extraItem.price)}
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      const newExtras = item.extras.filter(
+                                        (_, i) => i !== idx
+                                      );
+                                      updateItem(item._id, {
+                                        extras: newExtras,
+                                      });
+                                    }}
+                                  >
+                                    x
+                                  </button>
                                 </div>
                               ))
                             ) : (
@@ -960,11 +1361,12 @@ export default function ProductForm() {
                               type="text"
                               className="input-line"
                               value={item.size || ""}
-                              onChange={(e) => updateItem(item._id, { size: e.target.value })}
+                              onChange={(e) =>
+                                updateItem(item._id, { size: e.target.value })
+                              }
                               placeholder="e.g. S / M / L or custom"
                             />
                           </div>
-
 
                           {/* Quantity */}
                           <div className="field" style={{ maxWidth: 160 }}>
@@ -976,7 +1378,10 @@ export default function ProductForm() {
                               value={item.quantity ?? 1}
                               onChange={(e) =>
                                 updateItem(item._id, {
-                                  quantity: Math.max(1, Number(e.target.value || 1)),
+                                  quantity: Math.max(
+                                    1,
+                                    Number(e.target.value || 1)
+                                  ),
                                 })
                               }
                             />
@@ -990,7 +1395,11 @@ export default function ProductForm() {
                               min={0}
                               className="input-line"
                               value={item.price ?? 0}
-                              onChange={(e) => updateItem(item._id, { price: Number(e.target.value || 0) })}
+                              onChange={(e) =>
+                                updateItem(item._id, {
+                                  price: Number(e.target.value || 0),
+                                })
+                              }
                             />
                           </div>
 
@@ -1001,7 +1410,9 @@ export default function ProductForm() {
                               className="input-line"
                               placeholder="Add notes for this product item..."
                               value={item.notes || ""}
-                              onChange={(e) => updateItem(item._id, { notes: e.target.value })}
+                              onChange={(e) =>
+                                updateItem(item._id, { notes: e.target.value })
+                              }
                               rows={2}
                             />
                           </div>
@@ -1018,7 +1429,10 @@ export default function ProductForm() {
               {/* PRODUCT SELECT */}
               <div className="field">
                 <SearchableSelect
-                  options={products.map((p) => ({ label: p.name, value: p.id }))}
+                  options={products.map((p) => ({
+                    label: p.name,
+                    value: p.id,
+                  }))}
                   value={selectedProduct?.id || ""}
                   onChange={(val) =>
                     setSelectedProduct(
@@ -1031,30 +1445,31 @@ export default function ProductForm() {
                 {/* PRICE DISPLAY */}
                 {selectedProduct && (
                   <p className="product-price">
-                    Price: <strong>₹{formatIndianNumber(getLivePrice())}</strong>
+                    Price:{" "}
+                    <strong>₹{formatIndianNumber(getLivePrice())}</strong>
                   </p>
                 )}
-
-
-
               </div>
 
               {/* COLOR */}
-              <div className="field" >
+              {/* <div className="field" >
                 <SearchableSelect
                   options={toColorOptions(colors)}
                   value={selectedColor.name} // Display name, but onChange gets object
                   onChange={(colorObj) => setSelectedColor(colorObj)}
                   placeholder="Select Color"
                 />
-              </div>
-
+              </div> */}
 
               {/* QUANTITY */}
               <div className="qty-field">
                 <label>Qty</label>
                 <div className="qty-controls">
-                  <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}>−</button>
+                  <button
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  >
+                    −
+                  </button>
                   <span>{quantity}</span>
                   <button onClick={() => setQuantity((q) => q + 1)}>+</button>
                 </div>
@@ -1123,7 +1538,17 @@ export default function ProductForm() {
                   />
                 </div>
               )}
-              <button className="add-extra-btn" style={{ background: "#d5b85a", border: 'none', color: 'white', borderRadius: "3px" }} onClick={handleAddExtra} disabled={!selectedExtra}>
+              <button
+                className="add-extra-btn"
+                style={{
+                  background: "#d5b85a",
+                  border: "none",
+                  color: "white",
+                  borderRadius: "3px",
+                }}
+                onClick={handleAddExtra}
+                disabled={!selectedExtra}
+              >
                 Add Extra
               </button>
             </div>
@@ -1134,7 +1559,10 @@ export default function ProductForm() {
                 <h4>Added Extras:</h4>
                 {selectedExtrasWithColors.map((extra, index) => (
                   <div key={index} className="selected-extra-item">
-                    <span>{extra.name} (₹{formatIndianNumber(extra.price)}) {extra.color && `(${extra.color})`}</span>
+                    <span>
+                      {extra.name} (₹{formatIndianNumber(extra.price)}){" "}
+                      {extra.color && `(${extra.color})`}
+                    </span>
                     <button onClick={() => handleRemoveExtra(index)}>x</button>
                   </div>
                 ))}
@@ -1153,7 +1581,9 @@ export default function ProductForm() {
                   availableSizes.map((s, i) => (
                     <button
                       key={i}
-                      className={selectedSize === s ? "size-btn active" : "size-btn"}
+                      className={
+                        selectedSize === s ? "size-btn active" : "size-btn"
+                      }
                       onClick={() => setSelectedSize(s)}
                     >
                       {s}
@@ -1165,11 +1595,13 @@ export default function ProductForm() {
               </div>
             </div>
 
-
             {/* MEASUREMENTS */}
             <div className="measure-bar">
               <span>Custom Measurements </span>
-              <button className="plus-btn" onClick={() => setShowMeasurements(!showMeasurements)}>
+              <button
+                className="plus-btn"
+                onClick={() => setShowMeasurements(!showMeasurements)}
+              >
                 {showMeasurements ? "−" : "+"}
               </button>
             </div>
@@ -1180,7 +1612,11 @@ export default function ProductForm() {
                   {measurementCategories.map((cat) => (
                     <div
                       key={cat}
-                      className={activeCategory === cat ? "measure-item active" : "measure-item"}
+                      className={
+                        activeCategory === cat
+                          ? "measure-item active"
+                          : "measure-item"
+                      }
                       onClick={() => setActiveCategory(cat)}
                     >
                       {cat}
@@ -1192,30 +1628,33 @@ export default function ProductForm() {
                   <h3 className="measure-title">Custom Measurements (in)</h3>
 
                   <div className="measure-grid">
-                    {(isKidsProduct ? KIDS_MEASUREMENT_FIELDS[activeCategory] : measurementFields[activeCategory]).map((field) => (
+                    {(isKidsProduct
+                      ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
+                      : measurementFields[categoryKey] || []
+                    ).map((field) => (
                       <div className="measure-field" key={field}>
-                        <label>{field} </label>
+                        <label>{field}</label>
+
                         <input
                           type="number"
                           className="input-line"
-
-                          value={measurements[activeCategory]?.[field] || ""}
+                          value={measurements[categoryKey]?.[field] || ""}
                           onChange={(e) => {
                             const val = e.target.value;
 
                             setMeasurements((prev) => ({
                               ...prev,
-                              [activeCategory]: {
-                                ...(prev[activeCategory] || {}),
+                              [categoryKey]: {
+                                ...(prev[categoryKey] || {}),
                                 [field]: val,
                               },
                             }));
                           }}
                         />
-
                       </div>
                     ))}
                   </div>
+
                 </div>
               </div>
             )}
@@ -1238,14 +1677,14 @@ export default function ProductForm() {
                   min={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setDeliveryDate(e.target.value)}
                 />
-
               </div>
 
               <div className="field">
                 <SearchableSelect
                   options={[
                     { label: "Home Delivery", value: "Home Delivery" },
-                    { label: "Store Pickup", value: "Store Pickup" },
+                    { label: "Delhi Store", value: "Delhi Store" },
+                    { label: " Ludhiana Store ", value: "Ludhiana Store" },
                   ]}
                   value={modeOfDelivery}
                   onChange={setModeOfDelivery}
@@ -1270,11 +1709,8 @@ export default function ProductForm() {
                   }}
                   placeholder="Order Flag"
                 />
-
               </div>
             </div>
-
-
 
             {/* GENERAL ORDER COMMENTS */}
             <div className="row">
@@ -1289,13 +1725,12 @@ export default function ProductForm() {
                 />
               </div>
 
-
               <div className="field">
                 <label>Attachments</label>
 
                 <div className="custom-file-upload">
                   <label className="upload-btn">
-                    🅾 Upload Files
+                    Upload Files
                     <input
                       type="file"
                       accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx"
@@ -1314,32 +1749,29 @@ export default function ProductForm() {
                     ))}
                   </div>
                 )}
-
               </div>
-
-
             </div>
-
-
 
             {/* ALWAYS-VISIBLE SUMMARY */}
             <div className="summary-box-fixed">
-
-
-              <h3 >Order Summary</h3>
+              <h3>Order Summary</h3>
 
               <p>
-                Total Quantity: <strong>{formatIndianNumber(totalQuantity)}</strong>
+                Total Quantity:{" "}
+                <strong>{formatIndianNumber(totalQuantity)}</strong>
               </p>
               <p>
-                Subtotal: <strong>₹{formatIndianNumber(subtotal.toFixed(2))}</strong>
+                Subtotal:{" "}
+                <strong>₹{formatIndianNumber(subtotal.toFixed(2))}</strong>
               </p>
               <p>
-                Taxes (18%): <strong>₹{formatIndianNumber(taxes.toFixed(2))}</strong>
+                Taxes (18%):{" "}
+                <strong>₹{formatIndianNumber(taxes.toFixed(2))}</strong>
               </p>
 
               <p className="grand-total">
-                Total: <strong>₹{formatIndianNumber(totalOrder.toFixed(2))}</strong>
+                Total:{" "}
+                <strong>₹{formatIndianNumber(totalOrder.toFixed(2))}</strong>
               </p>
             </div>
 
@@ -1353,18 +1785,13 @@ export default function ProductForm() {
                 Continue
               </button>
             </div>
-
           </div>
           {/* ================= RIGHT IMAGE ================= */}
           {selectedProduct?.image_url && (
             <div className="screen4-image-fixed">
-              <img
-                src={selectedProduct.image_url}
-                alt={selectedProduct.name}
-              />
+              <img src={selectedProduct.image_url} alt={selectedProduct.name} />
             </div>
           )}
-
         </div>
       </div>
       {/*Urgent reason modal ------------------------------------- */}
@@ -1374,22 +1801,24 @@ export default function ProductForm() {
             <h3>Urgent Order</h3>
 
             <label>Reason for Urgent</label>
-            <SearchableSelect
-              options={[
-                { label: "Client Escalation", value: "Client Escalation" },
-                { label: "VIP Order", value: "VIP Order" },
-                { label: "Celebrity Order", value: "Celebrity Order" },
-                { label: "Others", value: "Others" },
-              ]}
-              value={urgentReason}
-              onChange={(val) => {
-                setUrgentReason(val);
-                if (val !== "Others") {
-                  setOtherUrgentReason(""); // Clear other reason if not 'Others'
-                }
-              }}
-              placeholder="Select Urgent Reason"
-            />
+            <div style={{ border: "1px solid #D5B85A" }}>
+              <SearchableSelect
+                options={[
+                  { label: "Client Escalation", value: "Client Escalation" },
+                  { label: "VIP Order", value: "VIP Order" },
+                  { label: "Celebrity Order", value: "Celebrity Order" },
+                  { label: "Others", value: "Others" },
+                ]}
+                value={urgentReason}
+                onChange={(val) => {
+                  setUrgentReason(val);
+                  if (val !== "Others") {
+                    setOtherUrgentReason(""); // Clear other reason if not 'Others'
+                  }
+                }}
+                placeholder="Select Urgent Reason"
+              />
+            </div>
 
             {urgentReason === "Others" && (
               <textarea
@@ -1418,7 +1847,10 @@ export default function ProductForm() {
               <button
                 className="confirm-btn"
                 onClick={() => {
-                  const finalReason = urgentReason === "Others" ? otherUrgentReason : urgentReason;
+                  const finalReason =
+                    urgentReason === "Others"
+                      ? otherUrgentReason
+                      : urgentReason;
                   if (!finalReason.trim()) {
                     alert("Please select or enter a reason for urgent order");
                     return;
@@ -1435,7 +1867,9 @@ export default function ProductForm() {
       )}
 
       {/* BACK BUTTON */}
-      <button className="back-btn" onClick={handleLogout}>←</button>
+      <button className="back-btn" onClick={handleLogout}>
+        ←
+      </button>
     </div>
   );
 }
