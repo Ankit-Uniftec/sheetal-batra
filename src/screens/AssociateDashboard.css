@@ -853,20 +853,25 @@
 .top-header {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    align-items: center;
-    padding: 10px 0;
+    align-items: center !important;
+    
+    
   }
 
   /* Logo */
   .top-header .logo {
     justify-self: start;
     margin-left: 12px;
+    
   }
 
   /* Title */
   .dashboard-title {
     justify-self: center;
     white-space: nowrap;
+    font-size: 15px !important;
+    
+    
   }
 
   /* Logout / Hamburger */
@@ -879,7 +884,7 @@
     position: absolute; /* Position relative to top-header */
      /* left: 20px; */
    
-    top: 60%;
+    top: 71%;
     transform: translateY(-50%);
     z-index: 1001; /* Above other content */
   }
@@ -1244,5 +1249,4 @@
     display: none;
   }
 }
-
 

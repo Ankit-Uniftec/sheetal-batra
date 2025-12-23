@@ -143,7 +143,7 @@ export default function OtpVerification() {
           <input
             className="phone-input"
             placeholder="Enter mobile number"
-            value={formatPhoneNumber(mobile)}
+            
             onChange={(e) => setMobile(e.target.value)}
           />
         </div>

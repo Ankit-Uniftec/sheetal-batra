@@ -1,13 +1,17 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState,useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import SignatureCanvas from "react-signature-canvas";
 import { pdf } from "@react-pdf/renderer";
 import Logo from "../images/logo.png";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatDate from "../utils/formatDate";
 import "./Screen7.css";
+import { buildCustomerOrderPdf } from "../pdf/customerPdf";
+import { buildWarehousePdf } from "../pdf/warehousePdf";
 
 // Import PDF components
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
@@ -24,7 +28,7 @@ function ColorDotDisplay({ colorObject }) {
     displayColorHex = colorObject.startsWith("#") ? colorObject : "gray";
   } else if (typeof colorObject === "object" && colorObject !== null) {
     displayColorName = colorObject.name || "";
-    displayColorHex = colorObject.hex || "#000000";
+    displayColorHex = colorObject.hex || "";
   } else {
     return <span>Invalid Color</span>;
   }
@@ -106,10 +110,32 @@ export default function ReviewDetail() {
     netPayable,
     remaining,
   };
+useEffect(() => {
+  (async () => {
+    try {
+      await pdf(
+        <CustomerOrderPdf order={{ items: [] }} logoUrl={null} />
+      ).toBlob();
 
-    // ===============================
-  // PREVIEW/DOWNLOAD PDFs (FOR TESTING)
-  // ===============================
+      console.log("✅ PDF sanity test passed");
+    } catch (e) {
+      console.error("❌ PDF sanity test failed", e);
+    }
+  })();
+}, []);
+
+// ===============================
+// PROFILE
+// ===============================
+const profileFromOrder = (o) => ({
+  full_name: o?.delivery_name || "",
+  email: o?.delivery_email || "",
+  phone: o?.delivery_phone || "",
+});
+
+// ===============================
+ // PREVIEW/DOWNLOAD PDFs (FOR TESTING)
+ // ===============================
   const handlePreviewCustomerPdf = async () => {
     try {
       setPreviewLoading(true);
@@ -270,6 +296,15 @@ export default function ReviewDetail() {
         .single();
 
       if (error) throw error;
+      if (!data) {
+        throw new Error("Order data not returned after saving.");
+      }
+
+      // Ensure 'items' array exists on the data object for PDF generation
+      const orderDataForPdf = {
+        ...data,
+        items: data.items || [], // Ensure items is an array, even if empty
+      };
 
       // ===============================
       // GENERATE BOTH PDFs USING REACT-PDF
@@ -285,35 +320,44 @@ export default function ReviewDetail() {
 
       // Generate Warehouse PDF
       const warehousePdfBlob = await pdf(
-        <WarehouseOrderPdf order={data} logoUrl={logoUrl} />
+        <WarehouseOrderPdf order={orderDataForPdf} logoUrl={logoUrl} />
       ).toBlob();
-
       // ===============================
       // UPLOAD PDFs TO STORAGE
       // ===============================
       const uploads = [
         supabase.storage
           .from("invoices")
-          .upload(`orders/${data.id}_customer.pdf`, customerPdfBlob, {
-            upsert: true,
-            contentType: "application/pdf",
-          }),
+          .upload(
+            `orders/${data.id}_customer.pdf`,
+            customerPdfBlob,
+            {
+              upsert: true,
+              contentType: "application/pdf",
+            }
+          ),
 
         supabase.storage
           .from("invoices")
-          .upload(`orders/${data.id}_warehouse.pdf`, warehousePdfBlob, {
-            upsert: true,
-            contentType: "application/pdf",
-          }),
+          .upload(
+            `orders/${data.id}_warehouse.pdf`,
+            warehousePdfBlob,
+            {
+              upsert: true,
+              contentType: "application/pdf",
+            }
+          ),
       ];
 
+      await Promise.all(uploads);
       await Promise.all(uploads);
 
       // ===============================
       // DONE
       // ===============================
       alert("✅ Order saved & both PDFs generated successfully!");
-      navigate("/orderHistory");
+      // navigate("/orderHistory");
+      handleLogout();
     } catch (e) {
       console.error("❌ Order save failed:", e);
       alert(e.message || "Failed to save order");
@@ -447,10 +491,10 @@ export default function ReviewDetail() {
                     <label>Product Name:</label>
                     <span>{item.product_name}</span>
                   </div>
-                  <div className="field field-small">
+                  {/* <div className="field field-small">
                     <label>Color:</label>
                     <ColorDotDisplay colorObject={item.color} />
-                  </div>
+                  </div> */}
                 </div>
 
                 {item.notes && (
@@ -650,16 +694,25 @@ export default function ReviewDetail() {
               <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
           </div>
-          <div className="row3">
-            <div className="field">
-              <label>Discount %:</label>
-              <span>{pricing.discountPercent}%</span>
+          {pricing.discountPercent>0 && (
+            <div className="row3">
+
+
+              <div className="field">
+                <label>Discount %:</label>
+                <span>{pricing.discountPercent}%</span>
+              </div>
+              <div className="field">
+                <label>Discount Amount:</label>
+                <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
+              </div>
+
+
+
             </div>
-            <div className="field">
-              <label>Discount Amount:</label>
-              <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
-            </div>
-          </div>
+          )
+
+          }
         </div>
 
         <button
