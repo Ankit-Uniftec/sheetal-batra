@@ -320,7 +320,7 @@ useEffect(() => {
       // GENERATE BOTH PDFs
       // ===============================
       const logoUrl = new URL(Logo, window.location.origin).href;
-//  handlePreviewBothPdfs();
+ handlePreviewBothPdfs();
      // Generate Customer PDF
       const customerPdfBlob = await pdf(
         <CustomerOrderPdf order={orderDataForPdf} logoUrl={logoUrl} />
