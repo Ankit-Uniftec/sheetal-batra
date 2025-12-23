@@ -3,7 +3,7 @@
   color:black;
 }
 
-.dashboard-wrapper {
+.ad-dashboard-wrapper {
   
   min-height: 100vh;
   width: 100%;
@@ -20,7 +20,7 @@
   align-items: center;
   
 }
-.blurred {
+.ad-blurred {
   filter: blur(6px);
   pointer-events: none;
   user-select: none;
@@ -29,21 +29,26 @@
 
 /* ---------------- HEADER ---------------- */
 
-.top-header {
+.ad-top-header {
   width: 100% !important;
-  display: grid !important;
-  grid-template-columns: 1fr auto 1fr !important; /* 3-column grid */
+  display: flex;
+  /* grid-template-columns: 1fr auto 1fr !important; 3-column grid */
   align-items: center;
-  position: relative; /* For positioning hamburger icon */
+  justify-content: space-between;
 }
-.logout-btn{
-  margin-top:40px ;
-  background-color: #d5b85a !important;
+.ad-logout-btn{
+  background: #d5b85a;
   color: white !important;
+  border: none;
+  padding: 15px 17px;
+  border-radius: 8px;
+  font-size: 19px;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 /* Hamburger Icon */
-.hamburger-icon {
+.ad-hamburger-icon {
   display: none; /* Hidden by default, shown in media query */
   flex-direction: column;
   justify-content: space-around;
@@ -57,7 +62,7 @@
   z-index: 1001; /* Above other content */
 }
 
-.hamburger-icon .bar {
+.ad-hamburger-icon .ad-bar {
   width: 100%;
   height: 3px;
   background-color: #d5b85a;
@@ -65,7 +70,7 @@
   transition: all 0.3s ease;
 }
 
-/* .logout-btn {
+/* .ad-logout-btn {
   display: grid !important;
   border: 1px solid #d5b85a;
   background-color: #d5b85a !important;
@@ -77,7 +82,7 @@
    text-align: center !important;
 } */
 
-/* .title {
+/* .ad-title {
   display: grid !important;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -96,7 +101,7 @@
 
 /* ---------------- MAIN GRID (3 ROW × 4 COLUMN) ---------------- */
 
-.grid-table {
+.ad-grid-table {
   margin-top: 30px;
   width: 100%;
   display: grid;
@@ -108,7 +113,7 @@
 
 /* ---------------- SIDEBAR (spans 3 rows) ---------------- */
 
-.sidebar {
+.ad-sidebar {
   grid-row: 1 / 4;
   grid-column: 1;
   background: #FFFFFFB0;
@@ -118,7 +123,7 @@
   transition: transform 0.3s ease-in-out; /* For smooth slide-in/out */
 }
 
-.hello-box {
+.ad-hello-box {
   background: #d5b85a;
   padding: 10px;
   color:white !important;
@@ -126,35 +131,35 @@
   font-weight: 500;
 
 }
-.clickable {
+.ad-clickable {
   cursor: pointer;
     color:white !important;
 }
 
 
-.menu {
+.ad-menu {
   margin-top: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.menu-item {
+.ad-menu-item {
   padding: 8px 12px;
   font-size: 15px;
   cursor: pointer;
 }
-.menu-item-logout {
+.ad-menu-item-logout {
   display: none;
 }
 
-.menu-item.active {
+.ad-menu-item.active {
   font-weight: bold;
   color: #d5b85a;
   position: relative; /* Needed for pseudo-element positioning */
 }
 
-.menu-item.active::after {
+.ad-menu-item.active::after {
   content: "";
   position: absolute;
   left: 12px; /* Align with padding */
@@ -167,12 +172,12 @@
 }
 
 
-.profile-wrapper {
+.ad-profile-wrapper {
   padding-top: 0;        /* same as Order Details */
 }
 
 
-.profile-title {
+.ad-profile-title {
   font-family: "Athleas", serif !important;
   font-size: 26px;
   font-weight: 600;
@@ -182,7 +187,7 @@
 }
 
 
-.profile-card {
+.ad-profile-card {
   background: #FFFFFFB0;
   border: 1px solid #D4D4D4;
   border-radius: 12px;
@@ -190,52 +195,54 @@
   max-width: 520px;
 }
 
-.profile-row {
+.ad-profile-row {
   display: flex;
   justify-content: space-between;
   padding: 12px 0;
   border-bottom: 1px solid #ddd;
 }
 
-.profile-row:last-child {
+.ad-profile-row:last-child {
   border-bottom: none;
 }
 
-.profile-row .label {
+.ad-profile-row .ad-label {
+  font-size: 16px;
   font-weight: 500;
   color: #777;
 }
 
-.profile-row .value {
+.ad-profile-row .ad-value {
+  font-size: 16px;
   font-weight: 600;
 }
-.password-modal {
+.ad-password-modal {
   filter: none !important;
 }
 
 
 /* ---------------- GRID CELLS ---------------- */
 
-.cell {
+.ad-cell {
   width: 100%;
 }
 
 /* ---- Row 1 ---- */
 
-.total-revenue { grid-row: 1; grid-column: 2;  }
-.total-orders  { grid-row: 1; grid-column: 3; }
-.total-clients { grid-row: 1; grid-column: 4; }
+.ad-total-revenue { grid-row: 1; grid-column: 2;  }
+.ad-total-orders  { grid-row: 1; grid-column: 3; }
+.ad-total-clients { grid-row: 1; grid-column: 4; }
 
 /* ---- Row 2 ---- */
 
-.sales-target {
+.ad-sales-target {
   grid-row: 2;
   grid-column: 2 / 4; /* spans 2 columns */
 }
 
 /* ---- Row 2–3 Alerts ---- */
 
-.alerts-box {
+.ad-alerts-box {
   grid-row: 2 / 4;
   grid-column: 4;
   padding: 20px;
@@ -245,19 +252,19 @@
   border: 1px solid #D4D4D4;
 }
 
-.alerts-header {
+.ad-alerts-header {
   display: flex;
   justify-content: space-between;
 }
 
-.alerts-title {
+.ad-alerts-title {
   font-family: "Athleas", serif !important;
   color: #d5b85a !important;
   font-size: 16px !important;
   
 }
 
-.alerts-body {
+.ad-alerts-body {
   margin-top: 12px;
   height: 440px;
   border-radius: 10px;
@@ -266,7 +273,7 @@
 
 /* ---- Row 3 ---- */
 
-.active-orders {
+.ad-active-orders {
   
   grid-row: 3;
   grid-column: 2 / 4; /* spans 2 columns */
@@ -274,25 +281,25 @@
 
 /* ---------------- CARDS ---------------- */
 
-.gold-text {
+.ad-gold-text {
   color:#d5b85a !important;
 }
 
-.stat-card {
+.ad-stat-card {
   background: #FFFFFFB0;
   padding: 18px;
   border-radius: 8px;
   border: 1px solid #D4D4D4;
 }
 
-.stat-title {
+.ad-stat-title {
   margin-top: 2px;
   font-family: "Athleas", serif !important;
  font-size: 16px !important;
  color: #d5b85a !important;
 }
 
-.stat-content {
+.ad-stat-content {
   display: flex;
   justify-content: space-between;
   align-items: center; /* Added to vertically center content */
@@ -300,18 +307,18 @@
   color: #d5b85a !important;
 }
 
-.stat-value {
+.ad-stat-value {
   font-size: 32px;
   color: #d5b85a;
   font-weight: 600;
 }
 
-.stat-change {
+.ad-stat-change {
  color: #d5b85a !important;
 }
 
 /* Sales Card */
-.sales-card {
+.ad-sales-card {
  background: #FFFFFFB0;
   padding: 20px ;
   padding-top: 2px;
@@ -319,31 +326,31 @@
   border: 1px solid #D4D4D4;
 }
 
-.sales-header {
+.ad-sales-header {
   
   display: flex;
   justify-content: space-between;
 }
 
-.sales-label {
+.ad-sales-label {
   font-family: "Athleas", serif !important;
   font-size: 16px !important;
   color: #d5b85a !important;
 }
 
-.sales-progress {
+.ad-sales-progress {
   font-size: 15px !important;
   font-weight: 500;
   color: #d5b85a;
 }
 
-.sales-scale {
+.ad-sales-scale {
   margin-top: 12px;
   display: flex;
   justify-content: space-between;
 }
 
-.progress-bar {
+.ad-progress-bar {
   margin-top: 10px;
   width: 100%;
   height: 10px;
@@ -351,7 +358,7 @@
   border-radius: 20px;
 }
 
-.progress-fill {
+.ad-progress-fill {
   width: 62%;
   height: 10px;
   background: #d5b85a;
@@ -359,7 +366,7 @@
 }
 
 /* Active Orders */
-.orders-card {
+.ad-orders-card {
   background: #FFFFFFB0;
   height: 320px;
   padding: 15px !important;
@@ -368,17 +375,17 @@
   overflow: hidden;
 }
  
-.card-header {
+.ad-card-header {
   display: flex;
   justify-content: space-between;
 }
 
-.card-title {
+.ad-card-title {
   font-family: "Athleas", serif !important;
   font-size: 16px !important;
   color: #d5b85a !important;
 }
-.view-btn {
+.ad-view-btn {
   width: 60px; /* Reduced width */
   padding: 2px 5px !important;
   border-radius: 3px !important;
@@ -388,7 +395,7 @@
   cursor: pointer;
   font-size: 14px;
 }
-.cardbox {
+.ad-cardbox {
   height: 250px !important;
   overflow-y: auto;
   overflow-x: auto;   /* ✅ STOPS sideways overflow */
@@ -396,7 +403,7 @@
 }
 
 /* Floating Add Button */
-.add-btn {
+.ad-add-btn {
   position: fixed;
   bottom: 40px;
   left: 50%;
@@ -412,7 +419,7 @@
 }
 
 /* Back Button */
-.back-btn {
+.ad-back-btn {
   position: fixed;
   bottom: 40px !important;
   left: 40px !important;
@@ -430,65 +437,65 @@
 @media (max-width: 1024px) and (min-width: 768px) {
   
   
-  .grid-table {
+  .ad-grid-table {
     grid-template-columns: 150px 1fr 1fr 200px; /* scale down */
     gap: 10px;
   }
 
-  .sidebar {
+  .ad-sidebar {
     width: 150px;
   }
 
-  .stat-card {
+  .ad-stat-card {
     
     padding: 14px;
     width: 170px;
 
   }
-  .cardbox{
+  .ad-cardbox{
     
     
     overflow: auto !important;
   }
 
-  .stat-value {
+  .ad-stat-value {
     
     font-size: 26px;
     color:black !important;
   }
 
-  .sales-card {
+  .ad-sales-card {
     padding: 16px;
     padding-top: 2px !important;
   }
 
-  .orders-card {
+  .ad-orders-card {
     height: 260px;
     padding: 16px;
     
   }
 
-  .alerts-box {
+  .ad-alerts-box {
     width: 170px;
     padding: 16px;
     height: 440px;
   }
 
-  .title {
+  .ad-title {
     font-size: 26px; /* shrink title */
   }
 
-  .logo {
+  .ad-logo {
     width: 150px; /* shrink logo */
   }
 
-  .logout-btn {
+  .ad-logout-btn {
     width: 45px;
     height: 45px;
   }
   
 }
-.password-modal {
+.ad-password-modal {
   position: fixed;
   top: 0;
   left: 0;
@@ -501,7 +508,7 @@
   z-index: 9999;
 }
 
-.password-box {
+.ad-password-box {
   background: white;
   padding: 30px;
   border-radius: 12px;
@@ -509,7 +516,7 @@
   text-align: center;
 }
 
-.password-box input {
+.ad-password-box input {
   width: 100%;
   padding: 12px;
   margin-top: 15px;
@@ -517,7 +524,7 @@
   border: 1px solid #ccc;
 }
 
-.password-box button {
+.ad-password-box button {
   margin-top: 15px;
   padding: 12px 20px;
   background: #d5b85a !important;
@@ -527,13 +534,13 @@
   cursor: pointer;
 }
 
-.error-text {
+.ad-error-text {
   color: red;
   margin-top: 10px;
 }
 
 
-.order-details-tab {
+.ad-order-details-tab {
   padding: 20px;
   grid-column: 2 / -1; /* span full width */
   width: 100%;
@@ -541,14 +548,14 @@
 
 
 
-.orders-list {
+.ad-orders-list {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
 /* Center & size order cards same as OrderHistory */
-.order-details-tab  {
+.ad-order-details-tab  {
   width: 760px;
   max-width: 100%;
   margin: 0 auto;
@@ -560,7 +567,7 @@
 }
 
 /* Thumbnail image identical to OrderHistory */
-.order-details-tab .thumb img {
+.ad-order-details-tab .ad-thumb img {
   width: 140px !important;
   height: 190px !important;
   object-fit: cover;
@@ -568,20 +575,20 @@
 }
 
 /* Ensure layout spacing matches */
-.order-details-tab .order-row {
+.ad-order-details-tab .ad-order-row {
   display: flex;
   gap: 16px;
 }
 
 /* Align badge same as OrderHistory */
-.order-details-tab .state-badge {
+.ad-order-details-tab .ad-state-badge {
   position: absolute;
   top: 10px;
   right: 10px;
 }
 
 /* Make grid layout match */
-.order-details-tab .grid-2 {
+.ad-order-details-tab .ad-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr !important;
   gap: 8px 18px !important;
@@ -589,31 +596,31 @@
 
 /* Responsive adjustments */
 @media (max-width: 1024px) {
-  .order-details-tab  {
+  .ad-order-details-tab  {
     width: 700px;
   }
 }
 
 @media (max-width: 700px) {
-  .order-details-tab  {
+  .ad-order-details-tab  {
     width: 100%;
   }
 
-  .order-details-tab .order-row {
+  .ad-order-details-tab .ad-order-row {
     flex-direction: column;
   }
 
-  .order-details-tab .thumb img {
+  .ad-order-details-tab .ad-thumb img {
     width: 100% !important;
     height: auto !important;
   }
 
-  .order-details-tab .grid-2 {
+  .ad-order-details-tab .ad-grid-2 {
     grid-template-columns: 1fr;
   }
 }
 /* Wraps the entire Order Details tab */
-.order-details-wrapper {
+.ad-order-details-wrapper {
   grid-column: span 3;        /* Stays aligned with main content */
   display: flex;
   flex-direction: column;
@@ -627,7 +634,7 @@
 }
 
 /* The title aligned to top at same horizontal level as sidebar */
-.order-details-wrapper .order-title {
+.ad-order-details-wrapper  {
   font-family: "Athleas", serif !important;
   font-size: 26px;
   font-weight: 600;
@@ -635,34 +642,43 @@
   padding-left: 5px;
   color: black !important;
 }
+.ad-order-title{
+  font-family: "Athleas", serif !important;
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0 0 15px 0;
+  padding-left: 5px;
+  color: #d5b85a !important;
+
+}
 
 /* Scroll area for only the cards */
-.order-list-scroll {
+.ad-order-list-scroll {
   flex: 1;
   overflow-y: auto;
   padding-right: 10px; /* so scrollbar doesn’t overlap cards */
 }
 
 /* Optional: smooth scroll feel */
-.order-list-scroll::-webkit-scrollbar {
+.ad-order-list-scroll::-webkit-scrollbar {
   width: 6px;
 }
 
-.order-list-scroll::-webkit-scrollbar-thumb {
+.ad-order-list-scroll::-webkit-scrollbar-thumb {
   background: #c7a24f;
   border-radius: 4px;
 }
-/* .order-card{
+/* .ad-order-card{
   margin: 3px;
 } */
 
 
 @media (max-width:768px) {
-  .dashboardContent{
+  .ad-dashboardContent{
     overflow-y: auto;
     overflow-x: auto;
   }
-  .calendar-grid {
+  .ad-calendar-grid {
     grid-template-columns: repeat(7, minmax(80px, 1fr)); /* Ensure minimum column width for each day */
     overflow-x: auto; /* Explicitly enable horizontal scrolling */
     -webkit-overflow-scrolling: touch; /* For smoother scrolling on iOS */
@@ -670,7 +686,7 @@
 }
 
 /* Calendar Styles */
-.calendar-controls {
+.ad-calendar-controls {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -681,7 +697,7 @@
   color: #d5b85a;
 }
 
-.calendar-controls button {
+.ad-calendar-controls button {
   background: #d5b85a;
   color: white !important;
   border: none;
@@ -691,7 +707,7 @@
   font-size: 16px;
 }
 
-.calendar-grid {
+.ad-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 5px;
@@ -703,7 +719,7 @@
 
 /* For screens between 768px and 1024px, display completely without scroll */
 @media (min-width: 768px) and (max-width: 1024px) {
-  .calendar-grid {
+  .ad-calendar-grid {
     overflow-x: visible;
     overflow-y: visible;
     min-width: auto;
@@ -711,14 +727,15 @@
   }
 }
 
-.calendar-day-label {
+.ad-calendar-day-label {
   text-align: center;
   font-weight: bold;
   color: #d5b85a;
+  font-size: 17px;
   padding: 10px 0;
 }
 
-.calendar-date-box {
+.ad-calendar-date-box {
   background: #f9f9f9;
   border: 1px solid #eee;
   border-radius: 8px;
@@ -732,37 +749,37 @@
   transition: background-color 0.2s ease;
 }
 
-.calendar-date-box:hover:not(.empty) {
+.ad-calendar-date-box:hover:not(.ad-empty) {
   background-color: #e0e0e0;
 }
 
-.calendar-date-box.empty {
+.ad-calendar-date-box.ad-empty {
   background: transparent;
   border: none;
   cursor: default;
 }
 
-.calendar-date-box .date-number {
+.ad-calendar-date-box .ad-date-number {
   font-size: 18px;
   font-weight: bold;
   color: #333;
 }
 
-.calendar-date-box .order-count {
+.ad-calendar-date-box .ad-order-count {
   font-size: 12px;
   color: #d5b85a;
   margin-top: 5px;
   font-weight: 600;
 }
 
-.calendar-date-box.today {
+.ad-calendar-date-box.ad-today {
   border: 2px solid #d5b85a;
   background-color: #fff8e1;
 }
 
 /* ---------- CLIENTS BOOK ---------- */
 
-.table-wrapper {
+.ad-table-wrapper {
   background: #fff;
   padding: 20px; /* Increased padding */
   border-radius: 16px;
@@ -772,7 +789,7 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); /* Added subtle shadow */
 }
 
-.clients-table {
+.ad-clients-table {
   width: 100%;
   min-width: 1200px; /* Ensure minimum width for horizontal scrolling */
   table-layout: auto; /* Allow columns to size based on content */
@@ -780,7 +797,7 @@
 }
 
 /* Headers */
-.clients-table th {
+.ad-clients-table th {
   background: #d5b85a; /* Gold background for headers */
   padding: 12px 15px; /* Adjusted padding */
   text-align: left;
@@ -792,10 +809,10 @@
 }
 
 /* Cells */
-.clients-table td {
+.ad-clients-table td {
   padding: 12px 15px; /* Adjusted padding */
   font-size: 14px; /* Slightly larger font size */
-  line-height: 1.5;
+  line-height: 1.ad-5;
   border-bottom: 1px solid #eee;
   white-space: nowrap; /* Ensure content stays on one line */
   overflow: hidden; /* Hide overflowing content */
@@ -804,53 +821,53 @@
 }
 
 /* Hover effect for rows */
-.clients-table tbody tr:hover {
+.ad-clients-table tbody tr:hover {
   background-color: #f9f9f9;
 }
 
 /* Column widths (adjusted to display complete values inline) */
-.clients-table th:nth-child(1),
-.clients-table td:nth-child(1) {
+.ad-clients-table th:nth-child(1),
+.ad-clients-table td:nth-child(1) {
   width: 20%; /* Name */
 }
 
-.clients-table th:nth-child(2),
-.clients-table td:nth-child(2) {
+.ad-clients-table th:nth-child(2),
+.ad-clients-table td:nth-child(2) {
   width: 35%; /* Email - increased width */
 }
 
-.clients-table th:nth-child(3),
-.clients-table td:nth-child(3) {
+.ad-clients-table th:nth-child(3),
+.ad-clients-table td:nth-child(3) {
   width: 20%; /* Phone */
 }
 
-.clients-table th:nth-child(4),
-.clients-table td:nth-child(4) {
+.ad-clients-table th:nth-child(4),
+.ad-clients-table td:nth-child(4) {
   width: 12%; /* Gender */
 }
 
-.clients-table th:nth-child(5),
-.clients-table td:nth-child(5) {
+.ad-clients-table th:nth-child(5),
+.ad-clients-table td:nth-child(5) {
   width: 13%; /* Date of Birth */
 }
 
 /* Empty text */
-.muted {
+.ad-muted {
   text-align: center;
   padding: 30px;
   color: #777;
   font-size: 14px;
 }
 
-/*css to movile view dashboard.........................................................................*/
+/*css to movile view dashboard*/
 
 /* ---------- MOBILE VIEW (max-width: 767px) ---------- */
 @media (max-width: 767px) {
-  .dashboard-wrapper {
+  .ad-dashboard-wrapper {
     padding: 20px; /* Adjust padding for smaller screens */
   }
 
-.top-header {
+.ad-top-header {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     align-items: center !important;
@@ -859,14 +876,14 @@
   }
 
   /* Logo */
-  .top-header .logo {
+  .ad-top-header .ad-logo {
     justify-self: start;
     margin-left: 12px;
     
   }
 
   /* Title */
-  .dashboard-title {
+  .ad-dashboard-title {
     justify-self: center;
     white-space: nowrap;
     font-size: 15px !important;
@@ -875,11 +892,11 @@
   }
 
   /* Logout / Hamburger */
-  .top-header .desktop-logout-btn {
+  .ad-top-header .ad-desktop-logout-btn {
     display: none; /* Hide desktop logout button on mobile */
   }
 
-  .hamburger-icon {
+  .ad-hamburger-icon {
     display: flex; /* Show hamburger icon */
     position: absolute; /* Position relative to top-header */
      /* left: 20px; */
@@ -890,7 +907,7 @@
   }
 
  
-.menu-item-logout {
+.ad-menu-item-logout {
   display: block;
   padding: 8px 12px;
   font-size: 15px;
@@ -899,13 +916,13 @@
 }
  
 
-  .grid-table {
+  .ad-grid-table {
     grid-template-columns: 1fr; /* Single column layout */
     grid-template-rows: auto; /* Auto rows */
     gap: 15px;
   }
 
-  .sidebar {
+  .ad-sidebar {
     position: fixed;
     top: 0;
     left: 0;
@@ -921,53 +938,53 @@
     grid-column: unset; /* Remove grid-column property */
   }
 
-  .sidebar.open {
+  .ad-sidebar.ad-open {
     transform: translateX(0); /* Slide in */
   }
 
-  .hello-box {
+  .ad-hello-box {
     margin: 0 10px; /* Adjust margin for mobile sidebar */
   }
 
-  .menu {
+  .ad-menu {
     margin-top: 10px;
   }
 
-  .menu-item {
+  .ad-menu-item {
     padding: 12px 20px;
   }
 
-  .menu-item.active::after {
+  .ad-menu-item.active::after {
     left: 20px;
   }
 
   /* Adjust main content to span full width */
-  .total-revenue,
-  .total-orders,
-  .total-clients,
-  .sales-target,
-  .active-orders,
-  .alerts-box,
-  .order-details-wrapper {
+  .ad-total-revenue,
+  .ad-total-orders,
+  .ad-total-clients,
+  .ad-sales-target,
+  .ad-active-orders,
+  .ad-alerts-box,
+  .ad-order-details-wrapper {
     grid-column: 1 / -1; /* Span full width */
     grid-row: unset; /* Remove specific grid-row assignments */
   }
 
-  .alerts-box {
+  .ad-alerts-box {
     height: auto; /* Adjust height for mobile */
   }
 
-  .add-btn, .back-btn {
+  .ad-add-btn, .ad-back-btn {
     bottom: 20px !important;
     left: 20px !important;
     transform: none;
   }
 
-  .add-btn {
+  .ad-add-btn {
     /* right: 20px !important; */
     left: auto !important;
   }
-  .view-btn {
+  .ad-view-btn {
   width: 60px !important; /* Reduced width */
   padding: 2px 5px !important;
   border-radius: 3px !important;
@@ -982,11 +999,11 @@
 
 /*////////////////////////////////////////////////////////////////*/
 
-.order-search-bar {
+.ad-order-search-bar {
   margin: 12px 0 18px;
 }
 
-.order-search-bar input {
+.ad-order-search-bar input {
   width: 100%;
   max-width: 420px;
   padding: 10px 14px;
@@ -996,11 +1013,11 @@
   outline: none;
 }
 
-.order-search-bar input:focus {
+.ad-order-search-bar input:focus {
   border-color: #b79b3d;
 }
 
-.order-card {
+.ad-order-card {
   background: linear-gradient(135deg, #fdfcf8 0%, #f9f7f0 100%);
   border: 2px solid #d5b85a7c;
   border-radius: 12px;
@@ -1011,7 +1028,7 @@
 }
 
 /* Top Header Row */
-.order-header {
+.ad-order-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1020,37 +1037,37 @@
   border-bottom: 1px solid #eee;
 }
 
-.header-info {
+.ad-header-info {
   display: flex;
   gap: 40px;
 }
 
-.header-item {
+.ad-header-item {
   display: flex;
   /* flex-direction: column; */
   align-items: center;
   gap: 8px;
 }
 
-.header-label {
+.ad-header-label {
   font-size: 12px;
   color: #666;
   font-weight: 500;
 }
 
-.header-value {
+.ad-header-value {
   font-size: 14px;
   color: #333;
   font-weight: 600;
 }
 
-.header-actions {
+.ad-header-actions {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.view-details-btn {
+.ad-view-details-btn {
   background: none;
   border: none;
   color: #666;
@@ -1060,11 +1077,11 @@
   padding: 0;
 }
 
-.view-details-btn:hover {
+.ad-view-details-btn:hover {
   color: #333;
 }
 
-.print-pdf-btn {
+.ad-print-pdf-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1078,26 +1095,26 @@
   transition: all 0.2s;
 }
 
-.print-pdf-btn:hover {
+.ad-print-pdf-btn:hover {
   background: #f5f5f5;
   border-color: #ccc;
 }
 
-.pdf-icon {
+.ad-pdf-icon {
   font-size: 14px;
 }
 
 /* Product Content Row */
-.order-content {
+.ad-order-content {
   display: flex;
   gap: 24px;
 }
 
-.product-thumb {
+.ad-product-thumb {
   flex-shrink: 0;
 }
 
-.product-thumb img {
+.ad-product-thumb img {
   width: 120px;
   height: 150px;
   object-fit: cover;
@@ -1105,7 +1122,7 @@
   border: 1px solid #eee;
 }
 
-.product-details {
+.ad-product-details {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1113,102 +1130,102 @@
 }
 
 /* Product Name Row with Status */
-.product-name-row {
+.ad-product-name-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
 
-.product-name {
+.ad-product-name {
   display: flex;
   align-items: center;
   /* flex-direction: column; */
   gap: 8px;
 }
 
-.product-name .label {
+.ad-product-name .ad-label {
   font-size: 13px;
   color: #c9a34a;
   font-weight: 600;
 }
 
 
-.product-name .value {
+.ad-product-name .ad-value {
   font-size: 14px;
   color: #333;
   font-weight: 500;
 }
 
 /* Status Badge */
-.status-badge {
+.ad-status-badge {
   padding: 6px 20px;
   border-radius: 20px;
   font-size: 13px;
   font-weight: 600;
 }
 
-.status-badge.active {
+.ad-status-badge.active {
   background: #4caf50;
   color: white;
 }
 
-.status-badge.complete {
+.ad-status-badge.complete {
   background: #2196f3;
   color: white;
 }
 
 /* Details Grid */
-.details-grid {
+.ad-details-grid {
   display: flex;
   gap: 48px;
   flex-wrap: wrap;
 }
 
-.detail-item {
+.ad-detail-item {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.detail-item .label {
+.ad-detail-item .ad-label {
   font-size: 13px;
   color: #c9a34a;
   font-weight: 600;
 }
 
-.detail-item .value {
+.ad-detail-item .ad-value {
   font-size: 12px;
   color: #333;
   font-weight: 500;
 }
 
 /* Sales Associate Row */
-.sa-row {
+.ad-sa-row {
   display: flex;
   gap: 8px;
   margin-top: 4px;
 }
 
-.sa-row .label {
+.ad-sa-row .ad-label {
   font-size: 13px;
   color: #c9a34a;
   font-weight: 600;
 }
 
-.sa-row .value {
+.ad-sa-row .ad-value {
   font-size: 14px;
   color: #333;
   font-weight: 500;
 }
 
-.order-label{
+.ad-order-label{
   color: #d5b85a !important;
   font-size: 14px;
   font-weight: 600;
 }
 
 /* Decorative Line */
-.decorative-line {
+.ad-decorative-line {
   position: absolute;
   right: 80px;
   top: 50%;
@@ -1221,31 +1238,31 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-  .order-header {
+  .ad-order-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
   }
 
-  .header-info {
+  .ad-header-info {
     flex-wrap: wrap;
     gap: 20px;
   }
 
-  .order-content {
+  .ad-order-content {
     flex-direction: column;
   }
 
-  .product-thumb img {
+  .ad-product-thumb img {
     width: 100px;
     height: 130px;
   }
 
-  .details-grid {
+  .ad-details-grid {
     gap: 24px;
   }
 
-  .decorative-line {
+  .ad-decorative-line {
     display: none;
   }
 }

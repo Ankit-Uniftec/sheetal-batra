@@ -383,17 +383,19 @@
 
 /* ------- Tablet view ------- */
 @media (min-width: 601px) and (max-width: 1024px) {
-  .screen6 {
-    padding: 0; /* Ensure no padding on the screen itself */
-  }
-  .screen6-container {
-    padding: 20px; /* Apply padding directly to the container for tablet view */
-  }
-  .screen6-header {
-    padding: 20px; /* Apply padding to the header in tablet view */
-  }
+
   .row3 {
-    grid-template-columns: repeat(2, 1fr); /* Change to 2 columns for better spacing */
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .payment-section .row3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .field {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }
 
