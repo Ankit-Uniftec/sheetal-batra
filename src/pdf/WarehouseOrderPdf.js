@@ -167,7 +167,7 @@ const warehouseStyles = StyleSheet.create({
   colorRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    // gap: 4,
   },
   colorSwatch: {
     width: 24,
@@ -219,7 +219,7 @@ const warehouseStyles = StyleSheet.create({
   bottomBarcodes: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: "auto",
+    // marginTop: "auto",
     paddingTop: 30,
   },
   barcodeItem: {
@@ -265,15 +265,15 @@ const ProductItem = ({ item }) => (
       <Image src={item.image_url} style={warehouseStyles.productImage} />
     )}
     <View style={warehouseStyles.productDetails}>
-      <Text style={warehouseStyles.productName}>{item.product_name}</Text>
+      <Text style={warehouseStyles.productName}>{item?.product_name || "—"}</Text>
 
       <View style={warehouseStyles.productGrid}>
         {/* Top with color swatch */}
         <View style={warehouseStyles.productField}>
           <Text style={warehouseStyles.fieldLabel}>Top</Text>
           <View style={warehouseStyles.colorRow}>
-            <Text style={warehouseStyles.fieldValue}>{item.top || "—"}</Text>
-            {item.top_color && (
+            <Text style={warehouseStyles.fieldValue}>{item?.top || "—"}</Text>
+            {item?.top_color && (
               <View
                 style={[
                   warehouseStyles.colorSwatch,
@@ -288,8 +288,8 @@ const ProductItem = ({ item }) => (
         <View style={warehouseStyles.productField}>
           <Text style={warehouseStyles.fieldLabel}>Bottom</Text>
           <View style={warehouseStyles.colorRow}>
-            <Text style={warehouseStyles.fieldValue}>{item.bottom || "—"}</Text>
-            {item.bottom_color && (
+            <Text style={warehouseStyles.fieldValue}>{item?.bottom || "—"}</Text>
+            {item?.bottom_color && (
               <View
                 style={[
                   warehouseStyles.colorSwatch,
@@ -303,7 +303,7 @@ const ProductItem = ({ item }) => (
         {/* Size */}
         <View style={warehouseStyles.productField}>
           <Text style={warehouseStyles.fieldLabel}>Size</Text>
-          <Text style={warehouseStyles.fieldValue}>{item.size || "—"}</Text>
+          <Text style={warehouseStyles.fieldValue}>{item?.size || "—"}</Text>
         </View>
       </View>
 
@@ -311,14 +311,14 @@ const ProductItem = ({ item }) => (
         {/* Color */}
         <View style={warehouseStyles.productField}>
           <Text style={warehouseStyles.fieldLabel}>Color</Text>
-          <Text style={warehouseStyles.fieldValue}>{getColorName(item.color)}</Text>
+          <Text style={warehouseStyles.fieldValue}>{getColorName(item?.color)}</Text>
         </View>
 
         {/* Additionals/Extras */}
         <View style={warehouseStyles.productField}>
           <Text style={warehouseStyles.fieldLabel}>Additionals</Text>
           <Text style={warehouseStyles.fieldValue}>
-            {item.extras?.map((e) => e.name).join(", ") || "—"}
+            {item?.extras?.map((e) => e?.name).filter(Boolean).join(", ") || "—"}
           </Text>
         </View>
       </View>
@@ -338,6 +338,11 @@ const BarcodePlaceholder = ({ label }) => (
 
 // Main Warehouse PDF Document
 const WarehouseOrderPdf = ({ order, logoUrl }) => {
+  if (!order) {
+    console.error("WarehouseOrderPdf received an undefined or null order prop.");
+    return <Document><Page size="A4" style={styles.page}><Text>Error: Order data is missing.</Text></Page></Document>;
+  }
+
   const items = order.items || [];
 
   return (

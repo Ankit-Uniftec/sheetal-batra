@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState,useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -25,7 +25,7 @@ function ColorDotDisplay({ colorObject }) {
     displayColorHex = colorObject.startsWith("#") ? colorObject : "gray"; // Fallback to gray for unknown named colors
   } else if (typeof colorObject === "object" && colorObject !== null) {
     displayColorName = colorObject.name || "";
-    displayColorHex = colorObject.hex || "#000000";
+    displayColorHex = colorObject.hex || "";
   } else {
     // Fallback for any other unexpected type, prevent rendering the object
     return <span>Invalid Color</span>;
@@ -109,6 +109,19 @@ export default function ReviewDetail() {
     netPayable,
     remaining,
   };
+useEffect(() => {
+  (async () => {
+    try {
+      await pdf(
+        <CustomerOrderPdf order={{ items: [] }} logoUrl={null} />
+      ).toBlob();
+
+      console.log("✅ PDF sanity test passed");
+    } catch (e) {
+      console.error("❌ PDF sanity test failed", e);
+    }
+  })();
+}, []);
 
  // ===============================
   // PREVIEW/DOWNLOAD PDFs (FOR TESTING)
@@ -173,6 +186,10 @@ export default function ReviewDetail() {
         id: order.id || "PREVIEW-" + Date.now(),
         created_at: order.created_at || new Date().toISOString(),
       };
+
+      if (!previewOrder) {
+        throw new Error("Order data is undefined for PDF preview.");
+      }
 
       // Generate both PDFs
       const [customerBlob, warehouseBlob] = await Promise.all([
@@ -289,6 +306,15 @@ export default function ReviewDetail() {
         .single();
 
       if (error) throw error;
+      if (!data) {
+        throw new Error("Order data not returned after saving.");
+      }
+
+      // Ensure 'items' array exists on the data object for PDF generation
+      const orderDataForPdf = {
+        ...data,
+        items: data.items || [], // Ensure items is an array, even if empty
+      };
 
       // ===============================
       // GENERATE BOTH PDFs
@@ -297,12 +323,12 @@ export default function ReviewDetail() {
 //  handlePreviewBothPdfs();
      // Generate Customer PDF
       const customerPdfBlob = await pdf(
-        <CustomerOrderPdf order={data} logoUrl={logoUrl} />
+        <CustomerOrderPdf order={orderDataForPdf} logoUrl={logoUrl} />
       ).toBlob();
 
       // Generate Warehouse PDF
       const warehousePdfBlob = await pdf(
-        <WarehouseOrderPdf order={data} logoUrl={logoUrl} />
+        <WarehouseOrderPdf order={orderDataForPdf} logoUrl={logoUrl} />
       ).toBlob();
       // ===============================
       // UPLOAD PDFs TO STORAGE

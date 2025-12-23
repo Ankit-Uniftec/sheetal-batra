@@ -95,8 +95,8 @@ const ProductItem = ({ item, showPricing = true }) => (
     )}
     <View style={styles.productDetails}>
       <View style={styles.rowSpaceBetween}>
-        <Text style={styles.productName}>{item.product_name}</Text>
-        {item.delivery_date && (
+        <Text style={styles.productName}>{item?.product_name || "—"}</Text>
+        {item?.delivery_date && (
           <View>
             <Text style={styles.label}>Estimated Delivery Date:</Text>
             <Text style={styles.deliveryDateHighlight}>
@@ -109,16 +109,16 @@ const ProductItem = ({ item, showPricing = true }) => (
       <View style={styles.productGrid}>
         <View style={styles.productField}>
           <Text style={styles.label}>Top</Text>
-          <Text style={styles.value}>{item.top || "—"}</Text>
+          <Text style={styles.value}>{item?.top || "—"}</Text>
         </View>
         <View style={styles.productField}>
           <Text style={styles.label}>Bottom</Text>
-          <Text style={styles.value}>{item.bottom || "—"}</Text>
+          <Text style={styles.value}>{item?.bottom || "—"}</Text>
         </View>
         <View style={styles.productField}>
           <Text style={styles.label}>Additionals</Text>
           <Text style={styles.value}>
-            {item.extras?.map((e) => e.name).join(", ") || "—"}
+            {item?.extras?.map((e) => e?.name).filter(Boolean).join(", ") || "—"}
           </Text>
         </View>
         {/* <View style={styles.productField}>
@@ -135,7 +135,7 @@ const ProductItem = ({ item, showPricing = true }) => (
         </View> */}
         <View style={styles.productField}>
           <Text style={styles.label}>Size</Text>
-          <Text style={styles.value}>{item.size || "—"}</Text>
+          <Text style={styles.value}>{item?.size || "—"}</Text>
         </View>
       </View>
 
@@ -143,16 +143,16 @@ const ProductItem = ({ item, showPricing = true }) => (
         <View style={styles.pricingRow}>
           <View style={styles.pricingField}>
             <Text style={styles.label}>Product Value</Text>
-            <Text style={styles.value}>{formatINR(item.price)}</Text>
+            <Text style={styles.value}>{formatINR(item?.price)}</Text>
           </View>
           <View style={styles.pricingField}>
             <Text style={styles.label}>Discount Value</Text>
-            <Text style={styles.value}>{formatINR(item.discount || 0)}</Text>
+            <Text style={styles.value}>{formatINR(item?.discount || 0)}</Text>
           </View>
           <View style={styles.pricingField}>
             <Text style={styles.label}>Final Value</Text>
             <Text style={styles.value}>
-              {formatINR((item.price || 0) - (item.discount || 0))}
+              {formatINR((item?.price || 0) - (item?.discount || 0))}
             </Text>
           </View>
         </View>
@@ -175,6 +175,11 @@ const PaymentRow = ({ label, value, isTotal = false, prefix = "+" }) => (
 
 // Main Customer PDF Document
 const CustomerOrderPdf = ({ order, logoUrl }) => {
+  if (!order) {
+    console.error("CustomerOrderPdf received an undefined or null order prop.");
+    return <Document><Page size="A4" style={styles.page}><Text>Error: Order data is missing.</Text></Page></Document>;
+  }
+
   const items = order.items || [];
   const grandTotal = Number(order.grand_total) || 0;
   const discountAmount = Number(order.discount_amount) || 0;
