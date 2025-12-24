@@ -5,8 +5,6 @@ import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 
-import formatDate from "../utils/formatDate";
-
 const WarehouseDashboard = () => {
   const navigate = useNavigate();
 

@@ -378,8 +378,20 @@ export default function ReviewDetail() {
       // ===============================
       // DONE
       // ===============================
-      alert("✅ Order saved & PDFs uploaded & URLs stored!");
-      handleLogout();
+      // alert("✅ Order saved & PDFs uploaded & URLs stored!");
+      // handleLogout();
+      // ===============================
+      // NAVIGATE TO ORDER PLACED PAGE
+      // ===============================
+      navigate("/order-placed", {
+        state: {
+          order: {
+            ...updatedOrder,
+            items: orderDataForPdf.items, // Include items for display
+          },
+        },
+        replace: true, // Prevent going back to review page
+      });
     }
 
     //   // ===============================

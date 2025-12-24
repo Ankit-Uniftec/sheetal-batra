@@ -1,0 +1,207 @@
+/* OrderPlaced.css */
+
+.order-placed-bg {
+  background-image: url("../../images/Screen1bg.png");
+  background-repeat: repeat;
+  background-size: cover;
+  background-position: center;
+  min-height: 100vh;
+  width: 100%;
+  padding: 40px 20px;
+  font-family: 'Jost', sans-serif;
+  position: relative;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Header */
+.op-header {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.op-logo {
+  width: 150px;
+  cursor: pointer;
+}
+
+/* Main Card */
+.order-placed-card {
+  max-width: 500px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  padding: 50px 40px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  text-align: center;
+}
+
+/* Success Icon */
+.success-icon-container {
+  margin-bottom: 25px;
+}
+
+.success-icon {
+  width: 90px;
+  height: 90px;
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  animation: scaleIn 0.5s ease-out;
+}
+
+.success-icon svg {
+  width: 45px;
+  height: 45px;
+  color: white;
+  animation: checkmark 0.5s ease-out 0.3s forwards;
+  stroke-dasharray: 50;
+  stroke-dashoffset: 50;
+}
+
+@keyframes scaleIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes checkmark {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Success Text */
+.success-title {
+  font-family: "Athleas", serif;
+  font-size: 28px;
+  color: #d5b85a;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.success-subtitle {
+  font-size: 15px;
+  color: #666;
+  margin-bottom: 30px;
+  line-height: 1.6;
+}
+
+/* Order ID Box */
+.order-id-box {
+  background: linear-gradient(135deg, #f8f4e8, #fff9e6);
+  border: 2px solid #d5b85a;
+  border-radius: 12px;
+  padding: 20px 30px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 35px;
+}
+
+.order-id-label {
+  font-size: 12px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+}
+
+.order-id-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #333;
+  font-family: monospace;
+}
+
+/* Button */
+.op-btn {
+  padding: 16px 40px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.op-btn-primary {
+  background: linear-gradient(135deg, #d5b85a, #c9a84a);
+  color: white;
+}
+
+.op-btn-primary:hover {
+  background: linear-gradient(135deg, #c9a84a, #b8993f);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(213, 184, 90, 0.4);
+}
+
+/* Confetti Animation */
+.confetti-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.confetti {
+  position: absolute;
+  top: -10px;
+  width: 10px;
+  height: 10px;
+  opacity: 0.8;
+  animation: confetti-fall 3s linear forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .order-placed-bg {
+    padding: 20px 15px;
+  }
+
+  .order-placed-card {
+    padding: 40px 25px;
+  }
+
+  .success-title {
+    font-size: 24px;
+  }
+
+  .order-id-value {
+    font-size: 22px;
+  }
+
+  .op-btn {
+    width: 100%;
+    padding: 14px 30px;
+  }
+}

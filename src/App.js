@@ -10,6 +10,7 @@ import AssociateDashboard from "./screens/AssociateDashboard";
 import WarehouseDashboard from "./screens/WarehouseDashboard";
 import OrderHistory from "./screens/OrderHistory";
 import {  Navigate } from "react-router-dom";
+import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced";
 
 
 function App() {
@@ -27,7 +28,7 @@ function App() {
         <Route path="/AssociateDashboard" element={<AssociateDashboard />} />
         <Route path="/warehouseDashboard" element={<WarehouseDashboard />} />
         <Route path="/orderHistory" element={<OrderHistory />} />
-
+        <Route path="/order-placed" element={<OrderPlaced/>}/>
       </Routes>
     </BrowserRouter>
   );
