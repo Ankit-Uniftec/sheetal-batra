@@ -451,6 +451,12 @@ export default function ReviewDetail() {
 
   return (
     <div className="screen7">
+      {loading && (
+  <div className="global-loader">
+    <img src={Logo} alt="Loading" className="loader-logo" />
+    <p>Saving order, please wait…</p>
+  </div>
+)}
       {/* HEADER */}
       <div className="screen6-header">
 

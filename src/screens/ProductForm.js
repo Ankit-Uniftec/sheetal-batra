@@ -729,7 +729,8 @@ export default function ProductForm() {
       },
     ]);
     setSelectedExtra("");
-    setSelectedExtraColor("");
+    setSelectedExtraColor({ name: "", hex: "" });
+
   };
 
   const handleRemoveExtra = (index) => {
@@ -1182,12 +1183,19 @@ export default function ProductForm() {
       value: c.name, // ← Returns just the name string
       hex: c.hex,
     }));
+  // const toExtraOptions = (extras = []) =>
+  //   extras.map((e) => ({
+  //     label: `${e.name} (₹${formatIndianNumber(e.price)})`,
+  //     value: { name: e.name, hex: e.hex },
+  //     price: e.price, // Also store price in the option object
+  //   }));
   const toExtraOptions = (extras = []) =>
-    extras.map((e) => ({
-      label: `${e.name} (₹${formatIndianNumber(e.price)})`,
-      value: { name: e.name, hex: e.hex },
-      price: e.price, // Also store price in the option object
-    }));
+  extras.map((e) => ({
+    label: `${e.name} (₹${formatIndianNumber(e.price)})`,
+    value: e.name,           // ✅ STRING ONLY
+    price: e.price,
+  }));
+
   const categoryKey = CATEGORY_KEY_MAP[activeCategory];
 
   return (
@@ -1583,20 +1591,16 @@ export default function ProductForm() {
             </div>
 
             {/* Display selected extras */}
-            {selectedExtrasWithColors.length > 0 && (
-              <div className="selected-extras-list">
-                <h4>Added Extras:</h4>
-                {selectedExtrasWithColors.map((extra, index) => (
-                  <div key={index} className="selected-extra-item">
-                    <span>
-                      {extra.name} (₹{formatIndianNumber(extra.price)}){" "}
-                      {extra.color && `(${extra.color})`}
-                    </span>
-                    <button onClick={() => handleRemoveExtra(index)}>x</button>
-                  </div>
-                ))}
+            {selectedExtrasWithColors.map((extra, index) => (
+              <div key={index} className="selected-extra-item">
+                <span>
+                  {extra.name} (₹{formatIndianNumber(extra.price)})
+                  {extra.color?.name && ` (${extra.color.name})`}
+                </span>
+                <button onClick={() => handleRemoveExtra(index)}>x</button>
               </div>
-            )}
+            ))}
+
 
             {/* TOP / BOTTOM COLORS */}
 
