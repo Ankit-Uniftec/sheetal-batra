@@ -693,7 +693,7 @@ export default function ProductForm() {
 
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("Kurta");
+  const [activeCategory, setActiveCategory] = useState("Choga");
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
@@ -784,17 +784,17 @@ export default function ProductForm() {
     fetchColors();
   }, []);
 
-  //........................................
-  // Reset Top Color when Top changes
-  useEffect(() => {
-    setSelectedTopColor("");
-  }, [selectedTop]);
+  //...........................................................................................................................
+  // // Reset Top Color when Top changes
+  // useEffect(() => {
+  //   setSelectedTopColor("");
+  // }, [selectedTop]);
 
-  // Reset Bottom Color when Bottom changes
-  useEffect(() => {
-    setSelectedBottomColor("");
-  }, [selectedBottom]);
-
+  // // Reset Bottom Color when Bottom changes
+  // useEffect(() => {
+  //   setSelectedBottomColor("");
+  // }, [selectedBottom]);
+//-----------------------------------------------------------------------------------------------------------------------------
   //-----------------------------------------------
   // automatic size chart value filled
   useEffect(() => {
@@ -900,17 +900,43 @@ export default function ProductForm() {
       setSelectedSize(newSelectedSize);
     }
 
-    // Reset other related states
-    setSelectedColor({ name: "", hex: "" });
-    setSelectedTop("");
-    setSelectedBottom("");
-    setSelectedTopColor({ name: "", hex: "" });
-    setSelectedBottomColor({ name: "", hex: "" });
-    setSelectedExtra("");
-    setSelectedExtraColor({ name: "", hex: "" });
+    const topOptions = selectedProduct.top_options || [];
+  const bottomOptions = selectedProduct.bottom_options || [];
+
+  const defaultTop = selectedProduct.default_top || topOptions[0] || "";
+  const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
+
+  const defaultColorName = selectedProduct.default_color || "";
+  const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
+  
+  setSelectedTop(defaultTop);
+  setSelectedBottom(defaultBottom);
+  // Use default_color for both top and bottom colors (or you can add separate columns later)
+  setSelectedTopColor(defaultTop ? defaultColor : { name: "", hex: "" });
+  setSelectedBottomColor(defaultBottom ? defaultColor : { name: "", hex: "" });
+  // setSelectedColor(selectedProduct.defaultColor);
+
+   // Auto-populate default extra if exists
+  if (selectedProduct.default_extra) {
+    const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
+    if (extraDetails) {
+      setSelectedExtrasWithColors([{
+        name: selectedProduct.default_extra,
+        color: defaultColor,
+        price: extraDetails.price || 0,
+      }]);
+    } else {
+      setSelectedExtrasWithColors([]);
+    }
+  } else {
     setSelectedExtrasWithColors([]);
-    setQuantity(1);
-    setMeasurements({});
+  }
+
+    // Reset other states
+  setSelectedExtra("");
+  setSelectedExtraColor({ name: "", hex: "" });
+  setQuantity(1);
+  setMeasurements({});
   }, [selectedProduct, isKidsProduct]);
 
   // ADD PRODUCT
@@ -1256,9 +1282,10 @@ export default function ProductForm() {
                             <SearchableSelect
                               options={toColorOptions(colors)}
                               value={item.top_color?.name || ""}
-                              onChange={(colorObj) =>
-                                updateItem(item._id, { top_color: colorObj })
-                              }
+                              onChange={(colorName) => {
+                                const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
+                                updateItem(item._id, { top_color: colorObj });
+                              }}
                               placeholder="Select Top Color"
                             />
                           </div>
@@ -1283,9 +1310,10 @@ export default function ProductForm() {
                             <SearchableSelect
                               options={toColorOptions(colors)}
                               value={item.bottom_color?.name || ""}
-                              onChange={(colorObj) =>
-                                updateItem(item._id, { bottom_color: colorObj })
-                              }
+                              onChange={(colorName) => {
+                                const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
+                                updateItem(item._id, { bottom_color: colorObj });
+                              }}
                               placeholder="Select Bottom Color"
                             />
                           </div>
@@ -1315,12 +1343,11 @@ export default function ProductForm() {
                                   <SearchableSelect
                                     options={toColorOptions(colors)}
                                     value={extraItem.color?.name || ""}
-                                    onChange={(colorObj) => {
+                                    onChange={(colorName) => {
+                                      const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
                                       const newExtras = [...item.extras];
                                       newExtras[idx].color = colorObj;
-                                      updateItem(item._id, {
-                                        extras: newExtras,
-                                      });
+                                      updateItem(item._id, { extras: newExtras });
                                     }}
                                     placeholder="Select Extra Color"
                                   />
@@ -1485,7 +1512,10 @@ export default function ProductForm() {
                   <SearchableSelect
                     options={toColorOptions(colors)}
                     value={selectedTopColor.name} // Display name, but onChange gets object
-                    onChange={(colorObj) => setSelectedTopColor(colorObj)}
+                   onChange={(colorName)=>{
+                      const colorObj = colors.find(c => c.name === colorName) || {name: "", hex: ""};
+                      setSelectedTopColor(colorObj);
+                    }}
                     placeholder="Select Top Color"
                   />
                 </div>
@@ -1505,7 +1535,10 @@ export default function ProductForm() {
                   <SearchableSelect
                     options={toColorOptions(colors)}
                     value={selectedBottomColor.name} // Display name, but onChange gets object
-                    onChange={(colorObj) => setSelectedBottomColor(colorObj)}
+                   onChange={(colorName)=>{
+                      const colorObj = colors.find(c => c.name === colorName) || {name: "", hex: ""};
+                      setSelectedBottomColor(colorObj);
+                    }}
                     placeholder="Select Bottom Color"
                   />
                 </div>
@@ -1525,7 +1558,10 @@ export default function ProductForm() {
                   <SearchableSelect
                     options={toColorOptions(colors)}
                     value={selectedExtraColor.name} // Display name, but onChange gets object
-                    onChange={(colorObj) => setSelectedExtraColor(colorObj)}
+                   onChange={(colorName) => {
+                      const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
+                      setSelectedExtraColor(colorObj);  // ✅ Stores {name, hex}
+                    }}
                     placeholder="Select Extra Color"
                   />
                 </div>

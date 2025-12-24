@@ -539,7 +539,8 @@ export default function OrderDetails() {
         </div>
 
         {/* PAYMENT DETAILS */}
-        <div className="section-box">
+        {/* <div className="section-box"> */}
+         <div className="section-box payment-section">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3>Payment Details</h3>
             <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white !important' }}>Collector Code</button>

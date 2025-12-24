@@ -143,7 +143,7 @@ a{
   z-index: 1000;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 768px) {
   .back-btn {
     bottom: 20px;
     left: 20px;

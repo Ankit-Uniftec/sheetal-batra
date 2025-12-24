@@ -1,4 +1,4 @@
-import React, { useMemo, useState,useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -109,28 +109,28 @@ export default function ReviewDetail() {
     netPayable,
     remaining,
   };
-useEffect(() => {
-  (async () => {
-    try {
-      await pdf(
-        <CustomerOrderPdf order={{ items: [] }} logoUrl={null} />
-      ).toBlob();
+  useEffect(() => {
+    (async () => {
+      try {
+        await pdf(
+          <CustomerOrderPdf order={{ items: [] }} logoUrl={null} />
+        ).toBlob();
 
-      console.log("✅ PDF sanity test passed");
-    } catch (e) {
-      console.error("❌ PDF sanity test failed", e);
-    }
-  })();
-}, []);
+        console.log("✅ PDF sanity test passed");
+      } catch (e) {
+        console.error("❌ PDF sanity test failed", e);
+      }
+    })();
+  }, []);
 
- // ===============================
+  // ===============================
   // PREVIEW/DOWNLOAD PDFs (FOR TESTING)
   // ===============================
   const handlePreviewCustomerPdf = async () => {
     try {
       setPreviewLoading(true);
       const logoUrl = new URL(Logo, window.location.origin).href;
-      
+
       // Use current order data for preview
       const previewOrder = {
         ...order,
@@ -320,8 +320,8 @@ useEffect(() => {
       // GENERATE BOTH PDFs
       // ===============================
       const logoUrl = new URL(Logo, window.location.origin).href;
- handlePreviewBothPdfs();
-     // Generate Customer PDF
+      handlePreviewBothPdfs();
+      // Generate Customer PDF
       const customerPdfBlob = await pdf(
         <CustomerOrderPdf order={orderDataForPdf} logoUrl={logoUrl} />
       ).toBlob();
@@ -358,14 +358,56 @@ useEffect(() => {
       ];
 
       await Promise.all(uploads);
+      // ===============================
+      // GET PUBLIC PDF URLS
+      // ===============================
+      const { data: customerUrlData } = supabase.storage
+        .from("invoices")
+        .getPublicUrl(`orders/${data.id}_customer.pdf`);
 
+      const { data: warehouseUrlData } = supabase.storage
+        .from("invoices")
+        .getPublicUrl(`orders/${data.id}_warehouse.pdf`);
+
+      const customer_url = customerUrlData?.publicUrl || null;
+      const warehouse_url = warehouseUrlData?.publicUrl || null;
+
+
+      // ===============================
+      // UPDATE ORDER WITH PDF URLS
+      // ===============================
+      const { data: updatedOrder, error: updateError } = await supabase
+        .from("orders")
+        .update({
+          customer_url,
+          warehouse_url,
+        })
+        .eq("id", data.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error("UPDATE FAILED:", updateError);
+        throw updateError;
+      }
+      if (!updatedOrder) {
+        throw new Error("Order update blocked (RLS?)");
+      }
       // ===============================
       // DONE
       // ===============================
-      alert("✅ Order saved & both PDFs generated successfully!");
-      // navigate("/orderHistory");
+      alert("✅ Order saved & PDFs uploaded & URLs stored!");
       handleLogout();
-    } catch (e) {
+    }
+
+    //   // ===============================
+    //   // DONE
+    //   // ===============================
+    //   alert("✅ Order saved & both PDFs generated successfully!");
+    //   // navigate("/orderHistory");
+    //   handleLogout();
+    // } 
+    catch (e) {
       console.error("❌ Order save failed:", e);
       alert(e.message || "Failed to save order");
     }
@@ -617,7 +659,7 @@ useEffect(() => {
             </div>
 
           </div>
-          {pricing.discountPercent>0 && (
+          {pricing.discountPercent > 0 && (
             <div className="row3">
 
 
