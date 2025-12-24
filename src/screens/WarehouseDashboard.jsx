@@ -5,6 +5,8 @@ import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 
+import formatDate from "../utils/formatDate";
+
 const WarehouseDashboard = () => {
   const navigate = useNavigate();
 
@@ -169,7 +171,9 @@ const WarehouseDashboard = () => {
                         <div style={{ display: "flex", justifyContent: 'space-between', alignItems:'center' }}>
                           <h3 className="wd-dropdown-title">Product Details</h3>
                           <div>
-                          <button className="wd-pdf-Btn">Generate PDF</button>
+                            
+                            <a href={order.warehouse_url} target="new">
+                          <button className="wd-pdf-Btn">Generate PDF</button></a>
                           </div>
                         </div>
                         <div className="wd-dropdown-content">
@@ -193,6 +197,7 @@ const WarehouseDashboard = () => {
 
 
                           <div className="wd-dropdown-info">
+                             <p><strong className="wd-label">Order Id:</strong> {order.id}</p>
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
                             {/* <p><strong>Color:</strong> {firstItem.color.name}</p> */}
                             <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>

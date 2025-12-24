@@ -276,6 +276,7 @@
   border-radius: 12px;
   border:none;
   font-weight: bold;
+  cursor: pointer;
 }
 
 
@@ -565,5 +566,4 @@
     gap: 4px 12px;
   }
 }
-
 

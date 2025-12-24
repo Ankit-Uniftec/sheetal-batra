@@ -274,6 +274,7 @@ export default function Dashboard() {
               onChange={(e) => setEnteredPassword(e.target.value)}
             />
             {passwordError && <p className="ad-error-text">{passwordError}</p>}
+            {passwordError && <p className="ad-error-text">{passwordError}</p>}
             <button onClick={verifyPassword}>Verify</button>
           </div>
         </div>
@@ -379,7 +380,7 @@ export default function Dashboard() {
               </div>
 
               <div className="ad-cell ad-total-orders">
-                <StatCard title="Total Orders" className="ad-gold-text" value={formatIndianNumber(totalOrders)} />
+                <StatCard title="Total Orders" className="gold-text" value={formatIndianNumber(totalOrders)} />
               </div>
 
               <div className="ad-cell ad-total-clients">
@@ -397,12 +398,15 @@ export default function Dashboard() {
                   </div>
 
                   <div className="ad-sales-scale">
-                    <span>₹{formatIndianNumber(500000)}</span>
+                    <span>₹{formatIndianNumber(totalRevenue)}</span>
                     <span>₹{formatIndianNumber(800000)}</span>
                   </div>
 
                   <div className="ad-progress-bar">
-                    <div className="ad-progress-fill"></div>
+                    <div
+                      className="ad-progress-fill"
+                      style={{ width: `${(totalRevenue / 800000) * 100}%`, height: '10px', background: ' #d5b85a', borderRadius: '20px' }}
+                    ></div>
                   </div>
                 </div>
               </div>
@@ -415,7 +419,7 @@ export default function Dashboard() {
 
                   </div>
 
-                  <div className="ad-cardbox" >
+                  <div className="cardbox" >
                     {activeOrders.length === 0 ? (
                       <p>No active orders</p>
                     ) : (
@@ -450,7 +454,7 @@ export default function Dashboard() {
               <div className="ad-order-search-bar">
                 <input
                   type="text"
-                  placeholder="Search by Order ID, Product Name or Client Name"
+                  placeholder="Search by Order ID, Product Name or Client Name or delivery date"
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
                 />
@@ -487,8 +491,8 @@ export default function Dashboard() {
                           {/* <button className="ad-view-details-btn" onClick={() => handleViewDetails(order)}>
                             View order details
                           </button> */}
-                          {/* <button className="ad-print-pdf-btn" onClick={() => handlePrintPdf(order)}>
-                            <span className="ad-pdf-icon">📄</span> Print PDF
+                          {/* <button className="print-pdf-btn" onClick={() => handlePrintPdf(order)}>
+                            <span className="pdf-icon">📄</span> Print PDF
                           </button> */}
                         </div>
                       </div>
@@ -734,7 +738,7 @@ export default function Dashboard() {
                         <tr key={i}>
                           <td data-label="Name">{c.name}</td>
                           <td data-label="Email">{c.email}</td>
-                          <td data-label="Phone">{formatPhoneNumber(c.phone)}</td>
+                          <td data-label="Phone">{c.phone}</td>
                           <td data-label="Gender">{c.gender}</td>
                           <td data-label="Date of Birth">{formatDate(c.dob)}</td>
                         </tr>

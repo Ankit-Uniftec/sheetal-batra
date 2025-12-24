@@ -49,15 +49,16 @@ export function SearchableSelect({
   }, [normalized, query]);
 
   useEffect(() => {
-    // When the external value changes, update the internal query to reflect it.
-    // This handles cases where the parent component clears the value or sets a new one.
-    if (value === null || value === undefined || value === "") {
+  // Sync query from selected value ONLY when dropdown is closed
+  if (!open) {
+    if (!value) {
       setQuery("");
-    } else if (current && query !== current.label && !open) {
-      // If a value is selected and the menu is closed, ensure query matches label
+    } else if (current) {
       setQuery(current.label);
     }
-  }, [value, current, open, query]);
+  }
+}, [value, current, open]);
+
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -135,29 +136,20 @@ export function SearchableSelect({
       className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}
     >
       <div
-        className={`ss-control ${open ? "ss-open" : ""}`}
-        onMouseDown={(e) => e.stopPropagation()} // Prevent mousedown from bubbling to document
-        onClick={() => {
-          if (disabled) return;
-          if (!open) {
-            // If currently closed, open it
-            setOpen(true);
-            // If an item is selected, clear query for new search when opening via click
-            if (current) {
-              setQuery("");
-            }
-          } else {
-            // If currently open, close it
-            setOpen(false);
-            // When closing, if a value is selected, ensure query reflects its label
-            if (current) {
-              setQuery(current.label);
-            }
-          }
-          setFocusIdx(-1); // Reset focus index
-          requestAnimationFrame(() => inputRef.current?.focus()); // Focus input
-        }}
-      >
+  className={`ss-control ${open ? "ss-open" : ""}`}
+  onMouseDown={(e) => {
+    e.preventDefault();     // ⛔ stops blur
+    e.stopPropagation();    // ⛔ stops document close
+
+    if (disabled) return;
+
+    setOpen(true);
+    setFocusIdx(-1);
+
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }}
+>
+
         <input
           ref={inputRef}
           className="ss-input"
@@ -701,7 +693,7 @@ export default function ProductForm() {
 
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("Kurta");
+  const [activeCategory, setActiveCategory] = useState("Choga");
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
@@ -792,20 +784,17 @@ export default function ProductForm() {
     fetchColors();
   }, []);
 
-  //........................................
-// ✅ Only reset when cleared, not when changed
-// useEffect(() => {
-//   if (!selectedTop) {
-//     setSelectedTopColor({ name: "", hex: "" });
-//   }
-// }, [selectedTop]);
+  //...........................................................................................................................
+  // // Reset Top Color when Top changes
+  // useEffect(() => {
+  //   setSelectedTopColor("");
+  // }, [selectedTop]);
 
-// useEffect(() => {
-//   if (!selectedBottom) {
-//     setSelectedBottomColor({ name: "", hex: "" });
-//   }
-// }, [selectedBottom]);
-
+  // // Reset Bottom Color when Bottom changes
+  // useEffect(() => {
+  //   setSelectedBottomColor("");
+  // }, [selectedBottom]);
+//-----------------------------------------------------------------------------------------------------------------------------
   //-----------------------------------------------
   // automatic size chart value filled
   useEffect(() => {

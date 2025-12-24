@@ -878,7 +878,7 @@
   /* Logo */
   .ad-top-header .ad-logo {
     justify-self: start;
-    margin-left: 12px;
+    
     
   }
 
@@ -901,7 +901,7 @@
     position: absolute; /* Position relative to top-header */
      /* left: 20px; */
    
-    top: 71%;
+    top: 13%;
     transform: translateY(-50%);
     z-index: 1001; /* Above other content */
   }
@@ -1266,4 +1266,3 @@
     display: none;
   }
 }
-

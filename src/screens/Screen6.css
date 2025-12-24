@@ -383,12 +383,20 @@
 
 /* ------- Tablet view ------- */
 @media (min-width: 601px) and (max-width: 1024px) {
-
-  .row3 {
-    grid-template-columns: repeat(2, 1fr);
+  .screen6 {
+    padding: 0; 
   }
-
-  .payment-section .row3 {
+  .screen6-container {
+    padding: 20px; 
+  }
+  .screen6-header {
+    padding: 20px; 
+  }
+  .row3 {
+    grid-template-columns: repeat(2, 1fr); 
+  }
+/*-----------*/
+   .payment-section .row3 {
     grid-template-columns: repeat(3, 1fr);
   }
 
@@ -397,6 +405,7 @@
     align-items: flex-start;
     gap: 4px;
   }
+  /*-----------*/
 }
 
 /* ------- Small phones ------- */
