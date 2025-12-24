@@ -22,6 +22,31 @@ const countryOptions = [
   { label: "Brazil", value: "Brazil" },
 ];
 
+
+const fetchIndiaAddressByPincode = async (pincode) => {
+  try {
+    const res = await fetch(
+      `https://api.postalpincode.in/pincode/${pincode}`
+    );
+    const data = await res.json();
+
+    if (
+      data?.[0]?.Status === "Success" &&
+      data[0].PostOffice?.length
+    ) {
+      return {
+        state: data[0].PostOffice[0].State,
+        city: data[0].PostOffice[0].District,
+      };
+    }
+    return null;
+  } catch (err) {
+    console.error("Pincode lookup failed", err);
+    return null;
+  }
+};
+
+
 export default function OrderDetails() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,7 +121,7 @@ export default function OrderDetails() {
     setShippingCharge(currentShippingCharge); // Update shipping charge state
 
     // ✅ Add COD charge
-    if (paymentMode === "COD" && order.mode_of_delivery==="Home Delivery") {
+    if (paymentMode === "COD" && order.mode_of_delivery === "Home Delivery") {
       netPayable += COD_CHARGE;
     }
 
@@ -111,7 +136,34 @@ export default function OrderDetails() {
     };
   }, [discountPercent, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery]);
 
+  //auto fill delivery state and city:
+  useEffect(() => {
+    if (deliveryCountry !== "India") return;
+    if (deliveryPincode.length !== 6) return;
 
+    (async () => {
+      const result = await fetchIndiaAddressByPincode(deliveryPincode);
+      if (result) {
+        setDeliveryState(result.state);
+        setDeliveryCity(result.city);
+      }
+    })();
+  }, [deliveryPincode, deliveryCountry]);
+  //auto fill billing state and city:
+  useEffect(() => {
+    if (billingCountry !== "India") return;
+    if (billingPincode.length !== 6) return;
+
+    (async () => {
+      const result = await fetchIndiaAddressByPincode(billingPincode);
+      if (result) {
+        setBillingState(result.state);
+        setBillingCity(result.city);
+      }
+    })();
+  }, [billingPincode, billingCountry]);
+
+  //-------------------------------------------
   // Load user profile + salesperson
   useEffect(() => {
     const cachedEmail = norm(localStorage.getItem("sp_email"));
@@ -326,9 +378,13 @@ export default function OrderDetails() {
                 <label>Pincode:</label>
                 <input
                   className="input-line"
+                  maxLength={6}
                   value={deliveryPincode}
-                  onChange={(e) => setDeliveryPincode(e.target.value)}
+                  onChange={(e) =>
+                    setDeliveryPincode(e.target.value.replace(/\D/g, ""))
+                  }
                 />
+
               </div>
 
 
@@ -400,7 +456,7 @@ export default function OrderDetails() {
                 <span>{order.delivery_date}</span>
               </div>
 
-             <div className="field">
+              <div className="field">
                 <label>Delivery Notes:</label>
                 <input
                   className="input-line"
@@ -419,7 +475,7 @@ export default function OrderDetails() {
           </div>
         )}
 
-        {order.mode_of_delivery === "Ludhiana Store" &&(
+        {order.mode_of_delivery === "Ludhiana Store" && (
           <div className="section-box">
             <h3>Delivery Details</h3>
             <div className="row3">
@@ -507,14 +563,17 @@ export default function OrderDetails() {
                   placeholder="Select Country"
                 />
               </div>
-
               <div className="field">
-                <label>City:</label>
+                <label>Pincode:</label>
                 <input
                   className="input-line"
-                  value={billingCity}
-                  onChange={(e) => setBillingCity(e.target.value)}
+                  maxLength={6}
+                  value={billingPincode}
+                  onChange={(e) =>
+                    setBillingPincode(e.target.value.replace(/\D/g, ""))
+                  }
                 />
+
               </div>
 
               <div className="field">
@@ -525,22 +584,22 @@ export default function OrderDetails() {
                   onChange={(e) => setBillingState(e.target.value)}
                 />
               </div>
-
               <div className="field">
-                <label>Pincode:</label>
+                <label>City:</label>
                 <input
                   className="input-line"
-                  value={billingPincode}
-                  onChange={(e) => setBillingPincode(e.target.value)}
+                  value={billingCity}
+                  onChange={(e) => setBillingCity(e.target.value)}
                 />
               </div>
+
             </div>
           )}
         </div>
 
         {/* PAYMENT DETAILS */}
         {/* <div className="section-box"> */}
-         <div className="section-box payment-section">
+        <div className="section-box payment-section">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3>Payment Details</h3>
             <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white !important' }}>Collector Code</button>
@@ -585,9 +644,9 @@ export default function OrderDetails() {
               />
             </div>
 
-            
+
           </div>
-           {discountApplied && (
+          {discountApplied && (
             <div className="row3">
               <div className="field">
                 <label>Discount %:</label>
@@ -612,7 +671,7 @@ export default function OrderDetails() {
             </div>
           </div>
 
-          {((paymentMode === "COD" && order.mode_of_delivery==="Home Delivery") || pricing.shippingCharge > 0) && (
+          {((paymentMode === "COD" && order.mode_of_delivery === "Home Delivery") || pricing.shippingCharge > 0) && (
             <div className="row3">
               {paymentMode === "COD" && (
                 <div className="field">
