@@ -702,12 +702,18 @@ export default function ProductForm() {
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [urgentReason, setUrgentReason] = useState(""); // Selected reason from dropdown
   const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
-
+ // Track active measurement category per expanded item
+  const [expandedItemCategories, setExpandedItemCategories] = useState({}); // {[_id]: "Choga"}
   // tiny id helper so list keys are stable
   const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   // update helpers
-  const toggleExpand = (id) =>
+  const toggleExpand = (id) => {
     setExpandedRowIds((e) => ({ ...e, [id]: !e[id] }));
+    // Initialize category for this item if not set
+    if (!expandedItemCategories[id]) {
+      setExpandedItemCategories((prev) => ({ ...prev, [id]: "Choga" }));
+    }
+  };
 
   const handleDelete = (id) =>
     setOrderItems((prev) => prev.filter((it) => it._id !== id));
@@ -716,7 +722,25 @@ export default function ProductForm() {
     setOrderItems((prev) =>
       prev.map((it) => (it._id === id ? { ...it, ...patch } : it))
     );
-
+// Update measurement for a specific item
+  const updateItemMeasurement = (itemId, categoryKey, field, value) => {
+    setOrderItems((prev) =>
+      prev.map((it) => {
+        if (it._id !== itemId) return it;
+        const currentMeasurements = it.measurements || {};
+        return {
+          ...it,
+          measurements: {
+            ...currentMeasurements,
+            [categoryKey]: {
+              ...(currentMeasurements[categoryKey] || {}),
+              [field]: value,
+            },
+          },
+        };
+      })
+    );
+  };
   const handleAddExtra = () => {
     if (!selectedExtra) return;
     const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
@@ -736,7 +760,27 @@ export default function ProductForm() {
   const handleRemoveExtra = (index) => {
     setSelectedExtrasWithColors((prev) => prev.filter((_, i) => i !== index));
   };
-
+ // Add extra to a specific item in edit mode
+  const handleAddExtraToItem = (itemId, extraName, extraColor) => {
+    if (!extraName) return;
+    const extraDetails = globalExtras.find((e) => e.name === extraName);
+    setOrderItems((prev) =>
+      prev.map((it) => {
+        if (it._id !== itemId) return it;
+        return {
+          ...it,
+          extras: [
+            ...(it.extras || []),
+            {
+              name: extraName,
+              color: extraColor,
+              price: extraDetails?.price || 0,
+            },
+          ],
+        };
+      })
+    );
+  };
   // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
@@ -961,6 +1005,7 @@ export default function ProductForm() {
       measurements,
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
+     
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -1197,6 +1242,15 @@ export default function ProductForm() {
   }));
 
   const categoryKey = CATEGORY_KEY_MAP[activeCategory];
+   // Get product's available tops/bottoms for edit mode
+  const getProductOptions = (productId) => {
+    const product = products.find((p) => p.id === productId);
+    return {
+      tops: product?.top_options || [],
+      bottoms: product?.bottom_options || [],
+      sizes: product?.available_size || [],
+    };
+  };
 
   return (
     <div className="screen4-bg">
@@ -1228,6 +1282,11 @@ export default function ProductForm() {
               <div className="added-products-box added-products-top">
                 {orderItems.map((item, i) => {
                   const expanded = !!expandedRowIds[item._id];
+                   const itemActiveCategory = expandedItemCategories[item._id] || "Choga";
+                  const itemCategoryKey = CATEGORY_KEY_MAP[itemActiveCategory];
+                  const productOptions = getProductOptions(item.product_id);
+                  const itemIsKids = item.isKids || false;
+                  const itemSizes = itemIsKids ? KIDS_SIZE_OPTIONS : productOptions.sizes;
 
                   return (
                     <div className="added-product-row" key={item._id}>
@@ -1254,195 +1313,248 @@ export default function ProductForm() {
                         </button>
                       </div>
 
-                      {/* Simple editable form (plain inputs) */}
+                      {/* FULL EDITABLE FORM */}
                       {expanded && (
-                        <div className="row expand-panel simple-edit">
-                          {/* Color */}
-                          <div className="field">
-                            <label>Color</label>
-                            <SearchableSelect
-                              options={toColorOptions(colors)}
-                              value={item.color?.name || ""}
-                              onChange={(colorName) => {
-                                const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
-                                updateItem(item._id, { color: colorObj });
-                              }}
-                              placeholder="Select Color"
-                            />
-                          </div>
+                        <div className="expand-panel full-edit">
+                          {/* ROW 1: Top, Top Color, Bottom, Bottom Color */}
+                          <div className="row">
+                            <div className="field">
+                              <label>Top</label>
+                              <SearchableSelect
+                                options={toOptions(productOptions.tops)}
+                                value={item.top || ""}
+                                onChange={(val) => updateItem(item._id, { top: val })}
+                                placeholder="Select Top"
+                              />
+                            </div>
 
-                          {/* Top */}
-                          <div className="field">
-                            <label>Top</label>
-                            <input
-                              type="text"
-                              className="input-line"
-                              value={item.top || ""}
-                              onChange={(e) =>
-                                updateItem(item._id, { top: e.target.value })
-                              }
-                              placeholder="Enter top"
-                            />
-                          </div>
+                            {item.top && (
+                              <div className="field">
+                                <label>Top Color</label>
+                                <SearchableSelect
+                                  options={toColorOptions(colors)}
+                                  value={item.top_color?.name || ""}
+                                  onChange={(colorName) => {
+                                    const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
+                                    updateItem(item._id, { top_color: colorObj });
+                                  }}
+                                  placeholder="Select Top Color"
+                                />
+                              </div>
+                            )}
 
-                          {/* Top Color */}
-                          <div className="field">
-                            <label>Top Color</label>
-                            <SearchableSelect
-                              options={toColorOptions(colors)}
-                              value={item.top_color?.name || ""}
-                              onChange={(colorName) => {
-                                const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
-                                updateItem(item._id, { top_color: colorObj });
-                              }}
-                              placeholder="Select Top Color"
-                            />
-                          </div>
+                            <div className="field">
+                              <label>Bottom</label>
+                              <SearchableSelect
+                                options={toOptions(productOptions.bottoms)}
+                                value={item.bottom || ""}
+                                onChange={(val) => updateItem(item._id, { bottom: val })}
+                                placeholder="Select Bottom"
+                              />
+                            </div>
 
-                          {/* Bottom */}
-                          <div className="field">
-                            <label>Bottom</label>
-                            <input
-                              type="text"
-                              className="input-line"
-                              value={item.bottom || ""}
-                              onChange={(e) =>
-                                updateItem(item._id, { bottom: e.target.value })
-                              }
-                              placeholder="Enter bottom"
-                            />
-                          </div>
-
-                          {/* Bottom Color */}
-                          <div className="field">
-                            <label>Bottom Color</label>
-                            <SearchableSelect
-                              options={toColorOptions(colors)}
-                              value={item.bottom_color?.name || ""}
-                              onChange={(colorName) => {
-                                const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
-                                updateItem(item._id, { bottom_color: colorObj });
-                              }}
-                              placeholder="Select Bottom Color"
-                            />
-                          </div>
-
-                          {/* Extras */}
-                          <div className="field">
-                            <label>Extras</label>
-                            {item.extras && item.extras.length > 0 ? (
-                              item.extras.map((extraItem, idx) => (
-                                <div
-                                  key={idx}
-                                  className="added-extra-item-edit"
-                                >
-                                  <input
-                                    type="text"
-                                    className="input-line"
-                                    value={extraItem.name || ""}
-                                    onChange={(e) => {
-                                      const newExtras = [...item.extras];
-                                      newExtras[idx].name = e.target.value;
-                                      updateItem(item._id, {
-                                        extras: newExtras,
-                                      });
-                                    }}
-                                    placeholder="Extra name"
-                                  />
-                                  <SearchableSelect
-                                    options={toColorOptions(colors)}
-                                    value={extraItem.color?.name || ""}
-                                    onChange={(colorName) => {
-                                      const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
-                                      const newExtras = [...item.extras];
-                                      newExtras[idx].color = colorObj;
-                                      updateItem(item._id, { extras: newExtras });
-                                    }}
-                                    placeholder="Select Extra Color"
-                                  />
-                                  <span className="extra-price">
-                                    ₹{formatIndianNumber(extraItem.price)}
-                                  </span>
-                                  <button
-                                    onClick={() => {
-                                      const newExtras = item.extras.filter(
-                                        (_, i) => i !== idx
-                                      );
-                                      updateItem(item._id, {
-                                        extras: newExtras,
-                                      });
-                                    }}
-                                  >
-                                    x
-                                  </button>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="muted">No extras added</p>
+                            {item.bottom && (
+                              <div className="field">
+                                <label>Bottom Color</label>
+                                <SearchableSelect
+                                  options={toColorOptions(colors)}
+                                  value={item.bottom_color?.name || ""}
+                                  onChange={(colorName) => {
+                                    const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
+                                    updateItem(item._id, { bottom_color: colorObj });
+                                  }}
+                                  placeholder="Select Bottom Color"
+                                />
+                              </div>
                             )}
                           </div>
 
-                          {/* Size */}
-                          <div className="field">
-                            <label>Size</label>
-                            <input
-                              type="text"
-                              className="input-line"
-                              value={item.size || ""}
-                              onChange={(e) =>
-                                updateItem(item._id, { size: e.target.value })
-                              }
-                              placeholder="e.g. S / M / L or custom"
-                            />
+                          {/* ROW 2: Extras Section */}
+                          <div className="row">
+                            <div className="field extras-field">
+                              <label>Extras</label>
+                              {item.extras && item.extras.length > 0 ? (
+                                <div className="extras-list">
+                                  {item.extras.map((extraItem, idx) => (
+                                    <div key={idx} className="added-extra-item-edit">
+                                      <span className="extra-name">{extraItem.name}</span>
+                                      <SearchableSelect
+                                        options={toColorOptions(colors)}
+                                        value={extraItem.color?.name || ""}
+                                        onChange={(colorName) => {
+                                          const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
+                                          const newExtras = [...item.extras];
+                                          newExtras[idx].color = colorObj;
+                                          updateItem(item._id, { extras: newExtras });
+                                        }}
+                                        placeholder="Color"
+                                      />
+                                      <span className="extra-price">
+                                        ₹{formatIndianNumber(extraItem.price)}
+                                      </span>
+                                      <button
+                                        className="remove-extra-btn"
+                                        onClick={() => {
+                                          const newExtras = item.extras.filter((_, i) => i !== idx);
+                                          updateItem(item._id, { extras: newExtras });
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="muted">No extras added</p>
+                              )}
+
+                              {/* Add new extra */}
+                              <div className="add-extra-row">
+                                <SearchableSelect
+                                  options={globalExtras.map((e) => ({
+                                    label: `${e.name} (₹${formatIndianNumber(e.price)})`,
+                                    value: e.name,
+                                  }))}
+                                  value=""
+                                  onChange={(extraName) => {
+                                    if (extraName) {
+                                      handleAddExtraToItem(item._id, extraName, { name: "", hex: "" });
+                                    }
+                                  }}
+                                  placeholder="Add Extra..."
+                                />
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Quantity */}
-                          <div className="field" style={{ maxWidth: 160 }}>
-                            <label>Quantity</label>
-                            <input
-                              type="number"
-                              min={1}
-                              className="input-line"
-                              value={item.quantity ?? 1}
-                              onChange={(e) =>
-                                updateItem(item._id, {
-                                  quantity: Math.max(
-                                    1,
-                                    Number(e.target.value || 1)
-                                  ),
-                                })
-                              }
-                            />
+                          {/* ROW 3: Size Selection */}
+                          <div className="size-box edit-size-box">
+                            <span className="size-label">Size:</span>
+                            <div className="sizes">
+                              {itemSizes.length > 0 ? (
+                                itemSizes.map((s, idx) => (
+                                  <button
+                                    key={idx}
+                                    className={item.size === s ? "size-btn active" : "size-btn"}
+                                    onClick={() => updateItem(item._id, { size: s })}
+                                  >
+                                    {s}
+                                  </button>
+                                ))
+                              ) : (
+                                <span style={{ opacity: 0.6 }}>No sizes available</span>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Price */}
-                          <div className="field" style={{ maxWidth: 200 }}>
-                            <label>Price (₹)</label>
-                            <input
-                              type="number"
-                              min={0}
-                              className="input-line"
-                              value={item.price ?? 0}
-                              onChange={(e) =>
-                                updateItem(item._id, {
-                                  price: Number(e.target.value || 0),
-                                })
-                              }
-                            />
+                          {/* ROW 4: Custom Measurements */}
+                          <div className="measure-container edit-measure-container">
+                            <div className="measure-menu">
+                              {measurementCategories.map((cat) => (
+                                <div
+                                  key={cat}
+                                  className={
+                                    itemActiveCategory === cat
+                                      ? "measure-item active"
+                                      : "measure-item"
+                                  }
+                                  onClick={() =>
+                                    setExpandedItemCategories((prev) => ({
+                                      ...prev,
+                                      [item._id]: cat,
+                                    }))
+                                  }
+                                >
+                                  {cat}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="measure-fields">
+                              <h3 className="measure-title">Custom Measurements (in)</h3>
+                              <div className="measure-grid">
+                                {(itemIsKids
+                                  ? KIDS_MEASUREMENT_FIELDS[itemCategoryKey] || []
+                                  : measurementFields[itemCategoryKey] || []
+                                ).map((field) => (
+                                  <div className="measure-field" key={field}>
+                                    <label>{field}</label>
+                                    <input
+                                      type="number"
+                                      className="input-line"
+                                      value={item.measurements?.[itemCategoryKey]?.[field] || ""}
+                                      onChange={(e) =>
+                                        updateItemMeasurement(
+                                          item._id,
+                                          itemCategoryKey,
+                                          field,
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Product Notes */}
-                          <div className="field full-width-field">
-                            <label>Notes:</label>
-                            <textarea
-                              className="input-line"
-                              placeholder="Add notes for this product item..."
-                              value={item.notes || ""}
-                              onChange={(e) =>
-                                updateItem(item._id, { notes: e.target.value })
-                              }
-                              rows={2}
-                            />
+                          {/* ROW 5: Quantity, Price */}
+                          <div className="row">
+                            <div className="qty-field">
+                              <label>Qty</label>
+                              <div className="qty-controls">
+                                <button
+                                  onClick={() =>
+                                    updateItem(item._id, {
+                                      quantity: Math.max(1, (item.quantity || 1) - 1),
+                                    })
+                                  }
+                                >
+                                  −
+                                </button>
+                                <span>{item.quantity || 1}</span>
+                                <button
+                                  onClick={() =>
+                                    updateItem(item._id, {
+                                      quantity: (item.quantity || 1) + 1,
+                                    })
+                                  }
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="field" style={{ maxWidth: 200 }}>
+                              <label>Price (₹)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                className="input-line"
+                                value={item.price ?? 0}
+                                onChange={(e) =>
+                                  updateItem(item._id, {
+                                    price: Number(e.target.value || 0),
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          {/* ROW 6: Notes */}
+                          <div className="row">
+                            <div className="field full-width-field">
+                              <label>Notes:</label>
+                              <textarea
+                                className="input-line"
+                                placeholder="Add notes for this product item..."
+                                value={item.notes || ""}
+                                onChange={(e) =>
+                                  updateItem(item._id, { notes: e.target.value })
+                                }
+                                rows={2}
+                              />
+                            </div>
                           </div>
                         </div>
                       )}
