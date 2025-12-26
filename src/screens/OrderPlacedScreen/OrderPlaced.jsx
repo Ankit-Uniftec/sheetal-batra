@@ -38,10 +38,10 @@ export default function OrderPlaced() {
           return;
         }
       }
-      navigate("/login", { replace: true });
+      navigate("/associateDashboard", { replace: true });
     } catch (e) {
       console.error("Logout restore error", e);
-      navigate("/login", { replace: true });
+      navigate("/associateDashboard", { replace: true });
     }
   };
 

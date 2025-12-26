@@ -1,22 +1,16 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import SignatureCanvas from "react-signature-canvas";
 import { pdf } from "@react-pdf/renderer";
 import Logo from "../images/logo.png";
-import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import formatDate from "../utils/formatDate";
 import "./Screen7.css";
-import { buildCustomerOrderPdf } from "../pdf/customerPdf";
-import { buildWarehousePdf } from "../pdf/warehousePdf";
 
 // Import PDF components
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
 import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
-
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -26,13 +20,11 @@ function ColorDotDisplay({ colorObject }) {
 
   if (typeof colorObject === "string") {
     displayColorName = colorObject;
-    // Attempt to convert common color names to hex if needed, or use a default
-    displayColorHex = colorObject.startsWith("#") ? colorObject : "gray"; // Fallback to gray for unknown named colors
+    displayColorHex = colorObject.startsWith("#") ? colorObject : "gray";
   } else if (typeof colorObject === "object" && colorObject !== null) {
     displayColorName = colorObject.name || "";
     displayColorHex = colorObject.hex || "";
   } else {
-    // Fallback for any other unexpected type, prevent rendering the object
     return <span>Invalid Color</span>;
   }
 
@@ -52,23 +44,16 @@ function ColorDotDisplay({ colorObject }) {
   );
 }
 
-
 // ===============================
-// DATE HELPERS (POSTGRES SAFE)
+// DATE HELPERS
 // ===============================
 const toISODate = (value) => {
   if (!value) return null;
-
-  // Already ISO
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-
-  // Convert DD-MM-YYYY → YYYY-MM-DD
   if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
     const [dd, mm, yyyy] = value.split("-");
     return `${yyyy}-${mm}-${dd}`;
   }
-
-  // Fallback (Date object / timestamp)
   try {
     return new Date(value).toISOString().slice(0, 10);
   } catch {
@@ -77,17 +62,89 @@ const toISODate = (value) => {
 };
 
 // ===============================
-// LOCAL DOWNLOAD HELPER
+// COMPRESS SIGNATURE (with white background)
 // ===============================
-const downloadBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+const compressSignature = (signaturePad) => {
+  return new Promise((resolve) => {
+    const canvas = signaturePad.getCanvas();
+    const newCanvas = document.createElement("canvas");
+    newCanvas.width = canvas.width;
+    newCanvas.height = canvas.height;
+    const ctx = newCanvas.getContext("2d");
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, newCanvas.width, newCanvas.height);
+    ctx.drawImage(canvas, 0, 0);
+    newCanvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.8);
+  });
+};
+
+// ===============================
+// BACKGROUND PDF GENERATOR (runs after navigation)
+// ===============================
+const generatePdfsInBackground = async (orderData, logoUrl) => {
+  try {
+    console.log("🔄 Background: Starting PDF generation...");
+
+    // Generate both PDFs in parallel
+    const [customerPdfBlob, warehousePdfBlob] = await Promise.all([
+      pdf(<CustomerOrderPdf order={orderData} logoUrl={logoUrl} />).toBlob(),
+      pdf(<WarehouseOrderPdf order={orderData} logoUrl={logoUrl} />).toBlob(),
+    ]);
+
+    console.log("✅ Background: PDFs generated, uploading...");
+
+    // Upload both PDFs in parallel
+    const [customerUpload, warehouseUpload] = await Promise.all([
+      supabase.storage
+        .from("invoices")
+        .upload(`orders/${orderData.id}_customer.pdf`, customerPdfBlob, {
+          upsert: true,
+          contentType: "application/pdf",
+        }),
+      supabase.storage
+        .from("invoices")
+        .upload(`orders/${orderData.id}_warehouse.pdf`, warehousePdfBlob, {
+          upsert: true,
+          contentType: "application/pdf",
+        }),
+    ]);
+
+    if (customerUpload.error) {
+      console.error("Customer PDF upload failed:", customerUpload.error);
+      return;
+    }
+    if (warehouseUpload.error) {
+      console.error("Warehouse PDF upload failed:", warehouseUpload.error);
+      return;
+    }
+
+    // Get public URLs
+    const { data: customerUrlData } = supabase.storage
+      .from("invoices")
+      .getPublicUrl(`orders/${orderData.id}_customer.pdf`);
+
+    const { data: warehouseUrlData } = supabase.storage
+      .from("invoices")
+      .getPublicUrl(`orders/${orderData.id}_warehouse.pdf`);
+
+    // Update order with PDF URLs
+    const { error: updateError } = await supabase
+      .from("orders")
+      .update({
+        customer_url: customerUrlData?.publicUrl || null,
+        warehouse_url: warehouseUrlData?.publicUrl || null,
+      })
+      .eq("id", orderData.id);
+
+    if (updateError) {
+      console.error("Background: Order update failed:", updateError);
+      return;
+    }
+
+    console.log("✅ Background: PDF generation complete!");
+  } catch (e) {
+    console.error("❌ Background PDF generation failed:", e);
+  }
 };
 
 export default function ReviewDetail() {
@@ -97,16 +154,15 @@ export default function ReviewDetail() {
   const order = location.state?.orderPayload;
 
   const [loading, setLoading] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
 
-  const totalAmount = Number(order.grand_total) || 0;
-  const advancePayment = Number(order.advance_payment) || 0;
-  const discountPercent = Number(order.discount_percent) || 0;
-  const discountAmount = Number(order.discount_amount) || 0;
-  const netPayable = Number(order.net_total) || 0;
-  const remaining = Number(order.remaining_payment) || 0;
+  const totalAmount = Number(order?.grand_total) || 0;
+  const advancePayment = Number(order?.advance_payment) || 0;
+  const discountPercent = Number(order?.discount_percent) || 0;
+  const discountAmount = Number(order?.discount_amount) || 0;
+  const netPayable = Number(order?.net_total) || 0;
+  const remaining = Number(order?.remaining_payment) || 0;
 
   const pricing = {
     discountPercent,
@@ -114,124 +170,7 @@ export default function ReviewDetail() {
     netPayable,
     remaining,
   };
-  useEffect(() => {
-    (async () => {
-      try {
-        await pdf(
-          <CustomerOrderPdf order={{ items: [] }} logoUrl={null} />
-        ).toBlob();
 
-        console.log("✅ PDF sanity test passed");
-      } catch (e) {
-        console.error("❌ PDF sanity test failed", e);
-      }
-    })();
-  }, []);
-
-  // ===============================
-  // PREVIEW/DOWNLOAD PDFs (FOR TESTING)
-  // ===============================
-  const handlePreviewCustomerPdf = async () => {
-    try {
-      setPreviewLoading(true);
-      const logoUrl = new URL(Logo, window.location.origin).href;
-
-      // Use current order data for preview
-      const previewOrder = {
-        ...order,
-        id: order.id || "PREVIEW-" + Date.now(),
-        created_at: order.created_at || new Date().toISOString(),
-      };
-
-      const blob = await pdf(
-        <CustomerOrderPdf order={previewOrder} logoUrl={logoUrl} />
-      ).toBlob();
-
-      downloadBlob(blob, `customer_preview_${Date.now()}.pdf`);
-    } catch (e) {
-      console.error("Customer PDF preview failed:", e);
-      alert("Failed to generate customer PDF: " + e.message);
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handlePreviewWarehousePdf = async () => {
-    try {
-      setPreviewLoading(true);
-      const logoUrl = new URL(Logo, window.location.origin).href;
-
-      // Use current order data for preview
-      const previewOrder = {
-        ...order,
-        id: order.id || "PREVIEW-" + Date.now(),
-        created_at: order.created_at || new Date().toISOString(),
-      };
-
-      const blob = await pdf(
-        <WarehouseOrderPdf order={previewOrder} logoUrl={logoUrl} />
-      ).toBlob();
-
-      downloadBlob(blob, `warehouse_preview_${Date.now()}.pdf`);
-    } catch (e) {
-      console.error("Warehouse PDF preview failed:", e);
-      alert("Failed to generate warehouse PDF: " + e.message);
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handlePreviewBothPdfs = async () => {
-    try {
-      setPreviewLoading(true);
-      const logoUrl = new URL(Logo, window.location.origin).href;
-
-      const previewOrder = {
-        ...order,
-        id: order.id || "PREVIEW-" + Date.now(),
-        created_at: order.created_at || new Date().toISOString(),
-      };
-
-      if (!previewOrder) {
-        throw new Error("Order data is undefined for PDF preview.");
-      }
-
-      // Generate both PDFs
-      const [customerBlob, warehouseBlob] = await Promise.all([
-        pdf(<CustomerOrderPdf order={previewOrder} logoUrl={logoUrl} />).toBlob(),
-        pdf(<WarehouseOrderPdf order={previewOrder} logoUrl={logoUrl} />).toBlob(),
-      ]);
-
-      // Download both
-      downloadBlob(customerBlob, `customer_preview_${Date.now()}.pdf`);
-      setTimeout(() => {
-        downloadBlob(warehouseBlob, `warehouse_preview_${Date.now()}.pdf`);
-      }, 500); // Small delay to prevent browser blocking
-    } catch (e) {
-      console.error("PDF preview failed:", e);
-      alert("Failed to generate PDFs: " + e.message);
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-
-
-
-
-
-  // ===============================
-  // PROFILE
-  // ===============================
-  const profileFromOrder = (o) => ({
-    full_name: o?.delivery_name || "",
-    email: o?.delivery_email || "",
-    phone: o?.delivery_phone || "",
-  });
-
-  // ===============================
-  // SIGNATURE FLOW
-  // ===============================
   const handlePlaceOrder = () => {
     setShowSignature(true);
   };
@@ -245,204 +184,80 @@ export default function ReviewDetail() {
     try {
       setLoading(true);
 
-      const blob = await (await fetch(sigPad.toDataURL("image/png"))).blob();
-      const path = `${user.id}/signature_${Date.now()}.png`;
+      // 1️⃣ UPLOAD SIGNATURE
+      const blob = await compressSignature(sigPad);
+      const path = `${user.id}/signature_${Date.now()}.jpg`;
 
-      const { error } = await supabase.storage
+      const { error: sigError } = await supabase.storage
         .from("signature")
-        .upload(path, blob, { upsert: true });
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
 
-      if (error) throw error;
+      if (sigError) throw sigError;
 
-      const { data } = supabase.storage
-        .from("signature")
-        .getPublicUrl(path);
+      const { data: sigData } = supabase.storage.from("signature").getPublicUrl(path);
 
-      const orderWithPricing = {
+      // 2️⃣ PREPARE ORDER DATA
+      const normalizedOrder = {
         ...order,
         discount_percent: pricing.discountPercent,
         discount_amount: pricing.discountAmount,
         grand_total_after_discount: pricing.netPayable,
         net_total: pricing.netPayable,
         remaining_payment: pricing.remaining,
-        signature_url: data.publicUrl,
+        signature_url: sigData.publicUrl,
+        created_at: order.created_at
+          ? new Date(order.created_at).toISOString()
+          : new Date().toISOString(),
+        delivery_date: toISODate(order.delivery_date),
+        join_date: toISODate(order.join_date),
+        billing_date: toISODate(order.billing_date),
+        expected_delivery: toISODate(order.expected_delivery),
       };
 
-      await saveOrderToDB(orderWithPricing);
+      // 3️⃣ GENERATE ORDER NUMBER
+      const { data: orderNo, error: orderNoError } = await supabase.rpc(
+        "generate_order_no",
+        { p_store: normalizedOrder.mode_of_delivery }
+      );
+
+      if (orderNoError) throw orderNoError;
+
+      // 4️⃣ INSERT ORDER
+      const { data: insertedOrder, error: insertError } = await supabase
+        .from("orders")
+        .insert({ ...normalizedOrder, order_no: orderNo })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      if (!insertedOrder) throw new Error("Order insert failed");
+
+      const orderDataForPdf = {
+        ...insertedOrder,
+        items: insertedOrder.items || [],
+      };
+
+      // 5️⃣ NAVIGATE IMMEDIATELY (user sees success in ~2-3 seconds)
+      navigate("/order-placed", {
+        state: {
+          order: orderDataForPdf,
+        },
+        replace: true,
+      });
+
+      // 6️⃣ GENERATE PDFs IN BACKGROUND (after navigation, user doesn't wait)
+      const logoUrl = new URL(Logo, window.location.origin).href;
+      generatePdfsInBackground(orderDataForPdf, logoUrl);
+
     } catch (e) {
-      alert("Signature upload failed");
-      console.error(e);
-    } finally {
+      console.error("❌ Order failed:", e);
+      alert(e.message || "Failed to place order");
       setLoading(false);
       setShowSignature(false);
     }
   };
 
-  // ===============================
-  // SAVE ORDER (DATE SAFE)
-  // ===============================
-  const saveOrderToDB = async (orderToSave) => {
-    try {
-      // ===============================
-      // NORMALIZE DATE FIELDS (SAFE)
-      // ===============================
-      const normalizedOrder = {
-        ...orderToSave,
-
-        created_at: orderToSave.created_at
-          ? new Date(orderToSave.created_at).toISOString()
-          : new Date().toISOString(),
-
-        delivery_date: toISODate(orderToSave.delivery_date),
-        join_date: toISODate(orderToSave.join_date),
-
-        // Optional dates (safe even if undefined)
-        billing_date: toISODate(orderToSave.billing_date),
-        expected_delivery: toISODate(orderToSave.expected_delivery),
-      };
-
-      // ===============================
-      // SAVE ORDER TO DB
-      // ===============================
-      // ===============================
-      // 1️⃣ GENERATE ORDER NUMBER (DB)
-      // ===============================
-      const { data: orderNo, error: orderNoError } = await supabase
-        .rpc("generate_order_no", {
-          p_store: normalizedOrder.mode_of_delivery,
-        });
-
-      if (orderNoError) {
-        console.error("Order no generation failed:", orderNoError);
-        throw orderNoError;
-      }
-
-      // ===============================
-      // 2️⃣ INSERT ORDER WITH order_no
-      // ===============================
-      const { data, error } = await supabase
-        .from("orders")
-        .insert({
-          ...normalizedOrder,
-          order_no: orderNo, // ✅ CUSTOM ORDER ID
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      if (!data) throw new Error("Order insert failed");
-
-
-      // Ensure 'items' array exists on the data object for PDF generation
-      const orderDataForPdf = {
-        ...data,
-        items: data.items || [], // Ensure items is an array, even if empty
-      };
-
-      // ===============================
-      // GENERATE BOTH PDFs
-      // ===============================
-      const logoUrl = new URL(Logo, window.location.origin).href;
-      handlePreviewBothPdfs();
-      // Generate Customer PDF
-      const customerPdfBlob = await pdf(
-        <CustomerOrderPdf order={orderDataForPdf} logoUrl={logoUrl} />
-      ).toBlob();
-
-      // Generate Warehouse PDF
-      const warehousePdfBlob = await pdf(
-        <WarehouseOrderPdf order={orderDataForPdf} logoUrl={logoUrl} />
-      ).toBlob();
-      // ===============================
-      // UPLOAD PDFs TO STORAGE
-      // ===============================
-      const uploads = [
-        supabase.storage
-          .from("invoices")
-          .upload(
-            `orders/${data.id}_customer.pdf`,
-            customerPdfBlob,
-            {
-              upsert: true,
-              contentType: "application/pdf",
-            }
-          ),
-
-        supabase.storage
-          .from("invoices")
-          .upload(
-            `orders/${data.id}_warehouse.pdf`,
-            warehousePdfBlob,
-            {
-              upsert: true,
-              contentType: "application/pdf",
-            }
-          ),
-      ];
-
-      await Promise.all(uploads);
-      // ===============================
-      // GET PUBLIC PDF URLS
-      // ===============================
-      const { data: customerUrlData } = supabase.storage
-        .from("invoices")
-        .getPublicUrl(`orders/${data.id}_customer.pdf`);
-
-      const { data: warehouseUrlData } = supabase.storage
-        .from("invoices")
-        .getPublicUrl(`orders/${data.id}_warehouse.pdf`);
-
-      const customer_url = customerUrlData?.publicUrl || null;
-      const warehouse_url = warehouseUrlData?.publicUrl || null;
-
-
-      // ===============================
-      // UPDATE ORDER WITH PDF URLS
-      // ===============================
-      const { data: updatedOrder, error: updateError } = await supabase
-        .from("orders")
-        .update({
-          customer_url,
-          warehouse_url,
-        })
-        .eq("id", data.id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error("UPDATE FAILED:", updateError);
-        throw updateError;
-      }
-      if (!updatedOrder) {
-        throw new Error("Order update blocked (RLS?)");
-      }
-      // ===============================
-      // DONE
-      // ===============================
-      // alert("✅ Order saved & PDFs uploaded & URLs stored!");
-      // handleLogout();
-       // NAVIGATE TO ORDER PLACED PAGE
-      // ===============================
-      navigate("/order-placed", {
-        state: {
-          order: {
-            ...updatedOrder,
-            items: orderDataForPdf.items, // Include items for display
-          },
-        },
-        replace: true, // Prevent going back to review page
-      });
-    }
-
-  
-    catch (e) {
-      console.error("❌ Order save failed:", e);
-      alert(e.message || "Failed to save order");
-    }
-  };
-
-
-  //logo click logout
+  // Logo click logout
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -469,9 +284,6 @@ export default function ReviewDetail() {
       navigate("/login", { replace: true });
     }
   };
-  // ==========================
-  // JSX UI BELOW
-  // ==========================
 
   if (!order) {
     return <div>No order found</div>;
@@ -482,17 +294,20 @@ export default function ReviewDetail() {
       {loading && (
         <div className="global-loader">
           <img src={Logo} alt="Loading" className="loader-logo" />
-          <p>Saving order, please wait…</p>
+          <p>Placing order...</p>
         </div>
       )}
+
       {/* HEADER */}
       <div className="screen6-header">
-
-        <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
+        <img
+          src={Logo}
+          className="sheetal-logo"
+          alt="logo"
+          onClick={handleLogout}
+        />
         <h2 className="title">Review Detail</h2>
       </div>
-
-
 
       <div className="screen6-container">
         {/* PRODUCT DETAILS */}
@@ -508,14 +323,13 @@ export default function ReviewDetail() {
                     <label>Product Name:</label>
                     <span>{item.product_name}</span>
                   </div>
-                  {/* <div className="field field-small">
-                    <label>Color:</label>
-                    <ColorDotDisplay colorObject={item.color} />
-                  </div> */}
                 </div>
 
                 {item.notes && (
-                  <div className="field field-wide" style={{ marginTop: "12px" }}>
+                  <div
+                    className="field field-wide"
+                    style={{ marginTop: "12px" }}
+                  >
                     <label>Product Notes:</label>
                     <span>{item.notes}</span>
                   </div>
@@ -524,16 +338,32 @@ export default function ReviewDetail() {
                 <div className="row3">
                   <div className="field">
                     <label>Top:</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                      }}
+                    >
                       <span>{item.top}</span>
-                      {item.top_color && <ColorDotDisplay colorObject={item.top_color} />}
+                      {item.top_color && (
+                        <ColorDotDisplay colorObject={item.top_color} />
+                      )}
                     </div>
                   </div>
                   <div className="field">
                     <label>Bottom:</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                      }}
+                    >
                       <span>{item.bottom}</span>
-                      {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
+                      {item.bottom_color && (
+                        <ColorDotDisplay colorObject={item.bottom_color} />
+                      )}
                     </div>
                   </div>
                   <div className="field">
@@ -546,8 +376,12 @@ export default function ReviewDetail() {
                       <div className="extras-display">
                         {item.extras.map((extra, idx) => (
                           <div key={idx} className="extra-item-display">
-                            <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
-                            {extra.color && <ColorDotDisplay colorObject={extra.color} />}
+                            <span>
+                              {extra.name} (₹{formatIndianNumber(extra.price)})
+                            </span>
+                            {extra.color && (
+                              <ColorDotDisplay colorObject={extra.color} />
+                            )}
                           </div>
                         ))}
                       </div>
@@ -579,7 +413,6 @@ export default function ReviewDetail() {
               </div>
             </div>
 
-            {/* ✅ DELIVERY ADDRESS */}
             <div className="field field-wide" style={{ marginTop: "12px" }}>
               <label>Delivery Address:</label>
               <span>
@@ -621,14 +454,12 @@ export default function ReviewDetail() {
             </div>
           ) : (
             <>
-              {/* Company + GSTIN (same row like other sections) */}
               {(order.billing_company || order.billing_gstin) && (
                 <div className="row3">
                   <div className="field">
                     <label>Company Name:</label>
                     <span>{order.billing_company || "—"}</span>
                   </div>
-
                   <div className="field">
                     <label>GSTIN:</label>
                     <span>{order.billing_gstin || "—"}</span>
@@ -636,7 +467,6 @@ export default function ReviewDetail() {
                 </div>
               )}
 
-              {/* Billing Address */}
               <div className="field field-wide" style={{ marginTop: "12px" }}>
                 <label>Billing Address:</label>
                 <span>
@@ -653,8 +483,6 @@ export default function ReviewDetail() {
             </>
           )}
         </div>
-
-
 
         {/* Salesperson */}
         <div className="section-box">
@@ -691,12 +519,9 @@ export default function ReviewDetail() {
               <label>Balance:</label>
               <span>₹{formatIndianNumber(pricing.remaining)}</span>
             </div>
-
           </div>
           {pricing.discountPercent > 0 && (
             <div className="row3">
-
-
               <div className="field">
                 <label>Discount %:</label>
                 <span>{pricing.discountPercent}%</span>
@@ -705,13 +530,8 @@ export default function ReviewDetail() {
                 <label>Discount Amount:</label>
                 <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
               </div>
-
-
-
             </div>
-          )
-
-          }
+          )}
         </div>
 
         <button
@@ -719,7 +539,7 @@ export default function ReviewDetail() {
           disabled={loading}
           onClick={handlePlaceOrder}
         >
-          {loading ? "Saving..." : "Place Order"}
+          {loading ? "Placing..." : "Place Order"}
         </button>
         <button className="back-btn" onClick={() => navigate(-1)}>
           ←
@@ -740,9 +560,14 @@ export default function ReviewDetail() {
                 className: "sig-canvas",
               }}
             />
-            <div className="sig-buttons" >
-              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>Clear </button>
-              <button style={{ color: "white !important" }} onClick={saveSignatureAndContinue}>
+            <div className="sig-buttons">
+              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>
+                Clear
+              </button>
+              <button
+                style={{ color: "white" }}
+                onClick={saveSignatureAndContinue}
+              >
                 Save & Continue
               </button>
             </div>
