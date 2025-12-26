@@ -1,57 +1,48 @@
 import React, { useEffect, useState } from "react";
 import "./AssociateDashboard.css";
-import "./OrderHistory.css"; // reuse same card UI
+import "./OrderHistory.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
-import formatDate from "../utils/formatDate"; // Import formatDate
+import formatDate from "../utils/formatDate";
+import { downloadCustomerPdf } from "../utils/pdfUtils"; // Import PDF utility
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
 
   const [activeTab, setActiveTab] = useState("dashboard");
-
   const [salesperson, setSalesperson] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showSidebar, setShowSidebar] = useState(false); // New state for sidebar visibility
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(null); // Track which order PDF is loading
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [enteredPassword, setEnteredPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [clients, setClients] = useState([]);
-  const [calendarDate, setCalendarDate] = useState(
-    () => new Date() // Initialize with a Date object
-  );
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
 
-  // ------------ Stats -------------
-  const totalRevenue = orders.reduce(
-    (sum, o) => sum + Number(o.grand_total || 0),
-    0
-  );
+  // Stats
+  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
   const totalOrders = orders.length;
   const totalClients = new Set(orders.map((o) => o.user_id)).size;
-
   const activeOrders = orders.filter(
     (o) => o.status !== "completed" && o.status !== "cancelled" &&
       formatDate(o.created_at) === formatDate(new Date())
   );
 
-
-
-  // ---------- Who is logged in ----------
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       console.log("Logged in:", data.user?.email);
     });
   }, []);
 
-  // ---------- Show password modal on return ----------
   useEffect(() => {
     if (location.state?.fromBuyerVerification) {
       setShowPasswordModal(true);
@@ -80,8 +71,6 @@ export default function Dashboard() {
     }
   }, [location]);
 
-
-
   const verifyPassword = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.auth.signInWithPassword({
@@ -93,11 +82,9 @@ export default function Dashboard() {
       setPasswordError("Incorrect password!");
       return;
     }
-
     setShowPasswordModal(false);
   };
 
-  // ---------- Load salesperson record ----------
   useEffect(() => {
     const loadSalesperson = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -113,31 +100,25 @@ export default function Dashboard() {
         console.log("Salesperson fetch error:", error);
         return;
       }
-
       setSalesperson(data);
     };
-
     loadSalesperson();
   }, []);
 
-  // ---------- Load orders belonging to this salesperson ----------
   useEffect(() => {
     if (!salesperson) return;
 
     const loadOrders = async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*") // IMPORTANT: items is JSONB, no join needed
+        .select("*")
         .eq("salesperson_email", salesperson.email)
         .order("created_at", { ascending: false });
 
       if (error) console.log("Orders fetch error:", error);
-
-      console.log("Orders:", data);
       setOrders(data || []);
       setLoading(false);
     };
-
     loadOrders();
   }, [salesperson]);
 
@@ -147,7 +128,6 @@ export default function Dashboard() {
     const loadClients = async () => {
       setClientsLoading(true);
 
-      // 1️⃣ Fetch clients from orders
       const { data: orderClients, error } = await supabase
         .from("orders")
         .select("delivery_name, delivery_email, delivery_phone")
@@ -160,9 +140,7 @@ export default function Dashboard() {
         return;
       }
 
-      // 2️⃣ Deduplicate clients by email
       const map = new Map();
-
       orderClients.forEach((c) => {
         if (c.delivery_email) {
           map.set(c.delivery_email, {
@@ -181,20 +159,13 @@ export default function Dashboard() {
         return;
       }
 
-      // 3️⃣ Fetch gender & dob from profiles
       const { data: profiles } = await supabase
         .from("profiles")
         .select("email, gender, dob")
-        .in(
-          "email",
-          uniqueClients.map((c) => c.email)
-        );
+        .in("email", uniqueClients.map((c) => c.email));
 
-      const profileMap = new Map(
-        (profiles || []).map((p) => [p.email, p])
-      );
+      const profileMap = new Map((profiles || []).map((p) => [p.email, p]));
 
-      // 4️⃣ Merge
       const finalClients = uniqueClients.map((c) => ({
         name: c.name,
         email: c.email,
@@ -206,11 +177,8 @@ export default function Dashboard() {
       setClients(finalClients);
       setClientsLoading(false);
     };
-
     loadClients();
   }, [salesperson]);
-
-
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -218,16 +186,20 @@ export default function Dashboard() {
     navigate("/login");
   };
 
+  // Handle PDF download with on-demand generation
+  const handlePrintPdf = async (order) => {
+    setPdfLoading(order.id);
+    try {
+      await downloadCustomerPdf(order);
+    } catch (error) {
+      console.error("PDF download failed:", error);
+    } finally {
+      setPdfLoading(null);
+    }
+  };
+
   if (loading) return <p className="loading-text">Loading Dashboard...</p>;
 
-  const statusBadge = (status) =>
-    status === "complete" ? "complete" : "active";
-
-  const calendarOrders = orders.filter(
-    (o) => o.delivery_date && formatDate(o.delivery_date) === formatDate(calendarDate)
-  );
-
-  // Group orders by delivery date for calendar view
   const ordersByDate = orders.reduce((acc, order) => {
     const date = order.delivery_date ? formatDate(order.delivery_date) : null;
     if (date) {
@@ -238,31 +210,17 @@ export default function Dashboard() {
 
   const filteredOrders = orders.filter((order) => {
     if (!orderSearch.trim()) return true;
-
     const q = orderSearch.toLowerCase();
-
-    const productName =
-      order.items?.[0]?.product_name?.toLowerCase() || "";
-
+    const productName = order.items?.[0]?.product_name?.toLowerCase() || "";
     const productId = String(order.id || "").toLowerCase();
-
-    const clientName =
-      order.delivery_name?.toLowerCase() || "";
-
-    return (
-      productId.includes(q) ||
-      productName.includes(q) ||
-      clientName.includes(q)
-    );
+    const clientName = order.delivery_name?.toLowerCase() || "";
+    return productId.includes(q) || productName.includes(q) || clientName.includes(q);
   });
 
-  // ---- constants 
-  const MIN_CALENDAR_DATE = new Date(2025, 11, 1); // December 2025 (month is 0-based)
-
+  const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
 
   return (
     <div className="ad-dashboardContent">
-      {/* PASSWORD MODAL */}
       {showPasswordModal && (
         <div className="ad-password-modal">
           <div className="ad-password-box">
@@ -280,28 +238,10 @@ export default function Dashboard() {
       )}
 
       <div className={`ad-dashboard-wrapper ${showPasswordModal ? "ad-blurred" : "ad-none"}`}>
-
-
-
-        {/* HEADER */}
-        {/* <div className="top-header">
-          
-            <img src={Logo} className="logo" alt="logo" />
-            <h1 className="title">My Dashboard</h1>
-            <button className="logout-btn" onClick={handleLogout}>↪</button>
-          
-
-          
-
-          
-        </div> */}
-
         <div className="ad-top-header">
           <img src={Logo} className="logo4" alt="logo" />
           <h1 className="ad-order-title">My Dashboard</h1>
-          {/* Logout button for larger screens */}
           <button className="ad-logout-btn ad-desktop-logout-btn" onClick={handleLogout}>↪</button>
-          {/* Hamburger icon for smaller screens */}
           <div className="ad-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
             <div className="ad-bar"></div>
             <div className="ad-bar"></div>
@@ -309,85 +249,29 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* MAIN TABLE */}
         <div className={`ad-grid-table ${showSidebar ? "ad-sidebar-open" : ""}`}>
-
-          {/* SIDEBAR */}
           <aside className={`ad-sidebar ${showSidebar ? "ad-open" : ""}`}>
-            {/* <div
-              className={`hello-box clickable ${activeTab === "profile" ? "active" : ""}`}
-             
-            >
-              Hello, {salesperson?.saleperson || "Associate"}
-            </div> */}
-            {/* Logout button for mobile sidebar */}
-
-
-
-
             <nav className="ad-menu">
-              <a
-                className={`ad-menu-item ${activeTab === "profile" ? "active" : ""}`}
-                onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}
-              >
-                View Profile
-              </a>
-
-              <a
-                className={`ad-menu-item ${activeTab === "dashboard" ? "active" : ""}`}
-                onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}
-              >
-                Dashboard
-              </a>
-              <a
-                className={`ad-menu-item ${activeTab === "calendar" ? "active" : ""}`}
-                onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}
-              >
-                Calendar
-              </a>
-
-              <a
-                className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`}
-                onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}
-              >
-                Order History
-              </a>
-
-
-
-              <a
-                className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`}
-                onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}
-              >
-                Client Book
-              </a>
-              <a
-                className={`ad-menu-item-logout `}
-                onClick={handleLogout}
-              >
-                Log Out
-              </a>
+              <a className={`ad-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>View Profile</a>
+              <a className={`ad-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
+              <a className={`ad-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
+              <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
+              <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
+              <a className="ad-menu-item-logout" onClick={handleLogout}>Log Out</a>
             </nav>
           </aside>
 
-          {/* --------------- DASHBOARD CARDS ---------------- */}
           {activeTab === "dashboard" && (
             <>
-
               <div className="ad-cell ad-total-revenue">
-
-                {/* i have removed the change value  */}
                 <StatCard title="Total Revenue" value={`₹${formatIndianNumber(totalRevenue)}`} />
               </div>
-
               <div className="ad-cell ad-total-orders">
                 <StatCard title="Total Orders" className="gold-text" value={formatIndianNumber(totalOrders)} />
               </div>
-
               <div className="ad-cell ad-total-clients">
                 <StatCard title="Total Clients" value={formatIndianNumber(totalClients)} />
               </div>
-
               <div className="ad-cell ad-sales-target">
                 <div className="ad-sales-card">
                   <div className="ad-sales-header">
@@ -395,38 +279,29 @@ export default function Dashboard() {
                       <p className="ad-sales-label">Sales Target</p>
                       <p className="ad-sales-progress">In Progress</p>
                     </div>
-                    {/* <p className="sales-total">Sales Target <b>{formatIndianNumber(800000)}</b></p> */}
                   </div>
-
                   <div className="ad-sales-scale">
                     <span>₹{formatIndianNumber(totalRevenue)}</span>
                     <span>₹{formatIndianNumber(800000)}</span>
                   </div>
-
                   <div className="ad-progress-bar">
-                    <div
-                      className="ad-progress-fill"
-                      style={{ width: `${(totalRevenue / 800000) * 100}%`, height: '10px', background: ' #d5b85a', borderRadius: '20px' }}
-                    ></div>
+                    <div className="ad-progress-fill" style={{ width: `${(totalRevenue / 800000) * 100}%`, height: '10px', background: '#d5b85a', borderRadius: '20px' }}></div>
                   </div>
                 </div>
               </div>
-
               <div className="ad-cell ad-active-orders">
                 <div className="ad-orders-card">
                   <div className="ad-card-header">
                     <span className="ad-card-title">Today's Orders</span>
-                    <button className="ad-view-btn" onClick={() => setActiveTab("orders")} >View All</button>
-
+                    <button className="ad-view-btn" onClick={() => setActiveTab("orders")}>View All</button>
                   </div>
-                  <div className="ad-cardbox" >
+                  <div className="ad-cardbox">
                     {activeOrders.length === 0 ? (
                       <p>No active orders</p>
                     ) : (
                       activeOrders.map((o) => (
                         <div className="ad-order-item" key={o.id} style={{ borderBottom: '1px solid #d5b85a' }}>
                           <p><b>Order No:</b> {o.id}</p>
-                          {/* <p><b>Total:</b> ₹{o.grand_total}</p> */}
                           <p><b>Status:</b> {o.status}</p>
                           <p><b>Delivery Date:</b> {formatDate(o.delivery_date)}</p>
                         </div>
@@ -435,7 +310,6 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-
               <aside className="ad-cell ad-alerts-box">
                 <div className="ad-alerts-header">
                   <span className="ad-alerts-title">Alerts</span>
@@ -446,24 +320,20 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* ------------- ORDER DETAILS TAB (OrderHistory UI) ------------ */}
           {activeTab === "orders" && (
             <div className="ad-order-details-wrapper">
-
               <h2 className="ad-order-title">Order History</h2>
               <div className="ad-order-search-bar">
                 <input
                   type="text"
-                  placeholder="Search by Order ID, Product Name or Client Name or delivery date"
+                  placeholder="Search by Order ID, Product Name or Client Name"
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
                 />
               </div>
 
               <div className="ad-order-list-scroll">
-                {filteredOrders.length === 0 && (
-                  <p className="ad-muted">No orders found for this associate.</p>
-                )}
+                {filteredOrders.length === 0 && <p className="ad-muted">No orders found for this associate.</p>}
 
                 {filteredOrders.map((order) => {
                   const item = order.items?.[0] || {};
@@ -471,7 +341,6 @@ export default function Dashboard() {
 
                   return (
                     <div key={order.id} className="ad-order-card">
-                      {/* Top Header Row */}
                       <div className="ad-order-header">
                         <div className="ad-header-info">
                           <div className="ad-header-item">
@@ -488,39 +357,32 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div className="ad-header-actions">
-                          {/* <button className="ad-view-details-btn" onClick={() => handleViewDetails(order)}>
-                            View order details
-                          </button> */}
-                          
-                          <button className="ad-print-pdf-btn" >
-                            <a href={order.customer_url} target="new"><span className="ad-pdf-icon">📄</span> Print PDF</a>
+                          <button
+                            className="ad-print-pdf-btn"
+                            onClick={() => handlePrintPdf(order)}
+                            disabled={pdfLoading === order.id}
+                          >
+                            <span className="ad-pdf-icon">📄</span>
+                            {pdfLoading === order.id ? "Generating..." : "Print PDF"}
                           </button>
                         </div>
                       </div>
 
-                      {/* Product Content Row */}
                       <div className="ad-order-content">
                         <div className="ad-product-thumb">
                           <img src={imgSrc} alt={item.product_name || "Product"} />
                         </div>
-
                         <div className="ad-product-details">
-                          {/* Product Name Row with Status Badge */}
                           <div className="ad-product-name-row">
                             <div className="ad-product-name">
                               <span className="ad-order-label">Product Name:</span>
                               <span className="ad-value">{item.product_name || "—"}</span>
                             </div>
-                            {/* <div className={`ad-status-badge ${order.status === "complete" ? "ad-complete" : "ad-active"}`}>
-                              {order.status === "complete" ? "Complete" : "Active"}
-                            </div> */}
                           </div>
                           <div className="ad-product-name">
                             <span className="ad-order-label">Client Name:</span>
                             <span className="ad-value">{order.delivery_name || "—"}</span>
                           </div>
-
-                          {/* Details Grid */}
                           <div className="ad-details-grid">
                             <div className="ad-detail-item">
                               <span className="ad-order-label">Amount:</span>
@@ -539,8 +401,6 @@ export default function Dashboard() {
                               <span className="ad-value">{item.size || "—"}</span>
                             </div>
                           </div>
-
-                          {/* Sales Associate Row */}
                           <div className="ad-sa-row">
                             <span className="ad-order-label">SA:</span>
                             <span className="ad-value">
@@ -550,90 +410,50 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-
-                      {/* Decorative Line */}
                       <div className="ad-decorative-line"></div>
                     </div>
                   );
                 })}
               </div>
-
             </div>
           )}
-
-          {/* ------------- CALENDAR TAB ------------ */}
-
 
           {activeTab === "calendar" && (
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Calendar</h2>
-
-              {/* ---------- CONTROLS ---------- */}
               <div className="ad-calendar-controls">
                 <button
-                  disabled={
-                    new Date(calendarDate).getFullYear() === 2025 &&
-                    new Date(calendarDate).getMonth() === 11
-                  }
-                  onClick={() =>
-                    setCalendarDate(prev => {
-                      const d = new Date(prev);
-                      d.setMonth(d.getMonth() - 1);
-
-                      // block before December 2025
-                      if (d < MIN_CALENDAR_DATE) return prev;
-
-                      return d;
-                    })
-                  }
-                >
-                  {"<"}
-                </button>
-
-                <span>
-                  {new Date(calendarDate).toLocaleString("default", {
-                    month: "long",
-                    year: "numeric",
+                  disabled={new Date(calendarDate).getFullYear() === 2025 && new Date(calendarDate).getMonth() === 11}
+                  onClick={() => setCalendarDate(prev => {
+                    const d = new Date(prev);
+                    d.setMonth(d.getMonth() - 1);
+                    if (d < MIN_CALENDAR_DATE) return prev;
+                    return d;
                   })}
-                </span>
-
-                <button
-                  onClick={() =>
-                    setCalendarDate(prev => {
-                      const d = new Date(prev);
-                      d.setMonth(d.getMonth() + 1);
-                      return d;
-                    })
-                  }
-                >
-                  {">"}
-                </button>
+                >{"<"}</button>
+                <span>{new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}</span>
+                <button onClick={() => setCalendarDate(prev => {
+                  const d = new Date(prev);
+                  d.setMonth(d.getMonth() + 1);
+                  return d;
+                })}>{">"}</button>
               </div>
 
-              {/* ---------- GRID ---------- */}
               <div className="ad-calendar-grid">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-                  <div key={day} className="ad-calendar-day-label">
-                    {day}
-                  </div>
+                  <div key={day} className="ad-calendar-day-label">{day}</div>
                 ))}
 
                 {(() => {
                   const year = new Date(calendarDate).getFullYear();
                   const month = new Date(calendarDate).getMonth();
-
                   const firstDayOfMonth = new Date(year, month, 1).getDay();
                   const daysInMonth = new Date(year, month + 1, 0).getDate();
                   const totalCells = firstDayOfMonth + daysInMonth;
 
                   return Array.from({ length: totalCells }).map((_, i) => {
                     const date = i - firstDayOfMonth + 1;
-
-                    if (date <= 0) {
-                      return (
-                        <div key={i} className="ad-calendar-date-box ad-empty" />
-                      );
-                    }
+                    if (date <= 0) return <div key={i} className="ad-calendar-date-box ad-empty" />;
 
                     const currentDay = new Date(year, month, date);
                     const fullDate = formatDate(currentDay);
@@ -643,22 +463,11 @@ export default function Dashboard() {
                     return (
                       <div
                         key={i}
-                        className={`ad-calendar-date-box ${fullDate === todayDate ? "ad-today" : ""
-                          }`}
-                        onClick={() => {
-                          if (orderCount > 0) {
-                            // setOrderSearch(fullDate);
-                            setActiveTab("orders");
-                          }
-                        }}
+                        className={`ad-calendar-date-box ${fullDate === todayDate ? "ad-today" : ""}`}
+                        onClick={() => { if (orderCount > 0) setActiveTab("orders"); }}
                       >
                         <span className="ad-date-number">{date}</span>
-
-                        {orderCount > 0 && (
-                          <span className="ad-order-count">
-                            {orderCount} Orders
-                          </span>
-                        )}
+                        {orderCount > 0 && <span className="ad-order-count">{orderCount} Orders</span>}
                       </div>
                     );
                   });
@@ -666,49 +475,17 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-          {/* ----------- SALES PERSON PROFILE TAB ----------- */}
+
           {activeTab === "profile" && salesperson && (
             <div className="ad-order-details-wrapper ad-profile-wrapper">
-
               <h2 className="ad-profile-title">My Profile</h2>
-
               <div className="ad-profile-card">
-                <div className="ad-profile-row">
-                  <span className="ad-label">Name</span>
-                  <span className="ad-value">{salesperson.saleperson}</span>
-                </div>
-
-                <div className="ad-profile-row">
-                  <span className="ad-label">Email</span>
-                  <span className="ad-value">{salesperson.email}</span>
-                </div>
-
-                <div className="ad-profile-row">
-                  <span className="ad-label">Phone</span>
-                  <span className="ad-value">{formatPhoneNumber(salesperson.personal_phone)}</span>
-                </div>
-
-                <div className="ad-profile-row">
-                  <span className="ad-label">Joining Date</span>
-                  <span className="ad-value">
-                    {formatDate(salesperson.join_date)}
-                  </span>
-
-                </div>
-                <div className="ad-profile-row">
-                  <span className="ad-label">Store Name</span>
-                  <span className="ad-value">
-                    {salesperson.store_name}
-                  </span>
-
-                </div>
-                <div className="ad-profile-row">
-                  <span className="ad-label">Designation</span>
-                  <span className="ad-value">
-                    {salesperson.designation}
-                  </span>
-
-                </div>
+                <div className="ad-profile-row"><span className="ad-label">Name</span><span className="ad-value">{salesperson.saleperson}</span></div>
+                <div className="ad-profile-row"><span className="ad-label">Email</span><span className="ad-value">{salesperson.email}</span></div>
+                <div className="ad-profile-row"><span className="ad-label">Phone</span><span className="ad-value">{formatPhoneNumber(salesperson.personal_phone)}</span></div>
+                <div className="ad-profile-row"><span className="ad-label">Joining Date</span><span className="ad-value">{formatDate(salesperson.join_date)}</span></div>
+                <div className="ad-profile-row"><span className="ad-label">Store Name</span><span className="ad-value">{salesperson.store_name}</span></div>
+                <div className="ad-profile-row"><span className="ad-label">Designation</span><span className="ad-value">{salesperson.designation}</span></div>
               </div>
             </div>
           )}
@@ -716,7 +493,6 @@ export default function Dashboard() {
           {activeTab === "clients" && (
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Client Book</h2>
-
               {clientsLoading ? (
                 <p className="ad-loading-text">Loading clients...</p>
               ) : clients.length === 0 ? (
@@ -733,7 +509,6 @@ export default function Dashboard() {
                         <th>Date of Birth</th>
                       </tr>
                     </thead>
-
                     <tbody>
                       {clients.map((c, i) => (
                         <tr key={i}>
@@ -750,31 +525,18 @@ export default function Dashboard() {
               )}
             </div>
           )}
-
-
         </div>
 
-        {/* CREATE ORDER BUTTON */}
         <button
           className="ad-add-btn"
           onClick={async () => {
             const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-              sessionStorage.setItem("associateSession", JSON.stringify(session));
-            }
+            if (session) sessionStorage.setItem("associateSession", JSON.stringify(session));
             sessionStorage.setItem("returnToAssociate", "true");
-            sessionStorage.setItem("requirePasswordVerificationOnReturn", "true"); // Set flag before navigating away
+            sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}
-        >
-          +
-        </button>
-
-        {/* BACK */}
-        {/* <button className="ad-back-btn" onClick={() => {
-          sessionStorage.setItem("requirePasswordVerificationOnReturn", "true"); // Set flag before navigating away
-          navigate("/");
-        }}>‹</button> */}
+        >+</button>
       </div>
     </div>
   );

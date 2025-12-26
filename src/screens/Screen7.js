@@ -3,14 +3,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import SignatureCanvas from "react-signature-canvas";
-import { pdf } from "@react-pdf/renderer";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
-
-// Import PDF components
-import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
-import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -44,9 +39,6 @@ function ColorDotDisplay({ colorObject }) {
   );
 }
 
-// ===============================
-// DATE HELPERS
-// ===============================
 const toISODate = (value) => {
   if (!value) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
@@ -61,9 +53,6 @@ const toISODate = (value) => {
   }
 };
 
-// ===============================
-// COMPRESS SIGNATURE (with white background)
-// ===============================
 const compressSignature = (signaturePad) => {
   return new Promise((resolve) => {
     const canvas = signaturePad.getCanvas();
@@ -76,75 +65,6 @@ const compressSignature = (signaturePad) => {
     ctx.drawImage(canvas, 0, 0);
     newCanvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.8);
   });
-};
-
-// ===============================
-// BACKGROUND PDF GENERATOR (runs after navigation)
-// ===============================
-const generatePdfsInBackground = async (orderData, logoUrl) => {
-  try {
-    console.log("🔄 Background: Starting PDF generation...");
-
-    // Generate both PDFs in parallel
-    const [customerPdfBlob, warehousePdfBlob] = await Promise.all([
-      pdf(<CustomerOrderPdf order={orderData} logoUrl={logoUrl} />).toBlob(),
-      pdf(<WarehouseOrderPdf order={orderData} logoUrl={logoUrl} />).toBlob(),
-    ]);
-
-    console.log("✅ Background: PDFs generated, uploading...");
-
-    // Upload both PDFs in parallel
-    const [customerUpload, warehouseUpload] = await Promise.all([
-      supabase.storage
-        .from("invoices")
-        .upload(`orders/${orderData.id}_customer.pdf`, customerPdfBlob, {
-          upsert: true,
-          contentType: "application/pdf",
-        }),
-      supabase.storage
-        .from("invoices")
-        .upload(`orders/${orderData.id}_warehouse.pdf`, warehousePdfBlob, {
-          upsert: true,
-          contentType: "application/pdf",
-        }),
-    ]);
-
-    if (customerUpload.error) {
-      console.error("Customer PDF upload failed:", customerUpload.error);
-      return;
-    }
-    if (warehouseUpload.error) {
-      console.error("Warehouse PDF upload failed:", warehouseUpload.error);
-      return;
-    }
-
-    // Get public URLs
-    const { data: customerUrlData } = supabase.storage
-      .from("invoices")
-      .getPublicUrl(`orders/${orderData.id}_customer.pdf`);
-
-    const { data: warehouseUrlData } = supabase.storage
-      .from("invoices")
-      .getPublicUrl(`orders/${orderData.id}_warehouse.pdf`);
-
-    // Update order with PDF URLs
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({
-        customer_url: customerUrlData?.publicUrl || null,
-        warehouse_url: warehouseUrlData?.publicUrl || null,
-      })
-      .eq("id", orderData.id);
-
-    if (updateError) {
-      console.error("Background: Order update failed:", updateError);
-      return;
-    }
-
-    console.log("✅ Background: PDF generation complete!");
-  } catch (e) {
-    console.error("❌ Background PDF generation failed:", e);
-  }
 };
 
 export default function ReviewDetail() {
@@ -164,16 +84,9 @@ export default function ReviewDetail() {
   const netPayable = Number(order?.net_total) || 0;
   const remaining = Number(order?.remaining_payment) || 0;
 
-  const pricing = {
-    discountPercent,
-    discountAmount,
-    netPayable,
-    remaining,
-  };
+  const pricing = { discountPercent, discountAmount, netPayable, remaining };
 
-  const handlePlaceOrder = () => {
-    setShowSignature(true);
-  };
+  const handlePlaceOrder = () => setShowSignature(true);
 
   const saveSignatureAndContinue = async () => {
     if (!sigPad || sigPad.isEmpty()) {
@@ -205,9 +118,7 @@ export default function ReviewDetail() {
         net_total: pricing.netPayable,
         remaining_payment: pricing.remaining,
         signature_url: sigData.publicUrl,
-        created_at: order.created_at
-          ? new Date(order.created_at).toISOString()
-          : new Date().toISOString(),
+        created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
         delivery_date: toISODate(order.delivery_date),
         join_date: toISODate(order.join_date),
         billing_date: toISODate(order.billing_date),
@@ -222,7 +133,7 @@ export default function ReviewDetail() {
 
       if (orderNoError) throw orderNoError;
 
-      // 4️⃣ INSERT ORDER
+      // 4️⃣ INSERT ORDER (NO PDF - FAST!)
       const { data: insertedOrder, error: insertError } = await supabase
         .from("orders")
         .insert({ ...normalizedOrder, order_no: orderNo })
@@ -232,22 +143,11 @@ export default function ReviewDetail() {
       if (insertError) throw insertError;
       if (!insertedOrder) throw new Error("Order insert failed");
 
-      const orderDataForPdf = {
-        ...insertedOrder,
-        items: insertedOrder.items || [],
-      };
-
-      // 5️⃣ NAVIGATE IMMEDIATELY (user sees success in ~2-3 seconds)
+      // 5️⃣ NAVIGATE IMMEDIATELY (~2-3 seconds)
       navigate("/order-placed", {
-        state: {
-          order: orderDataForPdf,
-        },
+        state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
         replace: true,
       });
-
-      // 6️⃣ GENERATE PDFs IN BACKGROUND (after navigation, user doesn't wait)
-      const logoUrl = new URL(Logo, window.location.origin).href;
-      generatePdfsInBackground(orderDataForPdf, logoUrl);
 
     } catch (e) {
       console.error("❌ Order failed:", e);
@@ -257,11 +157,9 @@ export default function ReviewDetail() {
     }
   };
 
-  // Logo click logout
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
-
       const raw = sessionStorage.getItem("associateSession");
       const saved = raw ? JSON.parse(raw) : null;
 
@@ -285,9 +183,7 @@ export default function ReviewDetail() {
     }
   };
 
-  if (!order) {
-    return <div>No order found</div>;
-  }
+  if (!order) return <div>No order found</div>;
 
   return (
     <div className="screen7">
@@ -298,22 +194,14 @@ export default function ReviewDetail() {
         </div>
       )}
 
-      {/* HEADER */}
       <div className="screen6-header">
-        <img
-          src={Logo}
-          className="sheetal-logo"
-          alt="logo"
-          onClick={handleLogout}
-        />
+        <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
         <h2 className="title">Review Detail</h2>
       </div>
 
       <div className="screen6-container">
-        {/* PRODUCT DETAILS */}
         <div className="section-box">
           <h3>Product Details</h3>
-
           {order.items?.map((item, i) => (
             <div key={i} className="product-box">
               <img src={item.image_url} className="prod-img" alt="" />
@@ -324,46 +212,25 @@ export default function ReviewDetail() {
                     <span>{item.product_name}</span>
                   </div>
                 </div>
-
                 {item.notes && (
-                  <div
-                    className="field field-wide"
-                    style={{ marginTop: "12px" }}
-                  >
+                  <div className="field field-wide" style={{ marginTop: "12px" }}>
                     <label>Product Notes:</label>
                     <span>{item.notes}</span>
                   </div>
                 )}
-
                 <div className="row3">
                   <div className="field">
                     <label>Top:</label>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "5px",
-                      }}
-                    >
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                       <span>{item.top}</span>
-                      {item.top_color && (
-                        <ColorDotDisplay colorObject={item.top_color} />
-                      )}
+                      {item.top_color && <ColorDotDisplay colorObject={item.top_color} />}
                     </div>
                   </div>
                   <div className="field">
                     <label>Bottom:</label>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "5px",
-                      }}
-                    >
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                       <span>{item.bottom}</span>
-                      {item.bottom_color && (
-                        <ColorDotDisplay colorObject={item.bottom_color} />
-                      )}
+                      {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
                     </div>
                   </div>
                   <div className="field">
@@ -376,12 +243,8 @@ export default function ReviewDetail() {
                       <div className="extras-display">
                         {item.extras.map((extra, idx) => (
                           <div key={idx} className="extra-item-display">
-                            <span>
-                              {extra.name} (₹{formatIndianNumber(extra.price)})
-                            </span>
-                            {extra.color && (
-                              <ColorDotDisplay colorObject={extra.color} />
-                            )}
+                            <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
+                            {extra.color && <ColorDotDisplay colorObject={extra.color} />}
                           </div>
                         ))}
                       </div>
@@ -393,190 +256,91 @@ export default function ReviewDetail() {
           ))}
         </div>
 
-        {/* Delivery */}
         {order.mode_of_delivery === "Home Delivery" && (
           <div className="section-box">
             <h3>Delivery Details</h3>
-
             <div className="row3">
-              <div className="field">
-                <label>Name:</label>
-                <span>{order.delivery_name}</span>
-              </div>
-              <div className="field">
-                <label>Email:</label>
-                <span>{order.delivery_email}</span>
-              </div>
-              <div className="field">
-                <label>Phone:</label>
-                <span>{order.delivery_phone}</span>
-              </div>
+              <div className="field"><label>Name:</label><span>{order.delivery_name}</span></div>
+              <div className="field"><label>Email:</label><span>{order.delivery_email}</span></div>
+              <div className="field"><label>Phone:</label><span>{order.delivery_phone}</span></div>
             </div>
-
             <div className="field field-wide" style={{ marginTop: "12px" }}>
               <label>Delivery Address:</label>
-              <span>
-                {[
-                  order.delivery_address,
-                  order.delivery_city,
-                  order.delivery_state,
-                  order.delivery_pincode,
-                ]
-                  .filter(Boolean)
-                  .join(", ")}
-              </span>
+              <span>{[order.delivery_address, order.delivery_city, order.delivery_state, order.delivery_pincode].filter(Boolean).join(", ")}</span>
             </div>
-
             {order.delivery_notes && (
               <div className="field field-wide" style={{ marginTop: "12px" }}>
-                <label>Delivery Notes:</label>
-                <span>{order.delivery_notes}</span>
+                <label>Delivery Notes:</label><span>{order.delivery_notes}</span>
               </div>
             )}
-
             {order.comments && (
               <div className="field field-wide" style={{ marginTop: "12px" }}>
-                <label>General Order Comments:</label>
-                <span>{order.comments}</span>
+                <label>General Order Comments:</label><span>{order.comments}</span>
               </div>
             )}
           </div>
         )}
 
-        {/* Billing Details */}
         <div className="section-box">
           <h3>Billing Details</h3>
-
           {order.billing_same ? (
-            <div className="field field-wide">
-              <label>Billing Address:</label>
-              <span>Same as delivery address</span>
-            </div>
+            <div className="field field-wide"><label>Billing Address:</label><span>Same as delivery address</span></div>
           ) : (
             <>
               {(order.billing_company || order.billing_gstin) && (
                 <div className="row3">
-                  <div className="field">
-                    <label>Company Name:</label>
-                    <span>{order.billing_company || "—"}</span>
-                  </div>
-                  <div className="field">
-                    <label>GSTIN:</label>
-                    <span>{order.billing_gstin || "—"}</span>
-                  </div>
+                  <div className="field"><label>Company Name:</label><span>{order.billing_company || "—"}</span></div>
+                  <div className="field"><label>GSTIN:</label><span>{order.billing_gstin || "—"}</span></div>
                 </div>
               )}
-
               <div className="field field-wide" style={{ marginTop: "12px" }}>
                 <label>Billing Address:</label>
-                <span>
-                  {[
-                    order.billing_address,
-                    order.billing_city,
-                    order.billing_state,
-                    order.billing_pincode,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-                </span>
+                <span>{[order.billing_address, order.billing_city, order.billing_state, order.billing_pincode].filter(Boolean).join(", ")}</span>
               </div>
             </>
           )}
         </div>
 
-        {/* Salesperson */}
         <div className="section-box">
           <h3>Salesperson Details</h3>
           <div className="row3">
-            <div className="field">
-              <label>Name:</label>
-              <span>{order.salesperson || "—"}</span>
-            </div>
-            <div className="field">
-              <label>Email:</label>
-              <span>{order.salesperson_email || "—"}</span>
-            </div>
-            <div className="field">
-              <label>Phone:</label>
-              <span>{order.salesperson_phone || "—"}</span>
-            </div>
+            <div className="field"><label>Name:</label><span>{order.salesperson || "—"}</span></div>
+            <div className="field"><label>Email:</label><span>{order.salesperson_email || "—"}</span></div>
+            <div className="field"><label>Phone:</label><span>{order.salesperson_phone || "—"}</span></div>
           </div>
         </div>
 
-        {/* Payment */}
         <div className="section-box">
           <h3>Payment Details</h3>
           <div className="row3">
-            <div className="field">
-              <label>Total Amount:</label>
-              <span>₹{formatIndianNumber(totalAmount)}</span>
-            </div>
-            <div className="field">
-              <label>Advance Payment:</label>
-              <span>₹{formatIndianNumber(advancePayment)}</span>
-            </div>
-            <div className="field">
-              <label>Balance:</label>
-              <span>₹{formatIndianNumber(pricing.remaining)}</span>
-            </div>
+            <div className="field"><label>Total Amount:</label><span>₹{formatIndianNumber(totalAmount)}</span></div>
+            <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
+            <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
           </div>
           {pricing.discountPercent > 0 && (
             <div className="row3">
-              <div className="field">
-                <label>Discount %:</label>
-                <span>{pricing.discountPercent}%</span>
-              </div>
-              <div className="field">
-                <label>Discount Amount:</label>
-                <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
-              </div>
+              <div className="field"><label>Discount %:</label><span>{pricing.discountPercent}%</span></div>
+              <div className="field"><label>Discount Amount:</label><span>₹{formatIndianNumber(pricing.discountAmount)}</span></div>
             </div>
           )}
         </div>
 
-        <button
-          className="confirm-btn"
-          disabled={loading}
-          onClick={handlePlaceOrder}
-        >
+        <button className="confirm-btn" disabled={loading} onClick={handlePlaceOrder}>
           {loading ? "Placing..." : "Place Order"}
         </button>
-        <button className="back-btn" onClick={() => navigate(-1)}>
-          ←
-        </button>
+        <button className="back-btn" onClick={() => navigate(-1)}>←</button>
       </div>
 
-      {/* SIGNATURE MODAL */}
       {showSignature && (
         <div className="signature-modal">
           <div className="signature-box">
             <h3>Sign Below</h3>
-            <SignatureCanvas
-              penColor="black"
-              ref={setSigPad}
-              canvasProps={{
-                width: 500,
-                height: 200,
-                className: "sig-canvas",
-              }}
-            />
+            <SignatureCanvas penColor="black" ref={setSigPad} canvasProps={{ width: 500, height: 200, className: "sig-canvas" }} />
             <div className="sig-buttons">
-              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>
-                Clear
-              </button>
-              <button
-                style={{ color: "white" }}
-                onClick={saveSignatureAndContinue}
-              >
-                Save & Continue
-              </button>
+              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>Clear</button>
+              <button style={{ color: "white" }} onClick={saveSignatureAndContinue}>Save & Continue</button>
             </div>
-            <button
-              className="close-modal"
-              onClick={() => setShowSignature(false)}
-            >
-              ✖
-            </button>
+            <button className="close-modal" onClick={() => setShowSignature(false)}>✖</button>
           </div>
         </div>
       )}

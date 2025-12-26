@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
+import { downloadWarehousePdf } from "../utils/pdfUtils"; // Import PDF utility
 
 const WarehouseDashboard = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const WarehouseDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("orders");
   const [showSidebar, setShowSidebar] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(null); // Track which order PDF is loading
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,37 +83,38 @@ const WarehouseDashboard = () => {
     if (!error) fetchOrders();
   };
 
+  // Handle PDF generation on-demand
+  const handleGeneratePdf = async (order) => {
+    setPdfLoading(order.id);
+    try {
+      await downloadWarehousePdf(order);
+      // Refresh orders to get updated URL
+      fetchOrders();
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+    } finally {
+      setPdfLoading(null);
+    }
+  };
+
   // Pagination logic
   const totalPages = Math.ceil(orders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
   const endIndex = startIndex + ordersPerPage;
   const currentOrders = orders.slice(startIndex, endIndex);
 
-  const goToPage = (page) => {
-    setCurrentPage(page);
-  };
-
-  const goToPrevious = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
-
-  const goToNext = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
+  const goToPage = (page) => setCurrentPage(page);
+  const goToPrevious = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
+  const goToNext = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
 
   return (
     <div className="wd-dashboard-wrapper">
-      {/* HEADER - UNCHANGED */}
+      {/* HEADER */}
       <div className="wd-top-header">
         <div className="wd-header-left">
           <img src={Logo} className="logo" alt="logo" />
         </div>
-
         <h1 className="wd-title">Warehouse Dashboard</h1>
-
-        {/* Logout for desktop */}
-        {/* <button className="wd-logout-btn wd-desktop-only" onClick={handleLogout}>↪</button> */}
-
       </div>
 
       {/* MAIN LAYOUT WITH SIDEBAR */}
@@ -122,6 +125,7 @@ const WarehouseDashboard = () => {
           <div className="wd-bar"></div>
           <div className="wd-bar"></div>
         </div>
+
         {/* SIDEBAR */}
         <aside className={`wd-sidebar ${showSidebar ? "wd-open" : ""}`}>
           <nav className="wd-menu">
@@ -134,7 +138,6 @@ const WarehouseDashboard = () => {
             >
               Order History
             </a>
-
             <a className="wd-menu-item" onClick={handleLogout}>
               Log Out
             </a>
@@ -143,7 +146,6 @@ const WarehouseDashboard = () => {
 
         {/* CONTENT AREA */}
         <div className="wd-content-area">
-          {/* ORDER HISTORY TAB */}
           {activeTab === "orders" && (
             <div className="wd-orders-section">
               {/* Header with count */}
@@ -165,17 +167,22 @@ const WarehouseDashboard = () => {
                       : order.items || {};
 
                     return (
-                      <div className="wd-order-dropdown">
-                        <div style={{ display: "flex", justifyContent: 'space-between', alignItems:'center' }}>
+                      <div key={order.id} className="wd-order-dropdown">
+                        <div style={{ display: "flex", justifyContent: 'space-between', alignItems: 'center' }}>
                           <h3 className="wd-dropdown-title">Product Details</h3>
                           <div>
-                            
-                            <a href={order.warehouse_url} target="new">
-                          <button className="wd-pdf-Btn">Generate PDF</button></a>
+                            <button
+                              className="wd-pdf-Btn"
+                              onClick={() => handleGeneratePdf(order)}
+                              disabled={pdfLoading === order.id}
+                            >
+                              {pdfLoading === order.id ? "Generating..." : "Generate PDF"}
+                            </button>
                           </div>
                         </div>
+
                         <div className="wd-dropdown-content">
-                          {/* IMAGE — you currently do NOT send image, so hiding */}
+                          {/* IMAGE */}
                           <div className="wd-dropdown-img">
                             {firstItem.image_url ? (
                               <img
@@ -193,21 +200,25 @@ const WarehouseDashboard = () => {
                             )}
                           </div>
 
-
                           <div className="wd-dropdown-info">
-                             <p><strong className="wd-label">Order Id:</strong> {order.id}</p>
+                            <p><strong className="wd-label">Order Id:</strong> {order.id}</p>
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
-                            {/* <p><strong>Color:</strong> {firstItem.color.name}</p> */}
+
                             <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
                               <div style={{ display: "flex", alignItems: 'center', gap: 10 }}>
                                 <p><strong className="wd-label">Top:</strong> {firstItem.top || "-"} </p>
-                                <p style={{ backgroundColor: firstItem.top_color.hex, width: 20, height: 20 }}></p>
+                                {firstItem.top_color?.hex && (
+                                  <p style={{ backgroundColor: firstItem.top_color.hex, width: 20, height: 20 }}></p>
+                                )}
                               </div>
                               <div style={{ display: "flex", alignItems: 'center', gap: 10 }}>
                                 <p><strong className="wd-label">Bottom:</strong> {firstItem.bottom || "-"}</p>
-                                <p style={{ backgroundColor: firstItem.bottom_color.hex, width: 20, height: 20 }}></p>
+                                {firstItem.bottom_color?.hex && (
+                                  <p style={{ backgroundColor: firstItem.bottom_color.hex, width: 20, height: 20 }}></p>
+                                )}
                               </div>
                             </div>
+
                             <div style={{ display: "flex", alignItems: 'center', gap: 50 }}>
                               <p><strong className="wd-label">Extras:</strong> {firstItem.extra || "-"}</p>
                               <p><strong className="wd-label">Size:</strong> {firstItem.size || "-"}</p>
@@ -252,18 +263,15 @@ const WarehouseDashboard = () => {
                   </button>
 
                   <div className="wd-pagination-pages">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                      (page) => (
-                        <button
-                          key={page}
-                          className={`wd-pagination-page ${currentPage === page ? "active" : ""
-                            }`}
-                          onClick={() => goToPage(page)}
-                        >
-                          {page}
-                        </button>
-                      )
-                    )}
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        className={`wd-pagination-page ${currentPage === page ? "active" : ""}`}
+                        onClick={() => goToPage(page)}
+                      >
+                        {page}
+                      </button>
+                    ))}
                   </div>
 
                   <button
