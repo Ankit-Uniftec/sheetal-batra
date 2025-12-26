@@ -17,6 +17,7 @@ import { buildWarehousePdf } from "../pdf/warehousePdf";
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
 import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
 
+
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
 
@@ -280,16 +281,34 @@ export default function ReviewDetail() {
       // ===============================
       // SAVE ORDER TO DB
       // ===============================
+      // ===============================
+      // 1️⃣ GENERATE ORDER NUMBER (DB)
+      // ===============================
+      const { data: orderNo, error: orderNoError } = await supabase
+        .rpc("generate_order_no", {
+          p_store: normalizedOrder.mode_of_delivery,
+        });
+
+      if (orderNoError) {
+        console.error("Order no generation failed:", orderNoError);
+        throw orderNoError;
+      }
+
+      // ===============================
+      // 2️⃣ INSERT ORDER WITH order_no
+      // ===============================
       const { data, error } = await supabase
         .from("orders")
-        .insert(normalizedOrder)
+        .insert({
+          ...normalizedOrder,
+          order_no: orderNo, // ✅ CUSTOM ORDER ID
+        })
         .select()
         .single();
 
       if (error) throw error;
-      if (!data) {
-        throw new Error("Order data not returned after saving.");
-      }
+      if (!data) throw new Error("Order insert failed");
+
 
       // Ensure 'items' array exists on the data object for PDF generation
       const orderDataForPdf = {
@@ -380,8 +399,7 @@ export default function ReviewDetail() {
       // ===============================
       // alert("✅ Order saved & PDFs uploaded & URLs stored!");
       // handleLogout();
-      // ===============================
-      // NAVIGATE TO ORDER PLACED PAGE
+       // NAVIGATE TO ORDER PLACED PAGE
       // ===============================
       navigate("/order-placed", {
         state: {
@@ -394,13 +412,7 @@ export default function ReviewDetail() {
       });
     }
 
-    //   // ===============================
-    //   // DONE
-    //   // ===============================
-    //   alert("✅ Order saved & both PDFs generated successfully!");
-    //   // navigate("/orderHistory");
-    //   handleLogout();
-    // } 
+  
     catch (e) {
       console.error("❌ Order save failed:", e);
       alert(e.message || "Failed to save order");
@@ -445,6 +457,12 @@ export default function ReviewDetail() {
 
   return (
     <div className="screen7">
+      {loading && (
+        <div className="global-loader">
+          <img src={Logo} alt="Loading" className="loader-logo" />
+          <p>Saving order, please wait…</p>
+        </div>
+      )}
       {/* HEADER */}
       <div className="screen6-header">
         <img

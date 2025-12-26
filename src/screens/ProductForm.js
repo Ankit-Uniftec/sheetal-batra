@@ -49,15 +49,15 @@ export function SearchableSelect({
   }, [normalized, query]);
 
   useEffect(() => {
-  // Sync query from selected value ONLY when dropdown is closed
-  if (!open) {
-    if (!value) {
-      setQuery("");
-    } else if (current) {
-      setQuery(current.label);
+    // Sync query from selected value ONLY when dropdown is closed
+    if (!open) {
+      if (!value) {
+        setQuery("");
+      } else if (current) {
+        setQuery(current.label);
+      }
     }
-  }
-}, [value, current, open]);
+  }, [value, current, open]);
 
 
   useEffect(() => {
@@ -136,19 +136,19 @@ export function SearchableSelect({
       className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}
     >
       <div
-  className={`ss-control ${open ? "ss-open" : ""}`}
-  onMouseDown={(e) => {
-    e.preventDefault();     // ⛔ stops blur
-    e.stopPropagation();    // ⛔ stops document close
+        className={`ss-control ${open ? "ss-open" : ""}`}
+        onMouseDown={(e) => {
+          e.preventDefault();     // ⛔ stops blur
+          e.stopPropagation();    // ⛔ stops document close
 
-    if (disabled) return;
+          if (disabled) return;
 
-    setOpen(true);
-    setFocusIdx(-1);
+          setOpen(true);
+          setFocusIdx(-1);
 
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }}
->
+          requestAnimationFrame(() => inputRef.current?.focus());
+        }}
+      >
 
         <input
           ref={inputRef}
@@ -702,10 +702,8 @@ export default function ProductForm() {
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [urgentReason, setUrgentReason] = useState(""); // Selected reason from dropdown
   const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
-
-  // Track active measurement category per expanded item
+ // Track active measurement category per expanded item
   const [expandedItemCategories, setExpandedItemCategories] = useState({}); // {[_id]: "Choga"}
-
   // tiny id helper so list keys are stable
   const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
   // update helpers
@@ -724,8 +722,7 @@ export default function ProductForm() {
     setOrderItems((prev) =>
       prev.map((it) => (it._id === id ? { ...it, ...patch } : it))
     );
-
-  // Update measurement for a specific item
+// Update measurement for a specific item
   const updateItemMeasurement = (itemId, categoryKey, field, value) => {
     setOrderItems((prev) =>
       prev.map((it) => {
@@ -744,7 +741,6 @@ export default function ProductForm() {
       })
     );
   };
-
   const handleAddExtra = () => {
     if (!selectedExtra) return;
     const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
@@ -757,14 +753,14 @@ export default function ProductForm() {
       },
     ]);
     setSelectedExtra("");
-    setSelectedExtraColor("");
+    setSelectedExtraColor({ name: "", hex: "" });
+
   };
 
   const handleRemoveExtra = (index) => {
     setSelectedExtrasWithColors((prev) => prev.filter((_, i) => i !== index));
   };
-
-  // Add extra to a specific item in edit mode
+ // Add extra to a specific item in edit mode
   const handleAddExtraToItem = (itemId, extraName, extraColor) => {
     if (!extraName) return;
     const extraDetails = globalExtras.find((e) => e.name === extraName);
@@ -785,7 +781,6 @@ export default function ProductForm() {
       })
     );
   };
-
   // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
@@ -808,8 +803,8 @@ export default function ProductForm() {
 
       setProducts(sorted);
 
-      
-      
+
+
     };
 
     fetchProducts();
@@ -844,52 +839,52 @@ export default function ProductForm() {
   // useEffect(() => {
   //   setSelectedBottomColor("");
   // }, [selectedBottom]);
-//-----------------------------------------------------------------------------------------------------------------------------
+  //-----------------------------------------------------------------------------------------------------------------------------
   //-----------------------------------------------
   // automatic size chart value filled
   useEffect(() => {
-  if (!selectedSize || !activeCategory) return;
+    if (!selectedSize || !activeCategory) return;
 
-  const categoryKey = CATEGORY_KEY_MAP[activeCategory];
-  if (!categoryKey) return;
+    const categoryKey = CATEGORY_KEY_MAP[activeCategory];
+    if (!categoryKey) return;
 
-  const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
-  const sizeData = currentSizeChart[selectedSize];
-  if (!sizeData) return;
+    const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+    const sizeData = currentSizeChart[selectedSize];
+    if (!sizeData) return;
 
-  setMeasurements((prev) => {
-    const prevCategory = prev[categoryKey] || {};
+    setMeasurements((prev) => {
+      const prevCategory = prev[categoryKey] || {};
 
-    const fieldsForCategory = isKidsProduct
-      ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
-      : measurementFields[categoryKey] || [];
+      const fieldsForCategory = isKidsProduct
+        ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
+        : measurementFields[categoryKey] || [];
 
-    const nextCategory = { ...prevCategory };
+      const nextCategory = { ...prevCategory };
 
-    if (fieldsForCategory.includes("Bust") && sizeData.Bust != null) {
-      nextCategory.Bust = sizeData.Bust;
-    }
-    if (fieldsForCategory.includes("Waist") && sizeData.Waist != null) {
-      nextCategory.Waist = sizeData.Waist;
-    }
-    if (fieldsForCategory.includes("Hip") && sizeData.Hip != null) {
-      nextCategory.Hip = sizeData.Hip;
-    }
-    if (fieldsForCategory.includes("Length") && sizeData.Length != null) {
-      nextCategory.Length = sizeData.Length;
-    }
+      if (fieldsForCategory.includes("Bust") && sizeData.Bust != null) {
+        nextCategory.Bust = sizeData.Bust;
+      }
+      if (fieldsForCategory.includes("Waist") && sizeData.Waist != null) {
+        nextCategory.Waist = sizeData.Waist;
+      }
+      if (fieldsForCategory.includes("Hip") && sizeData.Hip != null) {
+        nextCategory.Hip = sizeData.Hip;
+      }
+      if (fieldsForCategory.includes("Length") && sizeData.Length != null) {
+        nextCategory.Length = sizeData.Length;
+      }
 
-    // ⛔ prevent unnecessary rerender
-    if (JSON.stringify(prevCategory) === JSON.stringify(nextCategory)) {
-      return prev;
-    }
+      // ⛔ prevent unnecessary rerender
+      if (JSON.stringify(prevCategory) === JSON.stringify(nextCategory)) {
+        return prev;
+      }
 
-    return {
-      ...prev,
-      [categoryKey]: nextCategory, // ✅ CORRECT
-    };
-  });
-}, [selectedSize, activeCategory, isKidsProduct]);
+      return {
+        ...prev,
+        [categoryKey]: nextCategory, // ✅ CORRECT
+      };
+    });
+  }, [selectedSize, activeCategory, isKidsProduct]);
 
   // FETCH GLOBAL EXTRAS (ONE TIME)
   useEffect(() => {
@@ -950,44 +945,43 @@ export default function ProductForm() {
       setSelectedSize(newSelectedSize);
     }
 
-  const topOptions = selectedProduct.top_options || [];
-  const bottomOptions = selectedProduct.bottom_options || [];
+    const topOptions = selectedProduct.top_options || [];
+    const bottomOptions = selectedProduct.bottom_options || [];
 
-  const defaultTop = selectedProduct.default_top || topOptions[0] || "";
-  const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
+    const defaultTop = selectedProduct.default_top || topOptions[0] || "";
+    const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
 
-  const defaultColorName = selectedProduct.default_color || "";
-  const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
-  
-  setSelectedTop(defaultTop);
-  setSelectedBottom(defaultBottom);
-  
-  // Use default_color for both top and bottom colors (or you can add separate columns later)
-  setSelectedTopColor(defaultTop ? defaultColor : { name: "", hex: "" });
-  setSelectedBottomColor(defaultBottom ? defaultColor : { name: "", hex: "" });
-  // setSelectedColor(selectedProduct.defaultColor);
+    const defaultColorName = selectedProduct.default_color || "";
+    const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
 
-  // Auto-populate default extra if exists
-  if (selectedProduct.default_extra) {
-    const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
-    if (extraDetails) {
-      setSelectedExtrasWithColors([{
-        name: selectedProduct.default_extra,
-        color: defaultColor,
-        price: extraDetails.price || 0,
-      }]);
+    setSelectedTop(defaultTop);
+    setSelectedBottom(defaultBottom);
+    // Use default_color for both top and bottom colors (or you can add separate columns later)
+    setSelectedTopColor(defaultTop ? defaultColor : { name: "", hex: "" });
+    setSelectedBottomColor(defaultBottom ? defaultColor : { name: "", hex: "" });
+    // setSelectedColor(selectedProduct.defaultColor);
+
+    // Auto-populate default extra if exists
+    if (selectedProduct.default_extra) {
+      const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
+      if (extraDetails) {
+        setSelectedExtrasWithColors([{
+          name: selectedProduct.default_extra,
+          color: defaultColor,
+          price: extraDetails.price || 0,
+        }]);
+      } else {
+        setSelectedExtrasWithColors([]);
+      }
     } else {
       setSelectedExtrasWithColors([]);
     }
-  } else {
-    setSelectedExtrasWithColors([]);
-  }
 
-  // Reset other states
-  setSelectedExtra("");
-  setSelectedExtraColor({ name: "", hex: "" });
-  setQuantity(1);
-  setMeasurements({});
+    // Reset other states
+    setSelectedExtra("");
+    setSelectedExtraColor({ name: "", hex: "" });
+    setQuantity(1);
+    setMeasurements({});
   }, [selectedProduct, isKidsProduct]);
 
   // ADD PRODUCT
@@ -1011,7 +1005,7 @@ export default function ProductForm() {
       measurements,
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
-      isKids: isKidsProduct, // Store if it's a kids product
+     
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -1231,9 +1225,15 @@ export default function ProductForm() {
   const toColorOptions = (colors = []) =>
     colors.map((c) => ({
       label: c.name,
-      value: c.name, // Store full object as value
+      value: c.name, // ← Returns just the name string
       hex: c.hex,
     }));
+  // const toExtraOptions = (extras = []) =>
+  //   extras.map((e) => ({
+  //     label: `${e.name} (₹${formatIndianNumber(e.price)})`,
+  //     value: { name: e.name, hex: e.hex },
+  //     price: e.price, // Also store price in the option object
+  //   }));
   const toExtraOptions = (extras = []) =>
     extras.map((e) => ({
       label: `${e.name} (₹${formatIndianNumber(e.price)})`,
@@ -1282,7 +1282,7 @@ export default function ProductForm() {
               <div className="added-products-box added-products-top">
                 {orderItems.map((item, i) => {
                   const expanded = !!expandedRowIds[item._id];
-                  const itemActiveCategory = expandedItemCategories[item._id] || "Choga";
+                   const itemActiveCategory = expandedItemCategories[item._id] || "Choga";
                   const itemCategoryKey = CATEGORY_KEY_MAP[itemActiveCategory];
                   const productOptions = getProductOptions(item.product_id);
                   const itemIsKids = item.isKids || false;
@@ -1633,8 +1633,8 @@ export default function ProductForm() {
                   <SearchableSelect
                     options={toColorOptions(colors)}
                     value={selectedTopColor.name} // Display name, but onChange gets object
-                    onChange={(colorName)=>{
-                      const colorObj = colors.find(c => c.name === colorName) || {name: "", hex: ""};
+                    onChange={(colorName) => {
+                      const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
                       setSelectedTopColor(colorObj);
                     }}
                     placeholder="Select Top Color"
@@ -1656,8 +1656,8 @@ export default function ProductForm() {
                   <SearchableSelect
                     options={toColorOptions(colors)}
                     value={selectedBottomColor.name} // Display name, but onChange gets object
-                    onChange={(colorName)=>{
-                      const colorObj = colors.find(c => c.name === colorName) || {name: "", hex: ""};
+                    onChange={(colorName) => {
+                      const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
                       setSelectedBottomColor(colorObj);
                     }}
                     placeholder="Select Bottom Color"
@@ -1678,7 +1678,7 @@ export default function ProductForm() {
                 <div className="field">
                   <SearchableSelect
                     options={toColorOptions(colors)}
-                    value={selectedExtraColor.name} 
+                    value={selectedExtraColor.name} // Display name, but onChange gets object
                     onChange={(colorName) => {
                       const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
                       setSelectedExtraColor(colorObj);  // ✅ Stores {name, hex}
@@ -1703,20 +1703,16 @@ export default function ProductForm() {
             </div>
 
             {/* Display selected extras */}
-            {selectedExtrasWithColors.length > 0 && (
-              <div className="selected-extras-list">
-                <h4>Added Extras:</h4>
-                {selectedExtrasWithColors.map((extra, index) => (
-                  <div key={index} className="selected-extra-item">
-                    <span>
-                      {extra.name} (₹{formatIndianNumber(extra.price)}){" "}
-                      {extra.color && `(${extra.color})`}
-                    </span>
-                    <button onClick={() => handleRemoveExtra(index)}>x</button>
-                  </div>
-                ))}
+            {selectedExtrasWithColors.map((extra, index) => (
+              <div key={index} className="selected-extra-item">
+                <span>
+                  {extra.name} (₹{formatIndianNumber(extra.price)})
+                  {extra.color?.name && ` (${extra.color.name})`}
+                </span>
+                <button onClick={() => handleRemoveExtra(index)}>x</button>
               </div>
-            )}
+            ))}
+
 
             {/* TOP / BOTTOM COLORS */}
 
@@ -1976,7 +1972,7 @@ export default function ProductForm() {
                 value={otherUrgentReason}
                 onChange={(e) => setOtherUrgentReason(e.target.value)}
                 rows={2}
-                style={{ marginTop: "20px",border:'1px solid #d5b85a',alignItems:"center" }}
+                style={{ marginTop: "20px", border: '1px solid #d5b85a', alignItems: "center" }}
               />
             )}
 

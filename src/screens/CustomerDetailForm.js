@@ -69,7 +69,7 @@ export default function CustomerDetailForm() {
       gender,
       phone: normalizedPhone,
       email: email.trim().toLowerCase(),
-      dob: formatDate(dob), // Use formatDate
+      dob: dob, // Use formatDate
       created_at: new Date(),
     });
 
