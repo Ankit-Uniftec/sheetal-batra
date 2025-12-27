@@ -4,13 +4,14 @@ import OtpDialogBox from "./screens/OtpDialogBox";
 import CustomerDetailForm from "./screens/CustomerDetailForm";
 import ProductForm from "./screens/ProductForm";
 import OrderDetails  from "./screens/OrderDetails";
-import ReviewDetail from "./screens/Screen7";
+import ReviewDetail from "./screens/ReviewDetail";
 import SALogin from "./screens/SALogin";
 import AssociateDashboard from "./screens/AssociateDashboard";
 import WarehouseDashboard from "./screens/WarehouseDashboard";
 import OrderHistory from "./screens/OrderHistory";
 import {  Navigate } from "react-router-dom";
 import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced"
+import EditOrder from "./screens/EditOrder/EditOrder";
 
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
         <Route path="/warehouseDashboard" element={<WarehouseDashboard />} />
         <Route path="/orderHistory" element={<OrderHistory />} />
         <Route path="order-placed" element={<OrderPlaced />}/>
+        <Route path="/edit-order" element={<EditOrder/>}/>
       </Routes>
     </BrowserRouter>
   );

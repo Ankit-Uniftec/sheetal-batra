@@ -1266,3 +1266,415 @@
     display: none;
   }
 }
+
+/* ===================================
+   ASSOCIATE DASHBOARD - ORDER MANAGEMENT ADDITIONS
+   Add this to your AssociateDashboard.css
+   =================================== */
+
+/* ===== ORDER STATUS BADGE ===== */
+.ad-badges-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ad-order-status-badge {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.ad-status-active {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.ad-status-delivered {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #bbdefb;
+}
+
+.ad-status-cancelled {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+.ad-status-exchange {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+}
+
+.ad-status-processing {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #e1bee7;
+}
+
+/* ===== EDITABLE BADGE ===== */
+.ad-editable-badge {
+  padding: 5px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #fff8e1;
+  color: #f57c00;
+  border: 1px solid #ffe082;
+}
+
+/* ===== ORDER CARD ADJUSTMENTS ===== */
+.ad-order-card {
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f0f0f0;
+  transition: all 0.2s ease;
+}
+
+.ad-order-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Remove golden decorative line */
+.ad-decorative-line {
+  display: none !important;
+}
+
+/* ===== ORDER ACTIONS BAR ===== */
+.ad-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f0f0;
+  align-items: center;
+}
+
+.ad-action-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ad-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ad-edit-btn {
+  background: #d5b85a;
+  color: white;
+}
+
+.ad-edit-btn:hover:not(:disabled) {
+  background: #c9a94e;
+}
+
+.ad-delivered-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.ad-delivered-btn:hover:not(:disabled) {
+  background: #43a047;
+}
+
+.ad-cancel-btn {
+  background: #f44336;
+  color: white;
+}
+
+.ad-cancel-btn:hover:not(:disabled) {
+  background: #d32f2f;
+}
+
+.ad-exchange-btn {
+  background: #2196f3;
+  color: white;
+}
+
+.ad-exchange-btn:hover:not(:disabled) {
+  background: #1976d2;
+}
+
+/* ===== ACTION DROPDOWN ===== */
+.ad-action-dropdown {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ad-action-dropdown select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  min-width: 180px;
+  cursor: pointer;
+}
+
+.ad-action-dropdown select:focus {
+  border-color: #d5b85a;
+  outline: none;
+}
+
+/* ===== EDIT MODAL ===== */
+.ad-edit-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.ad-edit-box {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.ad-edit-box h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.4rem;
+  color: #d5b85a;
+  font-family: "Athleas", serif;
+}
+
+.ad-close-modal {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f5f5f5;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ad-close-modal:hover {
+  background: #eee;
+}
+
+/* ===== EDIT FORM ===== */
+.ad-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ad-edit-row {
+  display: flex;
+  gap: 16px;
+}
+
+.ad-edit-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ad-edit-field.ad-edit-full {
+  flex: none;
+  width: 100%;
+}
+
+.ad-edit-field label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.ad-edit-field input,
+.ad-edit-field select {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.ad-edit-field input:focus,
+.ad-edit-field select:focus {
+  border-color: #d5b85a;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.1);
+}
+
+.ad-edit-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.ad-edit-cancel {
+  padding: 10px 24px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ad-edit-cancel:hover {
+  background: #eee;
+}
+
+.ad-edit-save {
+  padding: 10px 24px;
+  background: #d5b85a;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ad-edit-save:hover:not(:disabled) {
+  background: #c9a94e;
+}
+
+.ad-edit-save:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* ===== BLUR EFFECT ===== */
+.ad-blurred {
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+/* ===== FONT SIZE CONSISTENCY ===== */
+.ad-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ad-order-label {
+  font-size: 13px;
+  color: #888;
+}
+
+.ad-header-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ad-header-label {
+  font-size: 12px;
+  color: #888;
+}
+
+/* ===== PRODUCT THUMB CLICKABLE ===== */
+.ad-product-thumb {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.ad-product-thumb:hover {
+  transform: scale(1.02);
+}
+
+/* ===== ORDER ITEM IN DASHBOARD ===== */
+.ad-order-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ad-order-item:last-child {
+  border-bottom: none;
+}
+
+/* ===== RESPONSIVE ADJUSTMENTS ===== */
+@media (max-width: 768px) {
+  .ad-badges-row {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .ad-order-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ad-action-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .ad-action-dropdown {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .ad-action-dropdown select {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .ad-action-dropdown button {
+    width: 100%;
+  }
+
+  .ad-edit-row {
+    flex-direction: column;
+  }
+
+  .ad-edit-actions {
+    flex-direction: column;
+  }
+
+  .ad-edit-cancel,
+  .ad-edit-save {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-edit-box {
+    padding: 16px;
+  }
+
+  .ad-edit-box h3 {
+    font-size: 1.2rem;
+  }
+}

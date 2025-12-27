@@ -1,13 +1,24 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import "./AssociateDashboard.css";
-import "./OrderHistory.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
-import { downloadCustomerPdf } from "../utils/pdfUtils"; // Import PDF utility
+import { downloadCustomerPdf } from "../utils/pdfUtils";
+
+// Time calculation helpers
+const getHoursSinceOrder = (createdAt) => {
+  const orderDate = new Date(createdAt);
+  const now = new Date();
+  return (now - orderDate) / (1000 * 60 * 60);
+};
+
+const isAfterDeliveryDate = (deliveryDate) => {
+  if (!deliveryDate) return false;
+  return new Date() > new Date(deliveryDate);
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -18,7 +29,8 @@ export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(null); // Track which order PDF is loading
+  const [pdfLoading, setPdfLoading] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [enteredPassword, setEnteredPassword] = useState("");
@@ -28,12 +40,25 @@ export default function Dashboard() {
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
 
+  // Edit modal state
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+
+  // Action dropdowns state
+  const [selectedCancellation, setSelectedCancellation] = useState({});
+  const [selectedExchange, setSelectedExchange] = useState({});
+
+  // Check if user is Store Manager
+  const isSM = useMemo(() => {
+    return salesperson?.designation?.toLowerCase().includes("manager");
+  }, [salesperson]);
+
   // Stats
   const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
   const totalOrders = orders.length;
   const totalClients = new Set(orders.map((o) => o.user_id)).size;
   const activeOrders = orders.filter(
-    (o) => o.status !== "completed" && o.status !== "cancelled" &&
+    (o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "delivered" &&
       formatDate(o.created_at) === formatDate(new Date())
   );
 
@@ -130,7 +155,7 @@ export default function Dashboard() {
 
       const { data: orderClients, error } = await supabase
         .from("orders")
-        .select("delivery_name, delivery_email, delivery_phone")
+        .select("delivery_name, delivery_email, delivery_phone, user_id")
         .eq("salesperson_email", salesperson.email);
 
       if (error) {
@@ -147,6 +172,7 @@ export default function Dashboard() {
             name: c.delivery_name,
             email: c.delivery_email,
             phone: c.delivery_phone,
+            user_id: c.user_id,
           });
         }
       });
@@ -170,6 +196,7 @@ export default function Dashboard() {
         name: c.name,
         email: c.email,
         phone: c.phone,
+        user_id: c.user_id,
         gender: profileMap.get(c.email)?.gender || "—",
         dob: formatDate(profileMap.get(c.email)?.dob),
       }));
@@ -186,8 +213,9 @@ export default function Dashboard() {
     navigate("/login");
   };
 
-  // Handle PDF download with on-demand generation
-  const handlePrintPdf = async (order) => {
+  // Handle PDF download
+  const handlePrintPdf = async (e, order) => {
+    e.stopPropagation();
     setPdfLoading(order.id);
     try {
       await downloadCustomerPdf(order);
@@ -195,6 +223,311 @@ export default function Dashboard() {
       console.error("PDF download failed:", error);
     } finally {
       setPdfLoading(null);
+    }
+  };
+
+  // Mark as Delivered
+  const handleMarkDelivered = async (e, order) => {
+    e.stopPropagation();
+    if (!window.confirm("Mark this order as delivered?")) return;
+
+    setActionLoading(order.id);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "delivered",
+          delivered_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, status: "delivered", delivered_at: new Date().toISOString() } : o
+      ));
+
+      alert("Order marked as delivered!");
+    } catch (err) {
+      console.error("Mark delivered error:", err);
+      alert("Failed to update: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle Cancellation
+  const handleCancellation = async (e, order) => {
+    e.stopPropagation();
+    const reason = selectedCancellation[order.id];
+    if (!reason) {
+      alert("Please select a cancellation reason");
+      return;
+    }
+
+    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+
+    setActionLoading(order.id);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "cancelled",
+          cancellation_reason: reason,
+          cancelled_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+
+      if (error) throw error;
+
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: reason } : o
+      ));
+
+      setSelectedCancellation(prev => ({ ...prev, [order.id]: "" }));
+      alert("Order cancelled successfully!");
+    } catch (err) {
+      console.error("Cancellation error:", err);
+      alert("Failed to cancel: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle Exchange/Return
+  const handleExchangeReturn = async (e, order) => {
+    e.stopPropagation();
+    const reason = selectedExchange[order.id];
+    if (!reason) {
+      alert("Please select an exchange/return reason");
+      return;
+    }
+
+    if (!window.confirm("Process this exchange/return request?")) return;
+
+    setActionLoading(order.id);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "exchange_return",
+          exchange_reason: reason,
+          exchange_requested_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+
+      if (error) throw error;
+
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, status: "exchange_return", exchange_reason: reason } : o
+      ));
+
+      setSelectedExchange(prev => ({ ...prev, [order.id]: "" }));
+      alert("Exchange/Return processed successfully!");
+    } catch (err) {
+      console.error("Exchange error:", err);
+      alert("Failed to process: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Open Edit Modal
+  const openEditModal = (e, order) => {
+    e.stopPropagation();
+    const item = order.items?.[0] || {};
+    // Handle color as object or string
+    let colorValue = "";
+    if (typeof item.color === 'object' && item.color !== null) {
+      colorValue = item.color.name || item.color.hex || "";
+    } else {
+      colorValue = item.color || "";
+    }
+    
+    setEditFormData({
+      size: item.size || "",
+      color: colorValue,
+      delivery_date: order.delivery_date?.slice(0, 10) || "",
+      delivery_address: order.delivery_address || "",
+      delivery_city: order.delivery_city || "",
+      delivery_state: order.delivery_state || "",
+      delivery_pincode: order.delivery_pincode || "",
+      mode_of_delivery: order.mode_of_delivery || "",
+    });
+    setEditingOrder(order);
+  };
+
+  // Save Edit
+  const handleSaveEdit = async () => {
+    if (!editingOrder) return;
+
+    setActionLoading(editingOrder.id);
+    try {
+      const updatedItems = editingOrder.items?.map((item, i) => {
+        if (i === 0) {
+          return {
+            ...item,
+            size: editFormData.size,
+            color: typeof item.color === 'object'
+              ? { ...item.color, name: editFormData.color }
+              : editFormData.color,
+          };
+        }
+        return item;
+      });
+
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          items: updatedItems,
+          delivery_date: editFormData.delivery_date,
+          delivery_address: editFormData.delivery_address,
+          delivery_city: editFormData.delivery_city,
+          delivery_state: editFormData.delivery_state,
+          delivery_pincode: editFormData.delivery_pincode,
+          mode_of_delivery: editFormData.mode_of_delivery,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingOrder.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setOrders(prev => prev.map(o => {
+        if (o.id === editingOrder.id) {
+          return {
+            ...o,
+            items: updatedItems,
+            delivery_date: editFormData.delivery_date,
+            delivery_address: editFormData.delivery_address,
+            delivery_city: editFormData.delivery_city,
+            delivery_state: editFormData.delivery_state,
+            delivery_pincode: editFormData.delivery_pincode,
+            mode_of_delivery: editFormData.mode_of_delivery,
+          };
+        }
+        return o;
+      }));
+
+      setEditingOrder(null);
+      alert("Order updated successfully!");
+    } catch (err) {
+      console.error("Save edit error:", err);
+      alert("Failed to save: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Navigate to Customer Orders
+  const viewCustomerOrders = (order) => {
+    navigate("/orderHistory", {
+      state: {
+        customer: {
+          user_id: order.user_id,
+          name: order.delivery_name,
+          email: order.delivery_email,
+          phone: order.delivery_phone,
+        },
+        fromAssociate: true,
+      }
+    });
+  };
+
+  // Navigate from Client Book
+  const viewClientOrders = (client) => {
+    navigate("/orderHistory", {
+      state: {
+        customer: {
+          user_id: client.user_id,
+          name: client.name,
+          email: client.email,
+          phone: client.phone,
+        },
+        fromAssociate: true,
+      }
+    });
+  };
+
+  // Get cancellation options based on time
+  const getCancellationOptions = (order) => {
+    const hoursSince = getHoursSinceOrder(order.created_at);
+    const afterDelivery = isAfterDeliveryDate(order.delivery_date);
+    const options = [];
+
+    if (hoursSince <= 24) {
+      options.push(
+        { value: "client_no_longer_wants", label: "Client No Longer Wants The Product" },
+        { value: "wh_cannot_expedite", label: "WH Cannot Expedite Production" },
+        { value: "new_order_placed", label: "New Order Placed" }
+      );
+    }
+
+    if (isSM && hoursSince > 24 && !afterDelivery) {
+      options.push({ value: "store_credit_given", label: "Store Credit Given" });
+    }
+
+    if (afterDelivery) {
+      options.push(
+        { value: "delayed_delivery", label: "Delayed Delivery" },
+        { value: "incorrect_product", label: "Incorrect Product Delivered" },
+        { value: "quality_failure", label: "Quality Failure" }
+      );
+    }
+
+    return options;
+  };
+
+  // Get exchange options
+  const getExchangeOptions = (order) => {
+    const hoursSince = getHoursSinceOrder(order.created_at);
+    const afterDelivery = isAfterDeliveryDate(order.delivery_date);
+    const isDelivered = order.status?.toLowerCase() === "delivered";
+    const options = [];
+
+    if (afterDelivery || isDelivered) {
+      options.push(
+        { value: "exchange_size", label: "Product Exchange (Size)" },
+        { value: "exchange_other", label: "Product Exchange (Other)" },
+        { value: "client_not_like_product", label: "Client Did Not Like Product" },
+        { value: "client_not_like_quality", label: "Client Did Not Like Quality" }
+      );
+    }
+
+    if (isSM && hoursSince > 24 && !afterDelivery) {
+      options.push({ value: "store_credit_given", label: "Store Credit Given" });
+    }
+
+    return options;
+  };
+
+  // Check permissions
+  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36;
+  const canCancel = (order) => {
+    const hoursSince = getHoursSinceOrder(order.created_at);
+    const afterDelivery = isAfterDeliveryDate(order.delivery_date);
+    return hoursSince <= 24 || afterDelivery || (isSM && hoursSince > 24);
+  };
+  const canExchangeReturn = (order) => {
+    const afterDelivery = isAfterDeliveryDate(order.delivery_date);
+    const isDelivered = order.status?.toLowerCase() === "delivered";
+    const hoursSince = getHoursSinceOrder(order.created_at);
+    return afterDelivery || isDelivered || (isSM && hoursSince > 24);
+  };
+  const canMarkDelivered = (order) => {
+    const status = order.status?.toLowerCase();
+    return status !== "delivered" && status !== "cancelled" && status !== "exchange_return";
+  };
+
+  // Get status badge style
+  const getStatusBadgeClass = (status) => {
+    switch (status?.toLowerCase()) {
+      case "delivered": return "ad-status-delivered";
+      case "cancelled": return "ad-status-cancelled";
+      case "exchange_return": return "ad-status-exchange";
+      case "processing": return "ad-status-processing";
+      default: return "ad-status-active";
     }
   };
 
@@ -237,7 +570,110 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className={`ad-dashboard-wrapper ${showPasswordModal ? "ad-blurred" : "ad-none"}`}>
+      {/* Edit Modal */}
+      {editingOrder && (
+        <div className="ad-edit-modal">
+          <div className="ad-edit-box">
+            <h3>Edit Order</h3>
+            <button className="ad-close-modal" onClick={() => setEditingOrder(null)}>✕</button>
+
+            <div className="ad-edit-form">
+              <div className="ad-edit-row">
+                <div className="ad-edit-field">
+                  <label>Size</label>
+                  <select
+                    value={editFormData.size}
+                    onChange={(e) => setEditFormData({ ...editFormData, size: e.target.value })}
+                  >
+                    <option value="">Select Size</option>
+                    {["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL"].map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ad-edit-field">
+                  <label>Color</label>
+                  <input
+                    type="text"
+                    value={editFormData.color}
+                    onChange={(e) => setEditFormData({ ...editFormData, color: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="ad-edit-row">
+                <div className="ad-edit-field">
+                  <label>Delivery Date</label>
+                  <input
+                    type="date"
+                    value={editFormData.delivery_date}
+                    onChange={(e) => setEditFormData({ ...editFormData, delivery_date: e.target.value })}
+                  />
+                </div>
+                <div className="ad-edit-field">
+                  <label>Mode of Delivery</label>
+                  <select
+                    value={editFormData.mode_of_delivery}
+                    onChange={(e) => setEditFormData({ ...editFormData, mode_of_delivery: e.target.value })}
+                  >
+                    <option value="Home Delivery">Home Delivery</option>
+                    <option value="Store Pickup">Store Pickup</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="ad-edit-field ad-edit-full">
+                <label>Delivery Address</label>
+                <input
+                  type="text"
+                  value={editFormData.delivery_address}
+                  onChange={(e) => setEditFormData({ ...editFormData, delivery_address: e.target.value })}
+                />
+              </div>
+
+              <div className="ad-edit-row">
+                <div className="ad-edit-field">
+                  <label>City</label>
+                  <input
+                    type="text"
+                    value={editFormData.delivery_city}
+                    onChange={(e) => setEditFormData({ ...editFormData, delivery_city: e.target.value })}
+                  />
+                </div>
+                <div className="ad-edit-field">
+                  <label>State</label>
+                  <input
+                    type="text"
+                    value={editFormData.delivery_state}
+                    onChange={(e) => setEditFormData({ ...editFormData, delivery_state: e.target.value })}
+                  />
+                </div>
+                <div className="ad-edit-field">
+                  <label>Pincode</label>
+                  <input
+                    type="text"
+                    value={editFormData.delivery_pincode}
+                    onChange={(e) => setEditFormData({ ...editFormData, delivery_pincode: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="ad-edit-actions">
+                <button className="ad-edit-cancel" onClick={() => setEditingOrder(null)}>Cancel</button>
+                <button
+                  className="ad-edit-save"
+                  onClick={handleSaveEdit}
+                  disabled={actionLoading === editingOrder.id}
+                >
+                  {actionLoading === editingOrder.id ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`ad-dashboard-wrapper ${showPasswordModal || editingOrder ? "ad-blurred" : ""}`}>
         <div className="ad-top-header">
           <img src={Logo} className="logo4" alt="logo" />
           <h1 className="ad-order-title">My Dashboard</h1>
@@ -300,9 +736,9 @@ export default function Dashboard() {
                       <p>No active orders</p>
                     ) : (
                       activeOrders.map((o) => (
-                        <div className="ad-order-item" key={o.id} style={{ borderBottom: '1px solid #d5b85a' }}>
-                          <p><b>Order No:</b> {o.id}</p>
-                          <p><b>Status:</b> {o.status}</p>
+                        <div className="ad-order-item" key={o.id}>
+                          <p><b>Order No:</b> {o.id?.slice(0, 8)}</p>
+                          <p><b>Status:</b> {o.status || "Pending"}</p>
                           <p><b>Delivery Date:</b> {formatDate(o.delivery_date)}</p>
                         </div>
                       ))
@@ -338,17 +774,35 @@ export default function Dashboard() {
                 {filteredOrders.map((order) => {
                   const item = order.items?.[0] || {};
                   const imgSrc = item.image_url || "/placeholder.png";
+                  const hoursSince = getHoursSinceOrder(order.created_at);
 
                   return (
-                    <div key={order.id} className="ad-order-card">
+                    <div 
+                      key={order.id} 
+                      className="ad-order-card"
+                      onClick={() => viewCustomerOrders(order)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {/* Badges Row - Top Right */}
+                      <div className="ad-badges-row">
+                        {canEdit(order) && (
+                          <div className="ad-editable-badge">
+                            Editable ({Math.floor(36 - hoursSince)}h left)
+                          </div>
+                        )}
+                        <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
+                          {order.status || "Pending"}
+                        </div>
+                      </div>
+
                       <div className="ad-order-header">
                         <div className="ad-header-info">
                           <div className="ad-header-item">
-                            <span className="ad-header-label">Order No.:</span>
+                            <span className="ad-header-label">Order No:</span>
                             <span className="ad-header-value">{order.id?.slice(0, 8) || "—"}</span>
                           </div>
                           <div className="ad-header-item">
-                            <span className="ad-header-label">Order Date.:</span>
+                            <span className="ad-header-label">Order Date:</span>
                             <span className="ad-header-value">{formatDate(order.created_at) || "—"}</span>
                           </div>
                           <div className="ad-header-item">
@@ -359,25 +813,22 @@ export default function Dashboard() {
                         <div className="ad-header-actions">
                           <button
                             className="ad-print-pdf-btn"
-                            onClick={() => handlePrintPdf(order)}
+                            onClick={(e) => handlePrintPdf(e, order)}
                             disabled={pdfLoading === order.id}
                           >
-                            <span className="ad-pdf-icon">📄</span>
-                            {pdfLoading === order.id ? "Generating..." : "Print PDF"}
+                            {pdfLoading === order.id ? "..." : "📄 PDF"}
                           </button>
                         </div>
                       </div>
 
                       <div className="ad-order-content">
-                        <div className="ad-product-thumb">
+                        <div className="ad-product-thumb" onClick={() => viewCustomerOrders(order)}>
                           <img src={imgSrc} alt={item.product_name || "Product"} />
                         </div>
                         <div className="ad-product-details">
-                          <div className="ad-product-name-row">
-                            <div className="ad-product-name">
-                              <span className="ad-order-label">Product Name:</span>
-                              <span className="ad-value">{item.product_name || "—"}</span>
-                            </div>
+                          <div className="ad-product-name">
+                            <span className="ad-order-label">Product Name:</span>
+                            <span className="ad-value">{item.product_name || "—"}</span>
                           </div>
                           <div className="ad-product-name">
                             <span className="ad-order-label">Client Name:</span>
@@ -394,23 +845,32 @@ export default function Dashboard() {
                             </div>
                             <div className="ad-detail-item">
                               <span className="ad-order-label">Color:</span>
-                              <span className="ad-value">{item.color?.name || "—"}</span>
+                              <span className="ad-value">
+                                {typeof item.color === 'object' && item.color !== null 
+                                  ? (item.color.name || item.color.hex || "—")
+                                  : (item.color || "—")}
+                              </span>
                             </div>
                             <div className="ad-detail-item">
                               <span className="ad-order-label">Size:</span>
                               <span className="ad-value">{item.size || "—"}</span>
                             </div>
                           </div>
-                          <div className="ad-sa-row">
-                            <span className="ad-order-label">SA:</span>
-                            <span className="ad-value">
-                              {order.salesperson || "—"}
-                              {order.salesperson_phone ? ` (${formatPhoneNumber(order.salesperson_phone)})` : ""}
-                            </span>
-                          </div>
                         </div>
                       </div>
-                      <div className="ad-decorative-line"></div>
+
+                      {/* Action Buttons - Only Mark Delivered */}
+                      {canMarkDelivered(order) && (
+                        <div className="ad-order-actions">
+                          <button
+                            className="ad-action-btn ad-delivered-btn"
+                            onClick={(e) => handleMarkDelivered(e, order)}
+                            disabled={actionLoading === order.id}
+                          >
+                            {actionLoading === order.id ? "..." : "✓ Mark Delivered"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -507,6 +967,7 @@ export default function Dashboard() {
                         <th>Phone</th>
                         <th>Gender</th>
                         <th>Date of Birth</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -517,6 +978,14 @@ export default function Dashboard() {
                           <td data-label="Phone">{c.phone}</td>
                           <td data-label="Gender">{c.gender}</td>
                           <td data-label="Date of Birth">{formatDate(c.dob)}</td>
+                          <td data-label="Action">
+                            <button
+                              className="ad-view-btn"
+                              onClick={() => viewClientOrders(c)}
+                            >
+                              View Orders
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
