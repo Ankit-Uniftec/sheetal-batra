@@ -1,26 +1,41 @@
-.kids-checkbox-container {
+/* .kids-checkbox-container {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Adjust as needed for spacing between checkbox and label */
   margin-bottom: 15px;
-  /* Add some space below the checkbox */
 }
 
 .kids-checkbox-container input[type="checkbox"] {
-  /* Basic styling for the checkbox itself */
   width: 18px;
   height: 18px;
   cursor: pointer;
 }
 
 .kids-checkbox-container label {
-  /* Styling for the label */
   font-size: 1rem;
   color: #333;
   cursor: pointer;
+} */
+
+.category-dropdown-container {
+  width: 150px;
+  margin-bottom: 15px;
 }
 
+.category-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid #d5b85a;
+  background: transparent;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+}
+
+.category-select:focus {
+  border-bottom: 2px solid #d5b85a;
+}
 
 .screen4-bg {
   background-image: url("../images/Screen1bg.png");

@@ -301,14 +301,14 @@ export default function ReviewDetail() {
           )}
         </div>
 
-        <div className="section-box">
+        {/* <div className="section-box">
           <h3>Salesperson Details</h3>
           <div className="row3">
             <div className="field"><label>Name:</label><span>{order.salesperson || "—"}</span></div>
             <div className="field"><label>Email:</label><span>{order.salesperson_email || "—"}</span></div>
             <div className="field"><label>Phone:</label><span>{order.salesperson_phone || "—"}</span></div>
           </div>
-        </div>
+        </div> */}
 
         <div className="section-box">
           <h3>Payment Details</h3>

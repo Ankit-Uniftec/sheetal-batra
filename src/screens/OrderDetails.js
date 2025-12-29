@@ -751,7 +751,7 @@ export default function OrderDetails() {
                 onChange={(e) => setPaymentMode(e.target.value)}
               >
                 <option value="UPI">UPI</option>
-                <option value="COD">COD</option>
+                <option value="COD">Cash</option>
                 <option value="Credit Card">Credit Card</option>
                 <option value="Debit Card">Debit Card</option>
                 <option value="Net Banking">Net Banking</option>

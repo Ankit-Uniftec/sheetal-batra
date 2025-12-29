@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
 
   // Edit modal state
   const [editingOrder, setEditingOrder] = useState(null);
@@ -531,6 +532,15 @@ export default function Dashboard() {
     }
   };
 
+  // Filter clients based on search
+  const filteredClients = clients.filter((client) => {
+    if (!clientSearch.trim()) return true;
+    const q = clientSearch.toLowerCase();
+    const name = client.name?.toLowerCase() || "";
+    const phone = client.phone?.toLowerCase() || "";
+    return name.includes(q) || phone.includes(q);
+  });
+
   if (loading) return <p className="loading-text">Loading Dashboard...</p>;
 
   const ordersByDate = orders.reduce((acc, order) => {
@@ -728,7 +738,7 @@ export default function Dashboard() {
               <div className="ad-cell ad-active-orders">
                 <div className="ad-orders-card">
                   <div className="ad-card-header">
-                    <span className="ad-card-title">Today's Orders</span>
+                    <span className="ad-card-title">Today's Orders ({activeOrders.length})</span>
                     <button className="ad-view-btn" onClick={() => setActiveTab("orders")}>View All</button>
                   </div>
                   <div className="ad-cardbox">
@@ -738,6 +748,7 @@ export default function Dashboard() {
                       activeOrders.map((o) => (
                         <div className="ad-order-item" key={o.id}>
                           <p><b>Order No:</b> {o.id?.slice(0, 8)}</p>
+                          <p><b>Client Name:</b> {o.delivery_name}</p>
                           <p><b>Status:</b> {o.status || "Pending"}</p>
                           <p><b>Delivery Date:</b> {formatDate(o.delivery_date)}</p>
                         </div>
@@ -952,38 +963,49 @@ export default function Dashboard() {
 
           {activeTab === "clients" && (
             <div className="ad-order-details-wrapper">
-              <h2 className="ad-order-title">Client Book</h2>
+              <h2 className="ad-order-title">Client Book ({filteredClients.length})</h2>
+              
+              {/* Client Search Bar */}
+              <div className="ad-order-search-bar">
+                <input
+                  type="text"
+                  placeholder="Search by Client Name or Phone Number"
+                  value={clientSearch}
+                  onChange={(e) => setClientSearch(e.target.value)}
+                />
+              </div>
+
               {clientsLoading ? (
                 <p className="ad-loading-text">Loading clients...</p>
-              ) : clients.length === 0 ? (
-                <p className="ad-muted">No client found</p>
+              ) : filteredClients.length === 0 ? (
+                <p className="ad-muted">{clientSearch ? "No clients found matching your search" : "No client found"}</p>
               ) : (
                 <div className="ad-table-wrapper">
                   <table className="ad-clients-table">
                     <thead>
                       <tr>
                         <th>Name</th>
-                        <th>Email</th>
+                        {/* <th>Email</th> */}
                         <th>Phone</th>
-                        <th>Gender</th>
-                        <th>Date of Birth</th>
+                        {/* <th>Gender</th>
+                        <th>Date of Birth</th> */}
                         <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {clients.map((c, i) => (
+                      {filteredClients.map((c, i) => (
                         <tr key={i}>
                           <td data-label="Name">{c.name}</td>
-                          <td data-label="Email">{c.email}</td>
+                          {/* <td data-label="Email">{c.email}</td> */}
                           <td data-label="Phone">{c.phone}</td>
-                          <td data-label="Gender">{c.gender}</td>
-                          <td data-label="Date of Birth">{formatDate(c.dob)}</td>
+                          {/* <td data-label="Gender">{c.gender}</td> */}
+                          {/* <td data-label="Date of Birth">{formatDate(c.dob)}</td> */}
                           <td data-label="Action">
                             <button
                               className="ad-view-btn"
                               onClick={() => viewClientOrders(c)}
                             >
-                              View Orders
+                              View
                             </button>
                           </td>
                         </tr>

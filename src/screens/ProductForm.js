@@ -227,21 +227,21 @@ export function SearchableSelect({
 }
 
 const KIDS_SIZE_OPTIONS = [
-  "1-2 Years",
-  "2-3 Years",
-  "3-4 Years",
-  "4-5 Years",
-  "5-6 Years",
-  "6-7 Years",
-  "7-8 Years",
-  "8-9 Years",
-  "9-10 Years",
-  "10-11 Years",
-  "11-12 Years",
-  "12-13 Years",
-  "13-14 Years",
-  "14-15 Years",
-  "15-16 Years",
+  "1-2 Yrs",
+  "2-3 Yrs",
+  "3-4 Yrs",
+  "4-5 Yrs",
+  "5-6 Yrs",
+  "6-7 Yrs",
+  "7-8 Yrs",
+  "8-9 Yrs",
+  "9-10 Yrs",
+  "10-11 Yrs",
+  "11-12 Yrs",
+  "12-13 Yrs",
+  "13-14 Yrs",
+  "14-15 Yrs",
+  "15-16 Yrs",
 ];
 
 const KIDS_SIZE_CHART = {
@@ -648,6 +648,15 @@ export default function ProductForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  useEffect(() => {
+  const saved = sessionStorage.getItem("screen4FormData");
+  console.log("Saved data:", saved);
+  if (saved) {
+    console.log("Parsed:", JSON.parse(saved));
+  }
+}, []);
+
+
   // PRODUCT STATES
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -702,10 +711,16 @@ export default function ProductForm() {
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [urgentReason, setUrgentReason] = useState(""); // Selected reason from dropdown
   const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
- // Track active measurement category per expanded item
+  // Track active measurement category per expanded item
   const [expandedItemCategories, setExpandedItemCategories] = useState({}); // {[_id]: "Choga"}
+  
+  // Flag to track if data was restored from sessionStorage
+  // const [isRestored, setIsRestored] = useState(false);
+  const isRestoredRef = useRef(false);
+  
   // tiny id helper so list keys are stable
   const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  
   // update helpers
   const toggleExpand = (id) => {
     setExpandedRowIds((e) => ({ ...e, [id]: !e[id] }));
@@ -722,7 +737,7 @@ export default function ProductForm() {
     setOrderItems((prev) =>
       prev.map((it) => (it._id === id ? { ...it, ...patch } : it))
     );
-// Update measurement for a specific item
+  // Update measurement for a specific item
   const updateItemMeasurement = (itemId, categoryKey, field, value) => {
     setOrderItems((prev) =>
       prev.map((it) => {
@@ -760,7 +775,7 @@ export default function ProductForm() {
   const handleRemoveExtra = (index) => {
     setSelectedExtrasWithColors((prev) => prev.filter((_, i) => i !== index));
   };
- // Add extra to a specific item in edit mode
+  // Add extra to a specific item in edit mode
   const handleAddExtraToItem = (itemId, extraName, extraColor) => {
     if (!extraName) return;
     const extraDetails = globalExtras.find((e) => e.name === extraName);
@@ -781,6 +796,104 @@ export default function ProductForm() {
       })
     );
   };
+
+  // ==================== SESSION STORAGE RESTORE ====================
+  // Restore form data from sessionStorage on mount
+// Restore form data from sessionStorage on mount
+useEffect(() => {
+  const saved = sessionStorage.getItem("screen4FormData");
+  if (saved) {
+    try {
+      isRestoredRef.current = true; // Set BEFORE restoring data
+      const data = JSON.parse(saved);
+      if (data.selectedProduct) setSelectedProduct(data.selectedProduct);
+      if (data.selectedColor) setSelectedColor(data.selectedColor);
+      if (data.selectedTop) setSelectedTop(data.selectedTop);
+      if (data.selectedBottom) setSelectedBottom(data.selectedBottom);
+      if (data.selectedTopColor) setSelectedTopColor(data.selectedTopColor);
+      if (data.selectedBottomColor) setSelectedBottomColor(data.selectedBottomColor);
+      if (data.selectedExtra) setSelectedExtra(data.selectedExtra);
+      if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
+      if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
+      if (data.selectedSize) setSelectedSize(data.selectedSize);
+      if (data.quantity) setQuantity(data.quantity);
+      if (data.measurements) setMeasurements(data.measurements);
+      if (data.orderItems) setOrderItems(data.orderItems);
+      if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
+      if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
+      if (data.orderFlag) setOrderFlag(data.orderFlag);
+      if (data.comments) setComments(data.comments);
+      if (data.attachments) setAttachments(data.attachments);
+      if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
+      if (data.urgentReason) setUrgentReason(data.urgentReason);
+      if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
+      if (data.availableSizes) setAvailableSizes(data.availableSizes);
+      if (data.tops) setTops(data.tops);
+      if (data.bottoms) setBottoms(data.bottoms);
+    } catch (e) {
+      console.error("Error restoring form data:", e);
+      isRestoredRef.current = false;
+    }
+  }
+}, []);
+
+  // ==================== SESSION STORAGE SAVE ====================
+  // Save form data to sessionStorage whenever it changes
+  useEffect(() => {
+    const formData = {
+      selectedProduct,
+      selectedColor,
+      selectedTop,
+      selectedBottom,
+      selectedTopColor,
+      selectedBottomColor,
+      selectedExtra,
+      selectedExtraColor,
+      selectedExtrasWithColors,
+      selectedSize,
+      quantity,
+      measurements,
+      orderItems,
+      deliveryDate,
+      modeOfDelivery,
+      orderFlag,
+      comments,
+      attachments,
+      isKidsProduct,
+      urgentReason,
+      otherUrgentReason,
+      availableSizes,
+      tops,
+      bottoms,
+    };
+    sessionStorage.setItem("screen4FormData", JSON.stringify(formData));
+  }, [
+    selectedProduct,
+    selectedColor,
+    selectedTop,
+    selectedBottom,
+    selectedTopColor,
+    selectedBottomColor,
+    selectedExtra,
+    selectedExtraColor,
+    selectedExtrasWithColors,
+    selectedSize,
+    quantity,
+    measurements,
+    orderItems,
+    deliveryDate,
+    modeOfDelivery,
+    orderFlag,
+    comments,
+    attachments,
+    isKidsProduct,
+    urgentReason,
+    otherUrgentReason,
+    availableSizes,
+    tops,
+    bottoms,
+  ]);
+
   // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
@@ -906,7 +1019,14 @@ export default function ProductForm() {
   }, []);
 
   // When product or isKidsProduct changes, load options
+  // Skip if data was just restored from sessionStorage
   useEffect(() => {
+    // Skip this effect if we just restored from sessionStorage
+    if (isRestoredRef.current) {
+      isRestoredRef.current = false; // Reset the flag after skipping once
+      return;
+    }
+
     if (!selectedProduct) {
       setTops([]);
       setBottoms([]);
@@ -1190,6 +1310,9 @@ export default function ProductForm() {
 
   const handleLogout = async () => {
     try {
+      // Clear form data on logout
+      sessionStorage.removeItem("screen4FormData");
+      
       await supabase.auth.signOut();
 
       const raw = sessionStorage.getItem("associateSession");
@@ -1266,15 +1389,16 @@ export default function ProductForm() {
           <div className="screen4-form">
             <h2 className="product-title">Product</h2>
 
-            {/* Kids Checkbox */}
-            <div className="kids-checkbox-container">
-              <input
-                type="checkbox"
-                id="kids-product"
-                checked={isKidsProduct}
-                onChange={(e) => setIsKidsProduct(e.target.checked)}
-              />
-              <label htmlFor="kids-product">Kids</label>
+            {/* Category Dropdown - Women/Kids */}
+            <div className="category-dropdown-container">
+              <select
+                className="category-select"
+                value={isKidsProduct ? "kids" : "women"}
+                onChange={(e) => setIsKidsProduct(e.target.value === "kids")}
+              >
+                <option value="women">Women</option>
+                <option value="kids">Kids</option>
+              </select>
             </div>
 
             {/* ADDED PRODUCTS INSIDE CARD */}
