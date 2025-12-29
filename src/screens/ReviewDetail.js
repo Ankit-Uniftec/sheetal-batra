@@ -186,7 +186,7 @@ export default function ReviewDetail() {
   if (!order) return <div>No order found</div>;
 
   return (
-    <div className="screen7">
+    <div className="rd-screen7">
       {loading && (
         <div className="global-loader">
           <img src={Logo} alt="Loading" className="loader-logo" />
@@ -196,7 +196,7 @@ export default function ReviewDetail() {
 
       <div className="screen6-header">
         <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
-        <h2 className="title">Review Detail</h2>
+        <h2 className="title">Review Details</h2>
       </div>
 
       <div className="screen6-container">

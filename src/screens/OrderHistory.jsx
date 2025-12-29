@@ -542,7 +542,7 @@ export default function OrderHistory() {
                             onChange={(e) => setSelectedCancellation({ ...selectedCancellation, [order.id]: e.target.value })}
                             className="oh-select"
                           >
-                            <option value="">Cancel Order...</option>
+                            <option value="">Cancel Order</option>
                             {cancelOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </select>
                           {selectedCancellation[order.id] && (
@@ -559,7 +559,7 @@ export default function OrderHistory() {
                             onChange={(e) => setSelectedExchange({ ...selectedExchange, [order.id]: e.target.value })}
                             className="oh-select"
                           >
-                            <option value="">Exchange / Return...</option>
+                            <option value="">Exchange / Return</option>
                             {exchangeOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </select>
                           {selectedExchange[order.id] && (

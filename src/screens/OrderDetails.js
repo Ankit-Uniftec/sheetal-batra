@@ -59,8 +59,11 @@ export default function OrderDetails() {
 
   // Payment
   const [advancePayment, setAdvancePayment] = useState(0); // Changed to amount
-  const [discountPercent, setDiscountPercent] = useState(null);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [birthdayDiscount, setBirthdayDiscount] = useState(0);
   const [discountApplied, setDiscountApplied] = useState(false);
+  const [birthdayApplied, setBirthdayApplied] = useState(false);
+  const [appliedCode, setAppliedCode] = useState("");
 
   // Billing
   const [billingSame, setBillingSame] = useState(true);
@@ -105,9 +108,13 @@ export default function OrderDetails() {
     () => Math.max(0, totalAmount - sanitizedAdvance),
     [totalAmount, sanitizedAdvance]
   );
+    // ✅ Calculate totalDiscount BEFORE pricing useMemo
+  const totalDiscount = useMemo(() => {
+    return (Number(discountPercent) || 0) + (Number(birthdayDiscount) || 0);
+  }, [discountPercent, birthdayDiscount]);
 
   const pricing = useMemo(() => {
-    const pct = Math.min(100, Math.max(0, Number(discountPercent) || 0));
+    const pct = Math.min(100, Math.max(0, Number(totalDiscount) || 0));
     const discountAmount = (totalAmount * pct) / 100;
 
     let netPayable = Math.max(0, totalAmount - discountAmount);
@@ -133,8 +140,11 @@ export default function OrderDetails() {
       netPayable,
       remaining,
       shippingCharge: currentShippingCharge, // Include shipping charge in pricing object
+      // ✅ Added for payload
+      regularDiscount: Number(discountPercent) || 0,
+      birthdayDiscount: Number(birthdayDiscount) || 0,
     };
-  }, [discountPercent, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery]);
+  }, [totalDiscount, discountPercent, birthdayDiscount, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery]);
 
   //auto fill delivery state and city:
   useEffect(() => {
@@ -270,17 +280,18 @@ export default function OrderDetails() {
     const codeInput = window.prompt("Enter Collector code:");
     if (codeInput === null) return; // cancelled
 
-    const code = codeInput.trim();
+    const code = codeInput.trim().toUpperCase();
     if (!code) {
       alert("Please enter a valid collector code.");
       return;
     }
 
     try {
+      // ✅ Fixed: Select both code and percent
       const { data, error } = await supabase
         .from("discount")
-        .select("percent")
-        .eq("code", code)
+        .select("code, percent")
+        .ilike("code", code)
         .limit(1)
         .maybeSingle();
 
@@ -290,13 +301,55 @@ export default function OrderDetails() {
       }
 
       const pct = Number(data.percent) || 0;
-      setDiscountPercent(pct);
-      setDiscountApplied(true);
+      const actualCode = data.code.toUpperCase();
+
+      // ✅ SBBIRTHDAY can combine with other codes
+      if (actualCode === "SBBIRTHDAY") {
+        if (birthdayApplied) {
+          alert("Birthday discount already applied!");
+          return;
+        }
+        setBirthdayDiscount(pct);
+        setBirthdayApplied(true);
+        alert(
+          `🎂 Birthday discount (${pct}%) applied!${
+            discountApplied ? ` Combined with ${appliedCode}: Total ${discountPercent + pct}% off!` : ""
+          }`
+        );
+      } else {
+        // Regular codes - only one at a time
+        if (discountApplied) {
+          const confirmReplace = window.confirm(
+            `You already have "${appliedCode}" (${discountPercent}%) applied. Replace with "${actualCode}" (${pct}%)?`
+          );
+          if (!confirmReplace) return;
+        }
+        setDiscountPercent(pct);
+        setDiscountApplied(true);
+        setAppliedCode(actualCode);
+        alert(
+          `✅ Discount code "${actualCode}" (${pct}%) applied!${
+            birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""
+          }`
+        );
+      }
 
     } catch (e) {
       console.error("Discount lookup failed", e);
       alert("Could not validate discount code. Please try again.");
     }
+  };
+
+  // ✅ Remove discount handlers
+  const removeRegularDiscount = () => {
+    setDiscountPercent(0);
+    setDiscountApplied(false);
+    setAppliedCode("");
+  };
+
+  const removeBirthdayDiscount = () => {
+    setBirthdayDiscount(0);
+    setBirthdayApplied(false);
   };
 
   const handleLogout = async () => {
@@ -604,6 +657,91 @@ export default function OrderDetails() {
             <h3>Payment Details</h3>
             <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white !important' }}>Collector Code</button>
           </div>
+
+          {/* ✅ Applied Discounts Display */}
+          {(discountApplied || birthdayApplied) && (
+            <div
+              className="applied-discounts"
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
+                marginBottom: "16px",
+                paddingBottom: "16px",
+                borderBottom: "1px solid #eee",
+              }}
+            >
+              {discountApplied && (
+                <div
+                  className="discount-tag"
+                  style={{
+                    background: "#e8f5e9",
+                    color: "#2e7d32",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>🏷️ {appliedCode} ({discountPercent}%)</span>
+                  <button
+                    onClick={removeRegularDiscount}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
+              {birthdayApplied && (
+                <div
+                  className="discount-tag birthday"
+                  style={{
+                    background: "#fff3e0",
+                    color: "#e65100",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>🎂 SBBIRTHDAY ({birthdayDiscount}%)</span>
+                  <button
+                    onClick={removeBirthdayDiscount}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
+              {discountApplied && birthdayApplied && (
+                <div
+                  style={{
+                    background: "#d5b85a",
+                    color: "white",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Total: {totalDiscount}% OFF
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="row3">
             <div className="field">
               <label>Mode of Payment:</label>
@@ -646,7 +784,8 @@ export default function OrderDetails() {
 
 
           </div>
-          {discountApplied && (
+          {/* ✅ Fixed: Show when either discount is applied */}
+          {(discountApplied || birthdayApplied) && (
             <div className="row3">
               <div className="field">
                 <label>Discount %:</label>
