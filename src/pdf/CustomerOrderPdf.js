@@ -201,7 +201,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <View style={styles.titleSection}>
           <Text style={styles.title}>Order Copy</Text>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order ID: {order.id || order.order_id || "—"}</Text>
+            <Text style={styles.orderId}>Order ID: {order.order_no || order.order_id || "—"}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
@@ -270,7 +270,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <View style={styles.titleSection}>
           <Text style={styles.title}>Order Copy</Text>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order ID: {order.id || order.order_id || "—"}</Text>
+            <Text style={styles.orderId}>Order ID: {order.order_no || order.order_id || "—"}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>

@@ -371,7 +371,7 @@ const WarehouseOrderPdf = ({ order, logoUrl }) => {
           <View style={warehouseStyles.infoColumn}>
             <InfoRow
               label="Order ID:"
-              value={order.id || order.order_id}
+              value={order.order_no || order.order_id}
             />
             <InfoRow
               label="DELIVERY TO:"

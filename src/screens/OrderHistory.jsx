@@ -430,7 +430,7 @@ export default function OrderHistory() {
             <h4>Recent Orders</h4>
             {recent.length === 0 ? <p className="muted">No orders yet</p> : recent.map(o => (
               <div key={o.id} className="oh-recent-item">
-                <span>#{o.id?.slice(0, 8)}</span>
+                <span>#{o.order_no}</span>
                 <span className={`oh-mini-badge ${getStatusClass(o.status)}`}>{getStatusText(o.status)}</span>
               </div>
             ))}
@@ -467,7 +467,7 @@ export default function OrderHistory() {
                     {/* Card Header */}
                     <div className="oh-card-top">
                       <div className="oh-card-info">
-                        <span className="oh-order-id">Order #{order.id?.slice(0, 8)}</span>
+                        <span className="oh-order-id">Order #{order.order_no}</span>
                         <span className="oh-order-date">{formatDate(order.created_at)}</span>
                         <span className="oh-order-edd">EDD: {formatDate(order.delivery_date)}</span>
                       </div>

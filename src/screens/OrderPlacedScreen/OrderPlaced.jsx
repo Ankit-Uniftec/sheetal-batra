@@ -116,7 +116,7 @@ export default function OrderPlaced() {
         {/* Order ID Box */}
         <div className="order-id-box">
           <span className="order-id-label">Order ID</span>
-          <span className="order-id-value">#{order.id}</span>
+          <span className="order-id-value">#{order.order_no}</span>
         </div>
 
         {/* Back to Dashboard Button */}

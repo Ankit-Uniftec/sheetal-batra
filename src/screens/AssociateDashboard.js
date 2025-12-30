@@ -747,7 +747,7 @@ export default function Dashboard() {
                     ) : (
                       activeOrders.map((o) => (
                         <div className="ad-order-item" key={o.id}>
-                          <p><b>Order No:</b> {o.id?.slice(0, 8)}</p>
+                          <p><b>Order No:</b> {o.order_no}</p>
                           <p><b>Client Name:</b> {o.delivery_name}</p>
                           <p><b>Status:</b> {o.status || "Pending"}</p>
                           <p><b>Delivery Date:</b> {formatDate(o.delivery_date)}</p>
@@ -810,7 +810,7 @@ export default function Dashboard() {
                         <div className="ad-header-info">
                           <div className="ad-header-item">
                             <span className="ad-header-label">Order No:</span>
-                            <span className="ad-header-value">{order.id?.slice(0, 8) || "—"}</span>
+                            <span className="ad-header-value">{order.order_no || "—"}</span>
                           </div>
                           <div className="ad-header-item">
                             <span className="ad-header-label">Order Date:</span>

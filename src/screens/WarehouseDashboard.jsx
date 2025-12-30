@@ -201,7 +201,7 @@ const WarehouseDashboard = () => {
                           </div>
 
                           <div className="wd-dropdown-info">
-                            <p><strong className="wd-label">Order Id:</strong> {order.id}</p>
+                            <p><strong className="wd-label">Order Id:</strong> {order.order_no}</p>
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
 
                             <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>

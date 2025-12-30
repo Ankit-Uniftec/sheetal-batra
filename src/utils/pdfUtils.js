@@ -35,7 +35,7 @@ export const downloadCustomerPdf = async (order, setLoading = null) => {
     // Upload to storage
     const { error: uploadError } = await supabase.storage
       .from("invoices")
-      .upload(`orders/${order.id}_customer.pdf`, pdfBlob, {
+      .upload(`orders/${order.order_no}_customer.pdf`, pdfBlob, {
         upsert: true,
         contentType: "application/pdf",
       });
@@ -45,7 +45,7 @@ export const downloadCustomerPdf = async (order, setLoading = null) => {
     // Get public URL
     const { data: urlData } = supabase.storage
       .from("invoices")
-      .getPublicUrl(`orders/${order.id}_customer.pdf`);
+      .getPublicUrl(`orders/${order.order_no}_customer.pdf`);
 
     const pdfUrl = urlData?.publicUrl;
 
@@ -93,7 +93,7 @@ export const downloadWarehousePdf = async (order, setLoading = null) => {
     // Upload to storage
     const { error: uploadError } = await supabase.storage
       .from("invoices")
-      .upload(`orders/${order.id}_warehouse.pdf`, pdfBlob, {
+      .upload(`orders/${order.order_no}_warehouse.pdf`, pdfBlob, {
         upsert: true,
         contentType: "application/pdf",
       });
@@ -103,7 +103,7 @@ export const downloadWarehousePdf = async (order, setLoading = null) => {
     // Get public URL
     const { data: urlData } = supabase.storage
       .from("invoices")
-      .getPublicUrl(`orders/${order.id}_warehouse.pdf`);
+      .getPublicUrl(`orders/${order.order_no}_warehouse.pdf`);
 
     const pdfUrl = urlData?.publicUrl;
 
@@ -147,13 +147,13 @@ export const generateBothPdfs = async (order, setLoading = null) => {
     await Promise.all([
       supabase.storage
         .from("invoices")
-        .upload(`orders/${order.id}_customer.pdf`, customerPdfBlob, {
+        .upload(`orders/${order.order_no}_customer.pdf`, customerPdfBlob, {
           upsert: true,
           contentType: "application/pdf",
         }),
       supabase.storage
         .from("invoices")
-        .upload(`orders/${order.id}_warehouse.pdf`, warehousePdfBlob, {
+        .upload(`orders/${order.order_no}_warehouse.pdf`, warehousePdfBlob, {
           upsert: true,
           contentType: "application/pdf",
         }),
@@ -162,11 +162,11 @@ export const generateBothPdfs = async (order, setLoading = null) => {
     // Get public URLs
     const { data: customerUrlData } = supabase.storage
       .from("invoices")
-      .getPublicUrl(`orders/${order.id}_customer.pdf`);
+      .getPublicUrl(`orders/${order.order_no}_customer.pdf`);
 
     const { data: warehouseUrlData } = supabase.storage
       .from("invoices")
-      .getPublicUrl(`orders/${order.id}_warehouse.pdf`);
+      .getPublicUrl(`orders/${order.order_no}_warehouse.pdf`);
 
     // Update order with both PDF URLs
     await supabase
