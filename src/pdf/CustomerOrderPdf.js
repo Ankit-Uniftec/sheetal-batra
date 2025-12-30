@@ -12,7 +12,7 @@ import { styles, COLORS } from "./pdfStyles";
 // Helper to format Indian numbers
 const formatINR = (num) => {
   if (!num) return "INR 0";
-  return `₹ ${Number(num).toLocaleString("en-IN")}`;
+  return `INR ${Number(num).toLocaleString("en-IN")}`;
 };
 
 // Helper to format date
