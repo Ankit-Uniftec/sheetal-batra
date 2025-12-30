@@ -425,7 +425,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     marginBottom: 12,
-    marginTop: 15,
+    marginTop: 20,
   },
   sectionTitle: {
     fontSize: 11,
@@ -533,8 +533,8 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
+    // borderBottomWidth: 1,
+    // borderBottomColor: "#EEEEEE",
   },
   paymentLabel: {
     fontSize: 10,
@@ -593,7 +593,7 @@ export const styles = StyleSheet.create({
   },
   noteText: {
     fontSize: 8,
-    color: COLORS.gray,
+    color: COLORS.black,
     lineHeight: 1.4,
   },
 
@@ -608,9 +608,9 @@ export const styles = StyleSheet.create({
   },
   policyItem: {
     fontSize: 7,
-    color: COLORS.gray,
+    color: COLORS.black,
     marginBottom: 4,
-    lineHeight: 1.3,
+    fontStyle:"italic"
   },
 
   /* =========================

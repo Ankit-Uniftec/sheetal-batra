@@ -12,7 +12,7 @@ import { styles, COLORS } from "./pdfStyles";
 // Helper to format Indian numbers
 const formatINR = (num) => {
   if (!num) return "INR 0";
-  return `INR ${Number(num).toLocaleString("en-IN")}`;
+  return `₹ ${Number(num).toLocaleString("en-IN")}`;
 };
 
 // Helper to format date
@@ -255,13 +255,13 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
           <Text style={styles.value}>
             {order.delivery_address
               ? [
-                  order.delivery_address,
-                  order.delivery_city,
-                  order.delivery_state,
-                  order.delivery_pincode,
-                ]
-                  .filter(Boolean)
-                  .join(", ")
+                order.delivery_address,
+                order.delivery_city,
+                order.delivery_state,
+                order.delivery_pincode,
+              ]
+                .filter(Boolean)
+                .join(", ")
               : order.mode_of_delivery === "Delhi Store"
                 ? "S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048"
                 : order.mode_of_delivery === "Ludhiana Store"
@@ -398,53 +398,37 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <View style={styles.noteSection}>
           <Text style={styles.noteTitle}>A Note to You</Text>
           <Text style={styles.noteText}>
-            Our pieces are handcrafted with care and created exclusively for you.
-            Each garment is made to order, honouring traditional techniques and
-            thoughtful detailing. As with all bespoke creations, minor alterations
-            and up to one trial fit may be part of the process to achieve the best
-            possible fit - every body is beautifully unique.
+            Our pieces are handcrafted with care and created exclusively for you. Each garment is made to order, honouring traditional techniques and thoughtful
+            detailing. As with all bespoke creations, minor alterations and up to one trial fit may be part of the process to achieve the best possible fit - every
+            body is beautifully unique.
           </Text>
           <Text style={[styles.noteText, { marginTop: 4 }]}>
-            We believe true luxury lies in time, craftsmanship, and a fit made
-            just for you.
+            We believe true luxury lies in time, craftsmanship, and a fit made just for you.
           </Text>
         </View>
 
         {/* Policy Section */}
         <View style={styles.policySection}>
           <Text style={styles.policyItem}>
-            • At Sheetal Batra, we take pride in crafting each piece with care and
-            precision. As we work with a made-to-order and artisanal production
-            timelines, we request you to kindly review the following policy.
+            • At Sheetal Batra, we take pride in crafting each piece with care and precision. As we work with a made-to-order and artisanal production timelines, we request you to kindly review the following policy.
           </Text>
           <Text style={styles.policyItem}>
-            • You may cancel an order within 24 hours after placing it. No
-            cancellations beyond 24 hours will be entertained barring extenuating
-            circumstances. Any accepted cancellation beyond 24 hours will be
-            exclusively at the discretion of Sheetal Batra Design House. A
-            cancelled order will result in store credit.
+            • You may cancel an order within 24 hours after placing it. No cancellations beyond 24 hours will be entertained barring extenuating circumstances. Any accepted cancellation beyond 24 hours will be exclusively at the discretion of Sheetal Batra Design House. A cancelled order will result in store credit only.
           </Text>
           <Text style={styles.policyItem}>
             • Articles on sale cannot be exchanged or returned.
           </Text>
           <Text style={styles.policyItem}>
-            • Customization requests can be accepted (such as bottom style change,
-            color change, sleeve length change) but products are then on final sale
-            and cannot be returned. Such requests must be pre-paid and COD cannot
-            be accepted as a form of payment in that case.
+            • Customisation requests can be accepted (such as bottom style change, color change, sleeve length change). These products are then on final sale and cannot be returned. Such requests must be pre-paid and COD cannot be accepted as a form of payment in that case.
           </Text>
           <Text style={styles.policyItem}>
-            • The accessories including jewelry, potlis and jutties cannot be
-            exchanged or returned.
+            • The accessories including jewelry, potlis and jutties cannot be exchanged or returned.
           </Text>
           <Text style={styles.policyItem}>
-            • We do not accept returns or exchange gift certificates and jewelry,
-            once dispatched unless it is a manufacturing defect.
+            • Return & Exchange Window: You must raise a return or exchange request within 72 hours of receiving your order. We do not accept requests beyond this window. Valid reasons are subject to approval. 
           </Text>
           <Text style={styles.policyItem}>
-            • Return & Exchange Window: You must raise a return or exchange request
-            within 72 hours of receiving your order. We do not accept requests
-            beyond this window.
+            • For a valid exchange: The products must be unused, and in perfect condition, with all original tags intact.
           </Text>
         </View>
       </Page>
