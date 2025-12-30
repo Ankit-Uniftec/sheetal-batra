@@ -489,12 +489,13 @@ export const styles = StyleSheet.create({
   productGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
+    marginTop:10,
   },
   productField: {
-    flex: 1,
-    minWidth: 90,
+    // flex: 1,
+    // minWidth: 90,
     marginBottom: 8,
-    marginRight: 15,
+    paddingRight: 10,
   },
 
   /* =========================
@@ -505,12 +506,12 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   colorSwatch: {
-    width: 20,
-    height: 12,
-    borderRadius: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 2,
     borderWidth: 1,
-    borderColor: "#CCCCCC",
-    marginRight: 6,
+    borderColor: "#DDD",
+    // marginRight: 6,
   },
 
   /* =========================

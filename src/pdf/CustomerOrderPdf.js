@@ -88,72 +88,84 @@ const ColorField = ({ label, color }) => (
 );
 
 // Product Item Component
-const ProductItem = ({ item, showPricing = true }) => (
+const ProductItem = ({ item, order, showPricing = true }) => (
   <View style={styles.productRow}>
     {item.image_url && (
       <Image src={item.image_url} style={styles.productImage} />
     )}
     <View style={styles.productDetails}>
+      {/* Product Name and Delivery Date Row */}
       <View style={styles.rowSpaceBetween}>
         <Text style={styles.productName}>{item?.product_name || "—"}</Text>
-        {item?.delivery_date && (
-          <View>
+        {order.delivery_date && (
+          <View style={{ alignItems: "flex-end" }}>
             <Text style={styles.label}>Estimated Delivery Date:</Text>
             <Text style={styles.deliveryDateHighlight}>
-              {formatDate(item.delivery_date)}
+              {formatDate(order.delivery_date)}
             </Text>
           </View>
         )}
       </View>
 
+      {/* Product Details Grid */}
       <View style={styles.productGrid}>
-        <View style={styles.productField}>
+        {/* Top */}
+        <View style={[styles.productField, { width: "25%" }]}>
           <Text style={styles.label}>Top</Text>
           <Text style={styles.value}>{item?.top || "—"}</Text>
+          {item?.top_color?.hex && (
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+              <View style={[styles.colorSwatch, { backgroundColor: item.top_color.hex }]} />
+              <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.top_color.name || ""}</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.productField}>
+
+        {/* Bottom */}
+        <View style={[styles.productField, { width: "25%" }]}>
           <Text style={styles.label}>Bottom</Text>
           <Text style={styles.value}>{item?.bottom || "—"}</Text>
+          {item?.bottom_color?.hex && (
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+              <View style={[styles.colorSwatch, { backgroundColor: item.bottom_color.hex }]} />
+              <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.bottom_color.name || ""}</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.productField}>
-          <Text style={styles.label}>Additionals</Text>
-          <Text style={styles.value}>
-            {item?.extras?.map((e) => e?.name).filter(Boolean).join(", ") || "—"}
-          </Text>
+
+        {/* Extra */}
+        <View style={[styles.productField, { width: "30%" }]}>
+          <Text style={styles.label}>Extra</Text>
+          {item?.extras && item.extras.length > 0 ? (
+            item.extras.map((extra, idx) => (
+              <View key={idx} style={{ marginBottom: 2 }}>
+                <Text style={styles.value}>{extra.name || "—"}</Text>
+                {extra.color?.hex && (
+                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                    <View style={[styles.colorSwatch, { backgroundColor: extra.color.hex }]} />
+                    <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{extra.color.name || ""}</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.value}>—</Text>
+          )}
         </View>
-        {/* <View style={styles.productField}>
-          <Text style={styles.label}>Color</Text>
-          <View style={styles.colorRow}>
-            <View
-              style={[
-                styles.colorSwatch,
-                { backgroundColor: getColorHex(item.color) },
-              ]}
-            />
-            <Text style={styles.value}>{getColorName(item.color)}</Text>
-          </View>
-        </View> */}
-        <View style={styles.productField}>
+
+        {/* Size */}
+        <View style={[styles.productField, { width: "20%" }]}>
           <Text style={styles.label}>Size</Text>
           <Text style={styles.value}>{item?.size || "—"}</Text>
         </View>
       </View>
 
+      {/* Pricing Row */}
       {showPricing && (
         <View style={styles.pricingRow}>
           <View style={styles.pricingField}>
             <Text style={styles.label}>Product Value</Text>
-            <Text style={styles.value}>{formatINR(item?.price)}</Text>
-          </View>
-          <View style={styles.pricingField}>
-            <Text style={styles.label}>Discount Value</Text>
-            <Text style={styles.value}>{formatINR(item?.discount || 0)}</Text>
-          </View>
-          <View style={styles.pricingField}>
-            <Text style={styles.label}>Final Value</Text>
-            <Text style={styles.value}>
-              {formatINR((item?.price || 0) - (item?.discount || 0))}
-            </Text>
+            <Text style={[styles.value, { fontFamily: "Helvetica-Bold" }]}>{formatINR(item?.price)}</Text>
           </View>
         </View>
       )}
@@ -180,12 +192,37 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
     return <Document><Page size="A4" style={styles.page}><Text>Error: Order data is missing.</Text></Page></Document>;
   }
 
-  const items = order.items || [];
+  // const items = order || [];
   const grandTotal = Number(order.grand_total) || 0;
   const discountAmount = Number(order.discount_amount) || 0;
   const advancePayment = Number(order.advance_payment) || 0;
   const netTotal = Number(order.net_total) || grandTotal;
   const remaining = Number(order.remaining_payment) || 0;
+  const collectorsCode = Number(order.collectors_code) || 0;
+
+  // GST Calculation (price includes 18% GST)
+  // Base Price = Total / 1.18
+  // GST = Total - Base Price
+  const baseAmount = Math.round(grandTotal / 1.18);
+  const gstAmount = grandTotal - baseAmount;
+
+  // Helper to get billing address
+  const getBillingAddress = () => {
+    if (order.billing_same) {
+      return [
+        order.delivery_address,
+        order.delivery_city,
+        order.delivery_state,
+        order.delivery_pincode,
+      ].filter(Boolean).join(", ");
+    }
+    return [
+      order.billing_address,
+      order.billing_city,
+      order.billing_state,
+      order.billing_pincode,
+    ].filter(Boolean).join(", ");
+  };
 
   return (
     <Document>
@@ -194,7 +231,6 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         {/* Header with Logo */}
         <View style={styles.header}>
           {logoUrl && <Image src={logoUrl} style={styles.logo} />}
-          {/* <Text style={styles.brandName}>S H E E T A L   B A T R A</Text> */}
         </View>
 
         {/* Title Section */}
@@ -210,40 +246,59 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <SectionBar title="Personal Details" />
         <View style={styles.rowSpaceBetween}>
           <Text style={styles.value}>{order.delivery_name || "—"}</Text>
-          <Text style={styles.value}>{order.delivery_email || "—"}</Text>
+          {order.delivery_email && (
+            <Text style={styles.value}>{order.delivery_email}</Text>
+          )}
         </View>
         <View style={styles.fieldBlock}>
           <Text style={[styles.label, { marginTop: 10 }]}>Delivery Address:</Text>
           <Text style={styles.value}>
-            {[
-              order.delivery_address,
-              order.delivery_city,
-              order.delivery_state,
-              order.delivery_pincode,
-            ]
-              .filter(Boolean)
-              .join(", ") || "—"}
+            {order.delivery_address
+              ? [
+                  order.delivery_address,
+                  order.delivery_city,
+                  order.delivery_state,
+                  order.delivery_pincode,
+                ]
+                  .filter(Boolean)
+                  .join(", ")
+              : order.mode_of_delivery === "Delhi Store"
+                ? "S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048"
+                : order.mode_of_delivery === "Ludhiana Store"
+                  ? "S.C.O no. 22, Sun View Plaza Ludhiana, Punjab 142027"
+                  : "—"}
           </Text>
         </View>
-        <View style={{ alignItems: "flex-end", marginTop: -30 }}>
-          <Text style={styles.value}>{order.delivery_phone || "—"}</Text>
-        </View>
+        {order.delivery_phone && (
+          <View style={{ alignItems: "flex-end", marginTop: -30 }}>
+            <Text style={styles.value}>{order.delivery_phone}</Text>
+          </View>
+        )}
 
         {/* Product Details */}
         <SectionBar title="Product Details" />
-        {items.map((item, index) => (
-          <ProductItem key={index} item={item} showPricing={true} />
+        {(order.items || []).map((item, index) => (
+          <ProductItem
+            key={index}
+            item={item}
+            order={order}
+            showPricing={true}
+          />
         ))}
 
         {/* Sales Associate Details */}
         <SectionBar title="Sales Associate Details" />
         <View style={styles.rowSpaceBetween}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Name: </Text>
-            <Text style={styles.value}>{order.salesperson || "—"}</Text>
-          </View>
+          {order.salesperson && (
+            <View style={styles.row}>
+              <Text style={styles.label}>Name: </Text>
+              <Text style={styles.value}>{order.salesperson}</Text>
+            </View>
+          )}
           <Text style={styles.value}>In-Store Client Relations Team</Text>
-          <Text style={styles.value}>{order.salesperson_phone || "—"}</Text>
+          {order.salesperson_phone && (
+            <Text style={styles.value}>{order.salesperson_phone}</Text>
+          )}
         </View>
 
         {/* Contact Footer */}
@@ -263,7 +318,6 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         {/* Header with Logo */}
         <View style={styles.header}>
           {logoUrl && <Image src={logoUrl} style={styles.logo} />}
-          {/* <Text style={styles.brandName}>S H E E T A L   B A T R A</Text> */}
         </View>
 
         {/* Title Section */}
@@ -279,40 +333,32 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <SectionBar title="Billing Details" />
         <View style={styles.twoColumn}>
           <View style={styles.column}>
-            <Field
-              label="Company / Individual Name:"
-              value={order.billing_company || order.delivery_name}
-            />
-            <Field label="GSTIN:" value={order.billing_gstin || "—"} />
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Billing Address</Text>
-              <Text style={styles.value}>
-                {order.billing_same
-                  ? [
-                      order.delivery_address,
-                      order.delivery_city,
-                      order.delivery_state,
-                      order.delivery_pincode,
-                    ]
-                      .filter(Boolean)
-                      .join(", ")
-                  : [
-                      order.billing_address,
-                      order.billing_city,
-                      order.billing_state,
-                      order.billing_pincode,
-                    ]
-                      .filter(Boolean)
-                      .join(", ") || "—"}
-              </Text>
-            </View>
+            {(order.billing_company || order.delivery_name) && (
+              <Field
+                label="Company / Individual Name:"
+                value={order.billing_company || order.delivery_name}
+              />
+            )}
+            {order.billing_gstin && (
+              <Field label="GSTIN:" value={order.billing_gstin} />
+            )}
+            {getBillingAddress() && (
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>Billing Address</Text>
+                <Text style={styles.value}>{getBillingAddress()}</Text>
+              </View>
+            )}
           </View>
           <View style={styles.column}>
-            <Field
-              label="Mode of Payment:"
-              value={order.payment_mode || "Card/ Cash/ UPI/ Other"}
-            />
-            <Field label="Advance Amount Paid:" value={formatINR(advancePayment)} />
+            {order.payment_mode && (
+              <Field
+                label="Mode of Payment:"
+                value={order.payment_mode}
+              />
+            )}
+            {advancePayment > 0 && (
+              <Field label="Advance Amount Paid:" value={formatINR(advancePayment)} />
+            )}
           </View>
         </View>
 
@@ -320,19 +366,17 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <SectionBar title="Payment Details" />
         <View style={styles.twoColumn}>
           <View style={styles.column}>
-            <PaymentRow label="Total Order Value:" value={grandTotal} prefix="+" />
-            <PaymentRow
-              label="Taxes (18% GST):"
-              value={order.tax_amount || 0}
-              prefix="+"
-            />
-            <PaymentRow label="Discount:" value={discountAmount} prefix="-" />
-            <PaymentRow
-              label="Collectors Code:"
-              value={order.collectors_code || 0}
-              prefix="-"
-            />
-            <PaymentRow label="Total Advance Paid:" value={advancePayment} prefix="-" />
+            <PaymentRow label="Order Value (excl. GST):" value={baseAmount} prefix="+" />
+            <PaymentRow label="GST (18%):" value={gstAmount} prefix="+" />
+            {discountAmount > 0 && (
+              <PaymentRow label="Discount:" value={discountAmount} prefix="-" />
+            )}
+            {collectorsCode > 0 && (
+              <PaymentRow label="Collectors Code:" value={collectorsCode} prefix="-" />
+            )}
+            {advancePayment > 0 && (
+              <PaymentRow label="Total Advance Paid:" value={advancePayment} prefix="-" />
+            )}
             <PaymentRow
               label="Total Pending Amount:"
               value={remaining}

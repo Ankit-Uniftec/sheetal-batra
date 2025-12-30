@@ -7,6 +7,7 @@ import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
+import { downloadCustomerPdf } from "../utils/pdfUtils";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -23,10 +24,10 @@ const isAfterDeliveryDate = (deliveryDate) => {
 // Color display component
 function ColorDot({ color }) {
   if (!color) return null;
-  
+
   let hex = "#888";
   let name = "";
-  
+
   if (typeof color === "string") {
     name = color;
     hex = color.startsWith("#") ? color : "#888";
@@ -34,7 +35,7 @@ function ColorDot({ color }) {
     name = color.name || "";
     hex = color.hex || "#888";
   }
-  
+
   return (
     <span className="oh-color-dot-wrapper">
       <span className="oh-color-dot" style={{ backgroundColor: hex }}></span>
@@ -57,6 +58,7 @@ export default function OrderHistory() {
   const [tab, setTab] = useState("orders");
   const [actionLoading, setActionLoading] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -94,6 +96,20 @@ export default function OrderHistory() {
   const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
 
   const recent = useMemo(() => orders.slice(0, 2), [orders]);
+
+  // Handle PDF download
+  const handlePrintPdf = async (e, order) => {
+    e.stopPropagation();
+    setPdfLoading(order.id);
+    try {
+      await downloadCustomerPdf(order);
+    } catch (error) {
+      console.error("PDF download failed:", error);
+    } finally {
+      setPdfLoading(null);
+    }
+  };
+
 
   // Check user role
   useEffect(() => {
@@ -465,15 +481,34 @@ export default function OrderHistory() {
                 return (
                   <div key={order.id} className="oh-order-card">
                     {/* Card Header */}
+                    {/* Card Header - Replace existing oh-card-top */}
                     <div className="oh-card-top">
                       <div className="oh-card-info">
-                        <span className="oh-order-id">Order #{order.order_no}</span>
-                        <span className="oh-order-date">{formatDate(order.created_at)}</span>
-                        <span className="oh-order-edd">EDD: {formatDate(order.delivery_date)}</span>
+                        <div className="oh-header-item">
+                          <span className="oh-header-label">Order No:</span>
+                          <span className="oh-header-value">{order.order_no || "—"}</span>
+                        </div>
+                        <div className="oh-header-item">
+                          <span className="oh-header-label">Order Date:</span>
+                          <span className="oh-header-value">{formatDate(order.created_at) || "—"}</span>
+                        </div>
+                        <div className="oh-header-item">
+                          <span className="oh-header-label">EDD:</span>
+                          <span className="oh-header-value">{formatDate(order.delivery_date) || "—"}</span>
+                        </div>
                       </div>
                       <div className="oh-card-badges">
                         <span className={`oh-badge ${getStatusClass(order.status)}`}>{getStatusText(order.status)}</span>
                         {editOk && <span className="oh-badge editable">Editable ({Math.floor(36 - hrs)}h)</span>}
+                        {/* <div className="ad-header-actions"> */}
+                          <button
+                            className="ad-print-pdf-btn active"
+                            onClick={(e) => handlePrintPdf(e, order)}
+                            disabled={pdfLoading === order.id}
+                          >
+                            {pdfLoading === order.id ? "..." : "📄 PDF"}
+                          </button>
+                        {/* </div> */}
                       </div>
                     </div>
 
@@ -484,7 +519,7 @@ export default function OrderHistory() {
                       </div>
                       <div className="oh-card-details">
                         <h3 className="oh-product-title">{item.product_name || "—"}</h3>
-                        
+
                         <div className="oh-details-row">
                           <div className="oh-detail">
                             <span className="oh-label">Top</span>
@@ -494,10 +529,10 @@ export default function OrderHistory() {
                             <span className="oh-label">Bottom</span>
                             <span className="oh-value">{item.bottom || "—"} {item.bottom_color && <ColorDot color={item.bottom_color} />}</span>
                           </div>
-                          <div className="oh-detail">
+                          {/* <div className="oh-detail">
                             <span className="oh-label">Color</span>
                             <span className="oh-value"><ColorDot color={item.color} /></span>
-                          </div>
+                          </div> */}
                           <div className="oh-detail">
                             <span className="oh-label">Size</span>
                             <span className="oh-value">{item.size || "—"}</span>

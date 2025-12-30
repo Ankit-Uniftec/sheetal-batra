@@ -65,7 +65,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      console.log("Logged in:", data.user?.email);
+      // console.log("Logged in:", data.user?.email);
     });
   }, []);
 
@@ -345,7 +345,7 @@ export default function Dashboard() {
     } else {
       colorValue = item.color || "";
     }
-    
+
     setEditFormData({
       size: item.size || "",
       color: colorValue,
@@ -559,6 +559,9 @@ export default function Dashboard() {
     const clientName = order.delivery_name?.toLowerCase() || "";
     return productId.includes(q) || productName.includes(q) || clientName.includes(q);
   });
+
+  // console.log(orders);
+
 
   const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
 
@@ -788,8 +791,8 @@ export default function Dashboard() {
                   const hoursSince = getHoursSinceOrder(order.created_at);
 
                   return (
-                    <div 
-                      key={order.id} 
+                    <div
+                      key={order.id}
                       className="ad-order-card"
                       onClick={() => viewCustomerOrders(order)}
                       style={{ cursor: 'pointer' }}
@@ -855,11 +858,49 @@ export default function Dashboard() {
                               <span className="ad-value">{order.total_quantity || 1}</span>
                             </div>
                             <div className="ad-detail-item">
-                              <span className="ad-order-label">Color:</span>
+                              <span className="ad-order-label">Top:</span>
                               <span className="ad-value">
-                                {typeof item.color === 'object' && item.color !== null 
-                                  ? (item.color.name || item.color.hex || "—")
-                                  : (item.color || "—")}
+                                {item.top || "—"}
+                                {item.top_color?.hex && (
+                                  <>
+                                    <span
+                                      style={{
+                                        display: 'inline-block',
+                                        width: 12,
+                                        height: 12,
+                                        backgroundColor: item.top_color.hex,
+                                        borderRadius: '50%',
+                                        marginLeft: 6,
+                                        border: '1px solid #ccc',
+                                        verticalAlign: 'middle'
+                                      }}
+                                    />
+                                    <span style={{ marginLeft: 4 }}>{item.top_color.name}</span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                            <div className="ad-detail-item">
+                              <span className="ad-order-label">Bottom:</span>
+                              <span className="ad-value">
+                                {item.bottom || "—"}
+                                {item.bottom_color?.hex && (
+                                  <>
+                                    <span
+                                      style={{
+                                        display: 'inline-block',
+                                        width: 12,
+                                        height: 12,
+                                        backgroundColor: item.bottom_color.hex,
+                                        borderRadius: '50%',
+                                        marginLeft: 6,
+                                        border: '1px solid #ccc',
+                                        verticalAlign: 'middle'
+                                      }}
+                                    />
+                                    <span style={{ marginLeft: 4 }}>{item.bottom_color.name}</span>
+                                  </>
+                                )}
                               </span>
                             </div>
                             <div className="ad-detail-item">
@@ -867,6 +908,36 @@ export default function Dashboard() {
                               <span className="ad-value">{item.size || "—"}</span>
                             </div>
                           </div>
+                            {item.extras && item.extras.length > 0 && (
+                              <div className="ad-detail-item" style={{ gridColumn: 'span 2' }}>
+                                <span className="ad-order-label">Extras:</span>
+                                <span className="ad-value">
+                                  {item.extras.map((extra, idx) => (
+                                    <span key={idx}>
+                                      {extra.name}
+                                      {extra.color?.hex && (
+                                        <>
+                                          <span
+                                            style={{
+                                              display: 'inline-block',
+                                              width: 12,
+                                              height: 12,
+                                              backgroundColor: extra.color.hex,
+                                              borderRadius: '50%',
+                                              marginLeft: 6,
+                                              border: '1px solid #ccc',
+                                              verticalAlign: 'middle'
+                                            }}
+                                          />
+                                          <span style={{ marginLeft: 4 }}>{extra.color.name}</span>
+                                        </>
+                                      )}
+                                      {idx < item.extras.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
+                                    </span>
+                                  ))}
+                                </span>
+                              </div>
+                            )}
                         </div>
                       </div>
 
@@ -964,7 +1035,7 @@ export default function Dashboard() {
           {activeTab === "clients" && (
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Client Book ({filteredClients.length})</h2>
-              
+
               {/* Client Search Bar */}
               <div className="ad-order-search-bar">
                 <input

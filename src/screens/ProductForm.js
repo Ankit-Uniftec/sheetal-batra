@@ -245,39 +245,39 @@ const KIDS_SIZE_OPTIONS = [
 ];
 
 const KIDS_SIZE_CHART = {
-  "1-2 Years": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
-  "2-3 Years": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
-  "3-4 Years": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
-  "4-5 Years": { Bust: 23, Waist: 21.5, Hip: 24, Length: 24 },
-  "5-6 Years": { Bust: 24, Waist: 22, Hip: 25, Length: 26 },
-  "6-7 Years": { Bust: 25, Waist: 22.5, Hip: 26, Length: 28 },
-  "7-8 Years": { Bust: 26, Waist: 23, Hip: 27, Length: 30 },
-  "8-9 Years": { Bust: 27, Waist: 23.5, Hip: 28, Length: 32 },
-  "9-10 Years": { Bust: 28, Waist: 24, Hip: 29, Length: 34 },
-  "10-11 Years": { Bust: 29, Waist: 24.5, Hip: 30, Length: 36 },
-  "11-12 Years": { Bust: 30, Waist: 25, Hip: 31, Length: 38 },
-  "12-13 Years": { Bust: 31, Waist: 25.5, Hip: 32, Length: 40 },
-  "13-14 Years": { Bust: 32, Waist: 26, Hip: 33, Length: 42 },
-  "14-15 Years": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
-  "15-16 Years": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
+  "1-2 Yrs": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
+  "2-3 Yrs": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
+  "3-4 Yrs": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
+  "4-5 Yrs": { Bust: 23, Waist: 21.5, Hip: 24, Length: 24 },
+  "5-6 Yrs": { Bust: 24, Waist: 22, Hip: 25, Length: 26 },
+  "6-7 Yrs": { Bust: 25, Waist: 22.5, Hip: 26, Length: 28 },
+  "7-8 Yrs": { Bust: 26, Waist: 23, Hip: 27, Length: 30 },
+  "8-9 Yrs": { Bust: 27, Waist: 23.5, Hip: 28, Length: 32 },
+  "9-10 Yrs": { Bust: 28, Waist: 24, Hip: 29, Length: 34 },
+  "10-11 Yrs": { Bust: 29, Waist: 24.5, Hip: 30, Length: 36 },
+  "11-12 Yrs": { Bust: 30, Waist: 25, Hip: 31, Length: 38 },
+  "12-13 Yrs": { Bust: 31, Waist: 25.5, Hip: 32, Length: 40 },
+  "13-14 Yrs": { Bust: 32, Waist: 26, Hip: 33, Length: 42 },
+  "14-15 Yrs": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
+  "15-16 Yrs": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
 };
 
 const KIDS_DISCOUNT_PERCENT = {
-  "1-2 Years": 65,
-  "2-3 Years": 60,
-  "3-4 Years": 60,
-  "4-5 Years": 55,
-  "5-6 Years": 55,
-  "6-7 Years": 50,
-  "7-8 Years": 42,
-  "8-9 Years": 42,
-  "9-10 Years": 34,
-  "10-11 Years": 34,
-  "11-12 Years": 34,
-  "12-13 Years": 20,
-  "13-14 Years": 20,
-  "14-15 Years": 20,
-  "15-16 Years": 8,
+  "1-2 Yrs": 65,
+  "2-3 Yrs": 60,
+  "3-4 Yrs": 60,
+  "4-5 Yrs": 55,
+  "5-6 Yrs": 55,
+  "6-7 Yrs": 50,
+  "7-8 Yrs": 42,
+  "8-9 Yrs": 42,
+  "9-10 Yrs": 34,
+  "10-11 Yrs": 34,
+  "11-12 Yrs": 34,
+  "12-13 Yrs": 20,
+  "13-14 Yrs": 20,
+  "14-15 Yrs": 20,
+  "15-16 Yrs": 8,
 };
 
 const KIDS_MEASUREMENT_FIELDS = {
@@ -650,9 +650,9 @@ export default function ProductForm() {
 
   useEffect(() => {
   const saved = sessionStorage.getItem("screen4FormData");
-  console.log("Saved data:", saved);
+  // console.log("Saved data:", saved);
   if (saved) {
-    console.log("Parsed:", JSON.parse(saved));
+    // console.log("Parsed:", JSON.parse(saved));
   }
 }, []);
 
@@ -1209,7 +1209,7 @@ useEffect(() => {
       const fileName = `${Date.now()}_${cleanName}`;
       const filePath = `attachments/${fileName}`;
 
-      console.log("Uploading:", filePath);
+      // console.log("Uploading:", filePath);
 
       const { error: uploadError } = await supabase.storage
         .from("attachments")
