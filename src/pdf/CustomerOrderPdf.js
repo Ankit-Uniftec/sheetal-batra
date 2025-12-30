@@ -135,7 +135,7 @@ const ProductItem = ({ item, order, showPricing = true }) => (
 
         {/* Extra */}
         <View style={[styles.productField, { width: "30%" }]}>
-          <Text style={styles.label}>Extra</Text>
+          <Text style={styles.label}>Extras</Text>
           {item?.extras && item.extras.length > 0 ? (
             item.extras.map((extra, idx) => (
               <View key={idx} style={{ marginBottom: 2 }}>

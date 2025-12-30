@@ -546,7 +546,7 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 6,
-    borderTopWidth: 2,
+    borderTopWidth: 1,
     borderTopColor: COLORS.dark,
     marginTop: 6,
   },
