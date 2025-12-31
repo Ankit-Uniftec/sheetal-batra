@@ -49,6 +49,8 @@ export default function Dashboard() {
   const [selectedCancellation, setSelectedCancellation] = useState({});
   const [selectedExchange, setSelectedExchange] = useState({});
 
+  const [attachmentLoading, setAttachmentLoading] = useState(null);
+
   // Check if user is Store Manager
   const isSM = useMemo(() => {
     return salesperson?.designation?.toLowerCase().includes("manager");
@@ -211,6 +213,39 @@ export default function Dashboard() {
     };
     loadClients();
   }, [salesperson]);
+
+  // Download all attachments
+  const downloadAttachments = async (attachments, orderNo) => {
+    if (!attachments || attachments.length === 0) return;
+
+    for (let i = 0; i < attachments.length; i++) {
+      const url = attachments[i];
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        // Get filename from URL
+        const fileName = url.split("/").pop() || `attachment_${i + 1}`;
+
+        // Create download link
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${orderNo}_${fileName}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        // Small delay between downloads
+        if (i < attachments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (err) {
+        console.error("Download failed for:", url, err);
+      }
+    }
+  };
+
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -422,6 +457,40 @@ export default function Dashboard() {
       alert("Failed to save: " + err.message);
     } finally {
       setActionLoading(null);
+    }
+  };
+
+
+  // Download all attachments
+  const handleDownloadAttachments = async (e, order) => {
+    e.stopPropagation();
+    if (!order.attachments || order.attachments.length === 0) return;
+
+    setAttachmentLoading(order.id);
+    try {
+      for (let i = 0; i < order.attachments.length; i++) {
+        const url = order.attachments[i];
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        const fileName = url.split("/").pop() || `attachment_${i + 1}`;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${order.order_no}_${fileName}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        if (i < order.attachments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Failed to download attachments");
+    } finally {
+      setAttachmentLoading(null);
     }
   };
 
@@ -844,6 +913,18 @@ export default function Dashboard() {
                           >
                             {pdfLoading === order.id ? "..." : "📄 PDF"}
                           </button>
+
+                          {/* Attachments Button - Only show if attachments exist */}
+                          {order.attachments && order.attachments.length > 0 && (
+                            <button
+                              className="ad-attachments-btn"
+                              onClick={(e) => handleDownloadAttachments(e, order)}
+                              disabled={attachmentLoading === order.id}
+                              title={`Download ${order.attachments.length} attachment(s)`}
+                            >
+                              {attachmentLoading === order.id ? "..." : `📎Attachments(${order.attachments.length})`}
+                            </button>
+                          )}
                         </div>
                       </div>
 

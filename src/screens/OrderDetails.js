@@ -97,18 +97,22 @@ export default function OrderDetails() {
     [order?.grand_total]
   );
 
+  // ✅ Check if order is Custom (100% advance) or Standard (25% advance)
+  const isCustomOrder = order?.order_type === "Custom";
+  const minAdvancePercent = isCustomOrder ? 1.0 : 0.25; // 100% or 25%
+
   const sanitizedAdvance = useMemo(() => {
     const amount = parseFloat(advancePayment);
-    const minAdvance = totalAmount * 0.25; // 25% of total amount
-    if (isNaN(amount) || amount <= 0) return minAdvance; // If no advance or invalid, default to 25%
-    return Math.max(minAdvance, Math.min(amount, totalAmount)); // Ensure it's at least 25% and not more than total
-  }, [advancePayment, totalAmount]);
+    const minAdvance = totalAmount * minAdvancePercent;
+    if (isNaN(amount) || amount <= 0) return minAdvance;
+    return Math.max(minAdvance, Math.min(amount, totalAmount));
+  }, [advancePayment, totalAmount, minAdvancePercent]);
 
   const remainingAmount = useMemo(
     () => Math.max(0, totalAmount - sanitizedAdvance),
     [totalAmount, sanitizedAdvance]
   );
-    // ✅ Calculate totalDiscount BEFORE pricing useMemo
+  // ✅ Calculate totalDiscount BEFORE pricing useMemo
   const totalDiscount = useMemo(() => {
     return (Number(discountPercent) || 0) + (Number(birthdayDiscount) || 0);
   }, [discountPercent, birthdayDiscount]);
@@ -215,6 +219,112 @@ export default function OrderDetails() {
     return () => (cancelled = true);
   }, [user?.id]);
 
+    // ==================== SESSION STORAGE RESTORE ====================
+  useEffect(() => {
+    const saved = sessionStorage.getItem("screen6FormData");
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+
+        // Payment
+        if (data.advancePayment !== undefined) setAdvancePayment(data.advancePayment);
+        if (data.discountPercent !== undefined) setDiscountPercent(data.discountPercent);
+        if (data.birthdayDiscount !== undefined) setBirthdayDiscount(data.birthdayDiscount);
+        if (data.discountApplied !== undefined) setDiscountApplied(data.discountApplied);
+        if (data.birthdayApplied !== undefined) setBirthdayApplied(data.birthdayApplied);
+        if (data.appliedCode) setAppliedCode(data.appliedCode);
+        if (data.paymentMode) setPaymentMode(data.paymentMode);
+
+        // Billing
+        if (data.billingSame !== undefined) setBillingSame(data.billingSame);
+        if (data.billingAddress) setBillingAddress(data.billingAddress);
+        if (data.billingCountry) setBillingCountry(data.billingCountry);
+        if (data.billingCity) setBillingCity(data.billingCity);
+        if (data.billingState) setBillingState(data.billingState);
+        if (data.billingPincode) setBillingPincode(data.billingPincode);
+        if (data.billingCompany) setBillingCompany(data.billingCompany);
+        if (data.billingGST) setBillingGST(data.billingGST);
+
+        // Delivery
+        if (data.deliveryAddress) setDeliveryAddress(data.deliveryAddress);
+        if (data.deliveryCountry) setDeliveryCountry(data.deliveryCountry);
+        if (data.deliveryCity) setDeliveryCity(data.deliveryCity);
+        if (data.deliveryState) setDeliveryState(data.deliveryState);
+        if (data.deliveryPincode) setDeliveryPincode(data.deliveryPincode);
+        if (data.deliveryNotes) setDeliveryNotes(data.deliveryNotes);
+
+      } catch (e) {
+        console.error("Error restoring Screen6 form data:", e);
+      }
+    }
+  }, []);
+
+
+
+  // ==================== SESSION STORAGE SAVE ====================
+  useEffect(() => {
+    const formData = {
+      // Payment
+      advancePayment,
+      discountPercent,
+      birthdayDiscount,
+      discountApplied,
+      birthdayApplied,
+      appliedCode,
+      paymentMode,
+
+      // Billing
+      billingSame,
+      billingAddress,
+      billingCountry,
+      billingCity,
+      billingState,
+      billingPincode,
+      billingCompany,
+      billingGST,
+
+      // Delivery
+      deliveryAddress,
+      deliveryCountry,
+      deliveryCity,
+      deliveryState,
+      deliveryPincode,
+      deliveryNotes,
+    };
+    sessionStorage.setItem("screen6FormData", JSON.stringify(formData));
+  }, [
+    // Payment
+    advancePayment,
+    discountPercent,
+    birthdayDiscount,
+    discountApplied,
+    birthdayApplied,
+    appliedCode,
+    paymentMode,
+
+    // Billing
+    billingSame,
+    billingAddress,
+    billingCountry,
+    billingCity,
+    billingState,
+    billingPincode,
+    billingCompany,
+    billingGST,
+
+    // Delivery
+    deliveryAddress,
+    deliveryCountry,
+    deliveryCity,
+    deliveryState,
+    deliveryPincode,
+    deliveryNotes,
+  ]);
+
+
+
+
+
   if (!profile || !order) return <p>Loading...</p>;
 
   // -------------------------------
@@ -312,8 +422,7 @@ export default function OrderDetails() {
         setBirthdayDiscount(pct);
         setBirthdayApplied(true);
         alert(
-          `🎂 Birthday discount (${pct}%) applied!${
-            discountApplied ? ` Combined with ${appliedCode}: Total ${discountPercent + pct}% off!` : ""
+          `🎂 Birthday discount (${pct}%) applied!${discountApplied ? ` Combined with ${appliedCode}: Total ${discountPercent + pct}% off!` : ""
           }`
         );
       } else {
@@ -328,8 +437,7 @@ export default function OrderDetails() {
         setDiscountApplied(true);
         setAppliedCode(actualCode);
         alert(
-          `✅ Discount code "${actualCode}" (${pct}%) applied!${
-            birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""
+          `✅ Discount code "${actualCode}" (${pct}%) applied!${birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""
           }`
         );
       }
@@ -354,6 +462,9 @@ export default function OrderDetails() {
 
   const handleLogout = async () => {
     try {
+
+      sessionStorage.removeItem("screen4FormData");
+      sessionStorage.removeItem("screen6FormData");
       await supabase.auth.signOut();
 
       const raw = sessionStorage.getItem("associateSession");
@@ -485,12 +596,12 @@ export default function OrderDetails() {
               </div>
             </div>
 
-            {order.comments && (
+            {/* {order.comments && (
               <div className="field field-wide" style={{ marginTop: "12px" }}>
                 <label>Notes:</label>
                 <span>{order.comments}</span>
               </div>
-            )}
+            )} */}
           </div>
         )}
 
@@ -519,12 +630,12 @@ export default function OrderDetails() {
               </div>
             </div>
 
-            {order.comments && (
+            {/* {order.comments && (
               <div className="field field-wide" style={{ marginTop: "12px" }}>
                 <label>Notes:</label>
                 <span>{order.comments}</span>
               </div>
-            )}
+            )} */}
           </div>
         )}
 
@@ -553,12 +664,12 @@ export default function OrderDetails() {
               </div>
             </div>
 
-            {order.comments && (
+            {/* {order.comments && (
               <div className="field field-wide" style={{ marginTop: "12px" }}>
                 <label>Notes:</label>
                 <span>{order.comments}</span>
               </div>
-            )}
+            )} */}
           </div>
         )}
 
@@ -655,7 +766,24 @@ export default function OrderDetails() {
         <div className="section-box payment-section">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3>Payment Details</h3>
-            <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white !important' }}>Collector Code</button>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              {/* Order Type Badge */}
+              <span
+                style={{
+                  background: isCustomOrder ? "#fff3e0" : "#e8f5e9",
+                  color: isCustomOrder ? "#e65100" : "#2e7d32",
+                  padding: "6px 12px",
+                  borderRadius: "20px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                }}
+              >
+                {isCustomOrder ? "Custom Order" : "Standard Order"}
+              </span>
+              <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white !important' }}>
+                Collector Code
+              </button>
+            </div>
           </div>
 
           {/* ✅ Applied Discounts Display */}
@@ -766,10 +894,14 @@ export default function OrderDetails() {
               <span>₹{formatIndianNumber(totalAmount)}</span>
             </div>
             <div className="field">
-              <label> Min. Advance:</label>
+              <label>
+                Min. Advance
+                {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 100%)</span>}
+                {!isCustomOrder && <span style={{ color: "#2e7d32", marginLeft: 4 }}>(Standard - 25%)</span>}
+              </label>
               <span>
                 ₹{formatIndianNumber(sanitizedAdvance)}
-                {totalAmount > 0 && ` (${((sanitizedAdvance / totalAmount) * 100).toFixed(2)}%)`}
+                {totalAmount > 0 && ` (${((sanitizedAdvance / totalAmount) * 100).toFixed(0)}%)`}
               </span>
             </div>
             <div className="field">

@@ -737,9 +737,76 @@ export default function ProductForm() {
   const handleDelete = (id) =>
     setOrderItems((prev) => prev.filter((it) => it._id !== id));
 
+  // Determine order type for an item (Custom or Standard)
+  const getItemOrderType = (item) => {
+    if (!item) return "Standard";
+
+    const product = products.find((p) => p.id === item.product_id);
+    if (!product) return "Standard";
+
+    const defaultTop = product.default_top || product.top_options?.[0] || "";
+    const defaultBottom = product.default_bottom || product.bottom_options?.[0] || "";
+    const defaultColorName = product.default_color || "";
+
+    // Check if top changed
+    if (item.top && item.top !== defaultTop) return "Custom";
+
+    // Check if bottom changed
+    if (item.bottom && item.bottom !== defaultBottom) return "Custom";
+
+    // Check if top color changed
+    if (item.top_color?.name && item.top_color.name !== defaultColorName) return "Custom";
+
+    // Check if bottom color changed
+    if (item.bottom_color?.name && item.bottom_color.name !== defaultColorName) return "Custom";
+
+    // ✅ Check if additionals are added
+    if (item.additionals && item.additionals.length > 0) {
+      const hasValidAdditional = item.additionals.some(
+        (add) => add.name && add.name.trim() !== ""
+      );
+      if (hasValidAdditional) return "Custom";
+    }
+
+    // Check for CUSTOM measurements (excluding auto-filled size chart values)
+    const itemIsKids = item.isKids || false;
+    const currentSizeChart = itemIsKids ? KIDS_SIZE_CHART : SIZE_CHART_US;
+    const sizeData = currentSizeChart[item.size] || {};
+    const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+
+    const hasCustomMeasurements = Object.entries(item.measurements || {}).some(([categoryKey, fields]) => {
+      if (!fields || typeof fields !== "object") return false;
+
+      return Object.entries(fields).some(([field, value]) => {
+        if (value === "" || value === null || value === undefined) return false;
+
+        if (autoFilledFields.includes(field)) {
+          const sizeChartValue = sizeData[field];
+          if (sizeChartValue !== undefined && Number(value) === Number(sizeChartValue)) {
+            return false;
+          }
+          return true;
+        }
+
+        return true;
+      });
+    });
+
+    if (hasCustomMeasurements) return "Custom";
+
+    return "Standard";
+  };
+
+
   const updateItem = (id, patch) =>
     setOrderItems((prev) =>
-      prev.map((it) => (it._id === id ? { ...it, ...patch } : it))
+      prev.map((it) => {
+        if (it._id !== id) return it;
+        const updated = { ...it, ...patch };
+        // Recalculate order_type after update
+        updated.order_type = getItemOrderType(updated);
+        return updated;
+      })
     );
   // Update measurement for a specific item
   const updateItemMeasurement = (itemId, categoryKey, field, value) => {
@@ -801,75 +868,109 @@ export default function ProductForm() {
     );
   };
 
-// ==================== SESSION STORAGE RESTORE ====================
-useEffect(() => {
-  const saved = sessionStorage.getItem("screen4FormData");
-  if (saved) {
-    try {
-      isRestoredRef.current = true;
-      const data = JSON.parse(saved);
-      
-      // Product & Colors
-      if (data.selectedProduct) setSelectedProduct(data.selectedProduct);
-      if (data.selectedColor) setSelectedColor(data.selectedColor);
-      if (data.selectedTop) setSelectedTop(data.selectedTop);
-      if (data.selectedBottom) setSelectedBottom(data.selectedBottom);
-      if (data.selectedTopColor) setSelectedTopColor(data.selectedTopColor);
-      if (data.selectedBottomColor) setSelectedBottomColor(data.selectedBottomColor);
-      
-      // Extras
-      if (data.selectedExtra) setSelectedExtra(data.selectedExtra);
-      if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
-      if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
-      
-      // Additionals
-      if (data.selectedAdditionals) setSelectedAdditionals(data.selectedAdditionals);
-      if (data.showAdditionals !== undefined) setShowAdditionals(data.showAdditionals);
-      
-      // Size & Quantity
-      if (data.selectedSize) setSelectedSize(data.selectedSize);
-      if (data.quantity) setQuantity(data.quantity);
-      if (data.availableSizes) setAvailableSizes(data.availableSizes);
-      
-      // Measurements
-      if (data.measurements) setMeasurements(data.measurements);
-      if (data.showMeasurements !== undefined) setShowMeasurements(data.showMeasurements); // ✅ ADD
-      if (data.activeCategory) setActiveCategory(data.activeCategory); // ✅ ADD
-      
-      // Order Items & Expanded States
-      if (data.orderItems) setOrderItems(data.orderItems);
-      if (data.expandedRowIds) setExpandedRowIds(data.expandedRowIds); // ✅ ADD
-      if (data.expandedItemCategories) setExpandedItemCategories(data.expandedItemCategories); // ✅ ADD
-      
-      // Delivery & Order Details
-      if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
-      if (data.deliveryNotes) setDeliveryNotes(data.deliveryNotes); // ✅ ADD
-      if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
-      if (data.orderFlag) setOrderFlag(data.orderFlag);
-      if (data.comments) setComments(data.comments);
-      if (data.attachments) setAttachments(data.attachments);
-      
-      // Kids Product
-      if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
-      
-      // Urgent
-      if (data.urgentReason) setUrgentReason(data.urgentReason);
-      if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
-      
-      // Product Options (dropdown data)
-      if (data.tops) setTops(data.tops);
-      if (data.bottoms) setBottoms(data.bottoms);
-      
-    } catch (e) {
-      console.error("Error restoring form data:", e);
-      isRestoredRef.current = false;
-    }
-  }
-}, []);
+  // ==================== SESSION STORAGE RESTORE ====================
+  useEffect(() => {
+    const saved = sessionStorage.getItem("screen4FormData");
+    if (saved) {
+      try {
+        isRestoredRef.current = true;
+        const data = JSON.parse(saved);
 
- // ==================== SESSION STORAGE SAVE ====================
-useEffect(() => {
-  const formData = {
+        // Product & Colors
+        if (data.selectedProduct) setSelectedProduct(data.selectedProduct);
+        if (data.selectedColor) setSelectedColor(data.selectedColor);
+        if (data.selectedTop) setSelectedTop(data.selectedTop);
+        if (data.selectedBottom) setSelectedBottom(data.selectedBottom);
+        if (data.selectedTopColor) setSelectedTopColor(data.selectedTopColor);
+        if (data.selectedBottomColor) setSelectedBottomColor(data.selectedBottomColor);
+
+        // Extras
+        if (data.selectedExtra) setSelectedExtra(data.selectedExtra);
+        if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
+        if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
+
+        // Additionals
+        if (data.selectedAdditionals) setSelectedAdditionals(data.selectedAdditionals);
+        if (data.showAdditionals !== undefined) setShowAdditionals(data.showAdditionals);
+
+        // Size & Quantity
+        if (data.selectedSize) setSelectedSize(data.selectedSize);
+        if (data.quantity) setQuantity(data.quantity);
+        if (data.availableSizes) setAvailableSizes(data.availableSizes);
+
+        // Measurements
+        if (data.measurements) setMeasurements(data.measurements);
+        if (data.showMeasurements !== undefined) setShowMeasurements(data.showMeasurements); // ✅ ADD
+        if (data.activeCategory) setActiveCategory(data.activeCategory); // ✅ ADD
+
+        // Order Items & Expanded States
+        if (data.orderItems) setOrderItems(data.orderItems);
+        if (data.expandedRowIds) setExpandedRowIds(data.expandedRowIds); // ✅ ADD
+        if (data.expandedItemCategories) setExpandedItemCategories(data.expandedItemCategories); // ✅ ADD
+
+        // Delivery & Order Details
+        if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
+        if (data.deliveryNotes) setDeliveryNotes(data.deliveryNotes); // ✅ ADD
+        if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
+        if (data.orderFlag) setOrderFlag(data.orderFlag);
+        if (data.comments) setComments(data.comments);
+        if (data.attachments) setAttachments(data.attachments);
+
+        // Kids Product
+        if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
+
+        // Urgent
+        if (data.urgentReason) setUrgentReason(data.urgentReason);
+        if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
+
+        // Product Options (dropdown data)
+        if (data.tops) setTops(data.tops);
+        if (data.bottoms) setBottoms(data.bottoms);
+
+      } catch (e) {
+        console.error("Error restoring form data:", e);
+        isRestoredRef.current = false;
+      }
+    }
+  }, []);
+
+  // ==================== SESSION STORAGE SAVE ====================
+  useEffect(() => {
+    const formData = {
+      selectedProduct,
+      selectedColor,
+      selectedTop,
+      selectedBottom,
+      selectedTopColor,
+      selectedBottomColor,
+      selectedExtra,
+      selectedExtraColor,
+      selectedExtrasWithColors,
+      selectedAdditionals,
+      showAdditionals,
+      selectedSize,
+      quantity,
+      measurements,
+      orderItems,
+      deliveryDate,
+      deliveryNotes, // ✅ ADD
+      modeOfDelivery,
+      orderFlag,
+      comments,
+      attachments,
+      isKidsProduct,
+      urgentReason,
+      otherUrgentReason,
+      availableSizes,
+      tops,
+      bottoms,
+      showMeasurements, // ✅ ADD
+      activeCategory, // ✅ ADD
+      expandedRowIds, // ✅ ADD
+      expandedItemCategories, // ✅ ADD
+    };
+    sessionStorage.setItem("screen4FormData", JSON.stringify(formData));
+  }, [
     selectedProduct,
     selectedColor,
     selectedTop,
@@ -901,41 +1002,7 @@ useEffect(() => {
     activeCategory, // ✅ ADD
     expandedRowIds, // ✅ ADD
     expandedItemCategories, // ✅ ADD
-  };
-  sessionStorage.setItem("screen4FormData", JSON.stringify(formData));
-}, [
-  selectedProduct,
-  selectedColor,
-  selectedTop,
-  selectedBottom,
-  selectedTopColor,
-  selectedBottomColor,
-  selectedExtra,
-  selectedExtraColor,
-  selectedExtrasWithColors,
-  selectedAdditionals,
-  showAdditionals,
-  selectedSize,
-  quantity,
-  measurements,
-  orderItems,
-  deliveryDate,
-  deliveryNotes, // ✅ ADD
-  modeOfDelivery,
-  orderFlag,
-  comments,
-  attachments,
-  isKidsProduct,
-  urgentReason,
-  otherUrgentReason,
-  availableSizes,
-  tops,
-  bottoms,
-  showMeasurements, // ✅ ADD
-  activeCategory, // ✅ ADD
-  expandedRowIds, // ✅ ADD
-  expandedItemCategories, // ✅ ADD
-]);
+  ]);
 
   // Fetch products
   useEffect(() => {
@@ -1048,10 +1115,10 @@ useEffect(() => {
       const { data, error } = await supabase
         .from("extras")
         .select("name, price, sort_order")
-        .order("sort_order", {ascending:true});
+        .order("sort_order", { ascending: true });
 
-        console.log("extras:", data);
-        
+      console.log("extras:", data);
+
 
       if (error) {
         console.error("Error fetching extras:", error);
@@ -1064,97 +1131,97 @@ useEffect(() => {
     fetchExtras();
   }, []);
 
-// When product or isKidsProduct changes, load options
-// Skip if data was just restored from sessionStorage
-useEffect(() => {
-  // Skip this effect if we just restored from sessionStorage
-  if (isRestoredRef.current) {
-    isRestoredRef.current = false;
-    return;
-  }
+  // When product or isKidsProduct changes, load options
+  // Skip if data was just restored from sessionStorage
+  useEffect(() => {
+    // Skip this effect if we just restored from sessionStorage
+    if (isRestoredRef.current) {
+      isRestoredRef.current = false;
+      return;
+    }
 
-  if (!selectedProduct) {
-    setTops([]);
-    setBottoms([]);
-    setAvailableSizes([]);
-    setSelectedSize("");
-    setSelectedColor({ name: "", hex: "" });
-    setSelectedTop("");
-    setSelectedBottom("");
-    setSelectedTopColor({ name: "", hex: "" });
-    setSelectedBottomColor({ name: "", hex: "" });
+    if (!selectedProduct) {
+      setTops([]);
+      setBottoms([]);
+      setAvailableSizes([]);
+      setSelectedSize("");
+      setSelectedColor({ name: "", hex: "" });
+      setSelectedTop("");
+      setSelectedBottom("");
+      setSelectedTopColor({ name: "", hex: "" });
+      setSelectedBottomColor({ name: "", hex: "" });
+      setSelectedExtra("");
+      setSelectedExtraColor({ name: "", hex: "" });
+      setSelectedExtrasWithColors([]);
+      setSelectedAdditionals([]);
+      setShowAdditionals(false);
+      setQuantity(1);
+      setMeasurements({});
+      return;
+    }
+
+    // Set product options
+    setTops(selectedProduct.top_options || []);
+    setBottoms(selectedProduct.bottom_options || []);
+
+    // Calculate available sizes
+    const newAvailableSizes = isKidsProduct
+      ? KIDS_SIZE_OPTIONS
+      : selectedProduct.available_size || [];
+
+    setAvailableSizes(newAvailableSizes);
+
+    // Only set default size if current size is not in new sizes
+    setSelectedSize((currentSize) => {
+      if (newAvailableSizes.includes(currentSize)) {
+        return currentSize; // Keep current size
+      }
+      return isKidsProduct
+        ? KIDS_SIZE_OPTIONS[0] || ""
+        : selectedProduct.available_size?.[0] || "";
+    });
+
+    const topOptions = selectedProduct.top_options || [];
+    const bottomOptions = selectedProduct.bottom_options || [];
+
+    const defaultTop = selectedProduct.default_top || topOptions[0] || "";
+    const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
+
+    const defaultColorName = selectedProduct.default_color || "";
+    const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
+
+    // Only set defaults if not already set
+    setSelectedTop((current) => current || defaultTop);
+    setSelectedTopColor((current) =>
+      current?.name ? current : (defaultTop ? defaultColor : { name: "", hex: "" })
+    );
+
+    setSelectedBottom((current) => current || defaultBottom);
+    setSelectedBottomColor((current) =>
+      current?.name ? current : (defaultBottom ? defaultColor : { name: "", hex: "" })
+    );
+
+    // Auto-populate default extra only if no extras selected
+    setSelectedExtrasWithColors((current) => {
+      if (current.length > 0) return current; // Keep existing
+      if (selectedProduct.default_extra) {
+        const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
+        if (extraDetails) {
+          return [{
+            name: selectedProduct.default_extra,
+            color: defaultColor,
+            price: extraDetails.price || 0,
+          }];
+        }
+      }
+      return [];
+    });
+
+    // Reset temporary selection states
     setSelectedExtra("");
     setSelectedExtraColor({ name: "", hex: "" });
-    setSelectedExtrasWithColors([]);
-    setSelectedAdditionals([]);
-    setShowAdditionals(false);
-    setQuantity(1);
-    setMeasurements({});
-    return;
-  }
 
-  // Set product options
-  setTops(selectedProduct.top_options || []);
-  setBottoms(selectedProduct.bottom_options || []);
-
-  // Calculate available sizes
-  const newAvailableSizes = isKidsProduct
-    ? KIDS_SIZE_OPTIONS
-    : selectedProduct.available_size || [];
-
-  setAvailableSizes(newAvailableSizes);
-
-  // Only set default size if current size is not in new sizes
-  setSelectedSize((currentSize) => {
-    if (newAvailableSizes.includes(currentSize)) {
-      return currentSize; // Keep current size
-    }
-    return isKidsProduct
-      ? KIDS_SIZE_OPTIONS[0] || ""
-      : selectedProduct.available_size?.[0] || "";
-  });
-
-  const topOptions = selectedProduct.top_options || [];
-  const bottomOptions = selectedProduct.bottom_options || [];
-
-  const defaultTop = selectedProduct.default_top || topOptions[0] || "";
-  const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
-
-  const defaultColorName = selectedProduct.default_color || "";
-  const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
-
-  // Only set defaults if not already set
-  setSelectedTop((current) => current || defaultTop);
-  setSelectedTopColor((current) => 
-    current?.name ? current : (defaultTop ? defaultColor : { name: "", hex: "" })
-  );
-
-  setSelectedBottom((current) => current || defaultBottom);
-  setSelectedBottomColor((current) => 
-    current?.name ? current : (defaultBottom ? defaultColor : { name: "", hex: "" })
-  );
-
-  // Auto-populate default extra only if no extras selected
-  setSelectedExtrasWithColors((current) => {
-    if (current.length > 0) return current; // Keep existing
-    if (selectedProduct.default_extra) {
-      const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
-      if (extraDetails) {
-        return [{
-          name: selectedProduct.default_extra,
-          color: defaultColor,
-          price: extraDetails.price || 0,
-        }];
-      }
-    }
-    return [];
-  });
-
-  // Reset temporary selection states
-  setSelectedExtra("");
-  setSelectedExtraColor({ name: "", hex: "" });
-
-}, [selectedProduct, isKidsProduct, colors, globalExtras]);
+  }, [selectedProduct, isKidsProduct, colors, globalExtras]);
 
   // ADD PRODUCT
   const handleAddProduct = () => {
@@ -1190,6 +1257,7 @@ useEffect(() => {
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
       isKids: isKidsProduct,
+      order_type: getOrderType(),
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -1244,6 +1312,63 @@ useEffect(() => {
     });
 
     return Math.round(price); // optional rounding
+  };
+
+  // Determine if current selection is Custom or Standard
+  const getOrderType = () => {
+    if (!selectedProduct) return "Standard";
+
+    const defaultTop = selectedProduct.default_top || selectedProduct.top_options?.[0] || "";
+    const defaultBottom = selectedProduct.default_bottom || selectedProduct.bottom_options?.[0] || "";
+    const defaultColorName = selectedProduct.default_color || "";
+
+    // Check if top changed from default
+    if (selectedTop && selectedTop !== defaultTop) return "Custom";
+
+    // Check if bottom changed from default
+    if (selectedBottom && selectedBottom !== defaultBottom) return "Custom";
+
+    // Check if top color changed from default
+    if (selectedTopColor?.name && selectedTopColor.name !== defaultColorName) return "Custom";
+
+    // Check if bottom color changed from default
+    if (selectedBottomColor?.name && selectedBottomColor.name !== defaultColorName) return "Custom";
+
+    // ✅ Check if additionals are added
+    if (selectedAdditionals && selectedAdditionals.length > 0) {
+      // Check if any additional has a name (not just empty rows)
+      const hasValidAdditional = selectedAdditionals.some(
+        (add) => add.name && add.name.trim() !== ""
+      );
+      if (hasValidAdditional) return "Custom";
+    }
+
+    // Check for CUSTOM measurements (excluding auto-filled size chart values)
+    const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+    const sizeData = currentSizeChart[selectedSize] || {};
+    const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+
+    const hasCustomMeasurements = Object.entries(measurements).some(([categoryKey, fields]) => {
+      if (!fields || typeof fields !== "object") return false;
+
+      return Object.entries(fields).some(([field, value]) => {
+        if (value === "" || value === null || value === undefined) return false;
+
+        if (autoFilledFields.includes(field)) {
+          const sizeChartValue = sizeData[field];
+          if (sizeChartValue !== undefined && Number(value) === Number(sizeChartValue)) {
+            return false;
+          }
+          return true;
+        }
+
+        return true;
+      });
+    });
+
+    if (hasCustomMeasurements) return "Custom";
+
+    return "Standard";
   };
 
   //==================
@@ -1304,7 +1429,10 @@ useEffect(() => {
       uploadedUrls.push(urlData.publicUrl);
     }
 
-    setAttachments(uploadedUrls);
+    setAttachments((prev) => [...prev, ...uploadedUrls]);
+
+    // ✅ Clear the input so same file can be uploaded again if needed
+    event.target.value = "";
   };
 
   // SAVE ORDER
@@ -1347,6 +1475,7 @@ useEffect(() => {
         image_url: selectedProduct.image_url || selectedProduct.image || null,
         notes: comments, // Initialize notes as empty for auto-added products
         isKids: isKidsProduct,
+        order_type: getOrderType(),
       });
     }
 
@@ -1354,6 +1483,10 @@ useEffect(() => {
     if (finalItems.length === 0) {
       return alert("Please add at least one product to the order.");
     }
+
+    const overallOrderType = finalItems.some((item) => item.order_type === "Custom")
+      ? "Custom"
+      : "Standard";
 
     const orderPayload = {
       user_id: user?.id,
@@ -1383,6 +1516,7 @@ useEffect(() => {
       taxes: taxes,
       grand_total: totalOrder,
       total_quantity: totalQuantity,
+      order_type: overallOrderType,
 
       // Timestamp
       created_at: new Date().toISOString(),
@@ -1395,6 +1529,7 @@ useEffect(() => {
     try {
       // Clear form data on logout
       sessionStorage.removeItem("screen4FormData");
+      sessionStorage.removeItem("screen6FormData");
 
       await supabase.auth.signOut();
 
@@ -1742,24 +1877,43 @@ useEffect(() => {
                                 {(itemIsKids
                                   ? KIDS_MEASUREMENT_FIELDS[itemCategoryKey] || []
                                   : measurementFields[itemCategoryKey] || []
-                                ).map((field) => (
-                                  <div className="measure-field" key={field}>
-                                    <label>{field}</label>
-                                    <input
-                                      type="number"
-                                      className="input-line"
-                                      value={item.measurements?.[itemCategoryKey]?.[field] || ""}
-                                      onChange={(e) =>
-                                        updateItemMeasurement(
-                                          item._id,
-                                          itemCategoryKey,
-                                          field,
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                ))}
+                                ).map((field) => {
+                                  const currentSizeChart = itemIsKids ? KIDS_SIZE_CHART : SIZE_CHART_US;
+                                  const sizeData = currentSizeChart[item.size] || {};
+                                  const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+                                  const isAutoField = autoFilledFields.includes(field);
+                                  const sizeChartValue = sizeData[field];
+                                  const currentValue = item.measurements?.[itemCategoryKey]?.[field];
+
+                                  // Check if value is edited (different from size chart)
+                                  const isEdited = isAutoField &&
+                                    currentValue !== undefined &&
+                                    currentValue !== "" &&
+                                    sizeChartValue !== undefined &&
+                                    Number(currentValue) !== Number(sizeChartValue);
+
+                                  return (
+                                    <div className="measure-field" key={field}>
+                                      <label>{field}</label>
+                                      <input
+                                        type="number"
+                                        className="input-line"
+                                        value={currentValue || ""}
+                                        style={{
+                                          color: isAutoField && !isEdited ? "#999" : "#000",
+                                        }}
+                                        onChange={(e) =>
+                                          updateItemMeasurement(
+                                            item._id,
+                                            itemCategoryKey,
+                                            field,
+                                            e.target.value
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -2042,28 +2196,45 @@ useEffect(() => {
                     {(isKidsProduct
                       ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
                       : measurementFields[categoryKey] || []
-                    ).map((field) => (
-                      <div className="measure-field" key={field}>
-                        <label>{field}</label>
+                    ).map((field) => {
+                      const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+                      const sizeData = currentSizeChart[selectedSize] || {};
+                      const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+                      const isAutoField = autoFilledFields.includes(field);
+                      const sizeChartValue = sizeData[field];
+                      const currentValue = measurements[categoryKey]?.[field];
 
-                        <input
-                          type="number"
-                          className="input-line"
-                          value={measurements[categoryKey]?.[field] || ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
+                      // Check if value is edited (different from size chart)
+                      const isEdited = isAutoField &&
+                        currentValue !== undefined &&
+                        currentValue !== "" &&
+                        sizeChartValue !== undefined &&
+                        Number(currentValue) !== Number(sizeChartValue);
 
-                            setMeasurements((prev) => ({
-                              ...prev,
-                              [categoryKey]: {
-                                ...(prev[categoryKey] || {}),
-                                [field]: val,
-                              },
-                            }));
-                          }}
-                        />
-                      </div>
-                    ))}
+                      return (
+                        <div className="measure-field" key={field}>
+                          <label>{field}</label>
+                          <input
+                            type="number"
+                            className="input-line"
+                            value={currentValue || ""}
+                            style={{
+                              color: isAutoField && !isEdited ? "#999" : "#000",
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setMeasurements((prev) => ({
+                                ...prev,
+                                [categoryKey]: {
+                                  ...(prev[categoryKey] || {}),
+                                  [field]: val,
+                                },
+                              }));
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
 
                 </div>
@@ -2223,6 +2394,13 @@ useEffect(() => {
                     {attachments.map((url, idx) => (
                       <span key={idx} className="file-item">
                         {url.split("/").pop()}
+                        <button
+                          type="button"
+                          className="remove-attachment-btn"
+                          onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          ×
+                        </button>
                       </span>
                     ))}
                   </div>

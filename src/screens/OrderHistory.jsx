@@ -77,6 +77,8 @@ export default function OrderHistory() {
   const customerEmail = customerFromState?.email || profile?.email || "";
   const customerPhone = customerFromState?.phone || profile?.phone || "";
 
+  const [attachmentLoading, setAttachmentLoading] = useState(null);
+
   const isSM = userRole === "SM";
 
   // Image URL helper
@@ -110,6 +112,37 @@ export default function OrderHistory() {
     }
   };
 
+  // Download all attachments
+  const downloadAttachments = async (attachments, orderNo) => {
+    if (!attachments || attachments.length === 0) return;
+
+    for (let i = 0; i < attachments.length; i++) {
+      const url = attachments[i];
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        // Get filename from URL
+        const fileName = url.split("/").pop() || `attachment_${i + 1}`;
+
+        // Create download link
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${orderNo}_${fileName}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        // Small delay between downloads
+        if (i < attachments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (err) {
+        console.error("Download failed for:", url, err);
+      }
+    }
+  };
 
   // Check user role
   useEffect(() => {
@@ -134,14 +167,35 @@ export default function OrderHistory() {
     const fetchData = async () => {
       try {
         if (fromAssociate && customerFromState) {
+          // Build orders query
           let query = supabase.from("orders").select("*");
+
           if (customerFromState.user_id) {
             query = query.eq("user_id", customerFromState.user_id);
+
+            // ✅ Also fetch profile by user_id
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", customerFromState.user_id)
+              .single();
+            setProfile(profileData || null);
+
           } else if (customerFromState.email) {
             query = query.eq("delivery_email", customerFromState.email);
+
+            // ✅ Also fetch profile by email
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("email", customerFromState.email)
+              .single();
+            setProfile(profileData || null);
           }
+
           const { data } = await query.order("created_at", { ascending: false });
           setOrders(data || []);
+
         } else {
           if (!user) { setLoading(false); return; }
           const [{ data: ordersData }, { data: profileData }] = await Promise.all([
@@ -330,6 +384,40 @@ export default function OrderHistory() {
     navigate("/login", { replace: true });
   };
 
+  // Download all attachments
+  const handleDownloadAttachments = async (e, order) => {
+    e.stopPropagation();
+    if (!order.attachments || order.attachments.length === 0) return;
+
+    setAttachmentLoading(order.id);
+    try {
+      for (let i = 0; i < order.attachments.length; i++) {
+        const url = order.attachments[i];
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        const fileName = url.split("/").pop() || `attachment_${i + 1}`;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${order.order_no}_${fileName}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        if (i < order.attachments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Failed to download attachments");
+    } finally {
+      setAttachmentLoading(null);
+    }
+  };
+
+
   const getStatusClass = (status) => {
     switch (status?.toLowerCase()) {
       case "delivered": return "delivered";
@@ -500,7 +588,6 @@ export default function OrderHistory() {
                       <div className="oh-card-badges">
                         <span className={`oh-badge ${getStatusClass(order.status)}`}>{getStatusText(order.status)}</span>
                         {editOk && <span className="oh-badge editable">Editable ({Math.floor(36 - hrs)}h)</span>}
-                        {/* <div className="ad-header-actions"> */}
                         <button
                           className="ad-print-pdf-btn active"
                           onClick={(e) => handlePrintPdf(e, order)}
@@ -508,7 +595,18 @@ export default function OrderHistory() {
                         >
                           {pdfLoading === order.id ? "..." : "📄 PDF"}
                         </button>
-                        {/* </div> */}
+
+                        {/* Attachments Button - Only show if attachments exist */}
+                        {order.attachments && order.attachments.length > 0 && (
+                          <button
+                            className="oh-attachments-btn"
+                            onClick={(e) => handleDownloadAttachments(e, order)}
+                            disabled={attachmentLoading === order.id}
+                            title={`Download ${order.attachments.length} attachment(s)`}
+                          >
+                            {attachmentLoading === order.id ? "..." : `📎Attachments(${order.attachments.length})`}
+                          </button>
+                        )}
                       </div>
                     </div>
 

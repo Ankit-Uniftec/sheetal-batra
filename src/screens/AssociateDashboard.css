@@ -365,6 +365,30 @@
   border-radius: 20px;
 }
 
+.ad-attachments-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ad-attachments-btn:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.ad-attachments-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Active Orders */
 .ad-orders-card {
   background: #FFFFFFB0;

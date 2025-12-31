@@ -1,22 +1,3 @@
-/* .kids-checkbox-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 15px;
-}
-
-.kids-checkbox-container input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.kids-checkbox-container label {
-  font-size: 1rem;
-  color: #333;
-  cursor: pointer;
-} */
-
 .category-dropdown-container {
   width: 150px;
   margin-bottom: 15px;
@@ -483,15 +464,14 @@ select,
 
 /* Preview text (file names) */
 .file-item {
-  color: #000 !important;
-  /* black text */
-  font-size: 15px;
-  font-weight: 500;
-  text-decoration: none !important;
-  /* remove underline completely */
-  cursor: default;
-  /* not clickable */
-  margin-bottom: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f5f5f5;
+  padding: 4px 10px;
+  border-radius: 4px;
+  margin: 4px;
+  font-size: 12px;
 }
 
 
@@ -1198,4 +1178,49 @@ select,
 
 .additionals-field {
   width: 100%;
+}
+
+
+.remove-attachment-btn {
+  background: #ff5252;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.remove-attachment-btn:hover {
+  background: #e04545;
+}
+
+/* Measurement Warning */
+.measure-warning {
+  display: block;
+  font-size: 11px;
+  color: #e65100;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.measure-field {
+  position: relative;
+}
+
+/* Auto-filled input placeholder style */
+.measure-field input::placeholder {
+  color: #999 !important;
+  background-color: red !important;
+}
+
+/* Edited input style */
+.measure-field input.edited {
+  color: #000 !important;
+  font-weight: 600;
 }

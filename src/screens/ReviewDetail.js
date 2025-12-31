@@ -145,7 +145,7 @@ export default function ReviewDetail() {
 
       // 5️⃣ NAVIGATE IMMEDIATELY (~2-3 seconds)
       sessionStorage.removeItem("screen4FormData");
-      
+      sessionStorage.removeItem("screen6FormData");
       navigate("/order-placed", {
         state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
         replace: true,
