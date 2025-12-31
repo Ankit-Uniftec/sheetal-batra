@@ -153,6 +153,22 @@ const ProductItem = ({ item, order, showPricing = true }) => (
           )}
         </View>
 
+        {/* Additionals */}
+        <View style={[styles.productField, { width: "30%" }]}>
+          <Text style={styles.label}>Additionals</Text>
+          {item?.additionals && item.additionals.length > 0 ? (
+            item.additionals.map((additional, idx) => (
+              <View key={idx} style={{ marginBottom: 2 }}>
+                <Text style={styles.value}>
+                  {additional.name} - INR {Number(additional.price).toLocaleString("en-IN")}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.value}>—</Text>
+          )}
+        </View>
+
         {/* Size */}
         <View style={[styles.productField, { width: "20%" }]}>
           <Text style={styles.label}>Size</Text>
@@ -425,7 +441,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
             • The accessories including jewelry, potlis and jutties cannot be exchanged or returned.
           </Text>
           <Text style={styles.policyItem}>
-            • Return & Exchange Window: You must raise a return or exchange request within 72 hours of receiving your order. We do not accept requests beyond this window. Valid reasons are subject to approval. 
+            • Return & Exchange Window: You must raise a return or exchange request within 72 hours of receiving your order. We do not accept requests beyond this window. Valid reasons are subject to approval.
           </Text>
           <Text style={styles.policyItem}>
             • For a valid exchange: The products must be unused, and in perfect condition, with all original tags intact.

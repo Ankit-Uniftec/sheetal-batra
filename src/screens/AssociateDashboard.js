@@ -908,36 +908,50 @@ export default function Dashboard() {
                               <span className="ad-value">{item.size || "—"}</span>
                             </div>
                           </div>
-                            {item.extras && item.extras.length > 0 && (
-                              <div className="ad-detail-item" style={{ gridColumn: 'span 2' }}>
-                                <span className="ad-order-label">Extras:</span>
-                                <span className="ad-value">
-                                  {item.extras.map((extra, idx) => (
-                                    <span key={idx}>
-                                      {extra.name}
-                                      {extra.color?.hex && (
-                                        <>
-                                          <span
-                                            style={{
-                                              display: 'inline-block',
-                                              width: 12,
-                                              height: 12,
-                                              backgroundColor: extra.color.hex,
-                                              borderRadius: '50%',
-                                              marginLeft: 6,
-                                              border: '1px solid #ccc',
-                                              verticalAlign: 'middle'
-                                            }}
-                                          />
-                                          <span style={{ marginLeft: 4 }}>{extra.color.name}</span>
-                                        </>
-                                      )}
-                                      {idx < item.extras.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
-                                    </span>
-                                  ))}
-                                </span>
-                              </div>
-                            )}
+                          {item.extras && item.extras.length > 0 && (
+                            <div className="ad-detail-item" style={{ gridColumn: 'span 2' }}>
+                              <span className="ad-order-label">Extras:</span>
+                              <span className="ad-value">
+                                {item.extras.map((extra, idx) => (
+                                  <span key={idx}>
+                                    {extra.name}
+                                    {extra.color?.hex && (
+                                      <>
+                                        <span
+                                          style={{
+                                            display: 'inline-block',
+                                            width: 12,
+                                            height: 12,
+                                            backgroundColor: extra.color.hex,
+                                            borderRadius: '50%',
+                                            marginLeft: 6,
+                                            border: '1px solid #ccc',
+                                            verticalAlign: 'middle'
+                                          }}
+                                        />
+                                        <span style={{ marginLeft: 4 }}>{extra.color.name}</span>
+                                      </>
+                                    )}
+                                    {idx < item.extras.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
+                                  </span>
+                                ))}
+                              </span>
+                            </div>
+                          )}
+                          {/* Additionals */}
+                          {item.additionals && item.additionals.length > 0 && (
+                            <div className="ad-detail-item" style={{ gridColumn: 'span 2' }}>
+                              <span className="ad-order-label">Additionals:</span>
+                              <span className="ad-value">
+                                {item.additionals.map((additional, idx) => (
+                                  <span key={idx}>
+                                    {additional.name} (₹{formatIndianNumber(additional.price)})
+                                    {idx < item.additionals.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
+                                  </span>
+                                ))}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
 

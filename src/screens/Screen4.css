@@ -1122,3 +1122,80 @@ select,
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+/* ===== ADDITIONALS ===== */
+.additionals-container {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.additionals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.additional-row,
+.additional-row-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.additional-name {
+  flex: 2;
+  padding: 8px 12px;
+  border: 1px solid #ddd !important;
+  border-radius: 6px;
+  background: #fff !important;
+}
+
+.additional-price {
+  flex: 1;
+  max-width: 120px;
+  padding: 8px 12px;
+  border: 1px solid #ddd !important;
+  border-radius: 6px;
+  background: #fff !important;
+}
+
+.remove-additional-btn {
+  background: #ff5252;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-additional-btn:hover {
+  background: #e04545;
+}
+
+.add-additional-btn {
+  background: #d5b85a;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.add-additional-btn:hover {
+  background: #c4a84a;
+}
+
+.additionals-field {
+  width: 100%;
+}

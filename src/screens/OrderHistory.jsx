@@ -501,13 +501,13 @@ export default function OrderHistory() {
                         <span className={`oh-badge ${getStatusClass(order.status)}`}>{getStatusText(order.status)}</span>
                         {editOk && <span className="oh-badge editable">Editable ({Math.floor(36 - hrs)}h)</span>}
                         {/* <div className="ad-header-actions"> */}
-                          <button
-                            className="ad-print-pdf-btn active"
-                            onClick={(e) => handlePrintPdf(e, order)}
-                            disabled={pdfLoading === order.id}
-                          >
-                            {pdfLoading === order.id ? "..." : "📄 PDF"}
-                          </button>
+                        <button
+                          className="ad-print-pdf-btn active"
+                          onClick={(e) => handlePrintPdf(e, order)}
+                          disabled={pdfLoading === order.id}
+                        >
+                          {pdfLoading === order.id ? "..." : "📄 PDF"}
+                        </button>
                         {/* </div> */}
                       </div>
                     </div>
@@ -560,6 +560,20 @@ export default function OrderHistory() {
                             {item.extras.map((ex, i) => (
                               <span key={i} className="oh-extra-tag">{ex.name} (₹{formatIndianNumber(ex.price)})</span>
                             ))}
+                          </div>
+                        )}
+                        {/* Additionals */}
+                        {item.additionals && item.additionals.length > 0 && (
+                          <div className="oh-extras" style={{ gridColumn: 'span 2' }}>
+                            <span className="oh-label">Additionals:</span>
+                            <span className="oh-extra-tag">
+                              {item.additionals.map((additional, idx) => (
+                                <span key={idx}>
+                                  {additional.name} (₹{formatIndianNumber(additional.price)})
+                                  {idx < item.additionals.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
+                                </span>
+                              ))}
+                            </span>
                           </div>
                         )}
                       </div>

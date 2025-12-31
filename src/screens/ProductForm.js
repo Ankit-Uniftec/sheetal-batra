@@ -649,12 +649,12 @@ export default function ProductForm() {
   const { user } = useAuth();
 
   useEffect(() => {
-  const saved = sessionStorage.getItem("screen4FormData");
-  // console.log("Saved data:", saved);
-  if (saved) {
-    // console.log("Parsed:", JSON.parse(saved));
-  }
-}, []);
+    const saved = sessionStorage.getItem("screen4FormData");
+    // console.log("Saved data:", saved);
+    if (saved) {
+      // console.log("Parsed:", JSON.parse(saved));
+    }
+  }, []);
 
 
   // PRODUCT STATES
@@ -697,6 +697,10 @@ export default function ProductForm() {
   // MEASUREMENTS
   const [measurements, setMeasurements] = useState({});
 
+  // ADDITIONALS STATE
+  const [selectedAdditionals, setSelectedAdditionals] = useState([]);
+  const [showAdditionals, setShowAdditionals] = useState(false);
+
   // CART
   const [orderItems, setOrderItems] = useState([]);
 
@@ -713,14 +717,14 @@ export default function ProductForm() {
   const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
   // Track active measurement category per expanded item
   const [expandedItemCategories, setExpandedItemCategories] = useState({}); // {[_id]: "Choga"}
-  
+
   // Flag to track if data was restored from sessionStorage
   // const [isRestored, setIsRestored] = useState(false);
   const isRestoredRef = useRef(false);
-  
+
   // tiny id helper so list keys are stable
   const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  
+
   // update helpers
   const toggleExpand = (id) => {
     setExpandedRowIds((e) => ({ ...e, [id]: !e[id] }));
@@ -799,43 +803,45 @@ export default function ProductForm() {
 
   // ==================== SESSION STORAGE RESTORE ====================
   // Restore form data from sessionStorage on mount
-// Restore form data from sessionStorage on mount
-useEffect(() => {
-  const saved = sessionStorage.getItem("screen4FormData");
-  if (saved) {
-    try {
-      isRestoredRef.current = true; // Set BEFORE restoring data
-      const data = JSON.parse(saved);
-      if (data.selectedProduct) setSelectedProduct(data.selectedProduct);
-      if (data.selectedColor) setSelectedColor(data.selectedColor);
-      if (data.selectedTop) setSelectedTop(data.selectedTop);
-      if (data.selectedBottom) setSelectedBottom(data.selectedBottom);
-      if (data.selectedTopColor) setSelectedTopColor(data.selectedTopColor);
-      if (data.selectedBottomColor) setSelectedBottomColor(data.selectedBottomColor);
-      if (data.selectedExtra) setSelectedExtra(data.selectedExtra);
-      if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
-      if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
-      if (data.selectedSize) setSelectedSize(data.selectedSize);
-      if (data.quantity) setQuantity(data.quantity);
-      if (data.measurements) setMeasurements(data.measurements);
-      if (data.orderItems) setOrderItems(data.orderItems);
-      if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
-      if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
-      if (data.orderFlag) setOrderFlag(data.orderFlag);
-      if (data.comments) setComments(data.comments);
-      if (data.attachments) setAttachments(data.attachments);
-      if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
-      if (data.urgentReason) setUrgentReason(data.urgentReason);
-      if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
-      if (data.availableSizes) setAvailableSizes(data.availableSizes);
-      if (data.tops) setTops(data.tops);
-      if (data.bottoms) setBottoms(data.bottoms);
-    } catch (e) {
-      console.error("Error restoring form data:", e);
-      isRestoredRef.current = false;
+  // Restore form data from sessionStorage on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem("screen4FormData");
+    if (saved) {
+      try {
+        isRestoredRef.current = true; // Set BEFORE restoring data
+        const data = JSON.parse(saved);
+        if (data.selectedProduct) setSelectedProduct(data.selectedProduct);
+        if (data.selectedColor) setSelectedColor(data.selectedColor);
+        if (data.selectedTop) setSelectedTop(data.selectedTop);
+        if (data.selectedBottom) setSelectedBottom(data.selectedBottom);
+        if (data.selectedTopColor) setSelectedTopColor(data.selectedTopColor);
+        if (data.selectedBottomColor) setSelectedBottomColor(data.selectedBottomColor);
+        if (data.selectedExtra) setSelectedExtra(data.selectedExtra);
+        if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
+        if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
+        if (data.selectedAdditionals) setSelectedAdditionals(data.selectedAdditionals);
+        if (data.showAdditionals) setShowAdditionals(data.showAdditionals);
+        if (data.selectedSize) setSelectedSize(data.selectedSize);
+        if (data.quantity) setQuantity(data.quantity);
+        if (data.measurements) setMeasurements(data.measurements);
+        if (data.orderItems) setOrderItems(data.orderItems);
+        if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
+        if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
+        if (data.orderFlag) setOrderFlag(data.orderFlag);
+        if (data.comments) setComments(data.comments);
+        if (data.attachments) setAttachments(data.attachments);
+        if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
+        if (data.urgentReason) setUrgentReason(data.urgentReason);
+        if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
+        if (data.availableSizes) setAvailableSizes(data.availableSizes);
+        if (data.tops) setTops(data.tops);
+        if (data.bottoms) setBottoms(data.bottoms);
+      } catch (e) {
+        console.error("Error restoring form data:", e);
+        isRestoredRef.current = false;
+      }
     }
-  }
-}, []);
+  }, []);
 
   // ==================== SESSION STORAGE SAVE ====================
   // Save form data to sessionStorage whenever it changes
@@ -850,6 +856,8 @@ useEffect(() => {
       selectedExtra,
       selectedExtraColor,
       selectedExtrasWithColors,
+      selectedAdditionals,
+      showAdditionals,
       selectedSize,
       quantity,
       measurements,
@@ -877,6 +885,8 @@ useEffect(() => {
     selectedExtra,
     selectedExtraColor,
     selectedExtrasWithColors,
+    selectedAdditionals,
+    showAdditionals,
     selectedSize,
     quantity,
     measurements,
@@ -1108,6 +1118,17 @@ useEffect(() => {
   const handleAddProduct = () => {
     if (!selectedProduct) return alert("Please select a product");
 
+    // Capture pending extra if selected but not added
+    let finalExtras = [...selectedExtrasWithColors];
+    if (selectedExtra) {
+      const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
+      finalExtras.push({
+        name: selectedExtra,
+        color: selectedExtraColor,
+        price: extraDetails?.price || 0,
+      });
+    }
+
     const newProduct = {
       _id: makeId(),
       product_id: selectedProduct.id,
@@ -1117,15 +1138,16 @@ useEffect(() => {
       top: selectedTop,
       top_color: selectedTopColor, // Now an object { name, hex }
       bottom: selectedBottom,
-      bottom_color: selectedBottomColor, // Now an object { name, hex }
-      extras: selectedExtrasWithColors, // Use the array of extras
+      bottom_color: selectedBottomColor,
+      extras: finalExtras,
+      additionals: selectedAdditionals, // Use the array of extras
       size: selectedSize,
       quantity: quantity,
       price: getLivePrice(),
       measurements,
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
-     
+
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -1139,7 +1161,9 @@ useEffect(() => {
     setSelectedBottomColor({ name: "", hex: "" }); // Reset to initial object structure
     setSelectedExtra("");
     setSelectedExtraColor({ name: "", hex: "" }); // Reset to initial object structure
-    setSelectedExtrasWithColors([]); // Reset the array of selected extras
+    setSelectedExtrasWithColors([]);
+    setSelectedAdditionals([]); // ✅ RESET ADDITIONALS
+    setShowAdditionals(false);  // Reset the array of selected extras
     setSelectedSize("S");
     setQuantity(1);
     setMeasurements({});
@@ -1170,6 +1194,11 @@ useEffect(() => {
       if (extraRow) {
         price += Number(extraRow.price || 0);
       }
+    });
+
+    // ➕ ADD ADDITIONALS PRICE
+    selectedAdditionals.forEach((additional) => {
+      price += Number(additional.price || 0);
     });
 
     return Math.round(price); // optional rounding
@@ -1247,6 +1276,16 @@ useEffect(() => {
 
     // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT"
     if (orderItems.length === 0 && selectedProduct) {
+      // Capture pending extra if selected but not added
+      let finalExtras = [...selectedExtrasWithColors];
+      if (selectedExtra) {
+        const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
+        finalExtras.push({
+          name: selectedExtra,
+          color: selectedExtraColor,
+          price: extraDetails?.price || 0,
+        });
+      }
       finalItems.push({
         _id: makeId(), // Ensure a unique ID for the item
         product_id: selectedProduct.id,
@@ -1257,7 +1296,8 @@ useEffect(() => {
         top_color: selectedTopColor,
         bottom: selectedBottom,
         bottom_color: selectedBottomColor,
-        extras: selectedExtrasWithColors, // Use the array of extras
+        extras: finalExtras,
+        additionals: selectedAdditionals, // Use the array of extras
         size: selectedSize,
         quantity,
         price: getLivePrice(), // Use getLivePrice to calculate price including extras
@@ -1312,7 +1352,7 @@ useEffect(() => {
     try {
       // Clear form data on logout
       sessionStorage.removeItem("screen4FormData");
-      
+
       await supabase.auth.signOut();
 
       const raw = sessionStorage.getItem("associateSession");
@@ -1358,14 +1398,14 @@ useEffect(() => {
   //     price: e.price, // Also store price in the option object
   //   }));
   const toExtraOptions = (extras = []) =>
-  extras.map((e) => ({
-    label: `${e.name} (₹${formatIndianNumber(e.price)})`,
-    value: e.name,           // ✅ STRING ONLY
-    price: e.price,
-  }));
+    extras.map((e) => ({
+      label: `${e.name} (₹${formatIndianNumber(e.price)})`,
+      value: e.name,           // ✅ STRING ONLY
+      price: e.price,
+    }));
 
   const categoryKey = CATEGORY_KEY_MAP[activeCategory];
-   // Get product's available tops/bottoms for edit mode
+  // Get product's available tops/bottoms for edit mode
   const getProductOptions = (productId) => {
     const product = products.find((p) => p.id === productId);
     return {
@@ -1406,7 +1446,7 @@ useEffect(() => {
               <div className="added-products-box added-products-top">
                 {orderItems.map((item, i) => {
                   const expanded = !!expandedRowIds[item._id];
-                   const itemActiveCategory = expandedItemCategories[item._id] || "Choga";
+                  const itemActiveCategory = expandedItemCategories[item._id] || "Choga";
                   const itemCategoryKey = CATEGORY_KEY_MAP[itemActiveCategory];
                   const productOptions = getProductOptions(item.product_id);
                   const itemIsKids = item.isKids || false;
@@ -1548,6 +1588,65 @@ useEffect(() => {
                                   placeholder="Add Extra..."
                                 />
                               </div>
+                            </div>
+                          </div>
+
+                          {/* ROW: Additionals Section */}
+                          <div className="row">
+                            <div className="field additionals-field">
+                              <label>Additionals</label>
+                              {item.additionals && item.additionals.length > 0 ? (
+                                <div className="additionals-list">
+                                  {item.additionals.map((additional, idx) => (
+                                    <div key={idx} className="additional-row-edit">
+                                      <input
+                                        type="text"
+                                        className="input-line additional-name"
+                                        placeholder="Item name"
+                                        value={additional.name}
+                                        onChange={(e) => {
+                                          const newAdditionals = [...item.additionals];
+                                          newAdditionals[idx].name = e.target.value;
+                                          updateItem(item._id, { additionals: newAdditionals });
+                                        }}
+                                      />
+                                      <input
+                                        type="number"
+                                        className="input-line additional-price"
+                                        placeholder="Price"
+                                        min={0}
+                                        value={additional.price}
+                                        onChange={(e) => {
+                                          const newAdditionals = [...item.additionals];
+                                          newAdditionals[idx].price = Number(e.target.value) || 0;
+                                          updateItem(item._id, { additionals: newAdditionals });
+                                        }}
+                                      />
+                                      <button
+                                        className="remove-additional-btn"
+                                        onClick={() => {
+                                          const newAdditionals = item.additionals.filter((_, i) => i !== idx);
+                                          updateItem(item._id, { additionals: newAdditionals });
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="muted">No additionals added</p>
+                              )}
+
+                              <button
+                                className="add-additional-btn"
+                                onClick={() => {
+                                  const newAdditionals = [...(item.additionals || []), { name: "", price: 0 }];
+                                  updateItem(item._id, { additionals: newAdditionals });
+                                }}
+                              >
+                                + Add Additional
+                              </button>
                             </div>
                           </div>
 
@@ -1925,6 +2024,73 @@ useEffect(() => {
                   </div>
 
                 </div>
+              </div>
+            )}
+
+            {/* ADDITIONALS */}
+            <div className="measure-bar">
+              <span>Additional Customization</span>
+              <button
+                className="plus-btn"
+                onClick={() => setShowAdditionals(!showAdditionals)}
+              >
+                {showAdditionals ? "−" : "+"}
+              </button>
+            </div>
+
+            {showAdditionals && (
+              <div className="additionals-container">
+                <div className="additionals-list">
+                  {selectedAdditionals.map((item, index) => (
+                    <div key={index} className="additional-row">
+                      <input
+                        type="text"
+                        className="input-line additional-name"
+                        placeholder="Item name"
+                        value={item.name}
+                        onChange={(e) => {
+                          const newAdditionals = [...selectedAdditionals];
+                          newAdditionals[index].name = e.target.value;
+                          setSelectedAdditionals(newAdditionals);
+                        }}
+                      />
+                      <input
+                        type="number"
+                        className="input-line additional-price"
+                        placeholder="Price"
+                        min={0}
+                        value={item.price}
+                        onChange={(e) => {
+                          const newAdditionals = [...selectedAdditionals];
+                          newAdditionals[index].price = Number(e.target.value) || 0;
+                          setSelectedAdditionals(newAdditionals);
+                        }}
+                      />
+                      <button
+                        className="remove-additional-btn"
+                        onClick={() => {
+                          setSelectedAdditionals((prev) =>
+                            prev.filter((_, i) => i !== index)
+                          );
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  className="add-additional-btn"
+                  onClick={() => {
+                    setSelectedAdditionals((prev) => [
+                      ...prev,
+                      { name: "", price: "" },
+                    ]);
+                  }}
+                >
+                  + Add More
+                </button>
               </div>
             )}
 

@@ -314,11 +314,21 @@ const ProductItem = ({ item }) => (
           <Text style={warehouseStyles.fieldValue}>{getColorName(item?.color)}</Text>
         </View>
 
-        {/* Additionals/Extras */}
+        {/* Extras */}
+        <View style={warehouseStyles.productField}>
+          <Text style={warehouseStyles.fieldLabel}>Extras</Text>
+          <Text style={warehouseStyles.fieldValue}>
+            {item?.extras?.map((e) => e?.name).filter(Boolean).join(", ") || "—"}
+          </Text>
+        </View>
+
+        {/* Additionals */}
         <View style={warehouseStyles.productField}>
           <Text style={warehouseStyles.fieldLabel}>Additionals</Text>
           <Text style={warehouseStyles.fieldValue}>
-            {item?.extras?.map((e) => e?.name).filter(Boolean).join(", ") || "—"}
+            {item?.additionals && item.additionals.length > 0
+              ? item.additionals.map((a) => `${a.name} (Rs.${a.price})`).join(", ")
+              : "—"}
           </Text>
         </View>
       </View>
