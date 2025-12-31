@@ -153,6 +153,14 @@ const ProductItem = ({ item, order, showPricing = true }) => (
           )}
         </View>
 
+
+        {/* Size */}
+        <View style={[styles.productField, { width: "20%" }]}>
+          <Text style={styles.label}>Size</Text>
+          <Text style={styles.value}>{item?.size || "—"}</Text>
+        </View>
+      </View>
+
         {/* Additionals */}
         <View style={[styles.productField, { width: "30%" }]}>
           <Text style={styles.label}>Additionals</Text>
@@ -169,13 +177,7 @@ const ProductItem = ({ item, order, showPricing = true }) => (
           )}
         </View>
 
-        {/* Size */}
-        <View style={[styles.productField, { width: "20%" }]}>
-          <Text style={styles.label}>Size</Text>
-          <Text style={styles.value}>{item?.size || "—"}</Text>
-        </View>
-      </View>
-
+        
       {/* Pricing Row */}
       {showPricing && (
         <View style={styles.pricingRow}>

@@ -801,81 +801,75 @@ export default function ProductForm() {
     );
   };
 
-  // ==================== SESSION STORAGE RESTORE ====================
-  // Restore form data from sessionStorage on mount
-  // Restore form data from sessionStorage on mount
-  useEffect(() => {
-    const saved = sessionStorage.getItem("screen4FormData");
-    if (saved) {
-      try {
-        isRestoredRef.current = true; // Set BEFORE restoring data
-        const data = JSON.parse(saved);
-        if (data.selectedProduct) setSelectedProduct(data.selectedProduct);
-        if (data.selectedColor) setSelectedColor(data.selectedColor);
-        if (data.selectedTop) setSelectedTop(data.selectedTop);
-        if (data.selectedBottom) setSelectedBottom(data.selectedBottom);
-        if (data.selectedTopColor) setSelectedTopColor(data.selectedTopColor);
-        if (data.selectedBottomColor) setSelectedBottomColor(data.selectedBottomColor);
-        if (data.selectedExtra) setSelectedExtra(data.selectedExtra);
-        if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
-        if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
-        if (data.selectedAdditionals) setSelectedAdditionals(data.selectedAdditionals);
-        if (data.showAdditionals) setShowAdditionals(data.showAdditionals);
-        if (data.selectedSize) setSelectedSize(data.selectedSize);
-        if (data.quantity) setQuantity(data.quantity);
-        if (data.measurements) setMeasurements(data.measurements);
-        if (data.orderItems) setOrderItems(data.orderItems);
-        if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
-        if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
-        if (data.orderFlag) setOrderFlag(data.orderFlag);
-        if (data.comments) setComments(data.comments);
-        if (data.attachments) setAttachments(data.attachments);
-        if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
-        if (data.urgentReason) setUrgentReason(data.urgentReason);
-        if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
-        if (data.availableSizes) setAvailableSizes(data.availableSizes);
-        if (data.tops) setTops(data.tops);
-        if (data.bottoms) setBottoms(data.bottoms);
-      } catch (e) {
-        console.error("Error restoring form data:", e);
-        isRestoredRef.current = false;
-      }
+// ==================== SESSION STORAGE RESTORE ====================
+useEffect(() => {
+  const saved = sessionStorage.getItem("screen4FormData");
+  if (saved) {
+    try {
+      isRestoredRef.current = true;
+      const data = JSON.parse(saved);
+      
+      // Product & Colors
+      if (data.selectedProduct) setSelectedProduct(data.selectedProduct);
+      if (data.selectedColor) setSelectedColor(data.selectedColor);
+      if (data.selectedTop) setSelectedTop(data.selectedTop);
+      if (data.selectedBottom) setSelectedBottom(data.selectedBottom);
+      if (data.selectedTopColor) setSelectedTopColor(data.selectedTopColor);
+      if (data.selectedBottomColor) setSelectedBottomColor(data.selectedBottomColor);
+      
+      // Extras
+      if (data.selectedExtra) setSelectedExtra(data.selectedExtra);
+      if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
+      if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
+      
+      // Additionals
+      if (data.selectedAdditionals) setSelectedAdditionals(data.selectedAdditionals);
+      if (data.showAdditionals !== undefined) setShowAdditionals(data.showAdditionals);
+      
+      // Size & Quantity
+      if (data.selectedSize) setSelectedSize(data.selectedSize);
+      if (data.quantity) setQuantity(data.quantity);
+      if (data.availableSizes) setAvailableSizes(data.availableSizes);
+      
+      // Measurements
+      if (data.measurements) setMeasurements(data.measurements);
+      if (data.showMeasurements !== undefined) setShowMeasurements(data.showMeasurements); // ✅ ADD
+      if (data.activeCategory) setActiveCategory(data.activeCategory); // ✅ ADD
+      
+      // Order Items & Expanded States
+      if (data.orderItems) setOrderItems(data.orderItems);
+      if (data.expandedRowIds) setExpandedRowIds(data.expandedRowIds); // ✅ ADD
+      if (data.expandedItemCategories) setExpandedItemCategories(data.expandedItemCategories); // ✅ ADD
+      
+      // Delivery & Order Details
+      if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
+      if (data.deliveryNotes) setDeliveryNotes(data.deliveryNotes); // ✅ ADD
+      if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
+      if (data.orderFlag) setOrderFlag(data.orderFlag);
+      if (data.comments) setComments(data.comments);
+      if (data.attachments) setAttachments(data.attachments);
+      
+      // Kids Product
+      if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
+      
+      // Urgent
+      if (data.urgentReason) setUrgentReason(data.urgentReason);
+      if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
+      
+      // Product Options (dropdown data)
+      if (data.tops) setTops(data.tops);
+      if (data.bottoms) setBottoms(data.bottoms);
+      
+    } catch (e) {
+      console.error("Error restoring form data:", e);
+      isRestoredRef.current = false;
     }
-  }, []);
+  }
+}, []);
 
-  // ==================== SESSION STORAGE SAVE ====================
-  // Save form data to sessionStorage whenever it changes
-  useEffect(() => {
-    const formData = {
-      selectedProduct,
-      selectedColor,
-      selectedTop,
-      selectedBottom,
-      selectedTopColor,
-      selectedBottomColor,
-      selectedExtra,
-      selectedExtraColor,
-      selectedExtrasWithColors,
-      selectedAdditionals,
-      showAdditionals,
-      selectedSize,
-      quantity,
-      measurements,
-      orderItems,
-      deliveryDate,
-      modeOfDelivery,
-      orderFlag,
-      comments,
-      attachments,
-      isKidsProduct,
-      urgentReason,
-      otherUrgentReason,
-      availableSizes,
-      tops,
-      bottoms,
-    };
-    sessionStorage.setItem("screen4FormData", JSON.stringify(formData));
-  }, [
+ // ==================== SESSION STORAGE SAVE ====================
+useEffect(() => {
+  const formData = {
     selectedProduct,
     selectedColor,
     selectedTop,
@@ -892,6 +886,7 @@ export default function ProductForm() {
     measurements,
     orderItems,
     deliveryDate,
+    deliveryNotes, // ✅ ADD
     modeOfDelivery,
     orderFlag,
     comments,
@@ -902,7 +897,45 @@ export default function ProductForm() {
     availableSizes,
     tops,
     bottoms,
-  ]);
+    showMeasurements, // ✅ ADD
+    activeCategory, // ✅ ADD
+    expandedRowIds, // ✅ ADD
+    expandedItemCategories, // ✅ ADD
+  };
+  sessionStorage.setItem("screen4FormData", JSON.stringify(formData));
+}, [
+  selectedProduct,
+  selectedColor,
+  selectedTop,
+  selectedBottom,
+  selectedTopColor,
+  selectedBottomColor,
+  selectedExtra,
+  selectedExtraColor,
+  selectedExtrasWithColors,
+  selectedAdditionals,
+  showAdditionals,
+  selectedSize,
+  quantity,
+  measurements,
+  orderItems,
+  deliveryDate,
+  deliveryNotes, // ✅ ADD
+  modeOfDelivery,
+  orderFlag,
+  comments,
+  attachments,
+  isKidsProduct,
+  urgentReason,
+  otherUrgentReason,
+  availableSizes,
+  tops,
+  bottoms,
+  showMeasurements, // ✅ ADD
+  activeCategory, // ✅ ADD
+  expandedRowIds, // ✅ ADD
+  expandedItemCategories, // ✅ ADD
+]);
 
   // Fetch products
   useEffect(() => {
@@ -1014,8 +1047,11 @@ export default function ProductForm() {
     const fetchExtras = async () => {
       const { data, error } = await supabase
         .from("extras")
-        .select("name, price")
-        .order("name");
+        .select("name, price, sort_order")
+        .order("sort_order", {ascending:true});
+
+        console.log("extras:", data);
+        
 
       if (error) {
         console.error("Error fetching extras:", error);
@@ -1028,91 +1064,97 @@ export default function ProductForm() {
     fetchExtras();
   }, []);
 
-  // When product or isKidsProduct changes, load options
-  // Skip if data was just restored from sessionStorage
-  useEffect(() => {
-    // Skip this effect if we just restored from sessionStorage
-    if (isRestoredRef.current) {
-      isRestoredRef.current = false; // Reset the flag after skipping once
-      return;
+// When product or isKidsProduct changes, load options
+// Skip if data was just restored from sessionStorage
+useEffect(() => {
+  // Skip this effect if we just restored from sessionStorage
+  if (isRestoredRef.current) {
+    isRestoredRef.current = false;
+    return;
+  }
+
+  if (!selectedProduct) {
+    setTops([]);
+    setBottoms([]);
+    setAvailableSizes([]);
+    setSelectedSize("");
+    setSelectedColor({ name: "", hex: "" });
+    setSelectedTop("");
+    setSelectedBottom("");
+    setSelectedTopColor({ name: "", hex: "" });
+    setSelectedBottomColor({ name: "", hex: "" });
+    setSelectedExtra("");
+    setSelectedExtraColor({ name: "", hex: "" });
+    setSelectedExtrasWithColors([]);
+    setSelectedAdditionals([]);
+    setShowAdditionals(false);
+    setQuantity(1);
+    setMeasurements({});
+    return;
+  }
+
+  // Set product options
+  setTops(selectedProduct.top_options || []);
+  setBottoms(selectedProduct.bottom_options || []);
+
+  // Calculate available sizes
+  const newAvailableSizes = isKidsProduct
+    ? KIDS_SIZE_OPTIONS
+    : selectedProduct.available_size || [];
+
+  setAvailableSizes(newAvailableSizes);
+
+  // Only set default size if current size is not in new sizes
+  setSelectedSize((currentSize) => {
+    if (newAvailableSizes.includes(currentSize)) {
+      return currentSize; // Keep current size
     }
-
-    if (!selectedProduct) {
-      setTops([]);
-      setBottoms([]);
-      setAvailableSizes([]);
-      setSelectedSize("");
-      setSelectedColor({ name: "", hex: "" });
-      setSelectedTop("");
-      setSelectedBottom("");
-      setSelectedTopColor({ name: "", hex: "" });
-      setSelectedBottomColor({ name: "", hex: "" });
-      setSelectedExtra("");
-      setSelectedExtraColor({ name: "", hex: "" });
-      setSelectedExtrasWithColors([]);
-      setQuantity(1);
-      setMeasurements({});
-      return;
-    }
-
-    setTops(selectedProduct.top_options || []);
-    setBottoms(selectedProduct.bottom_options || []);
-
-    // Calculate new available sizes and selected size
-    const newAvailableSizes = isKidsProduct
-      ? KIDS_SIZE_OPTIONS
-      : selectedProduct.available_size || [];
-    const newSelectedSize = isKidsProduct
+    return isKidsProduct
       ? KIDS_SIZE_OPTIONS[0] || ""
       : selectedProduct.available_size?.[0] || "";
+  });
 
-    // Only update state if the new values are different from the current state
-    // This prevents infinite re-renders if the values are effectively the same
-    if (JSON.stringify(availableSizes) !== JSON.stringify(newAvailableSizes)) {
-      setAvailableSizes(newAvailableSizes);
-    }
-    if (selectedSize !== newSelectedSize) {
-      setSelectedSize(newSelectedSize);
-    }
+  const topOptions = selectedProduct.top_options || [];
+  const bottomOptions = selectedProduct.bottom_options || [];
 
-    const topOptions = selectedProduct.top_options || [];
-    const bottomOptions = selectedProduct.bottom_options || [];
+  const defaultTop = selectedProduct.default_top || topOptions[0] || "";
+  const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
 
-    const defaultTop = selectedProduct.default_top || topOptions[0] || "";
-    const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
+  const defaultColorName = selectedProduct.default_color || "";
+  const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
 
-    const defaultColorName = selectedProduct.default_color || "";
-    const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
+  // Only set defaults if not already set
+  setSelectedTop((current) => current || defaultTop);
+  setSelectedTopColor((current) => 
+    current?.name ? current : (defaultTop ? defaultColor : { name: "", hex: "" })
+  );
 
-    setSelectedTop(defaultTop);
-    setSelectedBottom(defaultBottom);
-    // Use default_color for both top and bottom colors (or you can add separate columns later)
-    setSelectedTopColor(defaultTop ? defaultColor : { name: "", hex: "" });
-    setSelectedBottomColor(defaultBottom ? defaultColor : { name: "", hex: "" });
-    // setSelectedColor(selectedProduct.defaultColor);
+  setSelectedBottom((current) => current || defaultBottom);
+  setSelectedBottomColor((current) => 
+    current?.name ? current : (defaultBottom ? defaultColor : { name: "", hex: "" })
+  );
 
-    // Auto-populate default extra if exists
+  // Auto-populate default extra only if no extras selected
+  setSelectedExtrasWithColors((current) => {
+    if (current.length > 0) return current; // Keep existing
     if (selectedProduct.default_extra) {
       const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
       if (extraDetails) {
-        setSelectedExtrasWithColors([{
+        return [{
           name: selectedProduct.default_extra,
           color: defaultColor,
           price: extraDetails.price || 0,
-        }]);
-      } else {
-        setSelectedExtrasWithColors([]);
+        }];
       }
-    } else {
-      setSelectedExtrasWithColors([]);
     }
+    return [];
+  });
 
-    // Reset other states
-    setSelectedExtra("");
-    setSelectedExtraColor({ name: "", hex: "" });
-    setQuantity(1);
-    setMeasurements({});
-  }, [selectedProduct, isKidsProduct]);
+  // Reset temporary selection states
+  setSelectedExtra("");
+  setSelectedExtraColor({ name: "", hex: "" });
+
+}, [selectedProduct, isKidsProduct, colors, globalExtras]);
 
   // ADD PRODUCT
   const handleAddProduct = () => {
@@ -1147,7 +1189,7 @@ export default function ProductForm() {
       measurements,
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
-
+      isKids: isKidsProduct,
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -1304,6 +1346,7 @@ export default function ProductForm() {
         measurements,
         image_url: selectedProduct.image_url || selectedProduct.image || null,
         notes: comments, // Initialize notes as empty for auto-added products
+        isKids: isKidsProduct,
       });
     }
 

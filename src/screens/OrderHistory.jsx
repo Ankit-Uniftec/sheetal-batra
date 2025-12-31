@@ -558,7 +558,27 @@ export default function OrderHistory() {
                           <div className="oh-extras">
                             <span className="oh-label">Extras:</span>
                             {item.extras.map((ex, i) => (
-                              <span key={i} className="oh-extra-tag">{ex.name} (₹{formatIndianNumber(ex.price)})</span>
+                              <span key={i} className="oh-extra-tag">
+                                {ex.name}
+                                {ex.color?.hex && (
+                                  <>
+                                    <span
+                                      style={{
+                                        display: 'inline-block',
+                                        width: 12,
+                                        height: 12,
+                                        backgroundColor: ex.color.hex,
+                                        borderRadius: '50%',
+                                        marginLeft: 6,
+                                        border: '1px solid #ccc',
+                                        verticalAlign: 'middle'
+                                      }}
+                                    />
+                                    <span style={{ marginLeft: 4 }}>{ex.color.name}</span>
+                                  </>
+                                )}
+                                <span style={{ marginLeft: 4 }}>(₹{formatIndianNumber(ex.price)})</span>
+                              </span>
                             ))}
                           </div>
                         )}

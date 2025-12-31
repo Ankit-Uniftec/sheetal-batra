@@ -1148,7 +1148,7 @@ select,
 
 .additional-name {
   flex: 2;
-  padding: 8px 12px;
+  padding: 8px 12px !important;
   border: 1px solid #ddd !important;
   border-radius: 6px;
   background: #fff !important;
@@ -1157,7 +1157,7 @@ select,
 .additional-price {
   flex: 1;
   max-width: 120px;
-  padding: 8px 12px;
+  padding: 8px 12px !important;
   border: 1px solid #ddd !important;
   border-radius: 6px;
   background: #fff !important;

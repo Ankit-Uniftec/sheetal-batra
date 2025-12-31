@@ -144,6 +144,8 @@ export default function ReviewDetail() {
       if (!insertedOrder) throw new Error("Order insert failed");
 
       // 5️⃣ NAVIGATE IMMEDIATELY (~2-3 seconds)
+      sessionStorage.removeItem("screen4FormData");
+      
       navigate("/order-placed", {
         state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
         replace: true,
@@ -313,6 +315,7 @@ export default function ReviewDetail() {
         <div className="section-box">
           <h3>Payment Details</h3>
           <div className="row3">
+            <div className="field"><label>Mode of Payment:</label><span>{order.payment_mode || "—"}</span></div>
             <div className="field"><label>Total Amount:</label><span>₹{formatIndianNumber(totalAmount)}</span></div>
             <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
             <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>

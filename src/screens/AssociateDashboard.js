@@ -63,6 +63,10 @@ export default function Dashboard() {
       formatDate(o.created_at) === formatDate(new Date())
   );
 
+  // Sales Target - use DB value or default to 800000
+  const DEFAULT_SALES_TARGET = 800000;
+  const salesTarget = salesperson?.sales_target > 0 ? salesperson.sales_target : DEFAULT_SALES_TARGET;
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       // console.log("Logged in:", data.user?.email);
@@ -726,15 +730,23 @@ export default function Dashboard() {
                   <div className="ad-sales-header">
                     <div>
                       <p className="ad-sales-label">Sales Target</p>
-                      <p className="ad-sales-progress">In Progress</p>
+                      <p className="ad-sales-progress">{totalRevenue >= salesTarget ? "Completed!" : "In Progress"}</p>
                     </div>
                   </div>
                   <div className="ad-sales-scale">
                     <span>₹{formatIndianNumber(totalRevenue)}</span>
-                    <span>₹{formatIndianNumber(800000)}</span>
+                    <span>₹{formatIndianNumber(salesTarget)}</span>
                   </div>
                   <div className="ad-progress-bar">
-                    <div className="ad-progress-fill" style={{ width: `${(totalRevenue / 800000) * 100}%`, height: '10px', background: '#d5b85a', borderRadius: '20px' }}></div>
+                    <div
+                      className="ad-progress-fill"
+                      style={{
+                        width: `${Math.min((totalRevenue / salesTarget) * 100, 100)}%`,
+                        height: '10px',
+                        background: '#d5b85a',
+                        borderRadius: '20px'
+                      }}
+                    ></div>
                   </div>
                 </div>
               </div>
