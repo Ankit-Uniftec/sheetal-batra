@@ -1,14 +1,17 @@
-const formatPhoneNumber = (phoneNumber) => {
-  if (!phoneNumber) return "";
-  const cleaned = ('' + phoneNumber).replace(/\D/g, '');
-  // Assuming Indian phone numbers, which are typically 10 digits
-  // Format: +91 XXXXX XXXXX
-  const match = cleaned.match(/^(\d{5})(\d{5})$/);
+// In Screen2.jsx, add this helper at the top
+const formatDisplayPhone = (phone) => {
+  if (!phone) return "";
+  // Just add space after country code for readability
+  // e.g., "+1" + "1234567890" -> "+1 123 456 7890"
+  const match = phone.match(/^(\+\d{1,4})(\d+)$/);
   if (match) {
-    return '+91 ' + match[1] + ' ' + match[2];
+    const code = match[1];
+    const number = match[2];
+    // Format number with spaces
+    if (number.length === 10) {
+      return `${code} ${number.slice(0, 3)} ${number.slice(3, 6)} ${number.slice(6)}`;
+    }
+    return `${code} ${number}`;
   }
-  // If it's not a 10-digit number, return as is or with a default formatting
-  return phoneNumber;
+  return phone;
 };
-
-export default formatPhoneNumber;
