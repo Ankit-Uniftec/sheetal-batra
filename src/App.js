@@ -12,6 +12,7 @@ import OrderHistory from "./screens/OrderHistory";
 import {  Navigate } from "react-router-dom";
 import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced"
 import EditOrder from "./screens/EditOrder/EditOrder";
+import InventoryDashboard from "./screens/InventoryDashboard/InventoryDashboard";
 
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
         <Route path="/orderHistory" element={<OrderHistory />} />
         <Route path="order-placed" element={<OrderPlaced />}/>
         <Route path="/edit-order" element={<EditOrder/>}/>
+        <Route path="/inventoryDashboard" element={<InventoryDashboard/>} />
       </Routes>
     </BrowserRouter>
   );

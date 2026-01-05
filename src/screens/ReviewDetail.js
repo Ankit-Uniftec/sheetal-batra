@@ -88,76 +88,115 @@ export default function ReviewDetail() {
 
   const handlePlaceOrder = () => setShowSignature(true);
 
-  const saveSignatureAndContinue = async () => {
-    if (!sigPad || sigPad.isEmpty()) {
-      alert("Please sign before continuing.");
-      return;
-    }
+const saveSignatureAndContinue = async () => {
+  if (!sigPad || sigPad.isEmpty()) {
+    alert("Please sign before continuing.");
+    return;
+  }
 
+  try {
+    setLoading(true);
+
+    // 1️⃣ UPLOAD SIGNATURE
+    const blob = await compressSignature(sigPad);
+    const path = `${user.id}/signature_${Date.now()}.jpg`;
+
+    const { error: sigError } = await supabase.storage
+      .from("signature")
+      .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+
+    if (sigError) throw sigError;
+
+    const { data: sigData } = supabase.storage.from("signature").getPublicUrl(path);
+
+    // 2️⃣ PREPARE ORDER DATA
+    const normalizedOrder = {
+      ...order,
+      discount_percent: pricing.discountPercent,
+      discount_amount: pricing.discountAmount,
+      grand_total_after_discount: pricing.netPayable,
+      net_total: pricing.netPayable,
+      remaining_payment: pricing.remaining,
+      signature_url: sigData.publicUrl,
+      created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
+      delivery_date: toISODate(order.delivery_date),
+      join_date: toISODate(order.join_date),
+      billing_date: toISODate(order.billing_date),
+      expected_delivery: toISODate(order.expected_delivery),
+    };
+
+    // 3️⃣ GENERATE ORDER NUMBER
+    const { data: orderNo, error: orderNoError } = await supabase.rpc(
+      "generate_order_no",
+      { p_store: normalizedOrder.mode_of_delivery }
+    );
+
+    if (orderNoError) throw orderNoError;
+
+    // 4️⃣ INSERT ORDER
+    const { data: insertedOrder, error: insertError } = await supabase
+      .from("orders")
+      .insert({ ...normalizedOrder, order_no: orderNo })
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+    if (!insertedOrder) throw new Error("Order insert failed");
+
+    // 5️⃣ REDUCE INVENTORY FOR EACH PRODUCT
     try {
-      setLoading(true);
+      const items = normalizedOrder.items || order.items || [];
+      
+      for (const item of items) {
+        if (item.product_id) {
+          // Get current inventory
+          const { data: productData, error: fetchError } = await supabase
+            .from("products")
+            .select("inventory, name")
+            .eq("id", item.product_id)
+            .single();
 
-      // 1️⃣ UPLOAD SIGNATURE
-      const blob = await compressSignature(sigPad);
-      const path = `${user.id}/signature_${Date.now()}.jpg`;
+          if (!fetchError && productData) {
+            const currentInventory = productData.inventory || 0;
+            const quantityOrdered = item.quantity || 1;
+            const newInventory = Math.max(0, currentInventory - quantityOrdered);
 
-      const { error: sigError } = await supabase.storage
-        .from("signature")
-        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+            // Update inventory
+            const { error: updateError } = await supabase
+              .from("products")
+              .update({ inventory: newInventory })
+              .eq("id", item.product_id);
 
-      if (sigError) throw sigError;
-
-      const { data: sigData } = supabase.storage.from("signature").getPublicUrl(path);
-
-      // 2️⃣ PREPARE ORDER DATA
-      const normalizedOrder = {
-        ...order,
-        discount_percent: pricing.discountPercent,
-        discount_amount: pricing.discountAmount,
-        grand_total_after_discount: pricing.netPayable,
-        net_total: pricing.netPayable,
-        remaining_payment: pricing.remaining,
-        signature_url: sigData.publicUrl,
-        created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
-        delivery_date: toISODate(order.delivery_date),
-        join_date: toISODate(order.join_date),
-        billing_date: toISODate(order.billing_date),
-        expected_delivery: toISODate(order.expected_delivery),
-      };
-
-      // 3️⃣ GENERATE ORDER NUMBER
-      const { data: orderNo, error: orderNoError } = await supabase.rpc(
-        "generate_order_no",
-        { p_store: normalizedOrder.mode_of_delivery }
-      );
-
-      if (orderNoError) throw orderNoError;
-
-      // 4️⃣ INSERT ORDER (NO PDF - FAST!)
-      const { data: insertedOrder, error: insertError } = await supabase
-        .from("orders")
-        .insert({ ...normalizedOrder, order_no: orderNo })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-      if (!insertedOrder) throw new Error("Order insert failed");
-
-      // 5️⃣ NAVIGATE IMMEDIATELY (~2-3 seconds)
-      sessionStorage.removeItem("screen4FormData");
-      sessionStorage.removeItem("screen6FormData");
-      navigate("/order-placed", {
-        state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
-        replace: true,
-      });
-
-    } catch (e) {
-      console.error("❌ Order failed:", e);
-      alert(e.message || "Failed to place order");
-      setLoading(false);
-      setShowSignature(false);
+            if (updateError) {
+              console.error(`Failed to update inventory for ${productData.name}:`, updateError);
+            } else {
+              console.log(
+                `✅ Inventory updated: ${productData.name} (${currentInventory} → ${newInventory})`
+              );
+            }
+          }
+        }
+      }
+    } catch (inventoryError) {
+      console.error("Error updating inventory:", inventoryError);
+      // Don't block order completion if inventory update fails
     }
-  };
+
+    // 6️⃣ CLEAR SESSION & NAVIGATE
+    sessionStorage.removeItem("screen4FormData");
+    sessionStorage.removeItem("screen6FormData");
+    navigate("/order-placed", {
+      state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
+      replace: true,
+    });
+
+  } catch (e) {
+    console.error("❌ Order failed:", e);
+    alert(e.message || "Failed to place order");
+    setLoading(false);
+    setShowSignature(false);
+  }
+};
 
   const handleLogout = async () => {
     try {

@@ -51,6 +51,8 @@ export default function SALogin() {
       navigate("/associateDashboard");
     } else if (userRecord.role === "warehouse") {
       navigate("/warehouseDashboard");
+    } else if (userRecord.role === "inventory") {
+      navigate("/inventoryDashboard");
     } else {
       alert("Unknown role. Access denied.");
     }
@@ -88,7 +90,7 @@ export default function SALogin() {
             >
               {showPassword ? {eye} : ""}
             </span> */}
-           
+
 
             <span className="eye-icon" onClick={() => setShowPassword(!showPassword)}>
               <img src={showPassword ? eyeOff : eye} alt="toggle visibility" width={20} />
@@ -102,7 +104,7 @@ export default function SALogin() {
           </button>
         </div>
 
-        
+
       </div>
     </div>
   );
