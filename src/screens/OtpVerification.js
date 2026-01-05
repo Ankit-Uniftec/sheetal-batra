@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen1.css";
 import Logo from "../images/logo.png";
-import formatPhoneNumber from "../utils/formatPhoneNumber";
+// import formatPhoneNumber from "../utils/formatPhoneNumber";
 
 /* ----------------------------------
    COUNTRY CODE CONFIG (OBJECT ARRAY)

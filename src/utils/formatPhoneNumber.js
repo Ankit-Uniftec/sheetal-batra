@@ -1,17 +1,21 @@
-// In Screen2.jsx, add this helper at the top
-const formatDisplayPhone = (phone) => {
-  if (!phone) return "";
-  // Just add space after country code for readability
-  // e.g., "+1" + "1234567890" -> "+1 123 456 7890"
-  const match = phone.match(/^(\+\d{1,4})(\d+)$/);
-  if (match) {
-    const code = match[1];
-    const number = match[2];
-    // Format number with spaces
-    if (number.length === 10) {
-      return `${code} ${number.slice(0, 3)} ${number.slice(3, 6)} ${number.slice(6)}`;
-    }
-    return `${code} ${number}`;
+// Utility: format phone numbers
+const formatPhoneNumber = (phoneNumber) => {
+  if (!phoneNumber) return "";
+  const cleaned = ('' + phoneNumber).replace(/\D/g, '');
+  
+  // For 10-digit numbers (Indian format: XXXXX XXXXX)
+  if (cleaned.length === 10) {
+    return cleaned.slice(0, 5) + ' ' + cleaned.slice(5);
   }
-  return phone;
+  
+  // For numbers with country code (e.g., +911234567890)
+  if (cleaned.length > 10) {
+    const last10 = cleaned.slice(-10);
+    const countryPart = cleaned.slice(0, -10);
+    return '+' + countryPart + ' ' + last10.slice(0, 5) + ' ' + last10.slice(5);
+  }
+  
+  return phoneNumber;
 };
+
+export default formatPhoneNumber;
