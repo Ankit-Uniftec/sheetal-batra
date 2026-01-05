@@ -48,6 +48,7 @@ export default function Dashboard() {
   // Action dropdowns state
   const [selectedCancellation, setSelectedCancellation] = useState({});
   const [selectedExchange, setSelectedExchange] = useState({});
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
   const [attachmentLoading, setAttachmentLoading] = useState(null);
 
@@ -1070,58 +1071,116 @@ export default function Dashboard() {
           {activeTab === "calendar" && (
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Calendar</h2>
-              <div className="ad-calendar-controls">
-                <button
-                  disabled={new Date(calendarDate).getFullYear() === 2025 && new Date(calendarDate).getMonth() === 11}
-                  onClick={() => setCalendarDate(prev => {
-                    const d = new Date(prev);
-                    d.setMonth(d.getMonth() - 1);
-                    if (d < MIN_CALENDAR_DATE) return prev;
-                    return d;
-                  })}
-                >{"<"}</button>
-                <span>{new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}</span>
-                <button onClick={() => setCalendarDate(prev => {
-                  const d = new Date(prev);
-                  d.setMonth(d.getMonth() + 1);
-                  return d;
-                })}>{">"}</button>
+
+              {/* iPhone-style Calendar */}
+              <div className="ad-ios-calendar">
+                {/* Month Navigation */}
+                <div className="ad-ios-cal-header">
+                  <button
+                    className="ad-ios-nav-btn"
+                    disabled={new Date(calendarDate).getFullYear() === 2025 && new Date(calendarDate).getMonth() === 11}
+                    onClick={() => setCalendarDate(prev => {
+                      const d = new Date(prev);
+                      d.setMonth(d.getMonth() - 1);
+                      if (d < MIN_CALENDAR_DATE) return prev;
+                      return d;
+                    })}
+                  >
+                    ‹
+                  </button>
+                  <span className="ad-ios-month-year">
+                    {new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}
+                  </span>
+                  <button
+                    className="ad-ios-nav-btn"
+                    onClick={() => setCalendarDate(prev => {
+                      const d = new Date(prev);
+                      d.setMonth(d.getMonth() + 1);
+                      return d;
+                    })}
+                  >
+                    ›
+                  </button>
+                </div>
+
+                {/* Day Labels */}
+                <div className="ad-ios-days-row">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                    <div key={day} className="ad-ios-day-label">{day}</div>
+                  ))}
+                </div>
+
+                {/* Date Grid */}
+                <div className="ad-ios-date-grid">
+                  {(() => {
+                    const year = new Date(calendarDate).getFullYear();
+                    const month = new Date(calendarDate).getMonth();
+                    const firstDayOfMonth = new Date(year, month, 1).getDay();
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    const totalCells = Math.ceil((firstDayOfMonth + daysInMonth) / 7) * 7;
+
+                    return Array.from({ length: totalCells }).map((_, i) => {
+                      const date = i - firstDayOfMonth + 1;
+                      if (date <= 0 || date > daysInMonth) {
+                        return <div key={i} className="ad-ios-date-cell ad-ios-empty" />;
+                      }
+
+                      const currentDay = new Date(year, month, date);
+                      const fullDate = formatDate(currentDay);
+                      const todayDate = formatDate(new Date());
+                      const isToday = fullDate === todayDate;
+                      const isSelected = selectedCalendarDate === fullDate;
+                      const orderCount = ordersByDate[fullDate] || 0;
+
+                      return (
+                        <div
+                          key={i}
+                          className={`ad-ios-date-cell ${isToday ? "ad-ios-today" : ""} ${isSelected ? "ad-ios-selected" : ""} ${orderCount > 0 ? "ad-ios-has-orders" : ""}`}
+                          onClick={() => setSelectedCalendarDate(fullDate)}
+                        >
+                          <span className="ad-ios-date-num">{date}</span>
+                          {orderCount > 0 && (
+                            <span className="ad-ios-order-count">{orderCount}</span>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
 
-              <div className="ad-calendar-grid">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-                  <div key={day} className="ad-calendar-day-label">{day}</div>
-                ))}
+              {/* Orders Section Below Calendar */}
+              {selectedCalendarDate && (
+                <div className="ad-calendar-orders-section">
+                  <div className="ad-card-header">
+                    <span className="ad-card-title">
+                      Orders for {selectedCalendarDate} ({orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length})
+                    </span>
+                  </div>
 
-                {(() => {
-                  const year = new Date(calendarDate).getFullYear();
-                  const month = new Date(calendarDate).getMonth();
-                  const firstDayOfMonth = new Date(year, month, 1).getDay();
-                  const daysInMonth = new Date(year, month + 1, 0).getDate();
-                  const totalCells = firstDayOfMonth + daysInMonth;
-
-                  return Array.from({ length: totalCells }).map((_, i) => {
-                    const date = i - firstDayOfMonth + 1;
-                    if (date <= 0) return <div key={i} className="ad-calendar-date-box ad-empty" />;
-
-                    const currentDay = new Date(year, month, date);
-                    const fullDate = formatDate(currentDay);
-                    const todayDate = formatDate(new Date());
-                    const orderCount = ordersByDate[fullDate] || 0;
-
-                    return (
-                      <div
-                        key={i}
-                        className={`ad-calendar-date-box ${fullDate === todayDate ? "ad-today" : ""}`}
-                        onClick={() => { if (orderCount > 0) setActiveTab("orders"); }}
-                      >
-                        <span className="ad-date-number">{date}</span>
-                        {orderCount > 0 && <span className="ad-order-count">{orderCount} Orders</span>}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+                  <div className="ad-calendar-orders-list">
+                    {orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length === 0 ? (
+                      <p className="ad-muted">No orders scheduled for this date</p>
+                    ) : (
+                      orders
+                        .filter(o => formatDate(o.delivery_date) === selectedCalendarDate)
+                        .map((order) => (
+                          <div
+                            className="ad-order-item"
+                            key={order.id}
+                            onClick={() => viewCustomerOrders(order)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <p><b>Order No:</b> {order.order_no}</p>
+                            <p><b>Client Name:</b> {order.delivery_name}</p>
+                            <p><b>Status:</b> {order.status || "Pending"}</p>
+                            <p><b>Delivery Date:</b> {formatDate(order.delivery_date)}</p>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

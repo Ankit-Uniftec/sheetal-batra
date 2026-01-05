@@ -1648,6 +1648,297 @@
   border-bottom: none;
 }
 
+/* ==================== iPHONE STYLE CALENDAR (FULL WIDTH) ==================== */
+.ad-ios-calendar {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  backdrop-filter: blur(10px);
+}
+
+/* Header */
+.ad-ios-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  gap: 20px;
+}
+
+.ad-ios-month-year {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  min-width: 160px;
+  text-align: center;
+}
+
+.ad-ios-nav-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #d5b85a;
+  cursor: pointer;
+  padding: 5px 12px;
+  transition: transform 0.15s;
+  line-height: 1;
+}
+
+.ad-ios-nav-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+.ad-ios-nav-btn:disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Day Labels */
+.ad-ios-days-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.ad-ios-day-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  padding: 8px 0;
+  text-transform: uppercase;
+}
+
+/* Date Grid */
+.ad-ios-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.ad-ios-date-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  padding: 12px 8px;
+  min-height: 60px;
+}
+
+.ad-ios-date-cell:hover:not(.ad-ios-empty) {
+  background: rgba(213, 184, 90, 0.1);
+}
+
+.ad-ios-date-cell.ad-ios-empty {
+  cursor: default;
+}
+
+.ad-ios-date-num {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ad-ios-empty .ad-ios-date-num {
+  visibility: hidden;
+}
+
+/* Today */
+.ad-ios-date-cell.ad-ios-today {
+  background: #d5b85a;
+  border-radius: 12px;
+}
+
+.ad-ios-date-cell.ad-ios-today .ad-ios-date-num {
+  color: white;
+  font-weight: 600;
+}
+
+.ad-ios-date-cell.ad-ios-today .ad-ios-order-count {
+  background: white;
+  color: #d5b85a;
+}
+
+/* Selected */
+.ad-ios-date-cell.ad-ios-selected:not(.ad-ios-today) {
+  background: rgba(213, 184, 90, 0.12);
+  box-shadow: inset 0 0 0 2px #d5b85a;
+}
+
+.ad-ios-date-cell.ad-ios-selected .ad-ios-date-num {
+  font-weight: 600;
+  color: #d5b85a;
+}
+
+/* Order Count Badge */
+.ad-ios-order-count {
+  font-size: 11px;
+  font-weight: 600;
+  background: #d5b85a;
+  color: white;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  margin-top: 4px;
+}
+
+/* ========== ORDERS SECTION BELOW CALENDAR ========== */
+.ad-calendar-orders-section {
+  margin-top: 20px;
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+}
+
+.ad-calendar-orders-list {
+  max-height: 350px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+
+.ad-calendar-orders-section .ad-order-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.ad-calendar-orders-section .ad-order-item:hover {
+  background: #fafafa;
+  padding-left: 10px;
+}
+
+.ad-calendar-orders-section .ad-order-item:last-child {
+  border-bottom: none;
+}
+
+.ad-calendar-orders-section .ad-order-item p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.ad-calendar-orders-section .ad-order-item b {
+  color: #d5b85a;
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 1024px) {
+  .ad-ios-date-cell {
+    min-height: 55px;
+    padding: 10px 6px;
+  }
+
+  .ad-ios-date-num {
+    font-size: 15px;
+  }
+
+  .ad-ios-order-count {
+    font-size: 10px;
+    min-width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .ad-ios-calendar {
+    padding: 16px;
+  }
+
+  .ad-ios-date-cell {
+    min-height: 50px;
+    padding: 8px 4px;
+    border-radius: 10px;
+  }
+
+  .ad-ios-date-num {
+    font-size: 14px;
+  }
+
+  .ad-ios-order-count {
+    font-size: 9px;
+    min-width: 16px;
+    height: 16px;
+    margin-top: 2px;
+  }
+
+  .ad-ios-day-label {
+    font-size: 11px;
+    padding: 6px 0;
+  }
+
+  .ad-ios-month-year {
+    font-size: 16px;
+    min-width: 140px;
+  }
+
+  .ad-ios-nav-btn {
+    font-size: 20px;
+    padding: 5px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-ios-calendar {
+    padding: 12px;
+  }
+
+  .ad-ios-cal-header {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .ad-ios-month-year {
+    font-size: 15px;
+    min-width: 120px;
+  }
+
+  .ad-ios-date-cell {
+    min-height: 44px;
+    padding: 6px 2px;
+    border-radius: 8px;
+  }
+
+  .ad-ios-date-num {
+    font-size: 13px;
+  }
+
+  .ad-ios-order-count {
+    font-size: 8px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+  }
+
+  .ad-ios-day-label {
+    font-size: 10px;
+  }
+
+  .ad-ios-date-grid {
+    gap: 4px;
+  }
+
+  .ad-calendar-orders-section {
+    padding: 14px;
+  }
+
+  .ad-calendar-orders-section .ad-order-item p {
+    font-size: 13px;
+  }
+}
+
 /* ===== RESPONSIVE ADJUSTMENTS ===== */
 @media (max-width: 768px) {
   .ad-badges-row {
