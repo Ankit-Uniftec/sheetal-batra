@@ -219,7 +219,7 @@ export default function OrderDetails() {
     return () => (cancelled = true);
   }, [user?.id]);
 
-    // ==================== SESSION STORAGE RESTORE ====================
+  // ==================== SESSION STORAGE RESTORE ====================
   useEffect(() => {
     const saved = sessionStorage.getItem("screen6FormData");
     if (saved) {
@@ -462,30 +462,28 @@ export default function OrderDetails() {
 
   const handleLogout = async () => {
     try {
-
+      // Clear form data
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
-      await supabase.auth.signOut();
 
-      const raw = sessionStorage.getItem("associateSession");
-      const saved = raw ? JSON.parse(raw) : null;
+      // Check if session is still valid (don't sign out yet)
+      const { data: { session } } = await supabase.auth.getSession();
 
-      if (saved?.access_token && saved?.refresh_token) {
-        const { error } = await supabase.auth.setSession({
-          access_token: saved.access_token,
-          refresh_token: saved.refresh_token,
-        });
-
-        if (!error) {
-          sessionStorage.removeItem("associateSession");
-          sessionStorage.removeItem("returnToAssociate");
-          navigate("/AssociateDashboard", { replace: true });
-          return;
-        }
+      if (session) {
+        // Session valid - go to AssociateDashboard with password verification
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        sessionStorage.removeItem("associateSession");
+        sessionStorage.removeItem("returnToAssociate");
+        navigate("/AssociateDashboard", { replace: true });
+      } else {
+        // Session expired - sign out completely and go to login
+        await supabase.auth.signOut();
+        sessionStorage.removeItem("associateSession");
+        sessionStorage.removeItem("returnToAssociate");
+        navigate("/login", { replace: true });
       }
-      navigate("/login", { replace: true });
     } catch (e) {
-      console.error("Logout restore error", e);
+      console.error("Logout error", e);
       navigate("/login", { replace: true });
     }
   };

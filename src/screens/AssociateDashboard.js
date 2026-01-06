@@ -51,6 +51,8 @@ export default function Dashboard() {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
   const [attachmentLoading, setAttachmentLoading] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRevenue, setShowRevenue] = useState(false);
 
   // Check if user is Store Manager
   const isSM = useMemo(() => {
@@ -645,12 +647,25 @@ export default function Dashboard() {
         <div className="ad-password-modal">
           <div className="ad-password-box">
             <h3>Re-enter Password</h3>
-            <input
-              type="password"
-              placeholder="Enter password"
-              value={enteredPassword}
-              onChange={(e) => setEnteredPassword(e.target.value)}
-            />
+            <div className="ad-password-input-wrapper">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter password"
+                value={enteredPassword}
+                onChange={(e) => setEnteredPassword(e.target.value)}
+              />
+              <p
+                type="button"
+                className="ad-eye-btn"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ?
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
+                  :
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-closed-icon lucide-eye-closed"><path d="m15 18-.722-3.25" /><path d="M2 8a10.645 10.645 0 0 0 20 0" /><path d="m20 15-1.726-2.05" /><path d="m4 15 1.726-2.05" /><path d="m9 18 .722-3.25" /></svg>
+                }
+              </p>
+            </div>
             {passwordError && <p className="ad-error-text">{passwordError}</p>}
             <button onClick={verifyPassword}>Verify</button>
           </div>
@@ -763,7 +778,7 @@ export default function Dashboard() {
       <div className={`ad-dashboard-wrapper ${showPasswordModal || editingOrder ? "ad-blurred" : ""}`}>
         <div className="ad-top-header">
           <img src={Logo} className="logo4" alt="logo" />
-          <h1 className="ad-order-title">My Dashboard</h1>
+          {/* <h1 className="ad-order-title">My Dashboard</h1> */}
           <button className="ad-logout-btn ad-desktop-logout-btn" onClick={handleLogout}>↪</button>
           <div className="ad-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
             <div className="ad-bar"></div>
@@ -786,8 +801,26 @@ export default function Dashboard() {
 
           {activeTab === "dashboard" && (
             <>
+
               <div className="ad-cell ad-total-revenue">
-                <StatCard title="Total Revenue" value={`₹${formatIndianNumber(totalRevenue)}`} />
+                <div className="ad-stat-card">
+                  <p className="ad-stat-title">Total Revenue</p>
+                  <div className="ad-stat-content">
+                    <span className="ad-stat-value">
+                      {showRevenue ? `₹${formatIndianNumber(totalRevenue)}` : "₹ ••••••"}
+                    </span>
+                    <button
+                      className="bg-transparent border-none"
+                      onClick={() => setShowRevenue(!showRevenue)}
+                    >
+                      {showRevenue
+                        ?
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
+                        :
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-closed-icon lucide-eye-closed"><path d="m15 18-.722-3.25" /><path d="M2 8a10.645 10.645 0 0 0 20 0" /><path d="m20 15-1.726-2.05" /><path d="m4 15 1.726-2.05" /><path d="m9 18 .722-3.25" /></svg>}
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className="ad-cell ad-total-orders">
                 <StatCard title="Total Orders" className="gold-text" value={formatIndianNumber(totalOrders)} />
@@ -902,7 +935,7 @@ export default function Dashboard() {
                             <span className="ad-header-value">{formatDate(order.created_at) || "—"}</span>
                           </div>
                           <div className="ad-header-item">
-                            <span className="ad-header-label">EDD:</span>
+                            <span className="ad-header-label">Delivery Date:</span>
                             <span className="ad-header-value">{formatDate(order.delivery_date) || "—"}</span>
                           </div>
                         </div>

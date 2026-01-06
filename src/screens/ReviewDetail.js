@@ -88,138 +88,140 @@ export default function ReviewDetail() {
 
   const handlePlaceOrder = () => setShowSignature(true);
 
-const saveSignatureAndContinue = async () => {
-  if (!sigPad || sigPad.isEmpty()) {
-    alert("Please sign before continuing.");
-    return;
-  }
+  const saveSignatureAndContinue = async () => {
+    if (!sigPad || sigPad.isEmpty()) {
+      alert("Please sign before continuing.");
+      return;
+    }
 
-  try {
-    setLoading(true);
-
-    // 1️⃣ UPLOAD SIGNATURE
-    const blob = await compressSignature(sigPad);
-    const path = `${user.id}/signature_${Date.now()}.jpg`;
-
-    const { error: sigError } = await supabase.storage
-      .from("signature")
-      .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
-
-    if (sigError) throw sigError;
-
-    const { data: sigData } = supabase.storage.from("signature").getPublicUrl(path);
-
-    // 2️⃣ PREPARE ORDER DATA
-    const normalizedOrder = {
-      ...order,
-      discount_percent: pricing.discountPercent,
-      discount_amount: pricing.discountAmount,
-      grand_total_after_discount: pricing.netPayable,
-      net_total: pricing.netPayable,
-      remaining_payment: pricing.remaining,
-      signature_url: sigData.publicUrl,
-      created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
-      delivery_date: toISODate(order.delivery_date),
-      join_date: toISODate(order.join_date),
-      billing_date: toISODate(order.billing_date),
-      expected_delivery: toISODate(order.expected_delivery),
-    };
-
-    // 3️⃣ GENERATE ORDER NUMBER
-    const { data: orderNo, error: orderNoError } = await supabase.rpc(
-      "generate_order_no",
-      { p_store: normalizedOrder.mode_of_delivery }
-    );
-
-    if (orderNoError) throw orderNoError;
-
-    // 4️⃣ INSERT ORDER
-    const { data: insertedOrder, error: insertError } = await supabase
-      .from("orders")
-      .insert({ ...normalizedOrder, order_no: orderNo })
-      .select()
-      .single();
-
-    if (insertError) throw insertError;
-    if (!insertedOrder) throw new Error("Order insert failed");
-
-    // 5️⃣ REDUCE INVENTORY FOR EACH PRODUCT
     try {
-      const items = normalizedOrder.items || order.items || [];
-      
-      for (const item of items) {
-        if (item.product_id) {
-          // Get current inventory
-          const { data: productData, error: fetchError } = await supabase
-            .from("products")
-            .select("inventory, name")
-            .eq("id", item.product_id)
-            .single();
+      setLoading(true);
 
-          if (!fetchError && productData) {
-            const currentInventory = productData.inventory || 0;
-            const quantityOrdered = item.quantity || 1;
-            const newInventory = Math.max(0, currentInventory - quantityOrdered);
+      // 1️⃣ UPLOAD SIGNATURE
+      const blob = await compressSignature(sigPad);
+      const path = `${user.id}/signature_${Date.now()}.jpg`;
 
-            // Update inventory
-            const { error: updateError } = await supabase
+      const { error: sigError } = await supabase.storage
+        .from("signature")
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+
+      if (sigError) throw sigError;
+
+      const { data: sigData } = supabase.storage.from("signature").getPublicUrl(path);
+
+      // 2️⃣ PREPARE ORDER DATA
+      const normalizedOrder = {
+        ...order,
+        discount_percent: pricing.discountPercent,
+        discount_amount: pricing.discountAmount,
+        grand_total_after_discount: pricing.netPayable,
+        net_total: pricing.netPayable,
+        remaining_payment: pricing.remaining,
+        signature_url: sigData.publicUrl,
+        created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
+        delivery_date: toISODate(order.delivery_date),
+        join_date: toISODate(order.join_date),
+        billing_date: toISODate(order.billing_date),
+        expected_delivery: toISODate(order.expected_delivery),
+      };
+
+      // 3️⃣ GENERATE ORDER NUMBER
+      const { data: orderNo, error: orderNoError } = await supabase.rpc(
+        "generate_order_no",
+        { p_store: normalizedOrder.mode_of_delivery }
+      );
+
+      if (orderNoError) throw orderNoError;
+
+      // 4️⃣ INSERT ORDER
+      const { data: insertedOrder, error: insertError } = await supabase
+        .from("orders")
+        .insert({ ...normalizedOrder, order_no: orderNo })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      if (!insertedOrder) throw new Error("Order insert failed");
+
+      // 5️⃣ REDUCE INVENTORY FOR EACH PRODUCT
+      try {
+        const items = normalizedOrder.items || order.items || [];
+
+        for (const item of items) {
+          if (item.product_id) {
+            // Get current inventory
+            const { data: productData, error: fetchError } = await supabase
               .from("products")
-              .update({ inventory: newInventory })
-              .eq("id", item.product_id);
+              .select("inventory, name")
+              .eq("id", item.product_id)
+              .single();
 
-            if (updateError) {
-              console.error(`Failed to update inventory for ${productData.name}:`, updateError);
-            } else {
-              console.log(
-                `✅ Inventory updated: ${productData.name} (${currentInventory} → ${newInventory})`
-              );
+            if (!fetchError && productData) {
+              const currentInventory = productData.inventory || 0;
+              const quantityOrdered = item.quantity || 1;
+              const newInventory = Math.max(0, currentInventory - quantityOrdered);
+
+              // Update inventory
+              const { error: updateError } = await supabase
+                .from("products")
+                .update({ inventory: newInventory })
+                .eq("id", item.product_id);
+
+              if (updateError) {
+                console.error(`Failed to update inventory for ${productData.name}:`, updateError);
+              } else {
+                console.log(
+                  `✅ Inventory updated: ${productData.name} (${currentInventory} → ${newInventory})`
+                );
+              }
             }
           }
         }
+      } catch (inventoryError) {
+        console.error("Error updating inventory:", inventoryError);
+        // Don't block order completion if inventory update fails
       }
-    } catch (inventoryError) {
-      console.error("Error updating inventory:", inventoryError);
-      // Don't block order completion if inventory update fails
+
+      // 6️⃣ CLEAR SESSION & NAVIGATE
+      sessionStorage.removeItem("screen4FormData");
+      sessionStorage.removeItem("screen6FormData");
+      navigate("/order-placed", {
+        state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
+        replace: true,
+      });
+
+    } catch (e) {
+      console.error("❌ Order failed:", e);
+      alert(e.message || "Failed to place order");
+      setLoading(false);
+      setShowSignature(false);
     }
-
-    // 6️⃣ CLEAR SESSION & NAVIGATE
-    sessionStorage.removeItem("screen4FormData");
-    sessionStorage.removeItem("screen6FormData");
-    navigate("/order-placed", {
-      state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
-      replace: true,
-    });
-
-  } catch (e) {
-    console.error("❌ Order failed:", e);
-    alert(e.message || "Failed to place order");
-    setLoading(false);
-    setShowSignature(false);
-  }
-};
+  };
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      const raw = sessionStorage.getItem("associateSession");
-      const saved = raw ? JSON.parse(raw) : null;
+      // Clear form data
+      sessionStorage.removeItem("screen4FormData");
+      sessionStorage.removeItem("screen6FormData");
 
-      if (saved?.access_token && saved?.refresh_token) {
-        const { error } = await supabase.auth.setSession({
-          access_token: saved.access_token,
-          refresh_token: saved.refresh_token,
-        });
+      // Check if session is still valid (don't sign out yet)
+      const { data: { session } } = await supabase.auth.getSession();
 
-        if (!error) {
-          sessionStorage.removeItem("associateSession");
-          sessionStorage.removeItem("returnToAssociate");
-          navigate("/AssociateDashboard", { replace: true });
-          return;
-        }
+      if (session) {
+        // Session valid - go to AssociateDashboard with password verification
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        sessionStorage.removeItem("associateSession");
+        sessionStorage.removeItem("returnToAssociate");
+        navigate("/AssociateDashboard", { replace: true });
+      } else {
+        // Session expired - sign out completely and go to login
+        await supabase.auth.signOut();
+        sessionStorage.removeItem("associateSession");
+        sessionStorage.removeItem("returnToAssociate");
+        navigate("/login", { replace: true });
       }
-      navigate("/login", { replace: true });
     } catch (e) {
-      console.error("Logout restore error", e);
+      console.error("Logout error", e);
       navigate("/login", { replace: true });
     }
   };

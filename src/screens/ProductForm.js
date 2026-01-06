@@ -6,7 +6,8 @@ import "./Screen4.css";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
-import formatDate from "../utils/formatDate"; // Import formatDate
+import formatDate from "../utils/formatDate";
+import Popup, { usePopup } from "../components/Popup"; // Import Popup component
 
 /**
  * Generic Searchable Select (no external libs)
@@ -227,57 +228,57 @@ export function SearchableSelect({
 }
 
 const KIDS_SIZE_OPTIONS = [
-  "1-2 Yrs",
-  "2-3 Yrs",
-  "3-4 Yrs",
-  "4-5 Yrs",
-  "5-6 Yrs",
-  "6-7 Yrs",
-  "7-8 Yrs",
-  "8-9 Yrs",
-  "9-10 Yrs",
-  "10-11 Yrs",
-  "11-12 Yrs",
-  "12-13 Yrs",
-  "13-14 Yrs",
-  "14-15 Yrs",
-  "15-16 Yrs",
+  "1-2 yrs",
+  "2-3 yrs",
+  "3-4 yrs",
+  "4-5 yrs",
+  "5-6 yrs",
+  "6-7 yrs",
+  "7-8 yrs",
+  "8-9 yrs",
+  "9-10 yrs",
+  "10-11 yrs",
+  "11-12 yrs",
+  "12-13 yrs",
+  "13-14 yrs",
+  "14-15 yrs",
+  "15-16 yrs",
 ];
 
 const KIDS_SIZE_CHART = {
-  "1-2 Yrs": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
-  "2-3 Yrs": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
-  "3-4 Yrs": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
-  "4-5 Yrs": { Bust: 23, Waist: 21.5, Hip: 24, Length: 24 },
-  "5-6 Yrs": { Bust: 24, Waist: 22, Hip: 25, Length: 26 },
-  "6-7 Yrs": { Bust: 25, Waist: 22.5, Hip: 26, Length: 28 },
-  "7-8 Yrs": { Bust: 26, Waist: 23, Hip: 27, Length: 30 },
-  "8-9 Yrs": { Bust: 27, Waist: 23.5, Hip: 28, Length: 32 },
-  "9-10 Yrs": { Bust: 28, Waist: 24, Hip: 29, Length: 34 },
-  "10-11 Yrs": { Bust: 29, Waist: 24.5, Hip: 30, Length: 36 },
-  "11-12 Yrs": { Bust: 30, Waist: 25, Hip: 31, Length: 38 },
-  "12-13 Yrs": { Bust: 31, Waist: 25.5, Hip: 32, Length: 40 },
-  "13-14 Yrs": { Bust: 32, Waist: 26, Hip: 33, Length: 42 },
-  "14-15 Yrs": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
-  "15-16 Yrs": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
+  "1-2 yrs": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
+  "2-3 yrs": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
+  "3-4 yrs": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
+  "4-5 yrs": { Bust: 23, Waist: 21.5, Hip: 24, Length: 24 },
+  "5-6 yrs": { Bust: 24, Waist: 22, Hip: 25, Length: 26 },
+  "6-7 yrs": { Bust: 25, Waist: 22.5, Hip: 26, Length: 28 },
+  "7-8 yrs": { Bust: 26, Waist: 23, Hip: 27, Length: 30 },
+  "8-9 yrs": { Bust: 27, Waist: 23.5, Hip: 28, Length: 32 },
+  "9-10 yrs": { Bust: 28, Waist: 24, Hip: 29, Length: 34 },
+  "10-11 yrs": { Bust: 29, Waist: 24.5, Hip: 30, Length: 36 },
+  "11-12 yrs": { Bust: 30, Waist: 25, Hip: 31, Length: 38 },
+  "12-13 yrs": { Bust: 31, Waist: 25.5, Hip: 32, Length: 40 },
+  "13-14 yrs": { Bust: 32, Waist: 26, Hip: 33, Length: 42 },
+  "14-15 yrs": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
+  "15-16 yrs": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
 };
 
 const KIDS_DISCOUNT_PERCENT = {
-  "1-2 Yrs": 65,
-  "2-3 Yrs": 60,
-  "3-4 Yrs": 60,
-  "4-5 Yrs": 55,
-  "5-6 Yrs": 55,
-  "6-7 Yrs": 50,
-  "7-8 Yrs": 42,
-  "8-9 Yrs": 42,
-  "9-10 Yrs": 34,
-  "10-11 Yrs": 34,
-  "11-12 Yrs": 34,
-  "12-13 Yrs": 20,
-  "13-14 Yrs": 20,
-  "14-15 Yrs": 20,
-  "15-16 Yrs": 8,
+  "1-2 yrs": 65,
+  "2-3 yrs": 60,
+  "3-4 yrs": 60,
+  "4-5 yrs": 55,
+  "5-6 yrs": 55,
+  "6-7 yrs": 50,
+  "7-8 yrs": 42,
+  "8-9 yrs": 42,
+  "9-10 yrs": 34,
+  "10-11 yrs": 34,
+  "11-12 yrs": 34,
+  "12-13 yrs": 20,
+  "13-14 yrs": 20,
+  "14-15 yrs": 20,
+  "15-16 yrs": 8,
 };
 
 const KIDS_MEASUREMENT_FIELDS = {
@@ -648,6 +649,9 @@ export default function ProductForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // Initialize Popup hook
+  const { showPopup, PopupComponent } = usePopup();
+
   useEffect(() => {
     const saved = sessionStorage.getItem("screen4FormData");
     // console.log("Saved data:", saved);
@@ -827,8 +831,21 @@ export default function ProductForm() {
       })
     );
   };
+
+  // CHANGE #3: Add prompt when adding extra without color
   const handleAddExtra = () => {
     if (!selectedExtra) return;
+
+    // Check if color is selected
+    if (!selectedExtraColor.name) {
+      showPopup({
+        title: "Color Required",
+        message: "Please select a color for the extra before adding.",
+        type: "warning",
+      });
+      return;
+    }
+
     const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
     setSelectedExtrasWithColors((prev) => [
       ...prev,
@@ -840,7 +857,6 @@ export default function ProductForm() {
     ]);
     setSelectedExtra("");
     setSelectedExtraColor({ name: "", hex: "" });
-
   };
 
   const handleRemoveExtra = (index) => {
@@ -849,6 +865,17 @@ export default function ProductForm() {
   // Add extra to a specific item in edit mode
   const handleAddExtraToItem = (itemId, extraName, extraColor) => {
     if (!extraName) return;
+
+    // Check if color is selected
+    if (!extraColor || !extraColor.name) {
+      showPopup({
+        title: "Color Required",
+        message: "Please select a color for the extra before adding.",
+        type: "warning",
+      });
+      return;
+    }
+
     const extraDetails = globalExtras.find((e) => e.name === extraName);
     setOrderItems((prev) =>
       prev.map((it) => {
@@ -1162,7 +1189,12 @@ export default function ProductForm() {
 
     // Set product options
     setTops(selectedProduct.top_options || []);
-    setBottoms(selectedProduct.bottom_options || []);
+
+    // CHANGE #5: Sort bottoms alphabetically
+    const sortedBottoms = [...(selectedProduct.bottom_options || [])].sort((a, b) =>
+      String(a).localeCompare(String(b))
+    );
+    setBottoms(sortedBottoms);
 
     // Calculate available sizes
     const newAvailableSizes = isKidsProduct
@@ -1225,11 +1257,27 @@ export default function ProductForm() {
 
   // ADD PRODUCT
   const handleAddProduct = () => {
-    if (!selectedProduct) return alert("Please select a product");
+    if (!selectedProduct) {
+      showPopup({
+        title: "Product Required",
+        message: "Please select a product before adding.",
+        type: "warning",
+      });
+      return;
+    }
 
     // Capture pending extra if selected but not added
     let finalExtras = [...selectedExtrasWithColors];
     if (selectedExtra) {
+      // Check if extra has color
+      if (!selectedExtraColor.name) {
+        showPopup({
+          title: "Color Required",
+          message: "Please select a color for the extra before adding the product.",
+          type: "warning",
+        });
+        return;
+      }
       const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
       finalExtras.push({
         name: selectedExtra,
@@ -1252,7 +1300,7 @@ export default function ProductForm() {
       additionals: selectedAdditionals, // Use the array of extras
       size: selectedSize,
       quantity: quantity,
-      price: getLivePrice(),
+      price: getBasePrice(), // CHANGE #1: Use base price without extras
       measurements,
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
@@ -1280,12 +1328,38 @@ export default function ProductForm() {
   };
 
   // LIVE SUMMARY CALC
-  const cartQuantity = orderItems.reduce((a, b) => a + b.quantity, 0);
-  const cartSubtotal = orderItems.reduce((a, b) => a + b.price * b.quantity, 0);
+  // CHANGE #4: Calculate extras count for quantity
+  const getExtrasCount = (items) => {
+    return items.reduce((total, item) => {
+      return total + (item.extras?.length || 0);
+    }, 0);
+  };
 
-  const liveQuantity = quantity;
+  const cartQuantity = orderItems.reduce((a, b) => a + b.quantity, 0) + getExtrasCount(orderItems);
 
-  const getLivePrice = () => {
+  // Calculate cart subtotal (all prices are tax-inclusive)
+  const cartSubtotal = orderItems.reduce((a, b) => {
+    // Product price * quantity
+    let itemTotal = b.price * b.quantity;
+    // Add extras prices
+    if (b.extras && b.extras.length > 0) {
+      b.extras.forEach(extra => {
+        itemTotal += Number(extra.price || 0);
+      });
+    }
+    // Add additionals prices
+    if (b.additionals && b.additionals.length > 0) {
+      b.additionals.forEach(additional => {
+        itemTotal += Number(additional.price || 0);
+      });
+    }
+    return a + itemTotal;
+  }, 0);
+
+  const liveQuantity = quantity + selectedExtrasWithColors.length;
+
+  // CHANGE #1: Get base price without extras (for product display)
+  const getBasePrice = () => {
     if (!selectedProduct) return 0;
 
     // BASE PRICE
@@ -1298,6 +1372,18 @@ export default function ProductForm() {
       price = price - discountAmount;
     }
 
+    // ➕ ADD ADDITIONALS PRICE (additionals are part of product, not separate items)
+    selectedAdditionals.forEach((additional) => {
+      price += Number(additional.price || 0);
+    });
+
+    return Math.round(price);
+  };
+
+  // Get live price including extras (for order summary)
+  const getLivePrice = () => {
+    let price = getBasePrice();
+
     // ➕ ADD EXTRAS PRICE
     selectedExtrasWithColors.forEach((extraItem) => {
       const extraRow = globalExtras.find((e) => e.name === extraItem.name);
@@ -1306,12 +1392,7 @@ export default function ProductForm() {
       }
     });
 
-    // ➕ ADD ADDITIONALS PRICE
-    selectedAdditionals.forEach((additional) => {
-      price += Number(additional.price || 0);
-    });
-
-    return Math.round(price); // optional rounding
+    return Math.round(price);
   };
 
   // Determine if current selection is Custom or Standard
@@ -1375,21 +1456,22 @@ export default function ProductForm() {
   // livePrice is TAX-INCLUSIVE
   const gstRate = 0.18;
 
-  // LIVE (single product)
-  const livePrice = getLivePrice();
-  const liveSubtotalInclTax = livePrice * liveQuantity;
+  // LIVE calculation (before adding to cart)
+  // Use getBasePrice() NOT getLivePrice() to avoid double-counting extras
+  const liveProductTotal = getBasePrice() * quantity;
+  const liveExtrasTotal = selectedExtrasWithColors.reduce((sum, e) => sum + Number(e.price || 0), 0);
+  const liveSubtotalInclTax = liveProductTotal + liveExtrasTotal;
 
   // CART vs LIVE inclusive subtotal
-  const inclusiveSubtotal =
-    orderItems.length > 0 ? cartSubtotal : liveSubtotalInclTax;
+  const inclusiveSubtotal = orderItems.length > 0 ? cartSubtotal : liveSubtotalInclTax;
 
-  // Reverse GST calculation
-  const subtotal = inclusiveSubtotal / (1 + gstRate); // taxable amount
-  const taxes = inclusiveSubtotal - subtotal; // GST amount
+  // Flat 18% GST calculation
+  const taxes = inclusiveSubtotal * gstRate;           // 18% of total
+  const subtotal = inclusiveSubtotal - taxes;          // Total minus GST
 
   const totalQuantity = orderItems.length > 0 ? cartQuantity : liveQuantity;
 
-  // Final payable (already tax-inclusive)
+  // Final payable
   const totalOrder = inclusiveSubtotal;
 
   //====================
@@ -1417,7 +1499,11 @@ export default function ProductForm() {
 
       if (uploadError) {
         console.error("Upload failed:", uploadError);
-        alert("Upload failed: " + uploadError.message);
+        showPopup({
+          title: "Upload Failed",
+          message: uploadError.message,
+          type: "error",
+        });
         return;
       }
 
@@ -1438,9 +1524,30 @@ export default function ProductForm() {
   // SAVE ORDER
   const saveOrder = () => {
     // VALIDATION
-    if (!deliveryDate) return alert("Enter delivery date");
-    if (!modeOfDelivery) return alert("Select mode of delivery");
-    if (!orderFlag) return alert("Select order flag");
+    if (!deliveryDate) {
+      showPopup({
+        title: "Delivery Date Required",
+        message: "Please enter a delivery date.",
+        type: "warning",
+      });
+      return;
+    }
+    if (!modeOfDelivery) {
+      showPopup({
+        title: "Delivery Mode Required",
+        message: "Please select a mode of delivery.",
+        type: "warning",
+      });
+      return;
+    }
+    if (!orderFlag) {
+      showPopup({
+        title: "Order Flag Required",
+        message: "Please select an order flag.",
+        type: "warning",
+      });
+      return;
+    }
 
     let finalItems = [...orderItems];
 
@@ -1449,6 +1556,15 @@ export default function ProductForm() {
       // Capture pending extra if selected but not added
       let finalExtras = [...selectedExtrasWithColors];
       if (selectedExtra) {
+        // Check if extra has color
+        if (!selectedExtraColor.name) {
+          showPopup({
+            title: "Color Required",
+            message: "Please select a color for the extra before continuing.",
+            type: "warning",
+          });
+          return;
+        }
         const extraDetails = globalExtras.find((e) => e.name === selectedExtra);
         finalExtras.push({
           name: selectedExtra,
@@ -1470,7 +1586,7 @@ export default function ProductForm() {
         additionals: selectedAdditionals, // Use the array of extras
         size: selectedSize,
         quantity,
-        price: getLivePrice(), // Use getLivePrice to calculate price including extras
+        price: getBasePrice(), // Use base price
         measurements,
         image_url: selectedProduct.image_url || selectedProduct.image || null,
         notes: comments, // Initialize notes as empty for auto-added products
@@ -1481,12 +1597,20 @@ export default function ProductForm() {
 
     // NEW VALIDATION: Ensure at least one product is in the order
     if (finalItems.length === 0) {
-      return alert("Please add at least one product to the order.");
+      showPopup({
+        title: "No Products",
+        message: "Please add at least one product to the order.",
+        type: "warning",
+      });
+      return;
     }
 
     const overallOrderType = finalItems.some((item) => item.order_type === "Custom")
       ? "Custom"
       : "Standard";
+
+    // Calculate total quantity including extras
+    const finalTotalQuantity = finalItems.reduce((a, b) => a + b.quantity, 0) + getExtrasCount(finalItems);
 
     const orderPayload = {
       user_id: user?.id,
@@ -1515,7 +1639,7 @@ export default function ProductForm() {
       subtotal: subtotal,
       taxes: taxes,
       grand_total: totalOrder,
-      total_quantity: totalQuantity,
+      total_quantity: finalTotalQuantity,
       order_type: overallOrderType,
 
       // Timestamp
@@ -1527,36 +1651,28 @@ export default function ProductForm() {
 
   const handleLogout = async () => {
     try {
-      // Clear form data on logout
+      // Clear form data
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
 
-      await supabase.auth.signOut();
+      // Check if session is still valid (don't sign out yet)
+      const { data: { session } } = await supabase.auth.getSession();
 
-      const raw = sessionStorage.getItem("associateSession");
-      const saved = raw ? JSON.parse(raw) : null;
-
-      if (saved?.access_token && saved?.refresh_token) {
-        const { error } = await supabase.auth.setSession({
-          access_token: saved.access_token,
-          refresh_token: saved.refresh_token,
-        });
-
-        if (!error) {
-          // 🔴 FORCE verification again
-          sessionStorage.setItem("requireVerification", "true");
-
-          sessionStorage.removeItem("associateSession");
-          sessionStorage.removeItem("returnToAssociate");
-
-          navigate("/AssociateDashboard", { replace: true });
-          return;
-        }
+      if (session) {
+        // Session valid - go to AssociateDashboard with password verification
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        sessionStorage.removeItem("associateSession");
+        sessionStorage.removeItem("returnToAssociate");
+        navigate("/AssociateDashboard", { replace: true });
+      } else {
+        // Session expired - sign out completely and go to login
+        await supabase.auth.signOut();
+        sessionStorage.removeItem("associateSession");
+        sessionStorage.removeItem("returnToAssociate");
+        navigate("/login", { replace: true });
       }
-
-      navigate("/login", { replace: true });
     } catch (e) {
-      console.error("Logout restore error", e);
+      console.error("Logout error", e);
       navigate("/login", { replace: true });
     }
   };
@@ -1586,15 +1702,22 @@ export default function ProductForm() {
   // Get product's available tops/bottoms for edit mode
   const getProductOptions = (productId) => {
     const product = products.find((p) => p.id === productId);
+    // CHANGE #5: Sort bottoms alphabetically
+    const sortedBottoms = [...(product?.bottom_options || [])].sort((a, b) =>
+      String(a).localeCompare(String(b))
+    );
     return {
       tops: product?.top_options || [],
-      bottoms: product?.bottom_options || [],
+      bottoms: sortedBottoms,
       sizes: product?.available_size || [],
     };
   };
 
   return (
     <div className="screen4-bg">
+      {/* Popup Component */}
+      {PopupComponent}
+
       {/* HEADER */}
       <div className="header">
         <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
@@ -1760,6 +1883,13 @@ export default function ProductForm() {
                                   value=""
                                   onChange={(extraName) => {
                                     if (extraName) {
+                                      // Show popup to select color first
+                                      showPopup({
+                                        title: "Select Color",
+                                        message: "Please select a color for the extra using the color dropdown below.",
+                                        type: "info",
+                                      });
+                                      // For edit mode, we add with empty color and user can edit
                                       handleAddExtraToItem(item._id, extraName, { name: "", hex: "" });
                                     }
                                   }}
@@ -1885,12 +2015,15 @@ export default function ProductForm() {
                                   const sizeChartValue = sizeData[field];
                                   const currentValue = item.measurements?.[itemCategoryKey]?.[field];
 
-                                  // Check if value is edited (different from size chart)
+                                  // CHANGE #2: Check if value is edited (different from size chart)
                                   const isEdited = isAutoField &&
                                     currentValue !== undefined &&
                                     currentValue !== "" &&
                                     sizeChartValue !== undefined &&
                                     Number(currentValue) !== Number(sizeChartValue);
+
+                                  // Determine if this is an auto-filled unedited value
+                                  const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
 
                                   return (
                                     <div className="measure-field" key={field}>
@@ -1900,7 +2033,7 @@ export default function ProductForm() {
                                         className="input-line"
                                         value={currentValue || ""}
                                         style={{
-                                          color: isAutoField && !isEdited ? "#999" : "#000",
+                                          color: isAutoFilled ? "#999" : "#000",
                                         }}
                                         onChange={(e) =>
                                           updateItemMeasurement(
@@ -2002,11 +2135,11 @@ export default function ProductForm() {
                   placeholder="Select Product"
                 />
 
-                {/* PRICE DISPLAY */}
+                {/* CHANGE #1: Price Display - Show base price without extras */}
                 {selectedProduct && (
                   <p className="product-price">
                     Price:{" "}
-                    <strong>₹{formatIndianNumber(getLivePrice())}</strong>
+                    <strong>₹{formatIndianNumber(getBasePrice())}</strong>
                   </p>
                 )}
               </div>
@@ -2204,23 +2337,18 @@ export default function ProductForm() {
                       const sizeChartValue = sizeData[field];
                       const currentValue = measurements[categoryKey]?.[field];
 
-                      // Check if value is edited (different from size chart)
-                      const isEdited = isAutoField &&
-                        currentValue !== undefined &&
-                        currentValue !== "" &&
+                      // Simple check: if value matches size chart value, it's auto-filled (grey)
+                      const isAutoFilled = isAutoField &&
                         sizeChartValue !== undefined &&
-                        Number(currentValue) !== Number(sizeChartValue);
+                        String(currentValue) === String(sizeChartValue);
 
                       return (
                         <div className="measure-field" key={field}>
                           <label>{field}</label>
                           <input
                             type="number"
-                            className="input-line"
+                            className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
                             value={currentValue || ""}
-                            style={{
-                              color: isAutoField && !isEdited ? "#999" : "#000",
-                            }}
                             onChange={(e) => {
                               const val = e.target.value;
                               setMeasurements((prev) => ({
@@ -2508,7 +2636,11 @@ export default function ProductForm() {
                       ? otherUrgentReason
                       : urgentReason;
                   if (!finalReason.trim()) {
-                    alert("Please select or enter a reason for urgent order");
+                    showPopup({
+                      title: "Reason Required",
+                      message: "Please select or enter a reason for urgent order.",
+                      type: "warning",
+                    });
                     return;
                   }
                   setOrderFlag("Urgent");

@@ -1224,3 +1224,13 @@ select,
   color: #000 !important;
   font-weight: 600;
 }
+
+/* Auto-filled measurement input - GREY */
+.measure-field input.auto-filled {
+  color: #999 !important;
+}
+
+/* Manually edited measurement input - BLACK */
+.measure-field input.manual-input {
+  color: #000 !important;
+}

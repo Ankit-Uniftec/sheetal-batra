@@ -380,8 +380,8 @@ export default function OrderHistory() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/login", { replace: true });
+    // await supabase.auth.signOut();
+    navigate("/AssociateDashboard", { replace: true });
   };
 
   // Download all attachments
@@ -581,7 +581,7 @@ export default function OrderHistory() {
                           <span className="oh-header-value">{formatDate(order.created_at) || "—"}</span>
                         </div>
                         <div className="oh-header-item">
-                          <span className="oh-header-label">EDD:</span>
+                          <span className="oh-header-label">Delivery Date:</span>
                           <span className="oh-header-value">{formatDate(order.delivery_date) || "—"}</span>
                         </div>
                       </div>

@@ -6,13 +6,29 @@ import {
   View,
   Image,
   StyleSheet,
+  Font,
 } from "@react-pdf/renderer";
 import { styles, COLORS } from "./pdfStyles";
 
-// Helper to format Indian numbers
+// Register Noto Sans font for Rupee symbol support
+Font.register({
+  family: "NotoSans",
+  fonts: [
+    {
+      src: "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans@4.5.0/files/noto-sans-all-400-normal.woff",
+      fontWeight: 400,
+    },
+    {
+      src: "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans@4.5.0/files/noto-sans-all-700-normal.woff",
+      fontWeight: 700,
+    },
+  ],
+});
+
+// Helper to format Indian numbers with ₹ symbol
 const formatINR = (num) => {
-  if (!num) return "INR 0";
-  return `INR ${Number(num).toLocaleString("en-IN")}`;
+  if (!num) return "₹ 0";
+  return `₹ ${Number(num).toLocaleString("en-IN")}`;
 };
 
 // Helper to format date
@@ -61,6 +77,83 @@ const getColorHex = (color) => {
   return "#CCCCCC";
 };
 
+// Custom styles for this component
+const pdfStyles = StyleSheet.create({
+  // Watermark styles - half visible on page edge, maintain aspect ratio
+  watermarkRight: {
+    position: "absolute",
+    right: -340,
+    top: "20%",
+    width: 700,
+    opacity: 0.08,
+  },
+  watermarkLeft: {
+    position: "absolute",
+    left: -340,
+    top: "20%",
+    width: 700,
+    opacity: 0.08,
+  },
+  // Sales Associate row
+  salesAssociateRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  salesNameSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  salesTeamText: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 10,
+    color: "#333",
+  },
+  salesPhoneText: {
+    textAlign: "right",
+    fontSize: 10,
+    color: "#333",
+  },
+  // Footer styles
+  pageFooter: {
+    position: "absolute",
+    bottom: 20,
+    left: 40,
+    right: 40,
+  },
+  footerDivider: {
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+    marginBottom: 8,
+  },
+  footerText: {
+    fontSize: 8,
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  // Contact section (above footer)
+  contactSection: {
+    marginTop: 20,
+    marginBottom: 60, // Space for footer
+  },
+  contactText: {
+    fontSize: 9,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 4,
+    fontStyle: "italic",
+  },
+  // INR text with font
+  inrText: {
+    fontFamily: "NotoSans",
+  },
+});
+
 // Section Header Component
 const SectionBar = ({ title }) => (
   <View style={styles.sectionBar}>
@@ -72,7 +165,7 @@ const SectionBar = ({ title }) => (
 const Field = ({ label, value, style }) => (
   <View style={[styles.fieldBlock, style]}>
     <Text style={styles.label}>{label}</Text>
-    <Text style={styles.value}>{value || "—"}</Text>
+    <Text style={[styles.value, pdfStyles.inrText]}>{value || "—"}</Text>
   </View>
 );
 
@@ -153,7 +246,6 @@ const ProductItem = ({ item, order, showPricing = true }) => (
           )}
         </View>
 
-
         {/* Size */}
         <View style={[styles.productField, { width: "20%" }]}>
           <Text style={styles.label}>Size</Text>
@@ -161,29 +253,28 @@ const ProductItem = ({ item, order, showPricing = true }) => (
         </View>
       </View>
 
-        {/* Additionals */}
-        <View style={[styles.productField, { width: "30%" }]}>
-          <Text style={styles.label}>Additionals</Text>
-          {item?.additionals && item.additionals.length > 0 ? (
-            item.additionals.map((additional, idx) => (
-              <View key={idx} style={{ marginBottom: 2 }}>
-                <Text style={styles.value}>
-                  {additional.name} - INR {Number(additional.price).toLocaleString("en-IN")}
-                </Text>
-              </View>
-            ))
-          ) : (
-            <Text style={styles.value}>—</Text>
-          )}
-        </View>
+      {/* Additionals */}
+      <View style={[styles.productField, { width: "30%" }]}>
+        <Text style={styles.label}>Additionals</Text>
+        {item?.additionals && item.additionals.length > 0 ? (
+          item.additionals.map((additional, idx) => (
+            <View key={idx} style={{ marginBottom: 2 }}>
+              <Text style={[styles.value, pdfStyles.inrText]}>
+                {additional.name} - ₹ {Number(additional.price).toLocaleString("en-IN")}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.value}>—</Text>
+        )}
+      </View>
 
-        
       {/* Pricing Row */}
       {showPricing && (
         <View style={styles.pricingRow}>
           <View style={styles.pricingField}>
             <Text style={styles.label}>Product Value</Text>
-            <Text style={[styles.value, { fontFamily: "Helvetica-Bold" }]}>{formatINR(item?.price)}</Text>
+            <Text style={[styles.value, { fontFamily: "NotoSans", fontWeight: 700 }]}>{formatINR(item?.price)}</Text>
           </View>
         </View>
       )}
@@ -197,8 +288,29 @@ const PaymentRow = ({ label, value, isTotal = false, prefix = "+" }) => (
     <Text style={isTotal ? styles.paymentTotalLabel : styles.paymentLabel}>
       {label}
     </Text>
-    <Text style={isTotal ? styles.paymentTotalValue : styles.paymentValue}>
+    <Text style={[isTotal ? styles.paymentTotalValue : styles.paymentValue, pdfStyles.inrText]}>
       {isTotal ? "" : prefix + "  "}{formatINR(value)}
+    </Text>
+  </View>
+);
+
+// Watermark Component - uses logoUrl (same image as header logo)
+const WatermarkRight = ({ logoUrl }) => {
+  if (!logoUrl) return null;
+  return <Image src={logoUrl} style={pdfStyles.watermarkRight} />;
+};
+
+const WatermarkLeft = ({ logoUrl }) => {
+  if (!logoUrl) return null;
+  return <Image src={logoUrl} style={pdfStyles.watermarkLeft} />;
+};
+
+// Page Footer Component
+const PageFooter = () => (
+  <View style={pdfStyles.pageFooter} fixed>
+    <View style={pdfStyles.footerDivider} />
+    <Text style={pdfStyles.footerText}>
+      Incase of any issues or escalations, please email us at: foundersoffice@sheetalbatra.com
     </Text>
   </View>
 );
@@ -210,7 +322,6 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
     return <Document><Page size="A4" style={styles.page}><Text>Error: Order data is missing.</Text></Page></Document>;
   }
 
-  // const items = order || [];
   const grandTotal = Number(order.grand_total) || 0;
   const discountAmount = Number(order.discount_amount) || 0;
   const advancePayment = Number(order.advance_payment) || 0;
@@ -218,11 +329,9 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
   const remaining = Number(order.remaining_payment) || 0;
   const collectorsCode = Number(order.collectors_code) || 0;
 
-  // GST Calculation (price includes 18% GST)
-  // Base Price = Total / 1.18
-  // GST = Total - Base Price
-  const baseAmount = Math.round(grandTotal / 1.18);
-  const gstAmount = grandTotal - baseAmount;
+  // GST Calculation (flat 18% deduction)
+  const gstAmount = Math.round(grandTotal * 0.18);
+  const baseAmount = grandTotal - gstAmount;
 
   // Helper to get billing address
   const getBillingAddress = () => {
@@ -246,6 +355,9 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
     <Document>
       {/* PAGE 1 - Personal Details, Product Details, Sales Associate */}
       <Page size="A4" style={styles.page}>
+        {/* Watermark - Right side (half visible) */}
+        <WatermarkRight logoUrl={logoUrl} />
+
         {/* Header with Logo */}
         <View style={styles.header}>
           {logoUrl && <Image src={logoUrl} style={styles.logo} />}
@@ -306,33 +418,43 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
 
         {/* Sales Associate Details */}
         <SectionBar title="Sales Associate Details" />
-        <View style={styles.rowSpaceBetween}>
-          {order.salesperson && (
-            <View style={styles.row}>
-              <Text style={styles.label}>Name: </Text>
-              <Text style={styles.value}>{order.salesperson}</Text>
-            </View>
-          )}
-          <Text style={styles.value}>In-Store Client Relations Team</Text>
+        <View style={pdfStyles.salesAssociateRow}>
+          {/* Name - Left */}
+          <View style={pdfStyles.salesNameSection}>
+            {order.salesperson && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Name: </Text>
+                <Text style={styles.value}>{order.salesperson}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Team - Center/Right */}
+          <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team :</Text>
+
+          {/* Phone - Right */}
           {order.salesperson_phone && (
-            <Text style={styles.value}>{order.salesperson_phone}</Text>
+            <Text style={pdfStyles.salesPhoneText}>{order.salesperson_phone}</Text>
           )}
         </View>
 
-        {/* Contact Footer */}
-        <View style={styles.contactFooter}>
-          <Text style={styles.contactText}>
+        {/* Contact Section */}
+        <View style={pdfStyles.contactSection}>
+          <Text style={pdfStyles.contactText}>
             Kindly allow our customer care team up to 8 hours to thoughtfully
             assist you with your query.
           </Text>
-          <Text style={styles.contactEmail}>
-            Incase of any issues or escalations, please email us at: foundersoffice@sheetalbatra.com
-          </Text>
         </View>
+
+        {/* Page Footer */}
+        <PageFooter />
       </Page>
 
       {/* PAGE 2 - Billing, Payment, Signature, Notes, Policy */}
       <Page size="A4" style={styles.page}>
+        {/* Watermark - Left side (half visible) */}
+        <WatermarkLeft logoUrl={logoUrl} />
+
         {/* Header with Logo */}
         <View style={styles.header}>
           {logoUrl && <Image src={logoUrl} style={styles.logo} />}
@@ -426,7 +548,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         </View>
 
         {/* Policy Section */}
-        <View style={styles.policySection}>
+        <View style={[styles.policySection, { marginBottom: 60 }]}>
           <Text style={styles.policyItem}>
             • At Sheetal Batra, we take pride in crafting each piece with care and precision. As we work with a made-to-order and artisanal production timelines, we request you to kindly review the following policy.
           </Text>
@@ -449,6 +571,9 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
             • For a valid exchange: The products must be unused, and in perfect condition, with all original tags intact.
           </Text>
         </View>
+
+        {/* Page Footer */}
+        <PageFooter />
       </Page>
     </Document>
   );

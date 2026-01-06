@@ -48,7 +48,7 @@ export default function SALogin() {
 
     if (userRecord.role === "salesperson") {
       localStorage.setItem("sp_email", email.trim());
-      navigate("/associateDashboard");
+      navigate("/AssociateDashboard");
     } else if (userRecord.role === "warehouse") {
       navigate("/warehouseDashboard");
     } else if (userRecord.role === "inventory") {
