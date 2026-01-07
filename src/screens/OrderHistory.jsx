@@ -7,7 +7,7 @@ import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
-import { downloadCustomerPdf } from "../utils/pdfUtils";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -59,6 +59,7 @@ export default function OrderHistory() {
   const [actionLoading, setActionLoading] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(null);
+  const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -111,6 +112,20 @@ export default function OrderHistory() {
       setPdfLoading(null);
     }
   };
+
+  // Handle PDF download
+  const handlePrintWarehousePdf = async (e, order) => {
+    e.stopPropagation();
+    setWarehousePdfLoading(order.id);
+    try {
+      await downloadWarehousePdf(order);
+    } catch (error) {
+      console.error("PDF download failed:", error);
+    } finally {
+      setWarehousePdfLoading(null);
+    }
+  };
+
 
   // Download all attachments
   const downloadAttachments = async (attachments, orderNo) => {
@@ -593,7 +608,14 @@ export default function OrderHistory() {
                           onClick={(e) => handlePrintPdf(e, order)}
                           disabled={pdfLoading === order.id}
                         >
-                          {pdfLoading === order.id ? "..." : "📄 PDF"}
+                          {pdfLoading === order.id ? "..." : "📄Customer PDF"}
+                        </button>
+                        <button
+                          className="ad-print-pdf-btn"
+                          onClick={(e) => handlePrintWarehousePdf(e, order)}
+                          disabled={warehousePdfLoading === order.id}
+                        >
+                          {warehousePdfLoading === order.id ? "..." : "📄Warehouse PDF"}
                         </button>
 
                         {/* Attachments Button - Only show if attachments exist */}
@@ -634,6 +656,10 @@ export default function OrderHistory() {
                           <div className="oh-detail">
                             <span className="oh-label">Size</span>
                             <span className="oh-value">{item.size || "—"}</span>
+                          </div>
+                          <div className="oh-detail">
+                            <span className="oh-label">Category:</span>
+                            <span className="oh-value">{item.isKids ? "Kids" : "Women"}</span>
                           </div>
                         </div>
 

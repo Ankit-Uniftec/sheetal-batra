@@ -94,6 +94,13 @@ const pdfStyles = StyleSheet.create({
     width: 700,
     opacity: 0.08,
   },
+  // Sales Associate section - fixed at bottom
+  salesAssociateSection: {
+    position: "absolute",
+    bottom: 60,
+    left: 40,
+    right: 40,
+  },
   // Sales Associate row
   salesAssociateRow: {
     flexDirection: "row",
@@ -138,8 +145,8 @@ const pdfStyles = StyleSheet.create({
   },
   // Contact section (above footer)
   contactSection: {
-    marginTop: 20,
-    marginBottom: 60, // Space for footer
+    marginTop: 10,
+    marginBottom: 10,
   },
   contactText: {
     fontSize: 9,
@@ -181,106 +188,125 @@ const ColorField = ({ label, color }) => (
 );
 
 // Product Item Component
-const ProductItem = ({ item, order, showPricing = true }) => (
-  <View style={styles.productRow}>
-    {item.image_url && (
-      <Image src={item.image_url} style={styles.productImage} />
-    )}
-    <View style={styles.productDetails}>
-      {/* Product Name and Delivery Date Row */}
-      <View style={styles.rowSpaceBetween}>
-        <Text style={styles.productName}>{item?.product_name || "—"}</Text>
-        {order.delivery_date && (
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.label}>Estimated Delivery Date:</Text>
-            <Text style={styles.deliveryDateHighlight}>
-              {formatDate(order.delivery_date)}
-            </Text>
-          </View>
-        )}
-      </View>
+const ProductItem = ({ item, order, showPricing = true }) => {
+  const category = item?.category || (item?.isKids ? "Kids" : "Women");
+  const hasTop = item?.top;
+  const hasBottom = item?.bottom;
+  const hasExtras = item?.extras && item.extras.length > 0;
+  const hasAdditionals = item?.additionals && item.additionals.length > 0;
 
-      {/* Product Details Grid */}
-      <View style={styles.productGrid}>
-        {/* Top */}
-        <View style={[styles.productField, { width: "25%" }]}>
-          <Text style={styles.label}>Top</Text>
-          <Text style={styles.value}>{item?.top || "—"}</Text>
-          {item?.top_color?.hex && (
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
-              <View style={[styles.colorSwatch, { backgroundColor: item.top_color.hex }]} />
-              <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.top_color.name || ""}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Bottom */}
-        <View style={[styles.productField, { width: "25%" }]}>
-          <Text style={styles.label}>Bottom</Text>
-          <Text style={styles.value}>{item?.bottom || "—"}</Text>
-          {item?.bottom_color?.hex && (
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
-              <View style={[styles.colorSwatch, { backgroundColor: item.bottom_color.hex }]} />
-              <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.bottom_color.name || ""}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Extra */}
-        <View style={[styles.productField, { width: "30%" }]}>
-          <Text style={styles.label}>Extras</Text>
-          {item?.extras && item.extras.length > 0 ? (
-            item.extras.map((extra, idx) => (
-              <View key={idx} style={{ marginBottom: 2 }}>
-                <Text style={styles.value}>{extra.name || "—"}</Text>
-                {extra.color?.hex && (
-                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
-                    <View style={[styles.colorSwatch, { backgroundColor: extra.color.hex }]} />
-                    <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{extra.color.name || ""}</Text>
-                  </View>
-                )}
-              </View>
-            ))
-          ) : (
-            <Text style={styles.value}>—</Text>
-          )}
-        </View>
-
-        {/* Size */}
-        <View style={[styles.productField, { width: "20%" }]}>
-          <Text style={styles.label}>Size</Text>
-          <Text style={styles.value}>{item?.size || "—"}</Text>
-        </View>
-      </View>
-
-      {/* Additionals */}
-      <View style={[styles.productField, { width: "30%" }]}>
-        <Text style={styles.label}>Additionals</Text>
-        {item?.additionals && item.additionals.length > 0 ? (
-          item.additionals.map((additional, idx) => (
-            <View key={idx} style={{ marginBottom: 2 }}>
-              <Text style={[styles.value, pdfStyles.inrText]}>
-                {additional.name} - ₹ {Number(additional.price).toLocaleString("en-IN")}
+  return (
+    <View style={styles.productRow}>
+      {item.image_url && (
+        <Image src={item.image_url} style={styles.productImage} />
+      )}
+      <View style={styles.productDetails}>
+        {/* Product Name and Delivery Date Row */}
+        <View style={styles.rowSpaceBetween}>
+          <Text style={styles.productName}>{item?.product_name || "—"}</Text>
+          {order.delivery_date && (
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={styles.label}>Estimated Delivery Date:</Text>
+              <Text style={styles.deliveryDateHighlight}>
+                {formatDate(order.delivery_date)}
               </Text>
             </View>
-          ))
-        ) : (
-          <Text style={styles.value}>—</Text>
-        )}
-      </View>
+          )}
+        </View>
 
-      {/* Pricing Row */}
-      {showPricing && (
-        <View style={styles.pricingRow}>
-          <View style={styles.pricingField}>
-            <Text style={styles.label}>Product Value</Text>
-            <Text style={[styles.value, { fontFamily: "NotoSans", fontWeight: 700 }]}>{formatINR(item?.price)}</Text>
+        {/* Product Details Grid */}
+        <View style={styles.productGrid}>
+          {/* Top - only if present */}
+          {hasTop && (
+            <View style={[styles.productField, { width: "25%" }]}>
+              <Text style={styles.label}>Top</Text>
+              <Text style={styles.value}>{item.top}</Text>
+              {item?.top_color?.hex && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+                  <View style={[styles.colorSwatch, { backgroundColor: item.top_color.hex }]} />
+                  <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.top_color.name || ""}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Bottom - only if present */}
+          {hasBottom && (
+            <View style={[styles.productField, { width: "25%" }]}>
+              <Text style={styles.label}>Bottom</Text>
+              <Text style={styles.value}>{item.bottom}</Text>
+              {item?.bottom_color?.hex && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+                  <View style={[styles.colorSwatch, { backgroundColor: item.bottom_color.hex }]} />
+                  <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.bottom_color.name || ""}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Extras - only if present */}
+          {hasExtras && (
+            <View style={[styles.productField, { width: "30%" }]}>
+              <Text style={styles.label}>Extras</Text>
+              {item.extras.map((extra, idx) => (
+                <View key={idx} style={{ marginBottom: 2 }}>
+                  <Text style={styles.value}>{extra.name}</Text>
+                  {extra.color?.hex && (
+                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                      <View style={[styles.colorSwatch, { backgroundColor: extra.color.hex }]} />
+                      <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{extra.color.name || ""}</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Category */}
+          <View style={[styles.productField, { width: "20%" }]}>
+            <Text style={styles.label}>Category</Text>
+            <Text style={styles.value}>{category}</Text>
           </View>
         </View>
-      )}
+
+        {/* Second Row: Size and Additionals */}
+        <View style={styles.productGrid}>
+          {/* Size */}
+          {item?.size && (
+            <View style={[styles.productField, { width: "20%" }]}>
+              <Text style={styles.label}>Size</Text>
+              <Text style={styles.value}>{item.size}</Text>
+            </View>
+          )}
+
+          {/* Additionals - only if present */}
+          {hasAdditionals && (
+            <View style={[styles.productField, { width: "50%" }]}>
+              <Text style={styles.label}>Additionals</Text>
+              {item.additionals.map((additional, idx) => (
+                <View key={idx} style={{ marginBottom: 2 }}>
+                  <Text style={[styles.value, pdfStyles.inrText]}>
+                    {additional.name} - ₹ {Number(additional.price).toLocaleString("en-IN")}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Pricing Row */}
+        {showPricing && (
+          <View style={styles.pricingRow}>
+            <View style={styles.pricingField}>
+              <Text style={styles.label}>Product Value</Text>
+              <Text style={[styles.value, { fontFamily: "NotoSans", fontWeight: 700 }]}>{formatINR(item?.price)}</Text>
+            </View>
+          </View>
+        )}
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 // Payment Row Component
 const PaymentRow = ({ label, value, isTotal = false, prefix = "+" }) => (
@@ -354,7 +380,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
   return (
     <Document>
       {/* PAGE 1 - Personal Details, Product Details, Sales Associate */}
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={[styles.page, { paddingBottom: 140 }]}>
         {/* Watermark - Right side (half visible) */}
         <WatermarkRight logoUrl={logoUrl} />
 
@@ -407,43 +433,47 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
 
         {/* Product Details */}
         <SectionBar title="Product Details" />
-        {(order.items || []).map((item, index) => (
-          <ProductItem
-            key={index}
-            item={item}
-            order={order}
-            showPricing={true}
-          />
-        ))}
+        <View wrap>
+          {(order.items || []).map((item, index) => (
+            <ProductItem
+              key={index}
+              item={item}
+              order={order}
+              showPricing={true}
+            />
+          ))}
+        </View>
 
-        {/* Sales Associate Details */}
-        <SectionBar title="Sales Associate Details" />
-        <View style={pdfStyles.salesAssociateRow}>
-          {/* Name - Left */}
-          <View style={pdfStyles.salesNameSection}>
-            {order.salesperson && (
-              <View style={styles.row}>
-                <Text style={styles.label}>Name: </Text>
-                <Text style={styles.value}>{order.salesperson}</Text>
-              </View>
+        {/* Sales Associate Details - Fixed at bottom */}
+        <View style={pdfStyles.salesAssociateSection} fixed>
+          <SectionBar title="Sales Associate Details" />
+          <View style={pdfStyles.salesAssociateRow}>
+            {/* Name - Left */}
+            <View style={pdfStyles.salesNameSection}>
+              {order.salesperson && (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Name: </Text>
+                  <Text style={styles.value}>{order.salesperson}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Team - Center/Right */}
+            <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team :</Text>
+
+            {/* Phone - Right */}
+            {order.salesperson_phone && (
+              <Text style={pdfStyles.salesPhoneText}>{order.salesperson_phone}</Text>
             )}
           </View>
 
-          {/* Team - Center/Right */}
-          <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team :</Text>
-
-          {/* Phone - Right */}
-          {order.salesperson_phone && (
-            <Text style={pdfStyles.salesPhoneText}>{order.salesperson_phone}</Text>
-          )}
-        </View>
-
-        {/* Contact Section */}
-        <View style={pdfStyles.contactSection}>
-          <Text style={pdfStyles.contactText}>
-            Kindly allow our customer care team up to 8 hours to thoughtfully
-            assist you with your query.
-          </Text>
+          {/* Contact Section */}
+          <View style={pdfStyles.contactSection}>
+            <Text style={pdfStyles.contactText}>
+              Kindly allow our customer care team up to 8 hours to thoughtfully
+              assist you with your query.
+            </Text>
+          </View>
         </View>
 
         {/* Page Footer */}

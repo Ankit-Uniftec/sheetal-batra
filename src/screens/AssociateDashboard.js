@@ -993,6 +993,10 @@ export default function Dashboard() {
                             <span className="ad-value">{item.product_name || "—"}</span>
                           </div>
                           <div className="ad-product-name">
+                            <span className="ad-order-label">Category:</span>
+                            <span className="ad-value">{item.isKids ? "Kids" : "Women"}</span>
+                          </div>
+                          <div className="ad-product-name">
                             <span className="ad-order-label">Client Name:</span>
                             <span className="ad-value">{order.delivery_name || "—"}</span>
                           </div>

@@ -7,7 +7,15 @@ import {
   Image,
   StyleSheet,
 } from "@react-pdf/renderer";
-import { COLORS } from "./pdfStyles";
+
+// Define colors locally
+const COLORS = {
+  gold: "#D4AF37",
+  white: "#FFFFFF",
+  gray: "#666666",
+  lightGray: "#F5F5F5",
+  black: "#000000",
+};
 
 // Helper to format date
 const formatDate = (dateStr) => {
@@ -315,6 +323,7 @@ const ProductItem = ({ item }) => {
   const hasSize = item?.size;
   const hasExtras = item?.extras && item.extras.length > 0;
   const hasAdditionals = item?.additionals && item.additionals.length > 0;
+  const category = item?.category || (item?.isKids ? "Kids" : "Women");
 
   return (
     <View style={warehouseStyles.productRow}>
@@ -361,13 +370,11 @@ const ProductItem = ({ item }) => {
             </View>
           )}
 
-          {/* Size - only if present */}
-          {hasSize && (
-            <View style={warehouseStyles.productField}>
-              <Text style={warehouseStyles.fieldLabel}>Size</Text>
-              <Text style={warehouseStyles.fieldValue}>{item.size}</Text>
-            </View>
-          )}
+          {/* Category - always show */}
+          <View style={warehouseStyles.productField}>
+            <Text style={warehouseStyles.fieldLabel}>Category</Text>
+            <Text style={warehouseStyles.fieldValue}>{category}</Text>
+          </View>
 
           {/* Quantity - always show */}
           <View style={warehouseStyles.productField}>
@@ -376,42 +383,48 @@ const ProductItem = ({ item }) => {
           </View>
         </View>
 
-        {/* Extras and Additionals row - only if any present */}
-        {(hasExtras || hasAdditionals) && (
-          <View style={warehouseStyles.productGrid}>
-            {/* Extras with colors - only if present */}
-            {hasExtras && (
-              <View style={warehouseStyles.productFieldWide}>
-                <Text style={warehouseStyles.fieldLabel}>Extras</Text>
-                <View style={warehouseStyles.extrasContainer}>
-                  {item.extras.map((extra, idx) => (
-                    <View key={idx} style={warehouseStyles.extraItem}>
-                      <Text style={warehouseStyles.extraName}>{extra.name}</Text>
-                      {extra.color?.hex && (
-                        <View
-                          style={[
-                            warehouseStyles.colorSwatch,
-                            { backgroundColor: extra.color.hex, marginLeft: 0 },
-                          ]}
-                        />
-                      )}
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
+        {/* Second Row: Size, Extras, Additionals */}
+        <View style={warehouseStyles.productGrid}>
+          {/* Size - only if present */}
+          {hasSize && (
+            <View style={warehouseStyles.productField}>
+              <Text style={warehouseStyles.fieldLabel}>Size</Text>
+              <Text style={warehouseStyles.fieldValue}>{item.size}</Text>
+            </View>
+          )}
 
-            {/* Additionals - names only, NO PRICES - only if present */}
-            {hasAdditionals && (
-              <View style={warehouseStyles.productFieldWide}>
-                <Text style={warehouseStyles.fieldLabel}>Additionals</Text>
-                <Text style={warehouseStyles.fieldValue}>
-                  {item.additionals.map((a) => a.name).join(", ")}
-                </Text>
+          {/* Extras with colors - only if present */}
+          {hasExtras && (
+            <View style={warehouseStyles.productFieldWide}>
+              <Text style={warehouseStyles.fieldLabel}>Extras</Text>
+              <View style={warehouseStyles.extrasContainer}>
+                {item.extras.map((extra, idx) => (
+                  <View key={idx} style={warehouseStyles.extraItem}>
+                    <Text style={warehouseStyles.extraName}>{extra.name}</Text>
+                    {extra.color?.hex && (
+                      <View
+                        style={[
+                          warehouseStyles.colorSwatch,
+                          { backgroundColor: extra.color.hex, marginLeft: 0 },
+                        ]}
+                      />
+                    )}
+                  </View>
+                ))}
               </View>
-            )}
-          </View>
-        )}
+            </View>
+          )}
+
+          {/* Additionals - names only, NO PRICES - only if present */}
+          {hasAdditionals && (
+            <View style={warehouseStyles.productFieldWide}>
+              <Text style={warehouseStyles.fieldLabel}>Additionals</Text>
+              <Text style={warehouseStyles.fieldValue}>
+                {item.additionals.map((a) => a.name).join(", ")}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );

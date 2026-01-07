@@ -282,7 +282,8 @@ const KIDS_DISCOUNT_PERCENT = {
 };
 
 const KIDS_MEASUREMENT_FIELDS = {
-  Choga: [
+  KurtaChogaKaftan: [
+    "Height",
     "Shoulder",
     "Neck",
     "Upper Bust",
@@ -296,144 +297,60 @@ const KIDS_MEASUREMENT_FIELDS = {
     "Length",
     "Front Cross",
     "Back Cross",
-  ],
-  Kurta: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-  ],
-  ShortKurta: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-  ],
-  LongKurta: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-  ],
-  LongChoga: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
+    "Front Neck",
+    "Back Neck",
   ],
   Blouse: [
     "Shoulder",
-    "Front Neck",
-    "Back Neck",
     "Upper Bust",
     "Bust",
     "Dart Point",
-    "Length",
+    "Sleeves",
+    "Arm Hole",
     "Waist",
+    "Length",
     "Front Cross",
     "Back Cross",
+    "Front Neck",
+    "Back Neck",
   ],
-
   Anarkali: [
     "Shoulder",
-    "Bust",
     "Upper Bust",
-    "Length",
-    "Sleeve",
-    "Biceps",
-    "Arm Hole",
+    "Bust",
     "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Length",
+    "Front Neck",
+    "Back Neck",
+  ],
+  SalwarDhoti: [
     "Waist",
+    "Hip",
+    "Length",
+  ],
+  ChuridaarTrouserPantsPlazo: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Calf",
+    "Ankle",
+    "Knee",
     "Yoke Length",
   ],
-  Salwar: [
+  ShararaGharara: [
     "Waist",
     "Hip",
     "Length",
-    "Ankle",
-    "Thigh"
   ],
-
-  TulipPant: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh",
-    "Knee",
-    "Calf"
-  ],
-
-  StraightPants: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh",
-    "Ankle",
-    "Knee"
-  ],
-
-  Palazzo: [
-    "Waist",
-    "Hip",
-    "Length"
-  ],
-
-  Sharara: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh"
-  ],
-
-  Garara: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh",
-    "Knee"
-  ],
-
   Lehenga: [
     "Waist",
     "Hip",
-    "Length"
-  ]
+    "Length",
+  ],
 };
 
 const SIZE_CHART_US = {
@@ -454,44 +371,31 @@ const SIZE_CHART_US = {
 
 // 🔑 UI label → internal key mapping
 const CATEGORY_KEY_MAP = {
-  "Choga": "Choga",
-  "Kurta": "Kurta",
-  "Short Kurta": "ShortKurta",
-  "Long Kurta": "LongKurta",
-  "Long Choga": "LongChoga",
-  "Anarkali": "Anarkali",
+  "Kurta/Choga/Kaftan": "KurtaChogaKaftan",
   "Blouse": "Blouse",
-  "Salwar": "Salwar",
-  "Tulip Pant": "TulipPant",
-  "Straight Paint": "StraightPants",
-  "Plazzo": "Palazzo",
-  "Sharara": "Sharara",
-  "Garara": "Garara",
+  "Anarkali": "Anarkali",
+  "Salwar/Dhoti": "SalwarDhoti",
+  "Churidaar/Trouser/Pants/Plazo": "ChuridaarTrouserPantsPlazo",
+  "Sharara/Gharara": "ShararaGharara",
   "Lehenga": "Lehenga",
 };
 
 
 const measurementCategories = [
-  "Choga",
-  "Kurta",
-  "Short Kurta",
-  "Long Kurta",
-  "Long Choga",
-  "Anarkali",
+  "Kurta/Choga/Kaftan",
   "Blouse",
-  "Salwar",
-  "Tulip Pant",
-  "Straight Paint",
-  "Plazzo",
-  "Sharara",
-  "Garara",
-  "Lehenga"
+  "Anarkali",
+  "Salwar/Dhoti",
+  "Churidaar/Trouser/Pants/Plazo",
+  "Sharara/Gharara",
+  "Lehenga",
 ];
 
 
 
 const measurementFields = {
-  Choga: [
+  KurtaChogaKaftan: [
+    "Height",
     "Shoulder",
     "Neck",
     "Upper Bust",
@@ -505,144 +409,60 @@ const measurementFields = {
     "Length",
     "Front Cross",
     "Back Cross",
-  ],
-  Kurta: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-  ],
-  ShortKurta: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-  ],
-  LongKurta: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-  ],
-  LongChoga: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
+    "Front Neck",
+    "Back Neck",
   ],
   Blouse: [
     "Shoulder",
-    "Front Neck",
-    "Back Neck",
     "Upper Bust",
     "Bust",
     "Dart Point",
-    "Length",
+    "Sleeves",
+    "Arm Hole",
     "Waist",
+    "Length",
     "Front Cross",
     "Back Cross",
+    "Front Neck",
+    "Back Neck",
   ],
-
   Anarkali: [
     "Shoulder",
-    "Bust",
     "Upper Bust",
-    "Length",
-    "Sleeve",
-    "Biceps",
-    "Arm Hole",
+    "Bust",
     "Dart Point",
+    "Sleeves",
+    "Bicep",
+    "Arm Hole",
+    "Length",
+    "Front Neck",
+    "Back Neck",
+  ],
+  SalwarDhoti: [
     "Waist",
+    "Hip",
+    "Length",
+  ],
+  ChuridaarTrouserPantsPlazo: [
+    "Waist",
+    "Hip",
+    "Length",
+    "Thigh",
+    "Calf",
+    "Ankle",
+    "Knee",
     "Yoke Length",
   ],
-  Salwar: [
+  ShararaGharara: [
     "Waist",
     "Hip",
     "Length",
-    "Ankle",
-    "Thigh"
   ],
-
-  TulipPant: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh",
-    "Knee",
-    "Calf"
-  ],
-
-  StraightPants: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh",
-    "Ankle",
-    "Knee"
-  ],
-
-  Palazzo: [
-    "Waist",
-    "Hip",
-    "Length"
-  ],
-
-  Sharara: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh"
-  ],
-
-  Garara: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh",
-    "Knee"
-  ],
-
   Lehenga: [
     "Waist",
     "Hip",
-    "Length"
-  ]
+    "Length",
+  ],
 };
 
 export default function ProductForm() {
@@ -710,7 +530,7 @@ export default function ProductForm() {
 
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("Choga");
+  const [activeCategory, setActiveCategory] = useState("Kurta/Choga/Kaftan");
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
@@ -720,7 +540,7 @@ export default function ProductForm() {
   const [urgentReason, setUrgentReason] = useState(""); // Selected reason from dropdown
   const [otherUrgentReason, setOtherUrgentReason] = useState(""); // Input for 'Others' option
   // Track active measurement category per expanded item
-  const [expandedItemCategories, setExpandedItemCategories] = useState({}); // {[_id]: "Choga"}
+  const [expandedItemCategories, setExpandedItemCategories] = useState({}); // {[_id]: "Kurta/Choga/Kaftan"}
 
   // Flag to track if data was restored from sessionStorage
   // const [isRestored, setIsRestored] = useState(false);
@@ -734,7 +554,7 @@ export default function ProductForm() {
     setExpandedRowIds((e) => ({ ...e, [id]: !e[id] }));
     // Initialize category for this item if not set
     if (!expandedItemCategories[id]) {
-      setExpandedItemCategories((prev) => ({ ...prev, [id]: "Choga" }));
+      setExpandedItemCategories((prev) => ({ ...prev, [id]: "Kurta/Choga/Kaftan" }));
     }
   };
 
@@ -1315,6 +1135,7 @@ export default function ProductForm() {
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
       isKids: isKidsProduct,
+      category: isKidsProduct ? "Kids" : "Women", // Store category string
       order_type: getOrderType(),
       delivery_date: deliveryDate, // Add delivery date per product
     };
@@ -1775,7 +1596,7 @@ export default function ProductForm() {
               <div className="added-products-box added-products-top">
                 {orderItems.map((item, i) => {
                   const expanded = !!expandedRowIds[item._id];
-                  const itemActiveCategory = expandedItemCategories[item._id] || "Choga";
+                  const itemActiveCategory = expandedItemCategories[item._id] || "Kurta/Choga/Kaftan";
                   const itemCategoryKey = CATEGORY_KEY_MAP[itemActiveCategory];
                   const productOptions = getProductOptions(item.product_id);
                   const itemIsKids = item.isKids || false;
@@ -1784,7 +1605,7 @@ export default function ProductForm() {
                   return (
                     <div className="added-product-row" key={item._id}>
                       <span className="product-info">
-                        {i + 1}. {item.product_name} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}
+                        {i + 1}. {item.product_name} | {item.category || (item.isKids ? "Kids" : "Women")} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}
                       </span>
 
                       <div className="product-buttons">
@@ -2012,8 +1833,8 @@ export default function ProductForm() {
                                   key={cat}
                                   className={
                                     itemActiveCategory === cat
-                                      ? "measure-item active"
-                                      : "measure-item"
+                                      ? "measure-item active break-words"
+                                      : "measure-item break-words"
                                   }
                                   onClick={() =>
                                     setExpandedItemCategories((prev) => ({
@@ -2353,8 +2174,8 @@ export default function ProductForm() {
                       key={cat}
                       className={
                         activeCategory === cat
-                          ? "measure-item active"
-                          : "measure-item"
+                          ? "measure-item active break-words"
+                          : "measure-item break-words"
                       }
                       onClick={() => setActiveCategory(cat)}
                     >
@@ -2393,11 +2214,8 @@ export default function ProductForm() {
                           <label>{field}</label>
                           <input
                             type="number"
-                            className="input-line"
+                            className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
                             value={currentValue || ""}
-                            style={{
-                              color: isAutoFilled ? "#999" : "#000",
-                            }}
                             onChange={(e) => {
                               const val = e.target.value;
                               setMeasurements((prev) => ({
