@@ -7,7 +7,7 @@ import {
   Image,
   StyleSheet,
 } from "@react-pdf/renderer";
-import { styles, COLORS } from "./pdfStyles";
+import { COLORS } from "./pdfStyles";
 
 // Helper to format date
 const formatDate = (dateStr) => {
@@ -18,15 +18,7 @@ const formatDate = (dateStr) => {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).replace(/\//g, ". ");
-};
-
-// Get color name from color object
-const getColorName = (color) => {
-  if (!color) return "—";
-  if (typeof color === "string") return color;
-  if (typeof color === "object" && color.name) return color.name;
-  return "—";
+  }).replace(/\//g, ".");
 };
 
 // Get color hex from color object
@@ -39,24 +31,25 @@ const getColorHex = (color) => {
 
 // Warehouse specific styles
 const warehouseStyles = StyleSheet.create({
+  page: {
+    padding: 40,
+    paddingBottom: 120, // Extra space for fixed bottom barcodes
+    fontFamily: "Helvetica",
+    fontSize: 10,
+    backgroundColor: "#FFFFFF",
+  },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 25,
+    marginBottom: 20,
   },
   logoSection: {
     alignItems: "center",
   },
   logo: {
     width: 70,
-    // height: 70,
     marginBottom: 5,
-  },
-  brandName: {
-    fontSize: 7,
-    letterSpacing: 3,
-    color: COLORS.gold,
   },
   barcodeSection: {
     alignItems: "center",
@@ -79,11 +72,21 @@ const warehouseStyles = StyleSheet.create({
     color: COLORS.gray,
   },
 
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
   title: {
     fontSize: 20,
     fontFamily: "Helvetica-Bold",
     color: COLORS.gold,
-    marginBottom: 15,
+  },
+  productIndicator: {
+    fontSize: 11,
+    color: COLORS.gray,
+    fontFamily: "Helvetica-Bold",
   },
 
   infoGrid: {
@@ -143,7 +146,7 @@ const warehouseStyles = StyleSheet.create({
     flex: 1,
   },
   productName: {
-    fontSize: 11,
+    fontSize: 14,
     fontFamily: "Helvetica-Bold",
     marginBottom: 12,
   },
@@ -153,6 +156,10 @@ const warehouseStyles = StyleSheet.create({
   },
   productField: {
     width: "25%",
+    marginBottom: 10,
+  },
+  productFieldWide: {
+    width: "50%",
     marginBottom: 10,
   },
   fieldLabel: {
@@ -167,13 +174,27 @@ const warehouseStyles = StyleSheet.create({
   colorRow: {
     flexDirection: "row",
     alignItems: "center",
-    // gap: 4,
   },
   colorSwatch: {
     width: 24,
     height: 16,
     borderRadius: 2,
     marginLeft: 8,
+  },
+
+  // Extras with colors
+  extrasContainer: {
+    marginTop: 4,
+  },
+  extraItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  extraName: {
+    fontSize: 9,
+    color: COLORS.gray,
+    marginRight: 8,
   },
 
   commentsSection: {
@@ -202,25 +223,53 @@ const warehouseStyles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 10,
   },
-  measurementsPlaceholder: {
-    height: 120,
-    backgroundColor: "#F9F9F9",
-    borderWidth: 1,
-    borderColor: "#DDD",
-    justifyContent: "center",
-    alignItems: "center",
+
+  // Measurements grid styles
+  measurementsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     marginBottom: 20,
   },
-  placeholderText: {
+  measurementBox: {
+    width: "32%",
+    marginRight: "2%",
+    marginBottom: 10,
+    backgroundColor: "#FAFAFA",
+    borderWidth: 1,
+    borderColor: "#EEE",
+    borderRadius: 4,
+    padding: 10,
+  },
+  measurementBoxTitle: {
     fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    marginBottom: 8,
+    color: "#333",
+  },
+  measurementRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  measurementItem: {
+    marginRight: 12,
+    marginBottom: 4,
+  },
+  measurementLabel: {
+    fontSize: 8,
     color: COLORS.gray,
+  },
+  measurementValue: {
+    fontSize: 8,
+    color: "#333",
   },
 
   bottomBarcodes: {
+    position: "absolute",
+    bottom: 40,
+    left: 40,
+    right: 40,
     flexDirection: "row",
     justifyContent: "space-between",
-    // marginTop: "auto",
-    paddingTop: 30,
   },
   barcodeItem: {
     alignItems: "center",
@@ -258,83 +307,115 @@ const InfoRow = ({ label, value, highlight = false }) => (
   </View>
 );
 
-// Product Item Component
-const ProductItem = ({ item }) => (
-  <View style={warehouseStyles.productRow}>
-    {item.image_url && (
-      <Image src={item.image_url} style={warehouseStyles.productImage} />
-    )}
-    <View style={warehouseStyles.productDetails}>
-      <Text style={warehouseStyles.productName}>{item?.product_name || "—"}</Text>
+// Product Item Component - Shows top/bottom/extras WITH colors, additionals WITHOUT price
+// Hides empty fields
+const ProductItem = ({ item }) => {
+  const hasTop = item?.top;
+  const hasBottom = item?.bottom;
+  const hasSize = item?.size;
+  const hasExtras = item?.extras && item.extras.length > 0;
+  const hasAdditionals = item?.additionals && item.additionals.length > 0;
 
-      <View style={warehouseStyles.productGrid}>
-        {/* Top with color swatch */}
-        <View style={warehouseStyles.productField}>
-          <Text style={warehouseStyles.fieldLabel}>Top</Text>
-          <View style={warehouseStyles.colorRow}>
-            <Text style={warehouseStyles.fieldValue}>{item?.top || "—"}</Text>
-            {item?.top_color && (
-              <View
-                style={[
-                  warehouseStyles.colorSwatch,
-                  { backgroundColor: getColorHex(item.top_color) },
-                ]}
-              />
-            )}
+  return (
+    <View style={warehouseStyles.productRow}>
+      {item.image_url && (
+        <Image src={item.image_url} style={warehouseStyles.productImage} />
+      )}
+      <View style={warehouseStyles.productDetails}>
+        <Text style={warehouseStyles.productName}>{item?.product_name || "—"}</Text>
+
+        <View style={warehouseStyles.productGrid}>
+          {/* Top with color swatch - only if present */}
+          {hasTop && (
+            <View style={warehouseStyles.productField}>
+              <Text style={warehouseStyles.fieldLabel}>Top</Text>
+              <View style={warehouseStyles.colorRow}>
+                <Text style={warehouseStyles.fieldValue}>{item.top}</Text>
+                {item?.top_color?.hex && (
+                  <View
+                    style={[
+                      warehouseStyles.colorSwatch,
+                      { backgroundColor: item.top_color.hex },
+                    ]}
+                  />
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Bottom with color swatch - only if present */}
+          {hasBottom && (
+            <View style={warehouseStyles.productField}>
+              <Text style={warehouseStyles.fieldLabel}>Bottom</Text>
+              <View style={warehouseStyles.colorRow}>
+                <Text style={warehouseStyles.fieldValue}>{item.bottom}</Text>
+                {item?.bottom_color?.hex && (
+                  <View
+                    style={[
+                      warehouseStyles.colorSwatch,
+                      { backgroundColor: item.bottom_color.hex },
+                    ]}
+                  />
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Size - only if present */}
+          {hasSize && (
+            <View style={warehouseStyles.productField}>
+              <Text style={warehouseStyles.fieldLabel}>Size</Text>
+              <Text style={warehouseStyles.fieldValue}>{item.size}</Text>
+            </View>
+          )}
+
+          {/* Quantity - always show */}
+          <View style={warehouseStyles.productField}>
+            <Text style={warehouseStyles.fieldLabel}>Quantity</Text>
+            <Text style={warehouseStyles.fieldValue}>{item?.quantity || 1}</Text>
           </View>
         </View>
 
-        {/* Bottom with color swatch */}
-        <View style={warehouseStyles.productField}>
-          <Text style={warehouseStyles.fieldLabel}>Bottom</Text>
-          <View style={warehouseStyles.colorRow}>
-            <Text style={warehouseStyles.fieldValue}>{item?.bottom || "—"}</Text>
-            {item?.bottom_color && (
-              <View
-                style={[
-                  warehouseStyles.colorSwatch,
-                  { backgroundColor: getColorHex(item.bottom_color) },
-                ]}
-              />
+        {/* Extras and Additionals row - only if any present */}
+        {(hasExtras || hasAdditionals) && (
+          <View style={warehouseStyles.productGrid}>
+            {/* Extras with colors - only if present */}
+            {hasExtras && (
+              <View style={warehouseStyles.productFieldWide}>
+                <Text style={warehouseStyles.fieldLabel}>Extras</Text>
+                <View style={warehouseStyles.extrasContainer}>
+                  {item.extras.map((extra, idx) => (
+                    <View key={idx} style={warehouseStyles.extraItem}>
+                      <Text style={warehouseStyles.extraName}>{extra.name}</Text>
+                      {extra.color?.hex && (
+                        <View
+                          style={[
+                            warehouseStyles.colorSwatch,
+                            { backgroundColor: extra.color.hex, marginLeft: 0 },
+                          ]}
+                        />
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Additionals - names only, NO PRICES - only if present */}
+            {hasAdditionals && (
+              <View style={warehouseStyles.productFieldWide}>
+                <Text style={warehouseStyles.fieldLabel}>Additionals</Text>
+                <Text style={warehouseStyles.fieldValue}>
+                  {item.additionals.map((a) => a.name).join(", ")}
+                </Text>
+              </View>
             )}
           </View>
-        </View>
-
-        {/* Size */}
-        <View style={warehouseStyles.productField}>
-          <Text style={warehouseStyles.fieldLabel}>Size</Text>
-          <Text style={warehouseStyles.fieldValue}>{item?.size || "—"}</Text>
-        </View>
-      </View>
-
-      <View style={warehouseStyles.productGrid}>
-        {/* Color */}
-        <View style={warehouseStyles.productField}>
-          <Text style={warehouseStyles.fieldLabel}>Color</Text>
-          <Text style={warehouseStyles.fieldValue}>{getColorName(item?.color)}</Text>
-        </View>
-
-        {/* Extras */}
-        <View style={warehouseStyles.productField}>
-          <Text style={warehouseStyles.fieldLabel}>Extras</Text>
-          <Text style={warehouseStyles.fieldValue}>
-            {item?.extras?.map((e) => e?.name).filter(Boolean).join(", ") || "—"}
-          </Text>
-        </View>
-
-        {/* Additionals */}
-        <View style={warehouseStyles.productField}>
-          <Text style={warehouseStyles.fieldLabel}>Additionals</Text>
-          <Text style={warehouseStyles.fieldValue}>
-            {item?.additionals && item.additionals.length > 0
-              ? item.additionals.map((a) => `${a.name} (Rs.${a.price})`).join(", ")
-              : "—"}
-          </Text>
-        </View>
+        )}
       </View>
     </View>
-  </View>
-);
+  );
+};
 
 // Barcode Placeholder Component
 const BarcodePlaceholder = ({ label }) => (
@@ -346,23 +427,85 @@ const BarcodePlaceholder = ({ label }) => (
   </View>
 );
 
-// Main Warehouse PDF Document
-const WarehouseOrderPdf = ({ order, logoUrl }) => {
-  if (!order) {
-    console.error("WarehouseOrderPdf received an undefined or null order prop.");
-    return <Document><Page size="A4" style={styles.page}><Text>Error: Order data is missing.</Text></Page></Document>;
+// Measurements Display Component
+const MeasurementsDisplay = ({ measurements }) => {
+  if (!measurements || typeof measurements !== "object") {
+    return null;
   }
 
-  const items = order.items || [];
+  // Get all categories that have measurements
+  const categories = Object.keys(measurements).filter((category) => {
+    const fields = measurements[category];
+    if (!fields || typeof fields !== "object") return false;
+    // Check if any field has a value
+    return Object.values(fields).some((val) => val !== "" && val !== undefined && val !== null);
+  });
+
+  if (categories.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={warehouseStyles.measurementsGrid}>
+      {categories.map((category) => {
+        const fields = measurements[category];
+        // Get only fields with values
+        const fieldEntries = Object.entries(fields).filter(
+          ([_, value]) => value !== "" && value !== undefined && value !== null
+        );
+
+        if (fieldEntries.length === 0) return null;
+
+        return (
+          <View key={category} style={warehouseStyles.measurementBox}>
+            <Text style={warehouseStyles.measurementBoxTitle}>{category}</Text>
+            <View style={warehouseStyles.measurementRow}>
+              {fieldEntries.map(([fieldName, value]) => (
+                <View key={fieldName} style={warehouseStyles.measurementItem}>
+                  <Text style={warehouseStyles.measurementLabel}>
+                    {fieldName}: <Text style={warehouseStyles.measurementValue}>{value}</Text>
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+/**
+ * Warehouse PDF Document - ONE PDF PER PRODUCT
+ * 
+ * @param {object} order - Full order object
+ * @param {object} item - Single product item from order.items
+ * @param {number} itemIndex - Index of this item (0-based)
+ * @param {number} totalItems - Total number of items in order
+ * @param {string} logoUrl - Logo URL
+ */
+const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl }) => {
+  if (!order || !item) {
+    console.error("WarehouseOrderPdf received undefined order or item.");
+    return (
+      <Document>
+        <Page size="A4" style={warehouseStyles.page}>
+          <Text>Error: Order or item data is missing.</Text>
+        </Page>
+      </Document>
+    );
+  }
+
+  // Use item's delivery date, fallback to order's delivery date
+  const itemDeliveryDate = item.delivery_date || order.delivery_date;
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={warehouseStyles.page}>
         {/* Header Row - Logo and Master Barcode */}
         <View style={warehouseStyles.headerRow}>
           <View style={warehouseStyles.logoSection}>
             {logoUrl && <Image src={logoUrl} style={warehouseStyles.logo} />}
-            {/* <Text style={warehouseStyles.brandName}>S H E E T A L   B A T R A</Text> */}
           </View>
           <View style={warehouseStyles.barcodeSection}>
             <Text style={warehouseStyles.barcodeLabel}>Master</Text>
@@ -372,8 +515,13 @@ const WarehouseOrderPdf = ({ order, logoUrl }) => {
           </View>
         </View>
 
-        {/* Title */}
-        <Text style={warehouseStyles.title}>Warehouse Order Copy</Text>
+        {/* Title Row with Product Indicator */}
+        <View style={warehouseStyles.titleRow}>
+          <Text style={warehouseStyles.title}>Warehouse Order Copy</Text>
+          <Text style={warehouseStyles.productIndicator}>
+            Product {itemIndex + 1} of {totalItems}
+          </Text>
+        </View>
 
         {/* Order Info Grid */}
         <View style={warehouseStyles.infoGrid}>
@@ -385,7 +533,7 @@ const WarehouseOrderPdf = ({ order, logoUrl }) => {
             />
             <InfoRow
               label="DELIVERY TO:"
-              value={order.delivery_location || order.delivery_city || "—"}
+              value={order.delivery_location || order.delivery_city || order.mode_of_delivery || "—"}
             />
             <InfoRow
               label="CLIENT NAME:"
@@ -393,12 +541,12 @@ const WarehouseOrderPdf = ({ order, logoUrl }) => {
             />
             <InfoRow
               label="DELIVERY DATE:"
-              value={formatDate(order.delivery_date)}
+              value={formatDate(itemDeliveryDate)}
               highlight={true}
             />
             <InfoRow
               label="ORDER PRIORITY:"
-              value={order.priority || "NORMAL"}
+              value={order.order_flag || order.priority || "NORMAL"}
             />
           </View>
 
@@ -412,37 +560,39 @@ const WarehouseOrderPdf = ({ order, logoUrl }) => {
               label="SALES ASSOCIATE:"
               value={order.salesperson}
             />
+            <InfoRow
+              label="ORDER TYPE:"
+              value={item.order_type || order.order_type || "Standard"}
+            />
           </View>
         </View>
 
-        {/* Order Details Section */}
-        <SectionBar title="Order Details" />
-        {items.map((item, index) => (
-          <ProductItem key={index} item={item} />
-        ))}
+        {/* Product Details Section - Single Item */}
+        <SectionBar title="Product Details" />
+        <ProductItem item={item} />
 
-        {/* Comments Section */}
-        <View style={warehouseStyles.commentsSection}>
-          <Text style={warehouseStyles.commentsLabel}>Comments:</Text>
-          <View style={warehouseStyles.commentsBox}>
-            <Text style={warehouseStyles.commentsText}>
-              {order.comments || order.delivery_notes || "—"}
-            </Text>
+        {/* Notes Section - only show if notes exist */}
+        {(item.notes || order.comments || order.delivery_notes) && (
+          <View style={warehouseStyles.commentsSection}>
+            <Text style={warehouseStyles.commentsLabel}>Notes:</Text>
+            <View style={warehouseStyles.commentsBox}>
+              <Text style={warehouseStyles.commentsText}>
+                {item.notes || order.comments || order.delivery_notes}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Measurements Section */}
         <View style={warehouseStyles.measurementsBar}>
           <Text style={warehouseStyles.sectionTitle}>Measurements</Text>
         </View>
-        {/* <View style={warehouseStyles.measurementsPlaceholder}>
-          <Text style={warehouseStyles.placeholderText}>
-            [ Measurements will be added here ]
-          </Text>
-        </View> */}
+        
+        {/* Measurements Grid - show all categories with values */}
+        <MeasurementsDisplay measurements={item.measurements} />
 
-        {/* Bottom Barcodes */}
-        <View style={warehouseStyles.bottomBarcodes}>
+        {/* Bottom Barcodes - fixed at bottom, unique per product */}
+        <View style={warehouseStyles.bottomBarcodes} fixed>
           <BarcodePlaceholder label="Top" />
           <BarcodePlaceholder label="Bottom" />
           <BarcodePlaceholder label="Extra" />

@@ -5,9 +5,10 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import formatPhoneNumber from "../utils/formatPhoneNumber"; // Import the new utility
-import formatDate from "../utils/formatDate"; // Import formatDate
+import formatPhoneNumber from "../utils/formatPhoneNumber";
+import formatDate from "../utils/formatDate";
 import { SearchableSelect } from "../components/SearchableSelect";
+import Popup from "../components/Popup";
 
 const countryOptions = [
   { label: "India", value: "India" },
@@ -57,8 +58,21 @@ export default function OrderDetails() {
   const [profile, setProfile] = useState(null);
   const [selectedSP, setSelectedSP] = useState(null);
 
+  // Popup state
+  const [popup, setPopup] = useState({
+    show: false,
+    title: "",
+    message: "",
+    type: "info",
+    confirmText: "OK",
+    cancelText: "Cancel",
+  });
+  
+  // Separate ref for pending confirm action (to avoid stale closure issues)
+  const pendingActionRef = React.useRef(null);
+
   // Payment
-  const [advancePayment, setAdvancePayment] = useState(0); // Changed to amount
+  const [advancePayment, setAdvancePayment] = useState(0);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [birthdayDiscount, setBirthdayDiscount] = useState(0);
   const [discountApplied, setDiscountApplied] = useState(false);
@@ -84,11 +98,38 @@ export default function OrderDetails() {
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [paymentMode, setPaymentMode] = useState("UPI");
   const COD_CHARGE = 250;
-  const SHIPPING_CHARGE_AMOUNT = 2500; // Define shipping charge amount
-  const SHIPPING_THRESHOLD = 30000; // Define the threshold for shipping charge
+  const SHIPPING_CHARGE_AMOUNT = 2500;
+  const SHIPPING_THRESHOLD = 30000;
 
-  const [shippingCharge, setShippingCharge] = useState(0); // State to hold shipping charge
+  const [shippingCharge, setShippingCharge] = useState(0);
 
+  // Helper to show popup
+  const showPopup = (options) => {
+    // Store the callback in ref to avoid stale closure
+    pendingActionRef.current = options.onConfirm || null;
+    setPopup({
+      show: true,
+      title: options.title || "",
+      message: options.message || "",
+      type: options.type || "info",
+      confirmText: options.confirmText || "OK",
+      cancelText: options.cancelText || "Cancel",
+    });
+  };
+
+  // Helper to close popup
+  const closePopup = () => {
+    setPopup((prev) => ({ ...prev, show: false }));
+    pendingActionRef.current = null;
+  };
+
+  // Handle confirm button click in popup
+  const handlePopupConfirm = () => {
+    if (pendingActionRef.current) {
+      pendingActionRef.current();
+    }
+    closePopup();
+  };
 
   const norm = (v) => (v || "").trim();
 
@@ -97,22 +138,27 @@ export default function OrderDetails() {
     [order?.grand_total]
   );
 
-  // ✅ Check if order is Custom (100% advance) or Standard (25% advance)
+  // Check if order is Custom (100% advance) or Standard (25% advance)
   const isCustomOrder = order?.order_type === "Custom";
-  const minAdvancePercent = isCustomOrder ? 1.0 : 0.25; // 100% or 25%
+  const minAdvancePercent = isCustomOrder ? 1.0 : 0.25;
+  const minAdvanceAmount = totalAmount * minAdvancePercent;
 
+  // Allow any advance amount (don't force minimum)
   const sanitizedAdvance = useMemo(() => {
     const amount = parseFloat(advancePayment);
-    const minAdvance = totalAmount * minAdvancePercent;
-    if (isNaN(amount) || amount <= 0) return minAdvance;
-    return Math.max(minAdvance, Math.min(amount, totalAmount));
-  }, [advancePayment, totalAmount, minAdvancePercent]);
+    if (isNaN(amount) || amount < 0) return 0;
+    return Math.min(amount, totalAmount);
+  }, [advancePayment, totalAmount]);
+
+  // Check if advance is below minimum
+  const isAdvanceBelowMinimum = sanitizedAdvance < minAdvanceAmount;
 
   const remainingAmount = useMemo(
     () => Math.max(0, totalAmount - sanitizedAdvance),
     [totalAmount, sanitizedAdvance]
   );
-  // ✅ Calculate totalDiscount BEFORE pricing useMemo
+
+  // Calculate totalDiscount BEFORE pricing useMemo
   const totalDiscount = useMemo(() => {
     return (Number(discountPercent) || 0) + (Number(birthdayDiscount) || 0);
   }, [discountPercent, birthdayDiscount]);
@@ -124,14 +170,12 @@ export default function OrderDetails() {
     let netPayable = Math.max(0, totalAmount - discountAmount);
     let currentShippingCharge = 0;
 
-    // Apply shipping charge if country is not India and total is under 30000
     if (order.mode_of_delivery === "Home Delivery" && deliveryCountry !== "India" && totalAmount < SHIPPING_THRESHOLD) {
       netPayable += SHIPPING_CHARGE_AMOUNT;
       currentShippingCharge = SHIPPING_CHARGE_AMOUNT;
     }
-    setShippingCharge(currentShippingCharge); // Update shipping charge state
+    setShippingCharge(currentShippingCharge);
 
-    // ✅ Add COD charge
     if (paymentMode === "COD" && order.mode_of_delivery === "Home Delivery") {
       netPayable += COD_CHARGE;
     }
@@ -143,14 +187,13 @@ export default function OrderDetails() {
       discountAmount,
       netPayable,
       remaining,
-      shippingCharge: currentShippingCharge, // Include shipping charge in pricing object
-      // ✅ Added for payload
+      shippingCharge: currentShippingCharge,
       regularDiscount: Number(discountPercent) || 0,
       birthdayDiscount: Number(birthdayDiscount) || 0,
     };
   }, [totalDiscount, discountPercent, birthdayDiscount, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery]);
 
-  //auto fill delivery state and city:
+  // Auto fill delivery state and city
   useEffect(() => {
     if (deliveryCountry !== "India") return;
     if (deliveryPincode.length !== 6) return;
@@ -163,7 +206,8 @@ export default function OrderDetails() {
       }
     })();
   }, [deliveryPincode, deliveryCountry]);
-  //auto fill billing state and city:
+
+  // Auto fill billing state and city
   useEffect(() => {
     if (billingCountry !== "India") return;
     if (billingPincode.length !== 6) return;
@@ -177,7 +221,6 @@ export default function OrderDetails() {
     })();
   }, [billingPincode, billingCountry]);
 
-  //-------------------------------------------
   // Load user profile + salesperson
   useEffect(() => {
     const cachedEmail = norm(localStorage.getItem("sp_email"));
@@ -219,14 +262,13 @@ export default function OrderDetails() {
     return () => (cancelled = true);
   }, [user?.id]);
 
-  // ==================== SESSION STORAGE RESTORE ====================
+  // SESSION STORAGE RESTORE
   useEffect(() => {
     const saved = sessionStorage.getItem("screen6FormData");
     if (saved) {
       try {
         const data = JSON.parse(saved);
 
-        // Payment
         if (data.advancePayment !== undefined) setAdvancePayment(data.advancePayment);
         if (data.discountPercent !== undefined) setDiscountPercent(data.discountPercent);
         if (data.birthdayDiscount !== undefined) setBirthdayDiscount(data.birthdayDiscount);
@@ -235,7 +277,6 @@ export default function OrderDetails() {
         if (data.appliedCode) setAppliedCode(data.appliedCode);
         if (data.paymentMode) setPaymentMode(data.paymentMode);
 
-        // Billing
         if (data.billingSame !== undefined) setBillingSame(data.billingSame);
         if (data.billingAddress) setBillingAddress(data.billingAddress);
         if (data.billingCountry) setBillingCountry(data.billingCountry);
@@ -245,7 +286,6 @@ export default function OrderDetails() {
         if (data.billingCompany) setBillingCompany(data.billingCompany);
         if (data.billingGST) setBillingGST(data.billingGST);
 
-        // Delivery
         if (data.deliveryAddress) setDeliveryAddress(data.deliveryAddress);
         if (data.deliveryCountry) setDeliveryCountry(data.deliveryCountry);
         if (data.deliveryCity) setDeliveryCity(data.deliveryCity);
@@ -259,12 +299,9 @@ export default function OrderDetails() {
     }
   }, []);
 
-
-
-  // ==================== SESSION STORAGE SAVE ====================
+  // SESSION STORAGE SAVE
   useEffect(() => {
     const formData = {
-      // Payment
       advancePayment,
       discountPercent,
       birthdayDiscount,
@@ -272,8 +309,6 @@ export default function OrderDetails() {
       birthdayApplied,
       appliedCode,
       paymentMode,
-
-      // Billing
       billingSame,
       billingAddress,
       billingCountry,
@@ -282,8 +317,6 @@ export default function OrderDetails() {
       billingPincode,
       billingCompany,
       billingGST,
-
-      // Delivery
       deliveryAddress,
       deliveryCountry,
       deliveryCity,
@@ -293,7 +326,6 @@ export default function OrderDetails() {
     };
     sessionStorage.setItem("screen6FormData", JSON.stringify(formData));
   }, [
-    // Payment
     advancePayment,
     discountPercent,
     birthdayDiscount,
@@ -301,8 +333,6 @@ export default function OrderDetails() {
     birthdayApplied,
     appliedCode,
     paymentMode,
-
-    // Billing
     billingSame,
     billingAddress,
     billingCountry,
@@ -311,8 +341,6 @@ export default function OrderDetails() {
     billingPincode,
     billingCompany,
     billingGST,
-
-    // Delivery
     deliveryAddress,
     deliveryCountry,
     deliveryCity,
@@ -321,24 +349,10 @@ export default function OrderDetails() {
     deliveryNotes,
   ]);
 
-
-
-
-
   if (!profile || !order) return <p>Loading...</p>;
 
-  // -------------------------------
-  // CONTINUE TO NEXT SCREEN
-  // -------------------------------
-  const confirmOrder = () => {
-    if (!billingSame) {
-      if (!billingAddress || !billingCity || !billingState || !billingPincode) {
-        alert("Please fill full billing address.");
-        return;
-      }
-    }
-
-    // Build payload without signature (signature will be added in Screen7)
+  // Proceed with order (called after confirmation)
+  const proceedWithOrder = () => {
     const finalBillingAddress = billingSame
       ? `${deliveryAddress}, ${deliveryCountry}, ${deliveryCity}, ${deliveryState} - ${deliveryPincode}`
       : `${billingAddress}, ${billingCountry}, ${billingCity}, ${billingState} - ${billingPincode}`;
@@ -353,7 +367,6 @@ export default function OrderDetails() {
       grand_total_after_discount: pricing.netPayable,
       net_total: pricing.netPayable,
 
-      // DELIVERY
       delivery_name: profile.full_name,
       delivery_email: profile.email,
       delivery_phone: profile.phone,
@@ -364,7 +377,6 @@ export default function OrderDetails() {
       delivery_pincode: deliveryPincode,
       delivery_notes: deliveryNotes,
 
-      // BILLING
       billing_same: billingSame,
       billing_address: finalBillingAddress,
       billing_country: billingCountry,
@@ -372,32 +384,62 @@ export default function OrderDetails() {
       billing_gstin: billingGST || null,
       payment_mode: paymentMode,
       cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
-      shipping_charge: pricing.shippingCharge, // Include shipping charge in payload
+      shipping_charge: pricing.shippingCharge,
 
-
-      // SALESPERSON
       salesperson: selectedSP?.saleperson || null,
       salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : null,
-      salesperson_email:
-        selectedSP?.email || localStorage.getItem("sp_email") || null,
+      salesperson_email: selectedSP?.email || localStorage.getItem("sp_email") || null,
     };
 
-    // Navigate directly to Screen7
     navigate("/orderDetail", { state: { orderPayload: payload } });
+  };
+
+  // CONTINUE TO NEXT SCREEN
+  const confirmOrder = () => {
+    if (!billingSame) {
+      if (!billingAddress || !billingCity || !billingState || !billingPincode) {
+        showPopup({
+          title: "Billing Address Required",
+          message: "Please fill full billing address.",
+          type: "warning",
+        });
+        return;
+      }
+    }
+
+    // Check if advance payment is below minimum and show warning
+    if (isAdvanceBelowMinimum) {
+      const minPercentLabel = isCustomOrder ? "100%" : "25%";
+      showPopup({
+        title: "Advance Payment Below Minimum",
+        // message: `Order Type: ${isCustomOrder ? "Custom" : "Standard"}\nMinimum Required: ₹${formatIndianNumber(minAdvanceAmount)} (${minPercentLabel})\nEntered Amount: ₹${formatIndianNumber(sanitizedAdvance)}\n\nDo you want to continue anyway?`,
+        message: `Advance entered by you is less than ${minPercentLabel} \n\nMinimum advance required for this order is: ₹${formatIndianNumber(minAdvanceAmount)}`,
+        type: "confirm",
+        confirmText: "Continue",
+        cancelText: "Cancel",
+        onConfirm: proceedWithOrder,
+      });
+      return;
+    }
+
+    proceedWithOrder();
   };
 
   const handleDiscount = async () => {
     const codeInput = window.prompt("Enter Collector code:");
-    if (codeInput === null) return; // cancelled
+    if (codeInput === null) return;
 
     const code = codeInput.trim().toUpperCase();
     if (!code) {
-      alert("Please enter a valid collector code.");
+      showPopup({
+        title: "Invalid Code",
+        message: "Please enter a valid collector code.",
+        type: "warning",
+      });
       return;
     }
 
     try {
-      // ✅ Fixed: Select both code and percent
       const { data, error } = await supabase
         .from("discount")
         .select("code, percent")
@@ -406,49 +448,76 @@ export default function OrderDetails() {
         .maybeSingle();
 
       if (error || !data) {
-        alert("Invalid or expired discount code.");
+        showPopup({
+          title: "Invalid Code",
+          message: "Invalid or expired discount code.",
+          type: "error",
+        });
         return;
       }
 
       const pct = Number(data.percent) || 0;
       const actualCode = data.code.toUpperCase();
 
-      // ✅ SBBIRTHDAY can combine with other codes
       if (actualCode === "SBBIRTHDAY") {
         if (birthdayApplied) {
-          alert("Birthday discount already applied!");
+          showPopup({
+            title: "Already Applied",
+            message: "Birthday discount already applied!",
+            type: "warning",
+          });
           return;
         }
         setBirthdayDiscount(pct);
         setBirthdayApplied(true);
-        alert(
-          `🎂 Birthday discount (${pct}%) applied!${discountApplied ? ` Combined with ${appliedCode}: Total ${discountPercent + pct}% off!` : ""
-          }`
-        );
+        showPopup({
+          title: "Birthday Discount Applied! 🎂",
+          message: `${pct}% birthday discount applied!${discountApplied ? ` Combined with ${appliedCode}: Total ${discountPercent + pct}% off!` : ""}`,
+          type: "success",
+        });
       } else {
-        // Regular codes - only one at a time
         if (discountApplied) {
-          const confirmReplace = window.confirm(
-            `You already have "${appliedCode}" (${discountPercent}%) applied. Replace with "${actualCode}" (${pct}%)?`
-          );
-          if (!confirmReplace) return;
+          showPopup({
+            title: "Replace Discount?",
+            message: `You already have "${appliedCode}" (${discountPercent}%) applied.\n\nReplace with "${actualCode}" (${pct}%)?`,
+            type: "confirm",
+            confirmText: "Replace",
+            cancelText: "Keep Current",
+            onConfirm: () => {
+              setDiscountPercent(pct);
+              setDiscountApplied(true);
+              setAppliedCode(actualCode);
+              setTimeout(() => {
+                showPopup({
+                  title: "Discount Applied! ✅",
+                  message: `Discount code "${actualCode}" (${pct}%) applied!${birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""}`,
+                  type: "success",
+                });
+              }, 300);
+            },
+          });
+          return;
         }
         setDiscountPercent(pct);
         setDiscountApplied(true);
         setAppliedCode(actualCode);
-        alert(
-          `✅ Discount code "${actualCode}" (${pct}%) applied!${birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""
-          }`
-        );
+        showPopup({
+          title: "Discount Applied! ✅",
+          message: `Discount code "${actualCode}" (${pct}%) applied!${birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""}`,
+          type: "success",
+        });
       }
 
     } catch (e) {
       console.error("Discount lookup failed", e);
-      alert("Could not validate discount code. Please try again.");
+      showPopup({
+        title: "Error",
+        message: "Could not validate discount code. Please try again.",
+        type: "error",
+      });
     }
   };
 
-  // ✅ Remove discount handlers
   const removeRegularDiscount = () => {
     setDiscountPercent(0);
     setDiscountApplied(false);
@@ -462,21 +531,17 @@ export default function OrderDetails() {
 
   const handleLogout = async () => {
     try {
-      // Clear form data
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
 
-      // Check if session is still valid (don't sign out yet)
       const { data: { session } } = await supabase.auth.getSession();
 
       if (session) {
-        // Session valid - go to AssociateDashboard with password verification
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
         navigate("/AssociateDashboard", { replace: true });
       } else {
-        // Session expired - sign out completely and go to login
         await supabase.auth.signOut();
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
@@ -492,16 +557,11 @@ export default function OrderDetails() {
     <div className="screen6">
       {/* HEADER */}
       <div className="screen6-header">
-
         <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
         <h2 className="title">Order Detail</h2>
       </div>
 
-
-
       <div className="screen6-container">
-
-        {/* Your existing form UI remains unchanged */}
         {/* DELIVERY DETAILS */}
         {order.mode_of_delivery === "Home Delivery" && (
           <div className="section-box">
@@ -525,7 +585,6 @@ export default function OrderDetails() {
             </div>
 
             <div className="row3">
-
               <div className="field">
                 <label>Country:</label>
                 <SearchableSelect
@@ -546,10 +605,7 @@ export default function OrderDetails() {
                     setDeliveryPincode(e.target.value.replace(/\D/g, ""))
                   }
                 />
-
               </div>
-
-
 
               <div className="field">
                 <label>State:</label>
@@ -593,13 +649,6 @@ export default function OrderDetails() {
                 />
               </div>
             </div>
-
-            {/* {order.comments && (
-              <div className="field field-wide" style={{ marginTop: "12px" }}>
-                <label>Notes:</label>
-                <span>{order.comments}</span>
-              </div>
-            )} */}
           </div>
         )}
 
@@ -627,13 +676,6 @@ export default function OrderDetails() {
                 />
               </div>
             </div>
-
-            {/* {order.comments && (
-              <div className="field field-wide" style={{ marginTop: "12px" }}>
-                <label>Notes:</label>
-                <span>{order.comments}</span>
-              </div>
-            )} */}
           </div>
         )}
 
@@ -661,13 +703,6 @@ export default function OrderDetails() {
                 />
               </div>
             </div>
-
-            {/* {order.comments && (
-              <div className="field field-wide" style={{ marginTop: "12px" }}>
-                <label>Notes:</label>
-                <span>{order.comments}</span>
-              </div>
-            )} */}
           </div>
         )}
 
@@ -735,7 +770,6 @@ export default function OrderDetails() {
                     setBillingPincode(e.target.value.replace(/\D/g, ""))
                   }
                 />
-
               </div>
 
               <div className="field">
@@ -754,18 +788,15 @@ export default function OrderDetails() {
                   onChange={(e) => setBillingCity(e.target.value)}
                 />
               </div>
-
             </div>
           )}
         </div>
 
         {/* PAYMENT DETAILS */}
-        {/* <div className="section-box"> */}
         <div className="section-box payment-section">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3>Payment Details</h3>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              {/* Order Type Badge */}
               <span
                 style={{
                   background: isCustomOrder ? "#fff3e0" : "#e8f5e9",
@@ -784,7 +815,7 @@ export default function OrderDetails() {
             </div>
           </div>
 
-          {/* ✅ Applied Discounts Display */}
+          {/* Applied Discounts Display */}
           {(discountApplied || birthdayApplied) && (
             <div
               className="applied-discounts"
@@ -882,9 +913,6 @@ export default function OrderDetails() {
                 <option value="Debit Card">Debit Card</option>
                 <option value="Net Banking">Net Banking</option>
               </select>
-
-
-
             </div>
 
             <div className="field">
@@ -897,10 +925,7 @@ export default function OrderDetails() {
                 {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 100%)</span>}
                 {!isCustomOrder && <span style={{ color: "#2e7d32", marginLeft: 4 }}>(Standard - 25%)</span>}
               </label>
-              <span>
-                ₹{formatIndianNumber(sanitizedAdvance)}
-                {totalAmount > 0 && ` (${((sanitizedAdvance / totalAmount) * 100).toFixed(0)}%)`}
-              </span>
+              <span>₹{formatIndianNumber(minAdvanceAmount)}</span>
             </div>
             <div className="field">
               <label>Advance Payment (Amount):</label>
@@ -908,13 +933,20 @@ export default function OrderDetails() {
                 className="input-line"
                 type="number"
                 value={advancePayment}
-                onChange={(e) => setAdvancePayment(e.target.value)}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  // Cap at total amount
+                  if (val > totalAmount) {
+                    setAdvancePayment(totalAmount);
+                  } else {
+                    setAdvancePayment(e.target.value);
+                  }
+                }}
+                max={totalAmount}
               />
             </div>
-
-
           </div>
-          {/* ✅ Fixed: Show when either discount is applied */}
+
           {(discountApplied || birthdayApplied) && (
             <div className="row3">
               <div className="field">
@@ -932,11 +964,12 @@ export default function OrderDetails() {
             </div>
           )}
 
-
           <div className="row3">
             <div className="field">
               <label>Balance:</label>
-              <span>₹{formatIndianNumber(pricing.remaining)}</span>
+              <span style={{ fontWeight: "600", color: pricing.remaining > 0 ? "#333" : "#2e7d32" }}>
+                ₹{formatIndianNumber(pricing.remaining)}
+              </span>
             </div>
           </div>
 
@@ -964,6 +997,19 @@ export default function OrderDetails() {
         </button>
         <button className="back-btn" onClick={() => navigate(-1)}>←</button>
       </div>
+
+      {/* Popup Component */}
+      <Popup
+        isOpen={popup.show}
+        onClose={closePopup}
+        title={popup.title}
+        message={popup.message}
+        type={popup.type}
+        onConfirm={handlePopupConfirm}
+        // confirmText={popup.confirmText}
+        cancelText={popup.cancelText}
+        showCancel={popup.type === "confirm"}
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
-import { downloadCustomerPdf } from "../utils/pdfUtils";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(null);
+  const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -256,8 +257,8 @@ export default function Dashboard() {
     navigate("/login");
   };
 
-  // Handle PDF download
-  const handlePrintPdf = async (e, order) => {
+  // Handle customer PDF download
+  const handlePrintCustomerPdf = async (e, order) => {
     e.stopPropagation();
     setPdfLoading(order.id);
     try {
@@ -266,6 +267,19 @@ export default function Dashboard() {
       console.error("PDF download failed:", error);
     } finally {
       setPdfLoading(null);
+    }
+  };
+
+    // Handle PDF download
+  const handlePrintWarehousePdf = async (e, order) => {
+    e.stopPropagation();
+    setWarehousePdfLoading(order.id);
+    try {
+      await downloadWarehousePdf(order);
+    } catch (error) {
+      console.error("PDF download failed:", error);
+    } finally {
+      setWarehousePdfLoading(null);
     }
   };
 
@@ -942,10 +956,17 @@ export default function Dashboard() {
                         <div className="ad-header-actions">
                           <button
                             className="ad-print-pdf-btn"
-                            onClick={(e) => handlePrintPdf(e, order)}
+                            onClick={(e) => handlePrintCustomerPdf(e, order)}
                             disabled={pdfLoading === order.id}
                           >
-                            {pdfLoading === order.id ? "..." : "📄 PDF"}
+                            {pdfLoading === order.id ? "..." : "📄Customer PDF"}
+                          </button>
+                          <button
+                            className="ad-print-pdf-btn"
+                            onClick={(e) => handlePrintWarehousePdf(e, order)}
+                            disabled={warehousePdfLoading === order.id}
+                          >
+                            {warehousePdfLoading === order.id ? "..." : "📄Warehouse PDF"}
                           </button>
 
                           {/* Attachments Button - Only show if attachments exist */}

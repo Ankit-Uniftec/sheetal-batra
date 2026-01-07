@@ -21,7 +21,7 @@ export default function Popup({
   message = "",
   type = "info",
   onConfirm,
-  confirmText = "OK",
+  confirmText,
   cancelText = "Cancel",
   showCancel = false,
   children,
@@ -78,9 +78,12 @@ export default function Popup({
               {cancelText}
             </button>
           )}
+          {
+            confirmText &&
           <button className="popup-btn popup-btn-confirm" onClick={handleConfirm}>
             {confirmText}
           </button>
+          }
         </div>
       </div>
     </div>

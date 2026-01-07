@@ -835,7 +835,7 @@ export default function ProductForm() {
   // CHANGE #3: Add prompt when adding extra without color
   const handleAddExtra = () => {
     if (!selectedExtra) return;
-
+    
     // Check if color is selected
     if (!selectedExtraColor.name) {
       showPopup({
@@ -865,7 +865,7 @@ export default function ProductForm() {
   // Add extra to a specific item in edit mode
   const handleAddExtraToItem = (itemId, extraName, extraColor) => {
     if (!extraName) return;
-
+    
     // Check if color is selected
     if (!extraColor || !extraColor.name) {
       showPopup({
@@ -1189,9 +1189,9 @@ export default function ProductForm() {
 
     // Set product options
     setTops(selectedProduct.top_options || []);
-
+    
     // CHANGE #5: Sort bottoms alphabetically
-    const sortedBottoms = [...(selectedProduct.bottom_options || [])].sort((a, b) =>
+    const sortedBottoms = [...(selectedProduct.bottom_options || [])].sort((a, b) => 
       String(a).localeCompare(String(b))
     );
     setBottoms(sortedBottoms);
@@ -1266,6 +1266,16 @@ export default function ProductForm() {
       return;
     }
 
+    // Validate delivery date for this product
+    if (!deliveryDate) {
+      showPopup({
+        title: "Delivery Date Required",
+        message: "Please select a delivery date for this product.",
+        type: "warning",
+      });
+      return;
+    }
+
     // Capture pending extra if selected but not added
     let finalExtras = [...selectedExtrasWithColors];
     if (selectedExtra) {
@@ -1306,6 +1316,7 @@ export default function ProductForm() {
       notes: "", // Initialize notes as empty for new products
       isKids: isKidsProduct,
       order_type: getOrderType(),
+      delivery_date: deliveryDate, // Add delivery date per product
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
@@ -1325,6 +1336,7 @@ export default function ProductForm() {
     setSelectedSize("S");
     setQuantity(1);
     setMeasurements({});
+    setDeliveryDate(""); // Reset delivery date for next product
   };
 
   // LIVE SUMMARY CALC
@@ -1336,8 +1348,6 @@ export default function ProductForm() {
   };
 
   const cartQuantity = orderItems.reduce((a, b) => a + b.quantity, 0) + getExtrasCount(orderItems);
-
-  // Calculate cart subtotal (all prices are tax-inclusive)
   const cartSubtotal = orderItems.reduce((a, b) => {
     // Product price * quantity
     let itemTotal = b.price * b.quantity;
@@ -1456,22 +1466,21 @@ export default function ProductForm() {
   // livePrice is TAX-INCLUSIVE
   const gstRate = 0.18;
 
-  // LIVE calculation (before adding to cart)
-  // Use getBasePrice() NOT getLivePrice() to avoid double-counting extras
-  const liveProductTotal = getBasePrice() * quantity;
-  const liveExtrasTotal = selectedExtrasWithColors.reduce((sum, e) => sum + Number(e.price || 0), 0);
-  const liveSubtotalInclTax = liveProductTotal + liveExtrasTotal;
+  // LIVE (single product)
+  const livePrice = getLivePrice();
+  const liveSubtotalInclTax = livePrice * quantity + selectedExtrasWithColors.reduce((sum, e) => sum + Number(e.price || 0), 0);
 
   // CART vs LIVE inclusive subtotal
-  const inclusiveSubtotal = orderItems.length > 0 ? cartSubtotal : liveSubtotalInclTax;
+  const inclusiveSubtotal =
+    orderItems.length > 0 ? cartSubtotal : liveSubtotalInclTax;
 
-  // Flat 18% GST calculation
-  const taxes = inclusiveSubtotal * gstRate;           // 18% of total
-  const subtotal = inclusiveSubtotal - taxes;          // Total minus GST
+  // Reverse GST calculation
+  const subtotal = inclusiveSubtotal / (1 + gstRate); // taxable amount
+  const taxes = inclusiveSubtotal - subtotal; // GST amount
 
   const totalQuantity = orderItems.length > 0 ? cartQuantity : liveQuantity;
 
-  // Final payable
+  // Final payable (already tax-inclusive)
   const totalOrder = inclusiveSubtotal;
 
   //====================
@@ -1524,14 +1533,6 @@ export default function ProductForm() {
   // SAVE ORDER
   const saveOrder = () => {
     // VALIDATION
-    if (!deliveryDate) {
-      showPopup({
-        title: "Delivery Date Required",
-        message: "Please enter a delivery date.",
-        type: "warning",
-      });
-      return;
-    }
     if (!modeOfDelivery) {
       showPopup({
         title: "Delivery Mode Required",
@@ -1553,6 +1554,15 @@ export default function ProductForm() {
 
     // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT"
     if (orderItems.length === 0 && selectedProduct) {
+      // Validate delivery date for this product
+      if (!deliveryDate) {
+        showPopup({
+          title: "Delivery Date Required",
+          message: "Please select a delivery date for this product.",
+          type: "warning",
+        });
+        return;
+      }
       // Capture pending extra if selected but not added
       let finalExtras = [...selectedExtrasWithColors];
       if (selectedExtra) {
@@ -1592,6 +1602,7 @@ export default function ProductForm() {
         notes: comments, // Initialize notes as empty for auto-added products
         isKids: isKidsProduct,
         order_type: getOrderType(),
+        delivery_date: deliveryDate, // Add delivery date per product
       });
     }
 
@@ -1605,12 +1616,29 @@ export default function ProductForm() {
       return;
     }
 
+    // Validate all items have delivery dates
+    const itemsWithoutDeliveryDate = finalItems.filter(item => !item.delivery_date);
+    if (itemsWithoutDeliveryDate.length > 0) {
+      showPopup({
+        title: "Delivery Date Missing",
+        message: `${itemsWithoutDeliveryDate.length} product(s) are missing delivery dates. Please expand and add delivery dates.`,
+        type: "warning",
+      });
+      return;
+    }
+
     const overallOrderType = finalItems.some((item) => item.order_type === "Custom")
       ? "Custom"
       : "Standard";
 
     // Calculate total quantity including extras
     const finalTotalQuantity = finalItems.reduce((a, b) => a + b.quantity, 0) + getExtrasCount(finalItems);
+
+    // Get earliest delivery date from all items for order-level delivery_date
+    const earliestDeliveryDate = finalItems.reduce((earliest, item) => {
+      if (!earliest) return item.delivery_date;
+      return new Date(item.delivery_date) < new Date(earliest) ? item.delivery_date : earliest;
+    }, null);
 
     const orderPayload = {
       user_id: user?.id,
@@ -1619,7 +1647,7 @@ export default function ProductForm() {
       items: finalItems,
 
       // Delivery Details
-      delivery_date: formatDate(deliveryDate), // Use formatDate
+      delivery_date: formatDate(earliestDeliveryDate), // Use earliest date as order-level date
       mode_of_delivery: modeOfDelivery,
       order_flag: orderFlag,
 
@@ -1703,7 +1731,7 @@ export default function ProductForm() {
   const getProductOptions = (productId) => {
     const product = products.find((p) => p.id === productId);
     // CHANGE #5: Sort bottoms alphabetically
-    const sortedBottoms = [...(product?.bottom_options || [])].sort((a, b) =>
+    const sortedBottoms = [...(product?.bottom_options || [])].sort((a, b) => 
       String(a).localeCompare(String(b))
     );
     return {
@@ -1756,9 +1784,7 @@ export default function ProductForm() {
                   return (
                     <div className="added-product-row" key={item._id}>
                       <span className="product-info">
-                        {i + 1}. Name: {item.product_name}, Size: {item.size},
-                        Qty: {formatIndianNumber(item.quantity)}, Price: ₹
-                        {formatIndianNumber(item.price)}
+                        {i + 1}. {item.product_name} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}
                       </span>
 
                       <div className="product-buttons">
@@ -2051,7 +2077,7 @@ export default function ProductForm() {
                             </div>
                           </div>
 
-                          {/* ROW 5: Quantity, Price */}
+                          {/* ROW 5: Quantity, Price, Delivery Date */}
                           <div className="row">
                             <div className="qty-field">
                               <label>Qty</label>
@@ -2088,6 +2114,21 @@ export default function ProductForm() {
                                 onChange={(e) =>
                                   updateItem(item._id, {
                                     price: Number(e.target.value || 0),
+                                  })
+                                }
+                              />
+                            </div>
+
+                            <div className="field" style={{ maxWidth: 200 }}>
+                              <label>Delivery Date*</label>
+                              <input
+                                type="date"
+                                className="input-line"
+                                value={item.delivery_date || ""}
+                                min={new Date().toISOString().split("T")[0]}
+                                onChange={(e) =>
+                                  updateItem(item._id, {
+                                    delivery_date: e.target.value,
                                   })
                                 }
                               />
@@ -2337,18 +2378,26 @@ export default function ProductForm() {
                       const sizeChartValue = sizeData[field];
                       const currentValue = measurements[categoryKey]?.[field];
 
-                      // Simple check: if value matches size chart value, it's auto-filled (grey)
-                      const isAutoFilled = isAutoField &&
+                      // CHANGE #2: Check if value is edited (different from size chart)
+                      const isEdited = isAutoField &&
+                        currentValue !== undefined &&
+                        currentValue !== "" &&
                         sizeChartValue !== undefined &&
-                        String(currentValue) === String(sizeChartValue);
+                        Number(currentValue) !== Number(sizeChartValue);
+
+                      // Determine if this is an auto-filled unedited value
+                      const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
 
                       return (
                         <div className="measure-field" key={field}>
                           <label>{field}</label>
                           <input
                             type="number"
-                            className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
+                            className="input-line"
                             value={currentValue || ""}
+                            style={{
+                              color: isAutoFilled ? "#999" : "#000",
+                            }}
                             onChange={(e) => {
                               const val = e.target.value;
                               setMeasurements((prev) => ({
@@ -2436,21 +2485,14 @@ export default function ProductForm() {
               </div>
             )}
 
-            {/* DELIVERY */}
+            {/* ORDER DETAILS */}
             <div className="row">
               <div className="field">
                 <label>Delivery Date*</label>
-                {/* <input
-              type="date"
-              className="input-line"
-              value={deliveryDate}
-              onChange={(e) => setDeliveryDate(e.target.value)}
-            /> */}
                 <input
                   type="date"
                   className="input-line"
                   value={deliveryDate}
-                  style={{ border: "none", background: "transparent" }}
                   min={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setDeliveryDate(e.target.value)}
                 />
