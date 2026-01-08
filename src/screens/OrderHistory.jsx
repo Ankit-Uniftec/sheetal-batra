@@ -9,6 +9,58 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 
+// Measurement categories and fields (same as Screen4)
+const CATEGORY_KEY_MAP = {
+  "Kurta/Choga/Kaftan": "KurtaChogaKaftan",
+  "Blouse": "Blouse",
+  "Anarkali": "Anarkali",
+  "Salwar/Dhoti": "SalwarDhoti",
+  "Churidaar/Trouser/Pants/Plazo": "ChuridaarTrouserPantsPlazo",
+  "Sharara/Gharara": "ShararaGharara",
+  "Lehenga": "Lehenga",
+};
+
+const measurementCategories = [
+  "Kurta/Choga/Kaftan",
+  "Blouse",
+  "Anarkali",
+  "Salwar/Dhoti",
+  "Churidaar/Trouser/Pants/Plazo",
+  "Sharara/Gharara",
+  "Lehenga",
+];
+
+const measurementFields = {
+  KurtaChogaKaftan: [
+    "Height", "Shoulder", "Neck", "Upper Bust", "Bust", "Dart Point",
+    "Sleeves", "Bicep", "Arm Hole", "Waist", "Hip", "Length",
+    "Front Cross", "Back Cross", "Front Neck", "Back Neck",
+  ],
+  Blouse: [
+    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Arm Hole",
+    "Waist", "Length", "Front Cross", "Back Cross", "Front Neck", "Back Neck",
+  ],
+  Anarkali: [
+    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Bicep",
+    "Arm Hole", "Length", "Front Neck", "Back Neck",
+  ],
+  SalwarDhoti: ["Waist", "Hip", "Length"],
+  ChuridaarTrouserPantsPlazo: [
+    "Waist", "Hip", "Length", "Thigh", "Calf", "Ankle", "Knee", "Yoke Length",
+  ],
+  ShararaGharara: ["Waist", "Hip", "Length"],
+  Lehenga: ["Waist", "Hip", "Length"],
+};
+
+// Size options
+const WOMEN_SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
+
+const KIDS_SIZE_OPTIONS = [
+  "1-2 yrs", "2-3 yrs", "3-4 yrs", "4-5 yrs", "5-6 yrs",
+  "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
+  "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
+];
+
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
   const orderDate = new Date(createdAt);
@@ -61,6 +113,9 @@ export default function OrderHistory() {
   const [pdfLoading, setPdfLoading] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
+  // Colors for dropdown
+  const [colors, setColors] = useState([]);
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 5;
@@ -68,6 +123,8 @@ export default function OrderHistory() {
   // Edit modal state
   const [editingOrder, setEditingOrder] = useState(null);
   const [editFormData, setEditFormData] = useState({});
+  const [editActiveCategory, setEditActiveCategory] = useState("Kurta/Choga/Kaftan");
+  const [editMeasurements, setEditMeasurements] = useState({});
 
   // Action dropdowns state
   const [selectedCancellation, setSelectedCancellation] = useState({});
@@ -99,6 +156,20 @@ export default function OrderHistory() {
   const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
 
   const recent = useMemo(() => orders.slice(0, 2), [orders]);
+
+  // Fetch colors
+  useEffect(() => {
+    const fetchColors = async () => {
+      const { data, error } = await supabase
+        .from("colors")
+        .select("name, hex")
+        .order("name");
+      if (!error && data) {
+        setColors(data);
+      }
+    };
+    fetchColors();
+  }, []);
 
   // Handle PDF download
   const handlePrintPdf = async (e, order) => {
@@ -291,35 +362,73 @@ export default function OrderHistory() {
   const openEditModal = (e, order) => {
     e.stopPropagation();
     const item = order.items?.[0] || {};
-    let colorVal = "";
-    if (typeof item.color === 'object' && item.color !== null) {
-      colorVal = item.color.name || item.color.hex || "";
+    
+    // Get color values
+    let topColorVal = "";
+    let bottomColorVal = "";
+    
+    if (typeof item.top_color === 'object' && item.top_color !== null) {
+      topColorVal = item.top_color.name || "";
     } else {
-      colorVal = item.color || "";
+      topColorVal = item.top_color || "";
     }
+    
+    if (typeof item.bottom_color === 'object' && item.bottom_color !== null) {
+      bottomColorVal = item.bottom_color.name || "";
+    } else {
+      bottomColorVal = item.bottom_color || "";
+    }
+
     setEditFormData({
       size: item.size || "",
-      color: colorVal,
+      top: item.top || "",
+      bottom: item.bottom || "",
+      top_color: topColorVal,
+      bottom_color: bottomColorVal,
       delivery_date: order.delivery_date?.slice(0, 10) || "",
       delivery_address: order.delivery_address || "",
       delivery_city: order.delivery_city || "",
       delivery_state: order.delivery_state || "",
       delivery_pincode: order.delivery_pincode || "",
       mode_of_delivery: order.mode_of_delivery || "",
+      isKids: item.isKids || item.category === "Kids" || false,
     });
+    
+    // Set measurements from the item
+    setEditMeasurements(item.measurements || {});
+    setEditActiveCategory("Kurta/Choga/Kaftan");
     setEditingOrder(order);
+  };
+
+  // Update measurement in edit modal
+  const updateEditMeasurement = (categoryKey, field, value) => {
+    setEditMeasurements((prev) => ({
+      ...prev,
+      [categoryKey]: {
+        ...(prev[categoryKey] || {}),
+        [field]: value,
+      },
+    }));
   };
 
   const handleSaveEdit = async () => {
     if (!editingOrder) return;
     setActionLoading(editingOrder.id);
     try {
+      // Find the color objects
+      const topColorObj = colors.find(c => c.name === editFormData.top_color) || { name: editFormData.top_color, hex: "#888" };
+      const bottomColorObj = colors.find(c => c.name === editFormData.bottom_color) || { name: editFormData.bottom_color, hex: "#888" };
+
       const updatedItems = editingOrder.items?.map((item, i) => {
         if (i === 0) {
           return {
             ...item,
             size: editFormData.size,
-            color: typeof item.color === 'object' ? { ...item.color, name: editFormData.color } : editFormData.color,
+            top: editFormData.top,
+            bottom: editFormData.bottom,
+            top_color: topColorObj,
+            bottom_color: bottomColorObj,
+            measurements: editMeasurements,
           };
         }
         return item;
@@ -337,6 +446,7 @@ export default function OrderHistory() {
       if (error) throw error;
       setOrders(prev => prev.map(o => o.id === editingOrder.id ? { ...o, items: updatedItems, ...editFormData } : o));
       setEditingOrder(null);
+      setEditMeasurements({});
       alert("Order updated!");
     } catch (err) {
       alert("Failed: " + err.message);
@@ -453,31 +563,93 @@ export default function OrderHistory() {
 
   if (loading) return <p className="loading">Loading...</p>;
 
+  // Get current category key for measurements
+  const editCategoryKey = CATEGORY_KEY_MAP[editActiveCategory];
+
   return (
     <div className="oh-page">
       {/* Edit Modal */}
       {editingOrder && (
         <div className="oh-modal-overlay">
-          <div className="oh-modal">
+          <div className="oh-modal oh-modal-large">
             <div className="oh-modal-header">
               <h3>Edit Order</h3>
-              <button className="oh-modal-close" onClick={() => setEditingOrder(null)}>✕</button>
+              <button className="oh-modal-close" onClick={() => { setEditingOrder(null); setEditMeasurements({}); }}>✕</button>
             </div>
             <div className="oh-modal-body">
+              {/* Category Indicator */}
+              <div className="oh-category-badge" style={{ 
+                marginBottom: '15px', 
+                padding: '6px 12px', 
+                background: editFormData.isKids ? '#e8f5e9' : '#fce4ec', 
+                borderRadius: '4px', 
+                display: 'inline-block',
+                fontSize: '13px',
+                fontWeight: '500',
+                color: editFormData.isKids ? '#2e7d32' : '#c2185b'
+              }}>
+                Category: {editFormData.isKids ? 'Kids' : 'Women'}
+              </div>
+
+              {/* Top & Bottom with Colors */}
+              <div className="oh-modal-row">
+                <div className="oh-modal-field">
+                  <label>Top</label>
+                  <input 
+                    type="text" 
+                    value={editFormData.top} 
+                    onChange={(e) => setEditFormData({ ...editFormData, top: e.target.value })} 
+                  />
+                </div>
+                <div className="oh-modal-field">
+                  <label>Top Color</label>
+                  <select 
+                    value={editFormData.top_color} 
+                    onChange={(e) => setEditFormData({ ...editFormData, top_color: e.target.value })}
+                    className="oh-color-select"
+                  >
+                    <option value="">Select Color</option>
+                    {colors.map(c => (
+                      <option key={c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="oh-modal-row">
+                <div className="oh-modal-field">
+                  <label>Bottom</label>
+                  <input 
+                    type="text" 
+                    value={editFormData.bottom} 
+                    onChange={(e) => setEditFormData({ ...editFormData, bottom: e.target.value })} 
+                  />
+                </div>
+                <div className="oh-modal-field">
+                  <label>Bottom Color</label>
+                  <select 
+                    value={editFormData.bottom_color} 
+                    onChange={(e) => setEditFormData({ ...editFormData, bottom_color: e.target.value })}
+                    className="oh-color-select"
+                  >
+                    <option value="">Select Color</option>
+                    {colors.map(c => (
+                      <option key={c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="oh-modal-row">
                 <div className="oh-modal-field">
                   <label>Size</label>
                   <select value={editFormData.size} onChange={(e) => setEditFormData({ ...editFormData, size: e.target.value })}>
                     <option value="">Select</option>
-                    {["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL"].map(s => <option key={s} value={s}>{s}</option>)}
+                    {(editFormData.isKids ? KIDS_SIZE_OPTIONS : WOMEN_SIZE_OPTIONS).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
-                <div className="oh-modal-field">
-                  <label>Color</label>
-                  <input type="text" value={editFormData.color} onChange={(e) => setEditFormData({ ...editFormData, color: e.target.value })} />
-                </div>
-              </div>
-              <div className="oh-modal-row">
                 <div className="oh-modal-field">
                   <label>Delivery Date</label>
                   <input type="date" value={editFormData.delivery_date} onChange={(e) => setEditFormData({ ...editFormData, delivery_date: e.target.value })} />
@@ -486,10 +658,12 @@ export default function OrderHistory() {
                   <label>Mode of Delivery</label>
                   <select value={editFormData.mode_of_delivery} onChange={(e) => setEditFormData({ ...editFormData, mode_of_delivery: e.target.value })}>
                     <option value="Home Delivery">Home Delivery</option>
-                    <option value="Store Pickup">Store Pickup</option>
+                    <option value="Delhi Store">Delhi Store</option>
+                    <option value="Ludhiana Store">Ludhiana Store</option>
                   </select>
                 </div>
               </div>
+
               <div className="oh-modal-field full">
                 <label>Address</label>
                 <input type="text" value={editFormData.delivery_address} onChange={(e) => setEditFormData({ ...editFormData, delivery_address: e.target.value })} />
@@ -508,9 +682,41 @@ export default function OrderHistory() {
                   <input type="text" value={editFormData.delivery_pincode} onChange={(e) => setEditFormData({ ...editFormData, delivery_pincode: e.target.value })} />
                 </div>
               </div>
+
+              {/* Measurements Section */}
+              <div className="oh-measurements-section">
+                <h4>Custom Measurements (in)</h4>
+                <div className="oh-measure-container">
+                  <div className="oh-measure-menu">
+                    {measurementCategories.map((cat) => (
+                      <div
+                        key={cat}
+                        className={`oh-measure-item ${editActiveCategory === cat ? "active" : ""}`}
+                        onClick={() => setEditActiveCategory(cat)}
+                      >
+                        {cat}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="oh-measure-fields">
+                    <div className="oh-measure-grid">
+                      {(measurementFields[editCategoryKey] || []).map((field) => (
+                        <div className="oh-measure-field" key={field}>
+                          <label>{field}</label>
+                          <input
+                            type="number"
+                            value={editMeasurements[editCategoryKey]?.[field] || ""}
+                            onChange={(e) => updateEditMeasurement(editCategoryKey, field, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="oh-modal-footer">
-              <button className="oh-modal-btn cancel" onClick={() => setEditingOrder(null)}>Cancel</button>
+              <button className="oh-modal-btn cancel" onClick={() => { setEditingOrder(null); setEditMeasurements({}); }}>Cancel</button>
               <button className="oh-modal-btn save" onClick={handleSaveEdit} disabled={actionLoading === editingOrder.id}>
                 {actionLoading === editingOrder.id ? "Saving..." : "Save"}
               </button>
@@ -659,7 +865,7 @@ export default function OrderHistory() {
                           </div>
                           <div className="oh-detail">
                             <span className="oh-label">Category:</span>
-                            <span className="oh-value">{item.isKids ? "Kids" : "Women"}</span>
+                            <span className="oh-value">{item.category || (item.isKids ? "Kids" : "Women")}</span>
                           </div>
                         </div>
 

@@ -655,7 +655,7 @@ export default function ProductForm() {
   // CHANGE #3: Add prompt when adding extra without color
   const handleAddExtra = () => {
     if (!selectedExtra) return;
-    
+
     // Check if color is selected
     if (!selectedExtraColor.name) {
       showPopup({
@@ -685,7 +685,7 @@ export default function ProductForm() {
   // Add extra to a specific item in edit mode
   const handleAddExtraToItem = (itemId, extraName, extraColor) => {
     if (!extraName) return;
-    
+
     // Check if color is selected
     if (!extraColor || !extraColor.name) {
       showPopup({
@@ -1009,9 +1009,9 @@ export default function ProductForm() {
 
     // Set product options
     setTops(selectedProduct.top_options || []);
-    
+
     // CHANGE #5: Sort bottoms alphabetically
-    const sortedBottoms = [...(selectedProduct.bottom_options || [])].sort((a, b) => 
+    const sortedBottoms = [...(selectedProduct.bottom_options || [])].sort((a, b) =>
       String(a).localeCompare(String(b))
     );
     setBottoms(sortedBottoms);
@@ -1552,7 +1552,7 @@ export default function ProductForm() {
   const getProductOptions = (productId) => {
     const product = products.find((p) => p.id === productId);
     // CHANGE #5: Sort bottoms alphabetically
-    const sortedBottoms = [...(product?.bottom_options || [])].sort((a, b) => 
+    const sortedBottoms = [...(product?.bottom_options || [])].sort((a, b) =>
       String(a).localeCompare(String(b))
     );
     return {
@@ -1590,6 +1590,13 @@ export default function ProductForm() {
                 <option value="kids">Kids</option>
               </select>
             </div>
+
+            {/* Product Image - Inline for tablet/mobile */}
+            {selectedProduct?.image_url && (
+              <div className="screen4-image-inline">
+                <img src={selectedProduct.image_url} alt={selectedProduct.name} />
+              </div>
+            )}
 
             {/* ADDED PRODUCTS INSIDE CARD */}
             {orderItems.length > 0 && (

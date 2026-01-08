@@ -1,3 +1,4 @@
+/* ===== CATEGORY DROPDOWN ===== */
 .category-dropdown-container {
   width: 150px;
   margin-bottom: 15px;
@@ -18,6 +19,7 @@
   border-bottom: 2px solid #d5b85a;
 }
 
+/* ===== MAIN BACKGROUND ===== */
 .screen4-bg {
   background-image: url("../images/Screen1bg.png");
   background-repeat: repeat;
@@ -28,10 +30,9 @@
   padding: 40px;
   position: relative;
   font-family: 'Jost';
-
 }
 
-
+/* ===== HEADER ===== */
 .header {
   display: flex;
   justify-content: space-between;
@@ -55,19 +56,15 @@
   font-size: 26px;
   font-weight: 600;
   font-style: semibold;
-  
 }
 
 .order-product-thumb {
   position: absolute;
   right: 0;
   top: calc(100px + 26px);
-  /* just below the Order Form text */
-  /* top: calc(79px + 26px); */
   transform: translateY(8px);
   width: 100px;
   height: 150px;
-  /* border-radius: 50%; */
   overflow: hidden;
   border: 1px solid #d5b85a;
   background: #fff;
@@ -83,14 +80,12 @@
   display: block;
 }
 
+/* ===== CARD ===== */
 .screen4-card {
   width: 95%;
   max-width: 1300px;
   margin: 20px auto;
-
   border-radius: 20px;
-
-
 }
 
 .product-title {
@@ -107,6 +102,7 @@
   color: #444;
 }
 
+/* ===== FORM LAYOUT ===== */
 .row {
   display: flex;
   gap: 25px;
@@ -121,9 +117,7 @@ label {
   display: block;
   font-size: 16px;
   margin-bottom: 6px;
-
   font-weight: 400;
-
 }
 
 select,
@@ -131,13 +125,21 @@ select,
   width: 100%;
   padding: 8px 5px;
   border: none;
-
   background: transparent;
   font-size: 16px;
   outline: none;
 }
 
+.input-line {
+  width: 100%;
+  height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #d5b85a;
+  border-radius: 4px;
+  background: #fff;
+}
 
+/* ===== SIZE SELECTION ===== */
 .size-box {
   margin: 25px 0;
   display: flex;
@@ -154,7 +156,6 @@ select,
 .sizes {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  /* 6 boxes in a row */
   gap: 10px;
   margin-left: 3px;
 }
@@ -175,7 +176,7 @@ select,
   color: white;
 }
 
-
+/* ===== MEASURE BAR ===== */
 .measure-bar {
   background: #FFFFFF99;
   border: 1px solid #D5B85A;
@@ -198,21 +199,12 @@ select,
   cursor: pointer;
 }
 
-
-.input-line {
-  border: none;
-
-  background: transparent;
-  padding: 8px 5px;
-}
-
-
+/* ===== FOOTER BUTTONS ===== */
 .footer-btns {
   display: flex;
   justify-content: space-between;
   margin-top: 25px;
 }
-
 
 .productBtn {
   background: #D5B85A;
@@ -221,7 +213,6 @@ select,
   height: 56px;
   width: 165px;
   padding: 12px 20px;
-
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
@@ -232,14 +223,12 @@ select,
 }
 
 .continueBtn {
-
   height: 56px;
   width: 165px;
   background: #D5B85A;
   color: #fff !important;
   border: none;
   padding: 12px 20px;
-
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
@@ -248,7 +237,6 @@ select,
   justify-content: center;
   transition: 0.25s ease;
 }
-
 
 .back-btn {
   position: fixed;
@@ -264,9 +252,10 @@ select,
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
 }
 
-
+/* ===== MEASUREMENTS CONTAINER - DESKTOP ===== */
 .measure-container {
   display: flex;
+  flex-direction: row;
   margin-top: 20px;
   background: rgba(255, 255, 255, 0.75);
   border-radius: 14px;
@@ -274,11 +263,13 @@ select,
   overflow: hidden;
 }
 
-
 .measure-menu {
   width: 200px;
+  min-width: 200px;
   background: #f6efe4;
   padding: 20px 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .measure-item {
@@ -300,7 +291,6 @@ select,
   background: #fff5d9;
 }
 
-
 .measure-fields {
   flex: 1;
   padding: 25px 35px;
@@ -314,11 +304,14 @@ select,
   margin-bottom: 25px;
 }
 
-
 .measure-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+}
+
+.measure-field {
+  position: relative;
 }
 
 .measure-field label {
@@ -342,7 +335,25 @@ select,
   border-color: #D5B85A;
 }
 
+/* Auto-filled measurement input - GREY */
+.measure-field input.auto-filled {
+  color: #999 !important;
+}
 
+/* Manually edited measurement input - BLACK */
+.measure-field input.manual-input {
+  color: #000 !important;
+}
+
+.measure-warning {
+  display: block;
+  font-size: 11px;
+  color: #e65100;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* ===== QUANTITY CONTROLS ===== */
 .qty-field label {
   font-size: 16px;
   display: block;
@@ -373,12 +384,9 @@ select,
   font-size: 18px;
 }
 
-
-
+/* ===== ORDER SUMMARY ===== */
 .summary-box-fixed {
-
   width: 30%;
-
   margin-top: 20px;
   padding: 20px;
   background: rgba(255, 255, 255, 0.85);
@@ -418,22 +426,18 @@ select,
 }
 
 .summary-box-fixed .grand-total {
-
   color: #D5B85A;
   font-size: 17px;
   font-weight: 600;
 }
 
-
-/* Hide the ugly default file input */
+/* ===== FILE UPLOAD ===== */
 .custom-file-upload input[type="file"] {
   display: none;
 }
 
-/* Your custom upload button */
 .upload-btn {
   display: inline-block;
-  /* Gold color like your theme */
   color: white;
   padding: 10px 16px;
   border-radius: 6px;
@@ -442,27 +446,14 @@ select,
   font-weight: 500;
 }
 
-/* On hover */
-/* .upload-btn:hover {
-  background: #b99845;
-} */
-
-/* Preview box */
-/* Preview container aligned horizontally */
 .attachment-preview {
   margin-top: 8px;
   display: flex;
   gap: 12px;
-  /* spacing between file names */
   flex-wrap: wrap;
-  /* wrap when too long */
   align-items: center;
-  /* aligns with the label horizontally */
 }
 
-
-
-/* Preview text (file names) */
 .file-item {
   display: inline-flex;
   align-items: center;
@@ -474,49 +465,31 @@ select,
   font-size: 12px;
 }
 
-
-
-
-
-@media (max-width: 700px) {
-  .summary-box-fixed {
-    position: relative;
-    width: 100%;
-    right: 0;
-    bottom: 0;
-    margin-top: 20px;
-  }
+.remove-attachment-btn {
+  background: #ff5252;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
-@media (max-width: 700px) {
-  .summary-box-fixed {
-    width: 100%;
-  }
-
-  .footer-btns {
-    flex-direction: column;
-    gap: 15px;
-  }
-  
+.remove-attachment-btn:hover {
+  background: #e04545;
 }
 
-/* Between 700px and 1024px, make added-product-row text smaller as requested */
-@media (min-width: 700px) and (max-width: 1376px) {
-  .added-product-row {
-    font-size: 10px;
-    /* set to 2px if you really want extremely tiny text */
-  }
-}
-
-
-
+/* ===== ADDED PRODUCTS ROW ===== */
 .added-product-row {
   position: relative;
   flex-wrap: wrap;
-  /* so the editor can flow below */
   display: flex;
   background: #ffffff;
-  /* solid white so background is fully hidden when expanded */
   border: 1px solid #D5B85A;
   text-align: center;
   align-items: center;
@@ -526,7 +499,6 @@ select,
   margin: 25px 0;
   font-weight: 500;
   min-height: 35px;
-  /* allow row to grow when editor is open */
 }
 
 .product-buttons button {
@@ -540,7 +512,6 @@ select,
 
 .expand-panel {
   width: 100%;
-
   margin-top: 0px;
   padding-top: 10px;
   border-top: 1px dashed #d5b85a;
@@ -559,18 +530,9 @@ select,
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px 16px;
   padding: 10px;
-
 }
 
-.input-line {
-  width: 100%;
-  height: 34px;
-  padding: 6px 10px;
-  border: 1px solid #d5b85a;
-  border-radius: 4px;
-  background: #fff;
-}
-
+/* ===== SEARCHABLE SELECT ===== */
 .ss-root {
   position: relative;
   width: 100%;
@@ -583,8 +545,6 @@ select,
   padding: 8px 12px;
   cursor: text;
   color: #111;
-
-  
 }
 
 .ss-input {
@@ -593,33 +553,27 @@ select,
   flex: 1;
   font-size: 14px;
   background: transparent;
-  color: #888 !important; /* Default grey color */
+  color: #888 !important;
 }
 
 .ss-input::placeholder {
-  /* For Chrome, Firefox, Opera, Safari 10.1+ */
-  color: #888 !important; /* Placeholder text color */
+  color: #888 !important;
   opacity: 1;
-  /* Firefox */
 }
 
 .ss-input:-ms-input-placeholder {
-  /* Internet Explorer 10-11 */
   color: #888 !important;
 }
 
 .ss-input::-ms-input-placeholder {
-  /* Microsoft Edge */
   color: #888 !important;
 }
 
-/* Change text color to black when input has a value */
 .ss-input:not(:placeholder-shown) {
   color: black !important;
 }
 
 .ss-caret {
-  
   user-select: none;
   color: #000;
 }
@@ -687,7 +641,7 @@ select,
   border: 1px solid #ccc;
 }
 
-/* CSS for the Urgent Modal section */
+/* ===== MODAL ===== */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -714,7 +668,6 @@ select,
 }
 
 .confirm-btn {
-
   color: #fff !important;
   padding: 8px 14px;
   border-radius: 6px;
@@ -738,10 +691,14 @@ select,
   flex: 1;
 }
 
+/* Desktop: Sticky sidebar image */
 .screen4-image-fixed {
   width: 100px;
   position: sticky;
+  top: 20px;
   margin-top: 170px;
+  align-self: flex-start;
+  flex-shrink: 0;
 }
 
 .screen4-image-fixed img {
@@ -752,56 +709,39 @@ select,
   border-radius: 12px;
   border: 1px solid #d5b85a;
   background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* ===== MOBILE ===== */
-@media (max-width: 600px) {
-  .screen4-layout {
-    flex-direction: column;
-  }
+/* Mobile/Tablet inline image - hidden on desktop */
+.screen4-image-inline {
+  display: none;
+}
 
+/* Tablet and Mobile: Show inline image, hide sidebar image */
+@media (max-width: 900px) {
   .screen4-image-fixed {
-    position: relative;
+    display: none;
+  }
+  
+  .screen4-image-inline {
+    display: block;
+    width: 100px;
+    margin-bottom: 20px;
+  }
+  
+  .screen4-image-inline img {
     width: 100%;
-    max-width: 300px;
-    margin: auto;
+    height: auto;
+    max-height: 150px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #d5b85a;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 }
 
-/* ===== EXISTING STYLES PRESERVED ===== */
-.qty-controls {
-  display: flex;
-  gap: 10px;
-  border: 1px solid #d5b85a;
-  padding: 6px;
-}
-
-.qty-controls button {
-  border: none;
-  background: none;
-  font-size: 20px;
-}
-
-.summary-box-fixed {
-  margin-top: 20px;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
-}
-
-.color-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 8px;
-}
-
-/* =============================================
-   FULL EDIT PANEL STYLES - ADD TO END OF Screen4.css
-   ============================================= */
-
-/* Full Edit Panel Container */
+/* ===== FULL EDIT PANEL ===== */
 .expand-panel.full-edit {
   width: 100%;
   background: #fdfcf8;
@@ -832,7 +772,6 @@ select,
   margin-bottom: 4px;
 }
 
-/* Kids checkbox in edit mode */
 .edit-kids {
   margin-bottom: 8px;
   padding-bottom: 12px;
@@ -999,7 +938,6 @@ select,
   background: #ee5a5a;
 }
 
-/* Add extra row */
 .add-extra-row {
   margin-top: 8px;
 }
@@ -1008,7 +946,6 @@ select,
   max-width: 280px;
 }
 
-/* Qty field in edit panel */
 .expand-panel.full-edit .qty-field {
   min-width: 120px;
   flex: 0 0 auto;
@@ -1018,7 +955,6 @@ select,
   padding: 4px 10px;
 }
 
-/* Full width field for notes */
 .expand-panel.full-edit .full-width-field {
   flex: 1 1 100%;
   min-width: 100%;
@@ -1028,79 +964,6 @@ select,
   height: auto;
   min-height: 60px;
   resize: vertical;
-}
-
-/* Responsive adjustments for edit panel */
-@media (max-width: 900px) {
-  .edit-measure-container {
-    flex-direction: column;
-  }
-
-  .edit-measure-container .measure-menu {
-    width: 100%;
-    flex-direction: row;
-    overflow-x: auto;
-    padding: 8px;
-    gap: 4px;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .edit-measure-container .measure-item {
-    white-space: nowrap;
-    border-left: none;
-    border-bottom: 3px solid transparent;
-    padding: 6px 10px;
-  }
-
-  .edit-measure-container .measure-item.active {
-    border-left: none;
-    border-bottom: 3px solid #d5b85a;
-  }
-}
-
-@media (max-width: 768px) {
-  .expand-panel.full-edit {
-    padding: 12px;
-  }
-
-  .expand-panel.full-edit .row {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .expand-panel.full-edit .field {
-    width: 100%;
-    min-width: 100%;
-  }
-
-  .edit-measure-container .measure-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .added-extra-item-edit {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .added-extra-item-edit .ss-root {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .edit-size-box .sizes {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .edit-measure-container .measure-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .edit-size-box .sizes {
-    grid-template-columns: repeat(4, 1fr);
-  }
 }
 
 /* ===== ADDITIONALS ===== */
@@ -1180,57 +1043,195 @@ select,
   width: 100%;
 }
 
+/* ===== RESPONSIVE - SUMMARY BOX ===== */
+@media (max-width: 700px) {
+  .summary-box-fixed {
+    position: relative;
+    width: 100%;
+    right: 0;
+    bottom: 0;
+    margin-top: 20px;
+  }
 
-.remove-attachment-btn {
-  background: #ff5252;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 18px;
-  height: 18px;
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  .footer-btns {
+    flex-direction: column;
+    gap: 15px;
+  }
 }
 
-.remove-attachment-btn:hover {
-  background: #e04545;
+/* ===== RESPONSIVE - ADDED PRODUCT ROW TEXT ===== */
+@media (min-width: 700px) and (max-width: 1376px) {
+  .added-product-row {
+    font-size: 10px;
+  }
 }
 
-/* Measurement Warning */
-.measure-warning {
-  display: block;
-  font-size: 11px;
-  color: #e65100;
-  margin-top: 4px;
-  font-weight: 500;
+/* ===== RESPONSIVE - EDIT PANEL MEASURE CONTAINER ===== */
+@media (max-width: 900px) {
+  .edit-measure-container {
+    flex-direction: column;
+  }
+
+  .edit-measure-container .measure-menu {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+    gap: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .edit-measure-container .measure-item {
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    padding: 6px 10px;
+  }
+
+  .edit-measure-container .measure-item.active {
+    border-left: none;
+    border-bottom: 3px solid #d5b85a;
+  }
 }
 
-.measure-field {
-  position: relative;
+@media (max-width: 768px) {
+  .expand-panel.full-edit {
+    padding: 12px;
+  }
+
+  .expand-panel.full-edit .row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .expand-panel.full-edit .field {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .edit-measure-container .measure-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .added-extra-item-edit {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .added-extra-item-edit .ss-root {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .edit-size-box .sizes {
+    grid-template-columns: repeat(5, 1fr);
+  }
 }
 
-/* Auto-filled input placeholder style */
-.measure-field input::placeholder {
-  color: #999 !important;
-  background-color: red !important;
+@media (max-width: 480px) {
+  .edit-measure-container .measure-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .edit-size-box .sizes {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
-/* Edited input style */
-.measure-field input.edited {
-  color: #000 !important;
-  font-weight: 600;
+/* ===== RESPONSIVE - MAIN LAYOUT ===== */
+@media (max-width: 600px) {
+  .screen4-layout {
+    flex-direction: column;
+  }
+
+  .screen4-image-fixed {
+    display: none;
+  }
+  
+  .screen4-image-inline {
+    display: block;
+    width: 80px;
+    margin-bottom: 15px;
+  }
+  
+  .screen4-image-inline img {
+    max-height: 120px;
+  }
 }
 
-/* Auto-filled measurement input - GREY */
-.measure-field input.auto-filled {
-  color: #999 !important;
+/* ===== RESPONSIVE - MAIN MEASUREMENT CONTAINER (Mobile Only) ===== */
+@media (max-width: 600px) {
+  .measure-container {
+    flex-direction: column;
+  }
+  
+  .measure-menu {
+    width: 100%;
+    min-width: 100%;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    border-bottom: 1px solid #eee;
+    padding: 0;
+    background: #f6efe4;
+  }
+  
+  .measure-menu::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  .measure-menu::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+  
+  .measure-menu::-webkit-scrollbar-thumb {
+    background: #d5b85a;
+    border-radius: 4px;
+  }
+  
+  .measure-item {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 10px 15px;
+    font-size: 12px;
+    border-left: none !important;
+    border-bottom: 3px solid transparent;
+  }
+  
+  .measure-item:hover {
+    background: #fff5d9;
+  }
+  
+  .measure-item.active {
+    border-left: none !important;
+    border-bottom: 3px solid #d5b85a;
+    background: #fff5d9;
+  }
+  
+  .measure-fields {
+    padding: 15px;
+  }
+  
+  .measure-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .measure-title {
+    font-size: 18px;
+  }
 }
 
-/* Manually edited measurement input - BLACK */
-.measure-field input.manual-input {
-  color: #000 !important;
+@media (max-width: 400px) {
+  .measure-item {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  
+  .measure-grid {
+    grid-template-columns: 1fr;
+  }
 }

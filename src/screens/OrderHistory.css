@@ -746,6 +746,162 @@
   box-shadow: 0 4px 12px rgba(213, 184, 90, 0.4);
   display: none;
 }
+/* Add these styles to your OrderHistory.css */
+
+/* Larger modal for measurements */
+.oh-modal-large {
+  max-width: 900px;
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Color select dropdown */
+.oh-color-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+}
+
+/* Measurements Section */
+.oh-measurements-section {
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+}
+
+.oh-measurements-section h4 {
+  color: #d5b85a;
+  margin-bottom: 15px;
+  font-size: 16px;
+}
+
+.oh-measure-container {
+  display: flex;
+  gap: 20px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.oh-measure-menu {
+  width: 200px;
+  background: #f9f9f9;
+  border-right: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.oh-measure-item {
+  padding: 12px 15px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #eee;
+  transition: all 0.2s;
+}
+
+.oh-measure-item:hover {
+  background: #f0f0f0;
+}
+
+.oh-measure-item.active {
+  background: #d5b85a;
+  color: white;
+  font-weight: 500;
+}
+
+.oh-measure-fields {
+  flex: 1;
+  padding: 15px;
+}
+
+.oh-measure-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+.oh-measure-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.oh-measure-field label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.oh-measure-field input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.oh-measure-field input:focus {
+  outline: none;
+  border-color: #d5b85a;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .oh-measure-container {
+    flex-direction: column;
+  }
+  
+  .oh-measure-menu {
+    width: 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #eee;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  
+  .oh-measure-menu::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  .oh-measure-menu::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+  
+  .oh-measure-menu::-webkit-scrollbar-thumb {
+    background: #d5b85a;
+    border-radius: 4px;
+  }
+  
+  .oh-measure-item {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 10px 15px;
+    text-align: center;
+    border-bottom: none;
+    border-right: 1px solid #eee;
+    font-size: 12px;
+  }
+  
+  .oh-measure-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .oh-measure-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .oh-measure-item {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+}
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
