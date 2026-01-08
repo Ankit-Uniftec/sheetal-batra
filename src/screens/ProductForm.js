@@ -520,9 +520,11 @@ export default function ProductForm() {
 
   // MEASUREMENTS
   const [measurements, setMeasurements] = useState({});
+  const [customerSavedMeasurements, setCustomerSavedMeasurements] = useState(null); // Latest saved measurements from DB
+  const [measurementsLoaded, setMeasurementsLoaded] = useState(false);
 
-  // ADDITIONALS STATE
-  const [selectedAdditionals, setSelectedAdditionals] = useState([]);
+  // ADDITIONALS STATE - Default open with one empty row
+  const [selectedAdditionals, setSelectedAdditionals] = useState([{ name: "", price: "" }]);
   const [showAdditionals, setShowAdditionals] = useState(false);
 
   // CART
@@ -736,9 +738,12 @@ export default function ProductForm() {
         if (data.selectedExtraColor) setSelectedExtraColor(data.selectedExtraColor);
         if (data.selectedExtrasWithColors) setSelectedExtrasWithColors(data.selectedExtrasWithColors);
 
-        // Additionals
-        if (data.selectedAdditionals) setSelectedAdditionals(data.selectedAdditionals);
-        if (data.showAdditionals !== undefined) setShowAdditionals(data.showAdditionals);
+        // Additionals - ensure at least one empty row and keep open
+        if (data.selectedAdditionals && data.selectedAdditionals.length > 0) {
+          setSelectedAdditionals(data.selectedAdditionals);
+        }
+        // Don't restore empty additionals - keep the default one empty row
+        setShowAdditionals(true); // Always keep open
 
         // Size & Quantity
         if (data.selectedSize) setSelectedSize(data.selectedSize);
@@ -899,6 +904,43 @@ export default function ProductForm() {
     fetchColors();
   }, []);
 
+  // FETCH CUSTOMER'S LATEST SAVED MEASUREMENTS
+  useEffect(() => {
+    const fetchCustomerMeasurements = async () => {
+      if (!user?.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("customer_measurements")
+          .select("*")
+          .eq("customer_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (error && error.code !== "PGRST116") {
+          console.error("Error fetching customer measurements:", error);
+        }
+
+        if (data && data.measurements) {
+          console.log("✅ Found saved measurements:", data.measurements);
+          setCustomerSavedMeasurements(data.measurements);
+          // Directly set measurements from saved profile
+          setMeasurements(data.measurements);
+        } else {
+          console.log("ℹ️ No saved measurements found for customer");
+          setCustomerSavedMeasurements(null);
+        }
+        setMeasurementsLoaded(true);
+      } catch (err) {
+        console.error("Error:", err);
+        setMeasurementsLoaded(true);
+      }
+    };
+
+    fetchCustomerMeasurements();
+  }, [user?.id]);
+
   //...........................................................................................................................
   // // Reset Top Color when Top changes
   // useEffect(() => {
@@ -911,9 +953,18 @@ export default function ProductForm() {
   // }, [selectedBottom]);
   //-----------------------------------------------------------------------------------------------------------------------------
   //-----------------------------------------------
-  // automatic size chart value filled
+// automatic size chart value filled
+  // ONLY fills if customer has no saved measurements
   useEffect(() => {
     if (!selectedSize || !activeCategory) return;
+    
+    // Wait until we know if customer has saved measurements
+    if (!measurementsLoaded) return;
+    
+    // If customer has saved measurements, don't overwrite with size chart
+    if (customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0) {
+      return;
+    }
 
     const categoryKey = CATEGORY_KEY_MAP[activeCategory];
     if (!categoryKey) return;
@@ -931,16 +982,17 @@ export default function ProductForm() {
 
       const nextCategory = { ...prevCategory };
 
-      if (fieldsForCategory.includes("Bust") && sizeData.Bust != null) {
+      // Only set if not already set (don't overwrite manual entries)
+      if (fieldsForCategory.includes("Bust") && sizeData.Bust != null && !prevCategory.Bust) {
         nextCategory.Bust = sizeData.Bust;
       }
-      if (fieldsForCategory.includes("Waist") && sizeData.Waist != null) {
+      if (fieldsForCategory.includes("Waist") && sizeData.Waist != null && !prevCategory.Waist) {
         nextCategory.Waist = sizeData.Waist;
       }
-      if (fieldsForCategory.includes("Hip") && sizeData.Hip != null) {
+      if (fieldsForCategory.includes("Hip") && sizeData.Hip != null && !prevCategory.Hip) {
         nextCategory.Hip = sizeData.Hip;
       }
-      if (fieldsForCategory.includes("Length") && sizeData.Length != null) {
+      if (fieldsForCategory.includes("Length") && sizeData.Length != null && !prevCategory.Length) {
         nextCategory.Length = sizeData.Length;
       }
 
@@ -951,10 +1003,10 @@ export default function ProductForm() {
 
       return {
         ...prev,
-        [categoryKey]: nextCategory, // ✅ CORRECT
+        [categoryKey]: nextCategory,
       };
     });
-  }, [selectedSize, activeCategory, isKidsProduct]);
+  }, [selectedSize, activeCategory, isKidsProduct, measurementsLoaded, customerSavedMeasurements]);
 
   // FETCH GLOBAL EXTRAS (ONE TIME)
   useEffect(() => {
@@ -1000,10 +1052,15 @@ export default function ProductForm() {
       setSelectedExtra("");
       setSelectedExtraColor({ name: "", hex: "" });
       setSelectedExtrasWithColors([]);
-      setSelectedAdditionals([]);
+      setSelectedAdditionals([{ name: "", price: "" }]);
       setShowAdditionals(false);
       setQuantity(1);
-      setMeasurements({});
+      // ✅ Restore customer's saved measurements instead of clearing
+      if (customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0) {
+        setMeasurements(customerSavedMeasurements);
+      } else {
+        setMeasurements({});
+      }
       return;
     }
 
@@ -1073,7 +1130,7 @@ export default function ProductForm() {
     setSelectedExtra("");
     setSelectedExtraColor({ name: "", hex: "" });
 
-  }, [selectedProduct, isKidsProduct, colors, globalExtras]);
+  }, [selectedProduct, isKidsProduct, colors, globalExtras, customerSavedMeasurements]);
 
   // ADD PRODUCT
   const handleAddProduct = () => {
@@ -1152,8 +1209,8 @@ export default function ProductForm() {
     setSelectedExtra("");
     setSelectedExtraColor({ name: "", hex: "" }); // Reset to initial object structure
     setSelectedExtrasWithColors([]);
-    setSelectedAdditionals([]); // ✅ RESET ADDITIONALS
-    setShowAdditionals(false);  // Reset the array of selected extras
+    setSelectedAdditionals([{ name: "", price: "" }]); // ✅ RESET ADDITIONALS to one empty row
+    setShowAdditionals(true);  // Keep additionals open
     setSelectedSize("S");
     setQuantity(1);
     setMeasurements({});
@@ -1461,6 +1518,26 @@ export default function ProductForm() {
       return new Date(item.delivery_date) < new Date(earliest) ? item.delivery_date : earliest;
     }, null);
 
+    // Collect all measurements from order items for saving to customer profile
+    const allMeasurements = {};
+    finalItems.forEach(item => {
+      if (item.measurements) {
+        Object.entries(item.measurements).forEach(([categoryKey, fields]) => {
+          if (!allMeasurements[categoryKey]) {
+            allMeasurements[categoryKey] = {};
+          }
+          Object.entries(fields || {}).forEach(([field, value]) => {
+            if (value !== "" && value !== null && value !== undefined) {
+              allMeasurements[categoryKey][field] = value;
+            }
+          });
+        });
+      }
+    });
+
+    // Check if measurements have changed from saved measurements
+    const measurementsChanged = JSON.stringify(allMeasurements) !== JSON.stringify(customerSavedMeasurements);
+
     const orderPayload = {
       user_id: user?.id,
 
@@ -1490,6 +1567,10 @@ export default function ProductForm() {
       grand_total: totalOrder,
       total_quantity: finalTotalQuantity,
       order_type: overallOrderType,
+
+      // Measurements for customer profile
+      save_measurements: measurementsChanged && Object.keys(allMeasurements).length > 0,
+      measurements_to_save: allMeasurements,
 
       // Timestamp
       created_at: new Date().toISOString(),
@@ -1884,11 +1965,8 @@ export default function ProductForm() {
                                       <label>{field}</label>
                                       <input
                                         type="number"
-                                        className="input-line"
+                                        className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
                                         value={currentValue || ""}
-                                        style={{
-                                          color: isAutoFilled ? "#999" : "#000",
-                                        }}
                                         onChange={(e) =>
                                           updateItemMeasurement(
                                             item._id,
@@ -1989,7 +2067,7 @@ export default function ProductForm() {
             {/* PRODUCT ROW */}
             <div className="row">
               {/* PRODUCT SELECT */}
-              <div className="field">
+              <div className="field product-select-field">
                 <SearchableSelect
                   options={products.map((p) => ({
                     label: p.name,
@@ -2002,6 +2080,7 @@ export default function ProductForm() {
                     )
                   }
                   placeholder="Select Product"
+                  className="product-select"
                 />
 
                 {/* CHANGE #1: Price Display - Show base price without extras */}

@@ -125,6 +125,9 @@ export default function ReviewDetail() {
         expected_delivery: toISODate(order.expected_delivery),
       };
 
+      // Remove measurement saving flags from order data (they shouldn't be stored in orders table)
+      const { save_measurements, measurements_to_save, ...orderDataToInsert } = normalizedOrder;
+
       // 3️⃣ GENERATE ORDER NUMBER
       const { data: orderNo, error: orderNoError } = await supabase.rpc(
         "generate_order_no",
@@ -136,14 +139,37 @@ export default function ReviewDetail() {
       // 4️⃣ INSERT ORDER
       const { data: insertedOrder, error: insertError } = await supabase
         .from("orders")
-        .insert({ ...normalizedOrder, order_no: orderNo })
+        .insert({ ...orderDataToInsert, order_no: orderNo })
         .select()
         .single();
 
       if (insertError) throw insertError;
       if (!insertedOrder) throw new Error("Order insert failed");
 
-      // 5️⃣ REDUCE INVENTORY FOR EACH PRODUCT
+      // 5️⃣ SAVE CUSTOMER MEASUREMENTS (if changed)
+      if (order.save_measurements && order.measurements_to_save) {
+        try {
+          const { error: measurementError } = await supabase
+            .from("customer_measurements")
+            .insert({
+              customer_id: order.user_id,
+              measurements: order.measurements_to_save,
+              order_id: insertedOrder.id,
+              created_at: new Date().toISOString(),
+            });
+
+          if (measurementError) {
+            console.error("Error saving measurements:", measurementError);
+            // Don't fail the order, just log the error
+          } else {
+            console.log("✅ Customer measurements saved successfully");
+          }
+        } catch (err) {
+          console.error("Error saving measurements:", err);
+        }
+      }
+
+      // 6️⃣ REDUCE INVENTORY FOR EACH PRODUCT
       try {
         const items = normalizedOrder.items || order.items || [];
 
@@ -182,7 +208,7 @@ export default function ReviewDetail() {
         // Don't block order completion if inventory update fails
       }
 
-      // 6️⃣ CLEAR SESSION & NAVIGATE
+      // 7️⃣ CLEAR SESSION & NAVIGATE
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
       navigate("/order-placed", {

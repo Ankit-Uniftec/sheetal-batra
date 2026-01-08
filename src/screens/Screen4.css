@@ -107,10 +107,31 @@
   display: flex;
   gap: 25px;
   margin-bottom: 25px;
+  flex-wrap: wrap;
 }
 
 .field {
   flex: 1;
+  min-width: 150px;
+}
+
+/* Product select - show full name */
+.product-select-field {
+  flex: 2;
+  min-width: 280px;
+}
+
+.product-select .ss-input {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  line-height: 1.4;
+}
+
+.product-select .ss-control {
+  min-height: 44px;
+  align-items: flex-start;
+  padding-top: 10px;
 }
 
 label {
@@ -204,6 +225,59 @@ select,
   display: flex;
   justify-content: space-between;
   margin-top: 25px;
+}
+
+/* Add Extra Button */
+.add-extra-btn {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 8px 16px;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+/* Responsive row wrapping */
+@media (max-width: 1100px) {
+  .row {
+    gap: 15px;
+  }
+  
+  .field {
+    min-width: 140px;
+  }
+}
+
+@media (max-width: 900px) {
+  .row {
+    gap: 12px;
+  }
+  
+  .field {
+    min-width: 120px;
+    flex: 1 1 calc(50% - 12px);
+  }
+  
+  .add-extra-btn {
+    flex: 0 0 auto;
+    margin-top: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .row {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .field {
+    min-width: 100%;
+    flex: 1 1 100%;
+  }
+  
+  .add-extra-btn {
+    width: 100%;
+    margin-top: 5px;
+  }
 }
 
 .productBtn {
@@ -541,10 +615,11 @@ select,
 
 .ss-control {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 8px 12px;
   cursor: text;
   color: #111;
+  min-height: 38px;
 }
 
 .ss-input {
@@ -554,6 +629,16 @@ select,
   font-size: 14px;
   background: transparent;
   color: #888 !important;
+  width: 100%;
+  white-space: normal;
+  overflow: visible;
+  word-wrap: break-word;
+}
+
+/* When input has value, show full text */
+.ss-input:focus {
+  white-space: normal;
+  overflow: visible;
 }
 
 .ss-input::placeholder {
@@ -611,6 +696,8 @@ select,
 .ss-option {
   padding: 8px 12px;
   cursor: pointer;
+  white-space: normal;
+  word-wrap: break-word;
 }
 
 .ss-option:hover,

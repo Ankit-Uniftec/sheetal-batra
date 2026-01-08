@@ -106,6 +106,7 @@ export default function OrderHistory() {
 
   const [orders, setOrders] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [measurementsHistory, setMeasurementsHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("orders");
   const [actionLoading, setActionLoading] = useState(null);
@@ -267,6 +268,14 @@ export default function OrderHistory() {
               .single();
             setProfile(profileData || null);
 
+            // ✅ Fetch measurements history
+            const { data: measurementsData } = await supabase
+              .from("customer_measurements")
+              .select("*, orders(order_no)")
+              .eq("customer_id", customerFromState.user_id)
+              .order("created_at", { ascending: false });
+            setMeasurementsHistory(measurementsData || []);
+
           } else if (customerFromState.email) {
             query = query.eq("delivery_email", customerFromState.email);
 
@@ -284,12 +293,14 @@ export default function OrderHistory() {
 
         } else {
           if (!user) { setLoading(false); return; }
-          const [{ data: ordersData }, { data: profileData }] = await Promise.all([
+          const [{ data: ordersData }, { data: profileData }, { data: measurementsData }] = await Promise.all([
             supabase.from("orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
             supabase.from("profiles").select("*").eq("id", user.id).single(),
+            supabase.from("customer_measurements").select("*, orders(order_no)").eq("customer_id", user.id).order("created_at", { ascending: false }),
           ]);
           setOrders(ordersData || []);
           setProfile(profileData || null);
+          setMeasurementsHistory(measurementsData || []);
         }
       } catch (err) {
         console.error("Error:", err);
@@ -993,6 +1004,43 @@ export default function OrderHistory() {
                 <div><strong>Phone:</strong> {profile?.phone || customerPhone || "—"}</div>
                 <div><strong>Gender:</strong> {profile?.gender || "—"}</div>
               </div>
+
+              {/* Measurements History */}
+              <h3 style={{ marginTop: "30px" }}>Measurements History</h3>
+              {measurementsHistory.length === 0 ? (
+                <p className="oh-no-measurements">No saved measurements found.</p>
+              ) : (
+                <div className="oh-measurements-history">
+                  {measurementsHistory.map((record, idx) => (
+                    <div key={record.id || idx} className="oh-measurement-card">
+                      <div className="oh-measurement-card-header">
+                        <span className="oh-measurement-date">
+                          {new Date(record.created_at).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric"
+                          })}
+                        </span>
+                        {record.orders?.order_no && (
+                          <span className="oh-measurement-order">Order #{record.orders.order_no}</span>
+                        )}
+                      </div>
+                      <div className="oh-measurement-card-body">
+                        {Object.entries(record.measurements || {}).map(([category, fields]) => (
+                          <div key={category} className="oh-measurement-category">
+                            <strong>{category.replace(/([A-Z])/g, ' $1').trim()}:</strong>
+                            <div className="oh-measurement-fields-inline">
+                              {Object.entries(fields || {}).map(([field, value]) => (
+                                value && <span key={field}>{field}: {value}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </section>
