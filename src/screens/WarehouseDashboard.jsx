@@ -13,7 +13,8 @@ const WarehouseDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("orders");
   const [showSidebar, setShowSidebar] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(null); // Track which order PDF is loading
+  const [pdfLoading, setPdfLoading] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -97,11 +98,31 @@ const WarehouseDashboard = () => {
     }
   };
 
+  // Filter orders based on search
+  const filteredOrders = orders.filter((order) => {
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase();
+    const item = order.items?.[0] || {};
+
+    return (
+      order.order_no?.toLowerCase().includes(query) ||
+      item.product_name?.toLowerCase().includes(query) ||
+      order.delivery_name?.toLowerCase().includes(query) ||
+      order.status?.toLowerCase().includes(query)
+    );
+  });
+
   // Pagination logic
-  const totalPages = Math.ceil(orders.length / ordersPerPage);
+  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
   const endIndex = startIndex + ordersPerPage;
-  const currentOrders = orders.slice(startIndex, endIndex);
+  const currentOrders = filteredOrders.slice(startIndex, endIndex);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   const goToPage = (page) => setCurrentPage(page);
   const goToPrevious = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
@@ -151,7 +172,26 @@ const WarehouseDashboard = () => {
               {/* Header with count */}
               <div className="wd-orders-header">
                 <h2 className="wd-section-title">Order History</h2>
-                <span className="wd-orders-count">{orders.length} Orders</span>
+                <span className="wd-orders-count">{filteredOrders.length} Orders</span>
+              </div>
+
+              {/* Search Bar */}
+              <div className="wd-search-bar">
+                <input
+                  type="text"
+                  placeholder="Search by Order ID, Product Name, or Customer Name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="wd-search-input"
+                />
+                {searchQuery && (
+                  <button
+                    className="wd-search-clear"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {/* Scrollable Orders Container */}
