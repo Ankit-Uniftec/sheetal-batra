@@ -270,7 +270,7 @@ export default function Dashboard() {
     }
   };
 
-    // Handle PDF download
+  // Handle PDF download
   const handlePrintWarehousePdf = async (e, order) => {
     e.stopPropagation();
     setWarehousePdfLoading(order.id);
@@ -927,49 +927,44 @@ export default function Dashboard() {
                       style={{ cursor: 'pointer' }}
                     >
                       {/* Badges Row - Top Right */}
-                      <div className="ad-badges-row">
-                        {canEdit(order) && (
-                          <div className="ad-editable-badge">
-                            Editable ({Math.floor(36 - hoursSince)}h left)
-                          </div>
-                        )}
-                        <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
-                          {order.status || "Pending"}
-                        </div>
-                      </div>
-
                       <div className="ad-order-header">
                         <div className="ad-header-info">
                           <div className="ad-header-item">
-                            <span className="ad-header-label">Order No:</span>
+                            <span className="ad-header-label">ORDER NO:</span>
                             <span className="ad-header-value">{order.order_no || "—"}</span>
                           </div>
                           <div className="ad-header-item">
-                            <span className="ad-header-label">Order Date:</span>
+                            <span className="ad-header-label">ORDER DATE:</span>
                             <span className="ad-header-value">{formatDate(order.created_at) || "—"}</span>
                           </div>
                           <div className="ad-header-item">
-                            <span className="ad-header-label">Delivery Date:</span>
+                            <span className="ad-header-label">DELIVERY:</span>
                             <span className="ad-header-value">{formatDate(order.delivery_date) || "—"}</span>
                           </div>
                         </div>
                         <div className="ad-header-actions">
+                          <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
+                            {order.status || "Pending"}
+                          </div>
+                          {canEdit(order) && (
+                            <div className="ad-editable-badge">
+                              Editable ({Math.floor(36 - hoursSince)}h)
+                            </div>
+                          )}
                           <button
                             className="ad-print-pdf-btn"
                             onClick={(e) => handlePrintCustomerPdf(e, order)}
                             disabled={pdfLoading === order.id}
                           >
-                            {pdfLoading === order.id ? "..." : "📄Customer PDF"}
+                            {pdfLoading === order.id ? "..." : "📄 Customer PDF"}
                           </button>
                           <button
                             className="ad-print-pdf-btn"
                             onClick={(e) => handlePrintWarehousePdf(e, order)}
                             disabled={warehousePdfLoading === order.id}
                           >
-                            {warehousePdfLoading === order.id ? "..." : "📄Warehouse PDF"}
+                            {warehousePdfLoading === order.id ? "..." : "📄 Warehouse PDF"}
                           </button>
-
-                          {/* Attachments Button - Only show if attachments exist */}
                           {order.attachments && order.attachments.length > 0 && (
                             <button
                               className="ad-attachments-btn"
@@ -977,7 +972,7 @@ export default function Dashboard() {
                               disabled={attachmentLoading === order.id}
                               title={`Download ${order.attachments.length} attachment(s)`}
                             >
-                              {attachmentLoading === order.id ? "..." : `📎Attachments(${order.attachments.length})`}
+                              {attachmentLoading === order.id ? "..." : `📎 Attachments`}
                             </button>
                           )}
                         </div>
@@ -1091,11 +1086,11 @@ export default function Dashboard() {
                             </div>
                           )}
                           {/* Additionals */}
-                          {item.additionals && item.additionals.length > 0 && (
+                          {item.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0 && (
                             <div className="ad-detail-item" style={{ gridColumn: 'span 2' }}>
                               <span className="ad-order-label">Additionals:</span>
                               <span className="ad-value">
-                                {item.additionals.map((additional, idx) => (
+                                {item.additionals.filter(a => a.name && a.name.trim() !== "").map((additional, idx, arr) => (
                                   <span key={idx}>
                                     {additional.name} (₹{formatIndianNumber(additional.price)})
                                     {idx < item.additionals.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}

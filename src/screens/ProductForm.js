@@ -1184,7 +1184,7 @@ export default function ProductForm() {
       bottom: selectedBottom,
       bottom_color: selectedBottomColor,
       extras: finalExtras,
-      additionals: selectedAdditionals, // Use the array of extras
+      additionals: selectedAdditionals.filter(a => a.name && a.name.trim() !== ""),
       size: selectedSize,
       quantity: quantity,
       price: getBasePrice(), // CHANGE #1: Use base price without extras
@@ -1471,7 +1471,7 @@ export default function ProductForm() {
         bottom: selectedBottom,
         bottom_color: selectedBottomColor,
         extras: finalExtras,
-        additionals: selectedAdditionals, // Use the array of extras
+        additionals: selectedAdditionals.filter(a => a.name && a.name.trim() !== ""),
         size: selectedSize,
         quantity,
         price: getBasePrice(), // Use base price

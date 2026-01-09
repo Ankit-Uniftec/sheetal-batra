@@ -322,7 +322,7 @@ const ProductItem = ({ item }) => {
   const hasBottom = item?.bottom;
   const hasSize = item?.size;
   const hasExtras = item?.extras && item.extras.length > 0;
-  const hasAdditionals = item?.additionals && item.additionals.length > 0;
+  const hasAdditionals = item?.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0;
   const category = item?.category || (item?.isKids ? "Kids" : "Women");
 
   return (

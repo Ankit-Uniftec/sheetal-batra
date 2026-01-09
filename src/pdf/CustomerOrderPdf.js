@@ -193,7 +193,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
   const hasTop = item?.top;
   const hasBottom = item?.bottom;
   const hasExtras = item?.extras && item.extras.length > 0;
-  const hasAdditionals = item?.additionals && item.additionals.length > 0;
+  const hasAdditionals = item?.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0;
 
   return (
     <View style={styles.productRow}>
@@ -283,7 +283,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
           {hasAdditionals && (
             <View style={[styles.productField, { width: "50%" }]}>
               <Text style={styles.label}>Additionals</Text>
-              {item.additionals.map((additional, idx) => (
+              {item.additionals.filter(a => a.name && a.name.trim() !== "").map((additional, idx) => (
                 <View key={idx} style={{ marginBottom: 2 }}>
                   <Text style={[styles.value, pdfStyles.inrText]}>
                     {additional.name} - ₹ {Number(additional.price).toLocaleString("en-IN")}
@@ -351,9 +351,9 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
   const grandTotal = Number(order.grand_total) || 0;
   const discountAmount = Number(order.discount_amount) || 0;
   const advancePayment = Number(order.advance_payment) || 0;
-  const netTotal = Number(order.net_total) || grandTotal;
-  const remaining = Number(order.remaining_payment) || 0;
   const collectorsCode = Number(order.collectors_code) || 0;
+  const netTotal = grandTotal - discountAmount - collectorsCode;
+  const remaining = netTotal - advancePayment;
 
   // GST Calculation (flat 18% deduction)
   const gstAmount = Math.round(grandTotal * 0.18);

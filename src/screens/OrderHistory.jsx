@@ -924,11 +924,11 @@ export default function OrderHistory() {
                           </div>
                         )}
                         {/* Additionals */}
-                        {item.additionals && item.additionals.length > 0 && (
+                        {item.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0 && (
                           <div className="oh-extras" style={{ gridColumn: 'span 2' }}>
                             <span className="oh-label">Additionals:</span>
                             <span className="oh-extra-tag">
-                              {item.additionals.map((additional, idx) => (
+                              {item.additionals.filter(a => a.name && a.name.trim() !== "").map((additional, idx, arr) => (
                                 <span key={idx}>
                                   {additional.name} (₹{formatIndianNumber(additional.price)})
                                   {idx < item.additionals.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
