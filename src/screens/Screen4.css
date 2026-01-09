@@ -337,6 +337,32 @@ select,
   overflow: hidden;
 }
 
+.measure-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.auto-populate-btn {
+  background: #d5b85a;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.auto-populate-btn:hover:not(:disabled) {
+  background: #c4a84a;
+}
+
+.auto-populate-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
 .measure-menu {
   width: 200px;
   min-width: 200px;

@@ -30,7 +30,7 @@ export const downloadCustomerPdf = async (order, setLoading = null) => {
     // Upload to storage
     const { error: uploadError } = await supabase.storage
       .from("invoices")
-      .upload(`orders/${order.id}_customer.pdf`, pdfBlob, {
+      .upload(`orders/${order.order_no}_customer.pdf`, pdfBlob, {
         upsert: true,
         contentType: "application/pdf",
       });
@@ -40,7 +40,7 @@ export const downloadCustomerPdf = async (order, setLoading = null) => {
     // Get public URL
     const { data: urlData } = supabase.storage
       .from("invoices")
-      .getPublicUrl(`orders/${order.id}_customer.pdf`);
+      .getPublicUrl(`orders/${order.order_no}_customer.pdf`);
 
     const pdfUrl = urlData?.publicUrl;
 
@@ -118,7 +118,7 @@ export const downloadWarehousePdf = async (order, setLoading = null) => {
       ).toBlob();
 
       // Upload to storage with unique filename per product
-      const filename = `orders/${order.id}_warehouse_${i + 1}.pdf`;
+      const filename = `orders/${order.order_no}_warehouse_${i + 1}.pdf`;
       const { error: uploadError } = await supabase.storage
         .from("invoices")
         .upload(filename, pdfBlob, {
@@ -199,7 +199,7 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
     ).toBlob();
 
     // Upload to storage
-    const filename = `orders/${order.id}_warehouse_${productIndex + 1}.pdf`;
+    const filename = `orders/${order.order_no}_warehouse_${productIndex + 1}.pdf`;
     const { error: uploadError } = await supabase.storage
       .from("invoices")
       .upload(filename, pdfBlob, {
@@ -261,14 +261,14 @@ export const generateAllPdfs = async (order, setLoading = null) => {
     // Upload Customer PDF
     await supabase.storage
       .from("invoices")
-      .upload(`orders/${order.id}_customer.pdf`, customerPdfBlob, {
+      .upload(`orders/${order.order_no}_customer.pdf`, customerPdfBlob, {
         upsert: true,
         contentType: "application/pdf",
       });
 
     const { data: customerUrlData } = supabase.storage
       .from("invoices")
-      .getPublicUrl(`orders/${order.id}_customer.pdf`);
+      .getPublicUrl(`orders/${order.order_no}_customer.pdf`);
 
     const customerUrl = customerUrlData?.publicUrl;
 
@@ -288,7 +288,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
         />
       ).toBlob();
 
-      const filename = `orders/${order.id}_warehouse_${i + 1}.pdf`;
+      const filename = `orders/${order.order_no}_warehouse_${i + 1}.pdf`;
       await supabase.storage
         .from("invoices")
         .upload(filename, pdfBlob, {

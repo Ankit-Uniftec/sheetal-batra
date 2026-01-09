@@ -524,7 +524,7 @@ export default function ProductForm() {
   const [measurementsLoaded, setMeasurementsLoaded] = useState(false);
 
   // ADDITIONALS STATE - Default open with one empty row
-  const [selectedAdditionals, setSelectedAdditionals] = useState([{ name: "", price: "" }]);
+  const [selectedAdditionals, setSelectedAdditionals] = useState([]);
   const [showAdditionals, setShowAdditionals] = useState(false);
 
   // CART
@@ -594,11 +594,11 @@ export default function ProductForm() {
       if (hasValidAdditional) return "Custom";
     }
 
-    // Check for CUSTOM measurements (excluding auto-filled size chart values)
+    // Check for CUSTOM measurements (different from size chart)
     const itemIsKids = item.isKids || false;
     const currentSizeChart = itemIsKids ? KIDS_SIZE_CHART : SIZE_CHART_US;
     const sizeData = currentSizeChart[item.size] || {};
-    const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+    const sizeChartFields = ["Bust", "Waist", "Hip", "Length"];
 
     const hasCustomMeasurements = Object.entries(item.measurements || {}).some(([categoryKey, fields]) => {
       if (!fields || typeof fields !== "object") return false;
@@ -606,12 +606,12 @@ export default function ProductForm() {
       return Object.entries(fields).some(([field, value]) => {
         if (value === "" || value === null || value === undefined) return false;
 
-        if (autoFilledFields.includes(field)) {
+        // For size chart fields, check if matches size chart
+        if (sizeChartFields.includes(field)) {
           const sizeChartValue = sizeData[field];
           if (sizeChartValue !== undefined && Number(value) === Number(sizeChartValue)) {
-            return false;
+            return false; // Matches size chart = NOT custom
           }
-          return true;
         }
 
         return true;
@@ -652,6 +652,43 @@ export default function ProductForm() {
         };
       })
     );
+  };
+
+  // MANUAL AUTO-POPULATE FUNCTION
+  const handleAutoPopulate = () => {
+    const categoryKey = CATEGORY_KEY_MAP[activeCategory];
+    if (!categoryKey) return;
+
+    // ONLY use customer saved measurements (this makes it Custom)
+    if (customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0) {
+      const savedCategoryData = customerSavedMeasurements[categoryKey];
+      if (savedCategoryData && Object.keys(savedCategoryData).length > 0) {
+        setMeasurements((prev) => ({
+          ...prev,
+          [categoryKey]: {
+            ...(prev[categoryKey] || {}),
+            ...savedCategoryData,
+          },
+        }));
+        showPopup({
+          title: "Measurements Populated",
+          message: "Customer's saved measurements have been applied.",
+          type: "success",
+        });
+        return;
+      }
+    }
+
+    showPopup({
+      title: "No Saved Profile",
+      message: "No saved measurements found for this customer.",
+      type: "info",
+    });
+  };
+
+  // Check if auto-populate data is available (only saved profile now)
+  const hasAutoPopulateData = () => {
+    return customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0;
   };
 
   // CHANGE #3: Add prompt when adding extra without color
@@ -743,7 +780,7 @@ export default function ProductForm() {
           setSelectedAdditionals(data.selectedAdditionals);
         }
         // Don't restore empty additionals - keep the default one empty row
-        setShowAdditionals(true); // Always keep open
+        if (data.showAdditionals !== undefined) setShowAdditionals(data.showAdditionals);
 
         // Size & Quantity
         if (data.selectedSize) setSelectedSize(data.selectedSize);
@@ -926,7 +963,6 @@ export default function ProductForm() {
           console.log("✅ Found saved measurements:", data.measurements);
           setCustomerSavedMeasurements(data.measurements);
           // Directly set measurements from saved profile
-          setMeasurements(data.measurements);
         } else {
           console.log("ℹ️ No saved measurements found for customer");
           setCustomerSavedMeasurements(null);
@@ -940,73 +976,6 @@ export default function ProductForm() {
 
     fetchCustomerMeasurements();
   }, [user?.id]);
-
-  //...........................................................................................................................
-  // // Reset Top Color when Top changes
-  // useEffect(() => {
-  //   setSelectedTopColor("");
-  // }, [selectedTop]);
-
-  // // Reset Bottom Color when Bottom changes
-  // useEffect(() => {
-  //   setSelectedBottomColor("");
-  // }, [selectedBottom]);
-  //-----------------------------------------------------------------------------------------------------------------------------
-  //-----------------------------------------------
-// automatic size chart value filled
-  // ONLY fills if customer has no saved measurements
-  useEffect(() => {
-    if (!selectedSize || !activeCategory) return;
-    
-    // Wait until we know if customer has saved measurements
-    if (!measurementsLoaded) return;
-    
-    // If customer has saved measurements, don't overwrite with size chart
-    if (customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0) {
-      return;
-    }
-
-    const categoryKey = CATEGORY_KEY_MAP[activeCategory];
-    if (!categoryKey) return;
-
-    const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
-    const sizeData = currentSizeChart[selectedSize];
-    if (!sizeData) return;
-
-    setMeasurements((prev) => {
-      const prevCategory = prev[categoryKey] || {};
-
-      const fieldsForCategory = isKidsProduct
-        ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
-        : measurementFields[categoryKey] || [];
-
-      const nextCategory = { ...prevCategory };
-
-      // Only set if not already set (don't overwrite manual entries)
-      if (fieldsForCategory.includes("Bust") && sizeData.Bust != null && !prevCategory.Bust) {
-        nextCategory.Bust = sizeData.Bust;
-      }
-      if (fieldsForCategory.includes("Waist") && sizeData.Waist != null && !prevCategory.Waist) {
-        nextCategory.Waist = sizeData.Waist;
-      }
-      if (fieldsForCategory.includes("Hip") && sizeData.Hip != null && !prevCategory.Hip) {
-        nextCategory.Hip = sizeData.Hip;
-      }
-      if (fieldsForCategory.includes("Length") && sizeData.Length != null && !prevCategory.Length) {
-        nextCategory.Length = sizeData.Length;
-      }
-
-      // ⛔ prevent unnecessary rerender
-      if (JSON.stringify(prevCategory) === JSON.stringify(nextCategory)) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [categoryKey]: nextCategory,
-      };
-    });
-  }, [selectedSize, activeCategory, isKidsProduct, measurementsLoaded, customerSavedMeasurements]);
 
   // FETCH GLOBAL EXTRAS (ONE TIME)
   useEffect(() => {
@@ -1052,15 +1021,10 @@ export default function ProductForm() {
       setSelectedExtra("");
       setSelectedExtraColor({ name: "", hex: "" });
       setSelectedExtrasWithColors([]);
-      setSelectedAdditionals([{ name: "", price: "" }]);
+      setSelectedAdditionals([]);
       setShowAdditionals(false);
       setQuantity(1);
-      // ✅ Restore customer's saved measurements instead of clearing
-      if (customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0) {
-        setMeasurements(customerSavedMeasurements);
-      } else {
-        setMeasurements({});
-      }
+      setMeasurements({});
       return;
     }
 
@@ -1131,6 +1095,40 @@ export default function ProductForm() {
     setSelectedExtraColor({ name: "", hex: "" });
 
   }, [selectedProduct, isKidsProduct, colors, globalExtras, customerSavedMeasurements]);
+
+  // AUTO-FILL SIZE CHART VALUES WHEN SIZE CHANGES
+  useEffect(() => {
+    if (!selectedSize || !selectedProduct) return;
+
+    const categoryKey = CATEGORY_KEY_MAP[activeCategory];
+    if (!categoryKey) return;
+
+    const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+    const sizeData = currentSizeChart[selectedSize];
+
+    if (sizeData) {
+      const fieldsForCategory = isKidsProduct
+        ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
+        : measurementFields[categoryKey] || [];
+
+      const newValues = {};
+      if (fieldsForCategory.includes("Bust") && sizeData.Bust != null) newValues.Bust = sizeData.Bust;
+      if (fieldsForCategory.includes("Waist") && sizeData.Waist != null) newValues.Waist = sizeData.Waist;
+      if (fieldsForCategory.includes("Hip") && sizeData.Hip != null) newValues.Hip = sizeData.Hip;
+      if (fieldsForCategory.includes("Length") && sizeData.Length != null) newValues.Length = sizeData.Length;
+
+      if (Object.keys(newValues).length > 0) {
+        setMeasurements((prev) => ({
+          ...prev,
+          [categoryKey]: {
+            ...(prev[categoryKey] || {}),
+            ...newValues,
+          },
+        }));
+      }
+    }
+  }, [selectedSize, activeCategory, isKidsProduct, selectedProduct]);
+
 
   // ADD PRODUCT
   const handleAddProduct = () => {
@@ -1209,7 +1207,7 @@ export default function ProductForm() {
     setSelectedExtra("");
     setSelectedExtraColor({ name: "", hex: "" }); // Reset to initial object structure
     setSelectedExtrasWithColors([]);
-    setSelectedAdditionals([{ name: "", price: "" }]); // ✅ RESET ADDITIONALS to one empty row
+    setSelectedAdditionals([]); // ✅ RESET ADDITIONALS to one empty row
     setShowAdditionals(true);  // Keep additionals open
     setSelectedSize("S");
     setQuantity(1);
@@ -1312,10 +1310,10 @@ export default function ProductForm() {
       if (hasValidAdditional) return "Custom";
     }
 
-    // Check for CUSTOM measurements (excluding auto-filled size chart values)
+    // Check for CUSTOM measurements (different from size chart)
     const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
     const sizeData = currentSizeChart[selectedSize] || {};
-    const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+    const sizeChartFields = ["Bust", "Waist", "Hip", "Length"];
 
     const hasCustomMeasurements = Object.entries(measurements).some(([categoryKey, fields]) => {
       if (!fields || typeof fields !== "object") return false;
@@ -1323,14 +1321,15 @@ export default function ProductForm() {
       return Object.entries(fields).some(([field, value]) => {
         if (value === "" || value === null || value === undefined) return false;
 
-        if (autoFilledFields.includes(field)) {
+        // For size chart fields, check if matches size chart
+        if (sizeChartFields.includes(field)) {
           const sizeChartValue = sizeData[field];
           if (sizeChartValue !== undefined && Number(value) === Number(sizeChartValue)) {
-            return false;
+            return false; // Matches size chart = NOT custom
           }
-          return true;
         }
 
+        // Any non-size-chart field with value OR size chart field with different value = Custom
         return true;
       });
     });
@@ -1346,7 +1345,7 @@ export default function ProductForm() {
 
   // LIVE (single product)
   const livePrice = getLivePrice();
-  const liveSubtotalInclTax = livePrice * quantity + selectedExtrasWithColors.reduce((sum, e) => sum + Number(e.price || 0), 0);
+  const liveSubtotalInclTax = getBasePrice() * quantity + selectedExtrasWithColors.reduce((sum, e) => sum + Number(e.price || 0), 0);
 
   // CART vs LIVE inclusive subtotal
   const inclusiveSubtotal =
@@ -2271,7 +2270,17 @@ export default function ProductForm() {
                 </div>
 
                 <div className="measure-fields">
-                  <h3 className="measure-title">Custom Measurements (in)</h3>
+                  <div className="measure-header">
+                    <h3 className="measure-title">Custom Measurements (in)</h3>
+                    <button
+                      className="auto-populate-btn"
+                      onClick={handleAutoPopulate}
+                      disabled={!hasAutoPopulateData()}
+                      title={hasAutoPopulateData() ? "Auto-fill from saved profile or size chart" : "No saved data available"}
+                    >
+                      Auto Populate
+                    </button>
+                  </div>
 
                   <div className="measure-grid">
                     {(isKidsProduct
