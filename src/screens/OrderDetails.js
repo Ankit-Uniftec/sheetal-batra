@@ -138,9 +138,9 @@ export default function OrderDetails() {
     [order?.grand_total]
   );
 
-  // Check if order is Custom (100% advance) or Standard (25% advance)
+  // Check if order is Custom (50% advance) or Standard (25% advance)
   const isCustomOrder = order?.order_type === "Custom";
-  const minAdvancePercent = isCustomOrder ? 1.0 : 0.25;
+  const minAdvancePercent = isCustomOrder ? 0.5 : 0.25;
   const minAdvanceAmount = totalAmount * minAdvancePercent;
 
   // Allow any advance amount (don't force minimum)
@@ -409,7 +409,7 @@ export default function OrderDetails() {
 
     // Check if advance payment is below minimum and show warning
     if (isAdvanceBelowMinimum) {
-      const minPercentLabel = isCustomOrder ? "100%" : "25%";
+      const minPercentLabel = isCustomOrder ? "50%" : "25%";
       showPopup({
         title: "Advance Payment Below Minimum",
         // message: `Order Type: ${isCustomOrder ? "Custom" : "Standard"}\nMinimum Required: ₹${formatIndianNumber(minAdvanceAmount)} (${minPercentLabel})\nEntered Amount: ₹${formatIndianNumber(sanitizedAdvance)}\n\nDo you want to continue anyway?`,
@@ -922,7 +922,7 @@ export default function OrderDetails() {
             <div className="field">
               <label>
                 Min. Advance
-                {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 100%)</span>}
+                {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 50%)</span>}
                 {!isCustomOrder && <span style={{ color: "#2e7d32", marginLeft: 4 }}>(Standard - 25%)</span>}
               </label>
               <span>₹{formatIndianNumber(minAdvanceAmount)}</span>
