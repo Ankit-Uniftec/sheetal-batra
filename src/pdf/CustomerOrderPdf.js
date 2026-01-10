@@ -96,10 +96,11 @@ const pdfStyles = StyleSheet.create({
   },
   // Sales Associate section - fixed at bottom
   salesAssociateSection: {
-    position: "absolute",
-    bottom: 60,
-    left: 40,
-    right: 40,
+    // position: "absolute",
+    // bottom: 60,
+    // left: 40,
+    // right: 40,
+    marginTop:20,
   },
   // Sales Associate row
   salesAssociateRow: {
@@ -445,7 +446,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         </View>
 
         {/* Sales Associate Details - Fixed at bottom */}
-        <View style={pdfStyles.salesAssociateSection} fixed>
+        <View style={pdfStyles.salesAssociateSection}>
           <SectionBar title="Sales Associate Details" />
           <View style={pdfStyles.salesAssociateRow}>
             {/* Name - Left */}

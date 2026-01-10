@@ -411,9 +411,10 @@ export default function OrderDetails() {
     if (isAdvanceBelowMinimum) {
       const minPercentLabel = isCustomOrder ? "50%" : "25%";
       showPopup({
-        title: "Advance Payment Below Minimum",
+        title: "Minimum Advance Requirement",
         // message: `Order Type: ${isCustomOrder ? "Custom" : "Standard"}\nMinimum Required: ₹${formatIndianNumber(minAdvanceAmount)} (${minPercentLabel})\nEntered Amount: ₹${formatIndianNumber(sanitizedAdvance)}\n\nDo you want to continue anyway?`,
-        message: `Advance entered by you is less than ${minPercentLabel} \n\nMinimum advance required for this order is: ₹${formatIndianNumber(minAdvanceAmount)}`,
+        // message: `Advance entered by you is less than ${minPercentLabel} \n\nMinimum advance required for this order is: ₹${formatIndianNumber(minAdvanceAmount)}`,
+        message: `The entered amount is below the minimum advance of ₹${formatIndianNumber(minAdvanceAmount)} (${minPercentLabel})`,
         type: "confirm",
         confirmText: "Continue",
         cancelText: "Cancel",
