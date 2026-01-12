@@ -847,8 +847,9 @@ export default function Dashboard() {
                 <div className="ad-sales-card">
                   <div className="ad-sales-header">
                     <div>
-                      <p className="ad-sales-label">Sales Target</p>
-                      <p className="ad-sales-progress">{totalRevenue >= salesTarget ? "Completed!" : "In Progress"}</p>
+                      <p className="ad-sales-label">Sales Target 
+                      <span className="ad-sales-percent">({Math.min((totalRevenue / salesTarget) * 100, 100).toFixed(1)}%)</span></p>
+                      <p className="ad-sales-progress">{totalRevenue >= salesTarget ? "Completed! " : "In Progress "}</p>
                     </div>
                   </div>
                   <div className="ad-sales-scale">

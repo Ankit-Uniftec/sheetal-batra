@@ -72,7 +72,7 @@ export default function OrderDetails() {
   const pendingActionRef = React.useRef(null);
 
   // Payment
-  const [advancePayment, setAdvancePayment] = useState(0);
+  const [advancePayment, setAdvancePayment] = useState();
   const [discountPercent, setDiscountPercent] = useState(0);
   const [birthdayDiscount, setBirthdayDiscount] = useState(0);
   const [discountApplied, setDiscountApplied] = useState(false);
@@ -928,24 +928,6 @@ export default function OrderDetails() {
               </label>
               <span>₹{formatIndianNumber(minAdvanceAmount)}</span>
             </div>
-            <div className="field">
-              <label>Advance Payment (Amount):</label>
-              <input
-                className="input-line"
-                type="number"
-                value={advancePayment}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) || 0;
-                  // Cap at total amount
-                  if (val > totalAmount) {
-                    setAdvancePayment(totalAmount);
-                  } else {
-                    setAdvancePayment(e.target.value);
-                  }
-                }}
-                max={totalAmount}
-              />
-            </div>
           </div>
 
           {(discountApplied || birthdayApplied) && (
@@ -966,6 +948,24 @@ export default function OrderDetails() {
           )}
 
           <div className="row3">
+            <div className="field">
+              <label>Advance Payment (Amount):</label>
+              <input
+                className="input-line"
+                type="number"
+                value={advancePayment}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || '';
+                  // Cap at total amount
+                  if (val > totalAmount) {
+                    setAdvancePayment(totalAmount);
+                  } else {
+                    setAdvancePayment(e.target.value);
+                  }
+                }}
+                max={totalAmount}
+              />
+            </div>
             <div className="field">
               <label>Balance:</label>
               <span style={{ fontWeight: "600", color: pricing.remaining > 0 ? "#333" : "#2e7d32" }}>

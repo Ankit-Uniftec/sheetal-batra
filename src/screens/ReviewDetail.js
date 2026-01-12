@@ -6,6 +6,7 @@ import SignatureCanvas from "react-signature-canvas";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
+import formatPhoneNumber from "../utils/formatPhoneNumber";
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -371,7 +372,7 @@ export default function ReviewDetail() {
             <div className="row3">
               <div className="field"><label>Name:</label><span>{order.delivery_name}</span></div>
               <div className="field"><label>Email:</label><span>{order.delivery_email}</span></div>
-              <div className="field"><label>Phone:</label><span>{order.delivery_phone}</span></div>
+              <div className="field"><label>Phone:</label><span>{formatPhoneNumber(order.delivery_phone)}</span></div>
             </div>
             <div className="field field-wide" style={{ marginTop: "12px" }}>
               <label>Delivery Address:</label>
@@ -424,13 +425,14 @@ export default function ReviewDetail() {
           <div className="row3">
             <div className="field"><label>Mode of Payment:</label><span>{order.payment_mode || "—"}</span></div>
             <div className="field"><label>Total Amount:</label><span>₹{formatIndianNumber(totalAmount)}</span></div>
+            <div className="field"><label>Discount %:</label><span>{pricing.discountPercent}%</span></div>
+            <div className="field"><label>Discount Amount:</label><span>₹{formatIndianNumber(pricing.discountAmount)}</span></div>
+            <div className="field"><label>Net Payable:</label><span>₹{formatIndianNumber(pricing.netPayable)}</span></div>
             <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
-            <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
           </div>
           {pricing.discountPercent > 0 && (
             <div className="row3">
-              <div className="field"><label>Discount %:</label><span>{pricing.discountPercent}%</span></div>
-              <div className="field"><label>Discount Amount:</label><span>₹{formatIndianNumber(pricing.discountAmount)}</span></div>
+              <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
             </div>
           )}
         </div>

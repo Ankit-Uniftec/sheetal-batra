@@ -331,8 +331,13 @@
   
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
 }
 
+.ad-sales-percent {
+  padding-left: 10px;
+  color: #d5b85a !important;
+}
 .ad-sales-label {
   font-family: "Athleas", serif !important;
   font-size: 16px !important;

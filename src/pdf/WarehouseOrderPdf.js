@@ -28,6 +28,19 @@ const formatDate = (dateStr) => {
     year: "numeric",
   }).replace(/\//g, ".");
 };
+// Helper to calculate T-2 date (delivery date - 2 days)
+const getWarehouseDate = (dateStr) => {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return "—";
+  // Subtract 2 days
+  d.setDate(d.getDate() - 2);
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).replace(/\//g, ".");
+};
 
 // Get color hex from color object
 const getColorHex = (color) => {
@@ -554,7 +567,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             />
             <InfoRow
               label="DELIVERY DATE:"
-              value={formatDate(itemDeliveryDate)}
+              value={getWarehouseDate(itemDeliveryDate)}
               highlight={true}
             />
             <InfoRow

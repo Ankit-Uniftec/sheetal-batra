@@ -131,6 +131,15 @@ export default function OrderHistory() {
   const [selectedCancellation, setSelectedCancellation] = useState({});
   const [selectedExchange, setSelectedExchange] = useState({});
 
+  // Search state
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
   // Customer info
   const customerName = customerFromState?.name || profile?.full_name || "Customer";
   const customerEmail = customerFromState?.email || profile?.email || "";
@@ -148,10 +157,28 @@ export default function OrderHistory() {
     return data?.publicUrl || src;
   };
 
-  // Pagination
-  const totalPages = Math.ceil(orders.length / ordersPerPage);
+  // Filter orders by search query
+  const filteredOrders = useMemo(() => {
+    if (!searchQuery.trim()) return orders;
+
+    const query = searchQuery.toLowerCase().trim();
+    return orders.filter((order) => {
+      const item = order.items?.[0] || {};
+      return (
+        order.order_no?.toLowerCase().includes(query) ||
+        item.product_name?.toLowerCase().includes(query) ||
+        item.sku_id?.toLowerCase().includes(query) ||
+        order.status?.toLowerCase().includes(query) ||
+        order.delivery_address?.toLowerCase().includes(query) ||
+        order.salesperson?.toLowerCase().includes(query)
+      );
+    });
+  }, [orders, searchQuery]);
+
+  // Pagination - use filteredOrders instead of orders
+  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
-  const currentOrders = orders.slice(startIndex, startIndex + ordersPerPage);
+  const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
   const goToPage = (page) => setCurrentPage(page);
   const goToPrevious = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
@@ -327,27 +354,12 @@ export default function OrderHistory() {
 
   // Options
   const getCancellationOptions = (order) => {
-    const hrs = getHoursSinceOrder(order.created_at);
-    const afterDel = isAfterDeliveryDate(order.delivery_date);
-    const opts = [];
-    if (hrs <= 24) {
-      opts.push(
-        { value: "client_no_longer_wants", label: "Client No Longer Wants" },
-        { value: "wh_cannot_expedite", label: "WH Cannot Expedite" },
-        { value: "new_order_placed", label: "New Order Placed" }
-      );
-    }
-    if (isSM && hrs > 24 && !afterDel) {
-      opts.push({ value: "store_credit_given", label: "Store Credit Given" });
-    }
-    if (afterDel) {
-      opts.push(
-        { value: "delayed_delivery", label: "Delayed Delivery" },
-        { value: "incorrect_product", label: "Incorrect Product" },
-        { value: "quality_failure", label: "Quality Failure" }
-      );
-    }
-    return opts;
+    return [
+      { value: "change_in_requirement", label: "Change in Requirement" },
+      { value: "delivery_timeline_no_longer_works", label: "Delivery Timeline No Longer Works" },
+      { value: "duplicate_order", label: "Duplicate Order" },
+      { value: "order_placed_by_mistake", label: "Order Placed by Mistake" },
+    ];
   };
 
   const getExchangeOptions = (order) => {
@@ -373,17 +385,17 @@ export default function OrderHistory() {
   const openEditModal = (e, order) => {
     e.stopPropagation();
     const item = order.items?.[0] || {};
-    
+
     // Get color values
     let topColorVal = "";
     let bottomColorVal = "";
-    
+
     if (typeof item.top_color === 'object' && item.top_color !== null) {
       topColorVal = item.top_color.name || "";
     } else {
       topColorVal = item.top_color || "";
     }
-    
+
     if (typeof item.bottom_color === 'object' && item.bottom_color !== null) {
       bottomColorVal = item.bottom_color.name || "";
     } else {
@@ -404,7 +416,7 @@ export default function OrderHistory() {
       mode_of_delivery: order.mode_of_delivery || "",
       isKids: item.isKids || item.category === "Kids" || false,
     });
-    
+
     // Set measurements from the item
     setEditMeasurements(item.measurements || {});
     setEditActiveCategory("Kurta/Choga/Kaftan");
@@ -589,11 +601,11 @@ export default function OrderHistory() {
             </div>
             <div className="oh-modal-body">
               {/* Category Indicator */}
-              <div className="oh-category-badge" style={{ 
-                marginBottom: '15px', 
-                padding: '6px 12px', 
-                background: editFormData.isKids ? '#e8f5e9' : '#fce4ec', 
-                borderRadius: '4px', 
+              <div className="oh-category-badge" style={{
+                marginBottom: '15px',
+                padding: '6px 12px',
+                background: editFormData.isKids ? '#e8f5e9' : '#fce4ec',
+                borderRadius: '4px',
                 display: 'inline-block',
                 fontSize: '13px',
                 fontWeight: '500',
@@ -606,16 +618,16 @@ export default function OrderHistory() {
               <div className="oh-modal-row">
                 <div className="oh-modal-field">
                   <label>Top</label>
-                  <input 
-                    type="text" 
-                    value={editFormData.top} 
-                    onChange={(e) => setEditFormData({ ...editFormData, top: e.target.value })} 
+                  <input
+                    type="text"
+                    value={editFormData.top}
+                    onChange={(e) => setEditFormData({ ...editFormData, top: e.target.value })}
                   />
                 </div>
                 <div className="oh-modal-field">
                   <label>Top Color</label>
-                  <select 
-                    value={editFormData.top_color} 
+                  <select
+                    value={editFormData.top_color}
                     onChange={(e) => setEditFormData({ ...editFormData, top_color: e.target.value })}
                     className="oh-color-select"
                   >
@@ -630,16 +642,16 @@ export default function OrderHistory() {
               <div className="oh-modal-row">
                 <div className="oh-modal-field">
                   <label>Bottom</label>
-                  <input 
-                    type="text" 
-                    value={editFormData.bottom} 
-                    onChange={(e) => setEditFormData({ ...editFormData, bottom: e.target.value })} 
+                  <input
+                    type="text"
+                    value={editFormData.bottom}
+                    onChange={(e) => setEditFormData({ ...editFormData, bottom: e.target.value })}
                   />
                 </div>
                 <div className="oh-modal-field">
                   <label>Bottom Color</label>
-                  <select 
-                    value={editFormData.bottom_color} 
+                  <select
+                    value={editFormData.bottom_color}
                     onChange={(e) => setEditFormData({ ...editFormData, bottom_color: e.target.value })}
                     className="oh-color-select"
                   >
@@ -786,7 +798,27 @@ export default function OrderHistory() {
 
           {tab === "orders" && (
             <div className="oh-orders-list">
-              {orders.length === 0 && <p className="oh-empty">No orders found.</p>}
+              {/* Search Bar */}
+              <div className="oh-search-bar">
+                <input
+                  type="text"
+                  placeholder="Search by Order No, Product, SKU, Status..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="oh-search-input"
+                />
+                {searchQuery && (
+                  <button className="oh-search-clear" onClick={() => setSearchQuery("")}>
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {filteredOrders.length === 0 && (
+                <p className="oh-empty">
+                  {searchQuery ? `No orders found for "${searchQuery}"` : "No orders found."}
+                </p>
+              )}
 
               {currentOrders.map((order) => {
                 const item = order.items?.[0] || {};
