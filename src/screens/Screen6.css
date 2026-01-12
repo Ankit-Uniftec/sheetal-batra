@@ -109,7 +109,7 @@
   display: flex;
   align-items: center; /* Align content to the center */
   gap: 10px;       /* space between label and value */
-  padding-bottom: 8px; /* Consistent spacing from content to underline */
+  /* padding-bottom: 8px; Consistent spacing from content to underline */
   padding-top: 8px; /* Consistent spacing from top of field */
   min-height: 40px; /* Ensure a minimum height for consistent spacing even with less content */
 }

@@ -117,21 +117,21 @@
 
 /* Product select - show full name */
 .product-select-field {
-  flex: 2;
-  min-width: 280px;
+  flex: 3;
+  min-width: 350px;
+}
+.product-select{
+  width: 100%;
 }
 
 .product-select .ss-input {
-  white-space: normal !important;
-  overflow: visible !important;
-  text-overflow: clip !important;
-  line-height: 1.4;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .product-select .ss-control {
-  min-height: 44px;
-  align-items: flex-start;
-  padding-top: 10px;
+  min-height: 38px;
 }
 
 label {
@@ -646,6 +646,7 @@ select,
   cursor: text;
   color: #111;
   min-height: 38px;
+  padding-left: 0;
 }
 
 .ss-input {
@@ -655,6 +656,7 @@ select,
   font-size: 14px;
   background: transparent;
   color: #888 !important;
+  padding-left: 0;
   width: 100%;
   white-space: normal;
   overflow: visible;
@@ -724,6 +726,10 @@ select,
   cursor: pointer;
   white-space: normal;
   word-wrap: break-word;
+}
+
+.ss-menu {
+  min-width: 350px;
 }
 
 .ss-option:hover,
@@ -1155,6 +1161,46 @@ select,
 .additionals-field {
   width: 100%;
 }
+
+/* Sync Product Styles */
+.sync-badge {
+  background: #d5b85a;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+.inventory-badge {
+  color: #666;
+  font-size: 13px;
+  font-weight: normal;
+}
+
+.size-inventory {
+  /* font-size: 10px; */
+  color: #666;
+  margin-left: 2px;
+}
+
+.qty-max {
+  font-size: 11px;
+  color: #888;
+  display: block;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.sync-loading {
+  color: #d5b85a;
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+
 
 /* ===== RESPONSIVE - SUMMARY BOX ===== */
 @media (max-width: 700px) {

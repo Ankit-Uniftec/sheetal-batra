@@ -530,6 +530,12 @@ export default function ProductForm() {
   // CART
   const [orderItems, setOrderItems] = useState([]);
 
+  // SYNC PRODUCT STATES (LXRTS)
+  const [productVariants, setProductVariants] = useState([]);
+  const [localInventory, setLocalInventory] = useState({}); // { "M": 4, "L": 2, ... }
+  const [isSyncProduct, setIsSyncProduct] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
+
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [activeCategory, setActiveCategory] = useState("Kurta/Choga/Kaftan");
@@ -816,6 +822,11 @@ export default function ProductForm() {
         if (data.tops) setTops(data.tops);
         if (data.bottoms) setBottoms(data.bottoms);
 
+        // Sync product states
+        if (data.isSyncProduct !== undefined) setIsSyncProduct(data.isSyncProduct);
+        if (data.productVariants) setProductVariants(data.productVariants);
+        if (data.localInventory) setLocalInventory(data.localInventory);
+
       } catch (e) {
         console.error("Error restoring form data:", e);
         isRestoredRef.current = false;
@@ -842,7 +853,7 @@ export default function ProductForm() {
       measurements,
       orderItems,
       deliveryDate,
-      deliveryNotes, // ✅ ADD
+      deliveryNotes,
       modeOfDelivery,
       orderFlag,
       comments,
@@ -853,10 +864,14 @@ export default function ProductForm() {
       availableSizes,
       tops,
       bottoms,
-      showMeasurements, // ✅ ADD
-      activeCategory, // ✅ ADD
-      expandedRowIds, // ✅ ADD
-      expandedItemCategories, // ✅ ADD
+      showMeasurements,
+      activeCategory,
+      expandedRowIds,
+      expandedItemCategories,
+      // Sync product states
+      isSyncProduct,
+      productVariants,
+      localInventory,
     };
     sessionStorage.setItem("screen4FormData", JSON.stringify(formData));
   }, [
@@ -876,7 +891,7 @@ export default function ProductForm() {
     measurements,
     orderItems,
     deliveryDate,
-    deliveryNotes, // ✅ ADD
+    deliveryNotes,
     modeOfDelivery,
     orderFlag,
     comments,
@@ -887,10 +902,13 @@ export default function ProductForm() {
     availableSizes,
     tops,
     bottoms,
-    showMeasurements, // ✅ ADD
-    activeCategory, // ✅ ADD
-    expandedRowIds, // ✅ ADD
-    expandedItemCategories, // ✅ ADD
+    showMeasurements,
+    activeCategory,
+    expandedRowIds,
+    expandedItemCategories,
+    isSyncProduct,
+    productVariants,
+    localInventory,
   ]);
 
   // Fetch products
@@ -999,6 +1017,60 @@ export default function ProductForm() {
     fetchExtras();
   }, []);
 
+  // ==================== FETCH VARIANTS FOR SYNC PRODUCTS ====================
+  useEffect(() => {
+    const fetchVariants = async () => {
+      if (!selectedProduct || !selectedProduct.sync_enabled) {
+        setIsSyncProduct(false);
+        setProductVariants([]);
+        setLocalInventory({});
+        return;
+      }
+
+      setIsSyncProduct(true);
+      setSyncLoading(true);
+
+      // Force Women for sync products
+      if (isKidsProduct) {
+        setIsKidsProduct(false);
+      }
+
+      try {
+        const { data: variants, error } = await supabase
+          .from("product_variants")
+          .select("*")
+          .eq("product_id", selectedProduct.id);
+
+        if (error) {
+          console.error("Error fetching variants:", error);
+          setSyncLoading(false);
+          return;
+        }
+
+        setProductVariants(variants || []);
+
+        // Build inventory map - aggregate by size
+        const inventoryMap = {};
+        (variants || []).forEach((v) => {
+          if (v.inventory > 0) {
+            inventoryMap[v.size] = (inventoryMap[v.size] || 0) + v.inventory;
+          }
+        });
+
+        setLocalInventory(inventoryMap);
+        console.log("✅ Sync product inventory:", inventoryMap);
+      } catch (err) {
+        console.error("Error fetching variants:", err);
+      } finally {
+        setSyncLoading(false);
+      }
+    };
+
+    if (!isRestoredRef.current) {
+      fetchVariants();
+    }
+  }, [selectedProduct]);
+
   // When product or isKidsProduct changes, load options
   // Skip if data was just restored from sessionStorage
   useEffect(() => {
@@ -1025,7 +1097,19 @@ export default function ProductForm() {
       setShowAdditionals(false);
       setQuantity(1);
       setMeasurements({});
+      setIsSyncProduct(false);
+      setProductVariants([]);
+      setLocalInventory({});
       return;
+    }
+
+    // Check if sync product
+    const syncEnabled = selectedProduct.sync_enabled || false;
+    setIsSyncProduct(syncEnabled);
+
+    // Force Women for sync products
+    if (syncEnabled && isKidsProduct) {
+      setIsKidsProduct(false);
     }
 
     // Set product options
@@ -1038,9 +1122,25 @@ export default function ProductForm() {
     setBottoms(sortedBottoms);
 
     // Calculate available sizes
-    const newAvailableSizes = isKidsProduct
-      ? KIDS_SIZE_OPTIONS
-      : selectedProduct.available_size || [];
+    let newAvailableSizes;
+    if (syncEnabled) {
+      // For sync products: only sizes with inventory > 0
+      newAvailableSizes = Object.keys(localInventory).filter(size => localInventory[size] > 0);
+      // Sort sizes in standard order
+      const sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+      newAvailableSizes.sort((a, b) => {
+        const aIdx = sizeOrder.indexOf(a);
+        const bIdx = sizeOrder.indexOf(b);
+        if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+        if (aIdx === -1) return 1;
+        if (bIdx === -1) return -1;
+        return aIdx - bIdx;
+      });
+    } else if (isKidsProduct) {
+      newAvailableSizes = KIDS_SIZE_OPTIONS;
+    } else {
+      newAvailableSizes = selectedProduct.available_size || [];
+    }
 
     setAvailableSizes(newAvailableSizes);
 
@@ -1063,38 +1163,49 @@ export default function ProductForm() {
     const defaultColorName = selectedProduct.default_color || "";
     const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
 
-    // Only set defaults if not already set
-    setSelectedTop((current) => current || defaultTop);
-    setSelectedTopColor((current) =>
-      current?.name ? current : (defaultTop ? defaultColor : { name: "", hex: "" })
-    );
+    // For sync products: always use defaults, no changes allowed
+    if (syncEnabled) {
+      setSelectedTop(defaultTop);
+      setSelectedTopColor(defaultTop ? defaultColor : { name: "", hex: "" });
+      setSelectedBottom(defaultBottom);
+      setSelectedBottomColor(defaultBottom ? defaultColor : { name: "", hex: "" });
+      setSelectedExtrasWithColors([]); // No extras for sync products
+      setSelectedExtra("");
+      setSelectedExtraColor({ name: "", hex: "" });
+    } else {
+      // Only set defaults if not already set
+      setSelectedTop((current) => current || defaultTop);
+      setSelectedTopColor((current) =>
+        current?.name ? current : (defaultTop ? defaultColor : { name: "", hex: "" })
+      );
 
-    setSelectedBottom((current) => current || defaultBottom);
-    setSelectedBottomColor((current) =>
-      current?.name ? current : (defaultBottom ? defaultColor : { name: "", hex: "" })
-    );
+      setSelectedBottom((current) => current || defaultBottom);
+      setSelectedBottomColor((current) =>
+        current?.name ? current : (defaultBottom ? defaultColor : { name: "", hex: "" })
+      );
 
-    // Auto-populate default extra only if no extras selected
-    setSelectedExtrasWithColors((current) => {
-      if (current.length > 0) return current; // Keep existing
-      if (selectedProduct.default_extra) {
-        const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
-        if (extraDetails) {
-          return [{
-            name: selectedProduct.default_extra,
-            color: defaultColor,
-            price: extraDetails.price || 0,
-          }];
+      // Auto-populate default extra only if no extras selected
+      setSelectedExtrasWithColors((current) => {
+        if (current.length > 0) return current;
+        if (selectedProduct.default_extra) {
+          const extraDetails = globalExtras.find((e) => e.name === selectedProduct.default_extra);
+          if (extraDetails) {
+            return [{
+              name: selectedProduct.default_extra,
+              color: defaultColor,
+              price: extraDetails.price || 0,
+            }];
+          }
         }
-      }
-      return [];
-    });
+        return [];
+      });
 
-    // Reset temporary selection states
-    setSelectedExtra("");
-    setSelectedExtraColor({ name: "", hex: "" });
+      // Reset temporary selection states
+      setSelectedExtra("");
+      setSelectedExtraColor({ name: "", hex: "" });
+    }
 
-  }, [selectedProduct, isKidsProduct, colors, globalExtras, customerSavedMeasurements]);
+  }, [selectedProduct, isKidsProduct, colors, globalExtras, customerSavedMeasurements, localInventory]);
 
   // AUTO-FILL SIZE CHART VALUES WHEN SIZE CHANGES
   useEffect(() => {
@@ -1139,6 +1250,27 @@ export default function ProductForm() {
         type: "warning",
       });
       return;
+    }
+
+    // For sync products: validate inventory
+    if (isSyncProduct) {
+      const availableQty = localInventory[selectedSize] || 0;
+      if (availableQty <= 0) {
+        showPopup({
+          title: "Out of Stock",
+          message: `Size ${selectedSize} is out of stock.`,
+          type: "warning",
+        });
+        return;
+      }
+      if (quantity > availableQty) {
+        showPopup({
+          title: "Insufficient Stock",
+          message: `Only ${availableQty} available for size ${selectedSize}.`,
+          type: "warning",
+        });
+        return;
+      }
     }
 
     // Validate delivery date for this product
@@ -1193,9 +1325,20 @@ export default function ProductForm() {
       category: isKidsProduct ? "Kids" : "Women", // Store category string
       order_type: getOrderType(),
       delivery_date: deliveryDate, // Add delivery date per product
+      // Sync product metadata
+      sync_enabled: isSyncProduct,
+      shopify_product_id: selectedProduct.shopify_product_id || null,
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
+
+    // For sync products: decrease local inventory
+    if (isSyncProduct) {
+      setLocalInventory((prev) => ({
+        ...prev,
+        [selectedSize]: Math.max(0, (prev[selectedSize] || 0) - quantity),
+      }));
+    }
 
     // Reset inputs
     setSelectedProduct(null);
@@ -1213,6 +1356,9 @@ export default function ProductForm() {
     setQuantity(1);
     setMeasurements({});
     setDeliveryDate(""); // Reset delivery date for next product
+    setIsSyncProduct(false);
+    setProductVariants([]);
+    setLocalInventory({});
   };
 
   // LIVE SUMMARY CALC
@@ -1642,6 +1788,12 @@ export default function ProductForm() {
     };
   };
 
+  // Get max quantity for current size (for sync products)
+  const getMaxQuantity = () => {
+    if (!isSyncProduct) return 999;
+    return localInventory[selectedSize] || 0;
+  };
+
   return (
     <div className="screen4-bg">
       {/* Popup Component */}
@@ -1665,10 +1817,12 @@ export default function ProductForm() {
                 className="category-select"
                 value={isKidsProduct ? "kids" : "women"}
                 onChange={(e) => setIsKidsProduct(e.target.value === "kids")}
+                disabled={isSyncProduct}
               >
                 <option value="women">Women</option>
                 <option value="kids">Kids</option>
               </select>
+              {isSyncProduct && <span className="sync-badge">LXRTS</span>}
             </div>
 
             {/* Product Image - Inline for tablet/mobile */}
@@ -2066,7 +2220,7 @@ export default function ProductForm() {
             {/* PRODUCT ROW */}
             <div className="row">
               {/* PRODUCT SELECT */}
-              <div className="field product-select-field">
+              <div className="flex items-center gap-2 pt-2 min-h-10 flex-1" style={{borderBottom:"2px solid #D5B85A", margin:0 }}>
                 <SearchableSelect
                   options={products.map((p) => ({
                     label: p.name,
@@ -2087,8 +2241,14 @@ export default function ProductForm() {
                   <p className="product-price">
                     Price:{" "}
                     <strong>₹{formatIndianNumber(getBasePrice())}</strong>
+                    {isSyncProduct && selectedSize && localInventory[selectedSize] !== undefined && (
+                      <span className="inventory-badge">
+                        {" "}| Stock: {localInventory[selectedSize]}
+                      </span>
+                    )}
                   </p>
                 )}
+                {syncLoading && <p className="sync-loading">Loading inventory...</p>}
               </div>
 
               {/* COLOR */}
@@ -2105,14 +2265,18 @@ export default function ProductForm() {
               <div className="qty-field">
                 <label>Qty</label>
                 <div className="qty-controls">
-                  <button
-                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  >
+                  <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}>
                     −
                   </button>
                   <span>{quantity}</span>
-                  <button onClick={() => setQuantity((q) => q + 1)}>+</button>
+                  <button
+                    onClick={() => setQuantity((q) => Math.min(getMaxQuantity(), q + 1))}
+                    disabled={isSyncProduct && quantity >= getMaxQuantity()}
+                  >
+                    +
+                  </button>
                 </div>
+                {isSyncProduct && <span className="qty-max">Max: {getMaxQuantity()}</span>}
               </div>
             </div>
 
@@ -2124,6 +2288,7 @@ export default function ProductForm() {
                   value={selectedTop}
                   onChange={setSelectedTop}
                   placeholder="Select Top"
+                  disabled={isSyncProduct}
                 />
               </div>
 
@@ -2138,6 +2303,7 @@ export default function ProductForm() {
                       setSelectedTopColor(colorObj);
                     }}
                     placeholder="Select Top Color"
+                    disabled={isSyncProduct}
                   />
                 </div>
               )}
@@ -2148,6 +2314,7 @@ export default function ProductForm() {
                   value={selectedBottom}
                   onChange={setSelectedBottom}
                   placeholder="Select Bottom"
+                  disabled={isSyncProduct}
                 />
               </div>
               {selectedBottom && (
@@ -2161,6 +2328,7 @@ export default function ProductForm() {
                       setSelectedBottomColor(colorObj);
                     }}
                     placeholder="Select Bottom Color"
+                    disabled={isSyncProduct}
                   />
                 </div>
               )}
@@ -2178,10 +2346,10 @@ export default function ProductForm() {
                 <div className="field">
                   <SearchableSelect
                     options={toColorOptions(colors)}
-                    value={selectedExtraColor.name} // Display name, but onChange gets object
+                    value={selectedExtraColor.name}
                     onChange={(colorName) => {
                       const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" };
-                      setSelectedExtraColor(colorObj);  // ✅ Stores {name, hex}
+                      setSelectedExtraColor(colorObj);
                     }}
                     placeholder="Select Extra Color"
                   />
@@ -2222,20 +2390,28 @@ export default function ProductForm() {
               <span className="size-label">Size:</span>
 
               <div className="sizes">
-                {Array.isArray(availableSizes) && availableSizes.length > 0 ? (
+                {syncLoading ? (
+                  <span style={{ opacity: 0.6 }}>Loading sizes...</span>
+                ) : Array.isArray(availableSizes) && availableSizes.length > 0 ? (
                   availableSizes.map((s, i) => (
                     <button
                       key={i}
-                      className={
-                        selectedSize === s ? "size-btn active" : "size-btn"
-                      }
-                      onClick={() => setSelectedSize(s)}
+                      className={selectedSize === s ? "size-btn active" : "size-btn"}
+                      onClick={() => {
+                        setSelectedSize(s);
+                        if (isSyncProduct) setQuantity(1);
+                      }}
                     >
                       {s}
+                      {isSyncProduct && localInventory[s] !== undefined && (
+                        <span className="size-inventory">({localInventory[s]})</span>
+                      )}
                     </button>
                   ))
                 ) : (
-                  <span style={{ opacity: 0.6 }}>No sizes available</span>
+                  <span style={{ opacity: 0.6 }}>
+                    {isSyncProduct ? "No sizes in stock" : "No sizes available"}
+                  </span>
                 )}
               </div>
             </div>
@@ -2332,70 +2508,74 @@ export default function ProductForm() {
             )}
 
             {/* ADDITIONALS */}
-            <div className="measure-bar">
-              <span>Additional Customization</span>
-              <button
-                className="plus-btn"
-                onClick={() => setShowAdditionals(!showAdditionals)}
-              >
-                {showAdditionals ? "−" : "+"}
-              </button>
-            </div>
-
-            {showAdditionals && (
-              <div className="additionals-container">
-                <div className="additionals-list">
-                  {selectedAdditionals.map((item, index) => (
-                    <div key={index} className="additional-row">
-                      <input
-                        type="text"
-                        className="input-line additional-name"
-                        placeholder="Item name"
-                        value={item.name}
-                        onChange={(e) => {
-                          const newAdditionals = [...selectedAdditionals];
-                          newAdditionals[index].name = e.target.value;
-                          setSelectedAdditionals(newAdditionals);
-                        }}
-                      />
-                      <input
-                        type="number"
-                        className="input-line additional-price"
-                        placeholder="Price"
-                        min={0}
-                        value={item.price}
-                        onChange={(e) => {
-                          const newAdditionals = [...selectedAdditionals];
-                          newAdditionals[index].price = Number(e.target.value) || 0;
-                          setSelectedAdditionals(newAdditionals);
-                        }}
-                      />
-                      <button
-                        className="remove-additional-btn"
-                        onClick={() => {
-                          setSelectedAdditionals((prev) =>
-                            prev.filter((_, i) => i !== index)
-                          );
-                        }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+            {!isSyncProduct && (
+              <>
+                <div className="measure-bar">
+                  <span>Additional Customization</span>
+                  <button
+                    className="plus-btn"
+                    onClick={() => setShowAdditionals(!showAdditionals)}
+                  >
+                    {showAdditionals ? "−" : "+"}
+                  </button>
                 </div>
 
-                <button
-                  className="add-additional-btn"
-                  onClick={() => {
-                    setSelectedAdditionals((prev) => [
-                      ...prev,
-                      { name: "", price: "" },
-                    ]);
-                  }}
-                >
-                  + Add More
-                </button>
-              </div>
+                {showAdditionals && (
+                  <div className="additionals-container">
+                    <div className="additionals-list">
+                      {selectedAdditionals.map((item, index) => (
+                        <div key={index} className="additional-row">
+                          <input
+                            type="text"
+                            className="input-line additional-name"
+                            placeholder="Item name"
+                            value={item.name}
+                            onChange={(e) => {
+                              const newAdditionals = [...selectedAdditionals];
+                              newAdditionals[index].name = e.target.value;
+                              setSelectedAdditionals(newAdditionals);
+                            }}
+                          />
+                          <input
+                            type="number"
+                            className="input-line additional-price"
+                            placeholder="Price"
+                            min={0}
+                            value={item.price}
+                            onChange={(e) => {
+                              const newAdditionals = [...selectedAdditionals];
+                              newAdditionals[index].price = Number(e.target.value) || 0;
+                              setSelectedAdditionals(newAdditionals);
+                            }}
+                          />
+                          <button
+                            className="remove-additional-btn"
+                            onClick={() => {
+                              setSelectedAdditionals((prev) =>
+                                prev.filter((_, i) => i !== index)
+                              );
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      className="add-additional-btn"
+                      onClick={() => {
+                        setSelectedAdditionals((prev) => [
+                          ...prev,
+                          { name: "", price: "" },
+                        ]);
+                      }}
+                    >
+                      + Add More
+                    </button>
+                  </div>
+                )}
+              </>
             )}
 
             {/* ORDER DETAILS */}
