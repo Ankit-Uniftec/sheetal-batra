@@ -978,11 +978,11 @@ export default function ProductForm() {
         }
 
         if (data && data.measurements) {
-          console.log("✅ Found saved measurements:", data.measurements);
+          // console.log("✅ Found saved measurements:", data.measurements);
           setCustomerSavedMeasurements(data.measurements);
           // Directly set measurements from saved profile
         } else {
-          console.log("ℹ️ No saved measurements found for customer");
+          // console.log("ℹ️ No saved measurements found for customer");
           setCustomerSavedMeasurements(null);
         }
         setMeasurementsLoaded(true);
@@ -1058,7 +1058,26 @@ export default function ProductForm() {
         });
 
         setLocalInventory(inventoryMap);
-        console.log("✅ Sync product inventory:", inventoryMap);
+
+        // Set available sizes for sync products here
+        const syncSizes = Object.keys(inventoryMap).filter(size => inventoryMap[size] > 0);
+        const sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+        syncSizes.sort((a, b) => {
+          const aIdx = sizeOrder.indexOf(a);
+          const bIdx = sizeOrder.indexOf(b);
+          if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+          if (aIdx === -1) return 1;
+          if (bIdx === -1) return -1;
+          return aIdx - bIdx;
+        });
+        setAvailableSizes(syncSizes);
+
+        // Set default size if current not in list
+        if (!syncSizes.includes(selectedSize) && syncSizes.length > 0) {
+          setSelectedSize(syncSizes[0]);
+        }
+
+        // console.log("✅ Sync product inventory:", inventoryMap);
       } catch (err) {
         console.error("Error fetching variants:", err);
       } finally {
@@ -1121,38 +1140,31 @@ export default function ProductForm() {
     );
     setBottoms(sortedBottoms);
 
-    // Calculate available sizes
+    // Calculate available sizes (skip for sync products - handled in fetch variants)
     let newAvailableSizes;
     if (syncEnabled) {
-      // For sync products: only sizes with inventory > 0
-      newAvailableSizes = Object.keys(localInventory).filter(size => localInventory[size] > 0);
-      // Sort sizes in standard order
-      const sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
-      newAvailableSizes.sort((a, b) => {
-        const aIdx = sizeOrder.indexOf(a);
-        const bIdx = sizeOrder.indexOf(b);
-        if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
-        if (aIdx === -1) return 1;
-        if (bIdx === -1) return -1;
-        return aIdx - bIdx;
-      });
+      // Sizes are set in fetchVariants useEffect, skip size logic but continue for defaults
+      newAvailableSizes = null; // Will skip setAvailableSizes below
     } else if (isKidsProduct) {
       newAvailableSizes = KIDS_SIZE_OPTIONS;
     } else {
       newAvailableSizes = selectedProduct.available_size || [];
     }
 
-    setAvailableSizes(newAvailableSizes);
+    // Only set sizes for non-sync products
+    if (newAvailableSizes !== null) {
+      setAvailableSizes(newAvailableSizes);
 
-    // Only set default size if current size is not in new sizes
-    setSelectedSize((currentSize) => {
-      if (newAvailableSizes.includes(currentSize)) {
-        return currentSize; // Keep current size
-      }
-      return isKidsProduct
-        ? KIDS_SIZE_OPTIONS[0] || ""
-        : selectedProduct.available_size?.[0] || "";
-    });
+      // Only set default size if current size is not in new sizes
+      setSelectedSize((currentSize) => {
+        if (newAvailableSizes.includes(currentSize)) {
+          return currentSize;
+        }
+        return isKidsProduct
+          ? KIDS_SIZE_OPTIONS[0] || ""
+          : selectedProduct.available_size?.[0] || "";
+      });
+    }
 
     const topOptions = selectedProduct.top_options || [];
     const bottomOptions = selectedProduct.bottom_options || [];
@@ -1205,7 +1217,7 @@ export default function ProductForm() {
       setSelectedExtraColor({ name: "", hex: "" });
     }
 
-  }, [selectedProduct, isKidsProduct, colors, globalExtras, customerSavedMeasurements, localInventory]);
+  }, [selectedProduct, isKidsProduct, colors, globalExtras, customerSavedMeasurements]);
 
   // AUTO-FILL SIZE CHART VALUES WHEN SIZE CHANGES
   useEffect(() => {
@@ -1243,6 +1255,7 @@ export default function ProductForm() {
 
   // ADD PRODUCT
   const handleAddProduct = () => {
+    console.log("Adding product:", selectedProduct?.name, "isSyncProduct:", isSyncProduct);
     if (!selectedProduct) {
       showPopup({
         title: "Product Required",
@@ -1626,6 +1639,8 @@ export default function ProductForm() {
         isKids: isKidsProduct,
         order_type: getOrderType(),
         delivery_date: deliveryDate, // Add delivery date per product
+        sync_enabled: isSyncProduct,
+        shopify_product_id: selectedProduct.shopify_product_id || null,
       });
     }
 
@@ -2220,7 +2235,7 @@ export default function ProductForm() {
             {/* PRODUCT ROW */}
             <div className="row">
               {/* PRODUCT SELECT */}
-              <div className="flex items-center gap-2 pt-2 min-h-10 flex-1" style={{borderBottom:"2px solid #D5B85A", margin:0 }}>
+              <div className="flex items-center gap-2 pt-2 min-h-10 flex-1" style={{ borderBottom: "2px solid #D5B85A", margin: 0 }}>
                 <SearchableSelect
                   options={products.map((p) => ({
                     label: p.name,

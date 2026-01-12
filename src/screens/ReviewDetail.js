@@ -174,8 +174,50 @@ export default function ReviewDetail() {
         const items = normalizedOrder.items || order.items || [];
 
         for (const item of items) {
-          if (item.product_id) {
-            // Get current inventory
+          if (!item.product_id) continue;
+
+          const quantityOrdered = item.quantity || 1;
+
+          console.log("Item:", item.product_name, "sync_enabled:", item.sync_enabled);
+
+          // Check if this is a sync product (LXRTS)
+          if (item.sync_enabled) {
+            // For sync products: reduce from product_variants table
+            const { data: variants, error: fetchError } = await supabase
+              .from("product_variants")
+              .select("id, inventory, size")
+              .eq("product_id", item.product_id)
+              .eq("size", item.size)
+              .gt("inventory", 0)
+              .order("inventory", { ascending: false })
+              .limit(1);
+
+            if (fetchError) {
+              console.error(`Failed to fetch variant for ${item.product_name}:`, fetchError);
+              continue;
+            }
+
+            if (variants && variants.length > 0) {
+              const variant = variants[0];
+              const newInventory = Math.max(0, variant.inventory - quantityOrdered);
+
+              const { error: updateError } = await supabase
+                .from("product_variants")
+                .update({ inventory: newInventory })
+                .eq("id", variant.id);
+
+              if (updateError) {
+                console.error(`Failed to update variant inventory for ${item.product_name}:`, updateError);
+              } else {
+                console.log(
+                  `✅ Sync product inventory updated: ${item.product_name} (${item.size}): ${variant.inventory} → ${newInventory}`
+                );
+              }
+            } else {
+              console.warn(`No variant found for ${item.product_name} size ${item.size}`);
+            }
+          } else {
+            // For regular products: reduce from products table
             const { data: productData, error: fetchError } = await supabase
               .from("products")
               .select("inventory, name")
@@ -184,10 +226,8 @@ export default function ReviewDetail() {
 
             if (!fetchError && productData) {
               const currentInventory = productData.inventory || 0;
-              const quantityOrdered = item.quantity || 1;
               const newInventory = Math.max(0, currentInventory - quantityOrdered);
 
-              // Update inventory
               const { error: updateError } = await supabase
                 .from("products")
                 .update({ inventory: newInventory })
