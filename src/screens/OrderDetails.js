@@ -67,7 +67,7 @@ export default function OrderDetails() {
     confirmText: "OK",
     cancelText: "Cancel",
   });
-  
+
   // Separate ref for pending confirm action (to avoid stale closure issues)
   const pendingActionRef = React.useRef(null);
 
@@ -141,7 +141,7 @@ export default function OrderDetails() {
   // Check if order is Custom (50% advance) or Standard (25% advance)
   const isCustomOrder = order?.order_type === "Custom";
   const minAdvancePercent = isCustomOrder ? 0.5 : 0.25;
-  const minAdvanceAmount = totalAmount * minAdvancePercent;
+  // const minAdvanceAmount = totalAmount * minAdvancePercent;
 
   // Allow any advance amount (don't force minimum)
   const sanitizedAdvance = useMemo(() => {
@@ -149,9 +149,6 @@ export default function OrderDetails() {
     if (isNaN(amount) || amount < 0) return 0;
     return Math.min(amount, totalAmount);
   }, [advancePayment, totalAmount]);
-
-  // Check if advance is below minimum
-  const isAdvanceBelowMinimum = sanitizedAdvance < minAdvanceAmount;
 
   const remainingAmount = useMemo(
     () => Math.max(0, totalAmount - sanitizedAdvance),
@@ -163,9 +160,10 @@ export default function OrderDetails() {
     return (Number(discountPercent) || 0) + (Number(birthdayDiscount) || 0);
   }, [discountPercent, birthdayDiscount]);
 
-  const pricing = useMemo(() => {
+const pricing = useMemo(() => {
     const pct = Math.min(100, Math.max(0, Number(totalDiscount) || 0));
     const discountAmount = (totalAmount * pct) / 100;
+    const hasDiscount = discountApplied || birthdayApplied;
 
     let netPayable = Math.max(0, totalAmount - discountAmount);
     let currentShippingCharge = 0;
@@ -180,6 +178,10 @@ export default function OrderDetails() {
       netPayable += COD_CHARGE;
     }
 
+    // Calculate min advance: on netPayable if discount applied, otherwise on totalAmount
+    const minAdvanceBase = hasDiscount ? netPayable : totalAmount;
+    const minAdvanceAmount = minAdvanceBase * minAdvancePercent;
+
     const remaining = Math.max(0, netPayable - sanitizedAdvance);
 
     return {
@@ -190,8 +192,14 @@ export default function OrderDetails() {
       shippingCharge: currentShippingCharge,
       regularDiscount: Number(discountPercent) || 0,
       birthdayDiscount: Number(birthdayDiscount) || 0,
+      minAdvanceAmount,
+      hasDiscount,
     };
-  }, [totalDiscount, discountPercent, birthdayDiscount, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery]);
+  }, [totalDiscount, discountPercent, birthdayDiscount, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery, discountApplied, birthdayApplied, minAdvancePercent]);
+
+  
+  // Check if advance is below minimum
+  const isAdvanceBelowMinimum = sanitizedAdvance < pricing.minAdvanceAmount;
 
   // Auto fill delivery state and city
   useEffect(() => {
@@ -414,7 +422,7 @@ export default function OrderDetails() {
         title: "Minimum Advance Requirement",
         // message: `Order Type: ${isCustomOrder ? "Custom" : "Standard"}\nMinimum Required: ₹${formatIndianNumber(minAdvanceAmount)} (${minPercentLabel})\nEntered Amount: ₹${formatIndianNumber(sanitizedAdvance)}\n\nDo you want to continue anyway?`,
         // message: `Advance entered by you is less than ${minPercentLabel} \n\nMinimum advance required for this order is: ₹${formatIndianNumber(minAdvanceAmount)}`,
-        message: `The entered amount is below the minimum advance of ₹${formatIndianNumber(minAdvanceAmount)} (${minPercentLabel})`,
+        message: `The entered amount is below the minimum advance of ₹${formatIndianNumber(pricing.minAdvanceAmount)} (${minPercentLabel})`,
         type: "confirm",
         confirmText: "Continue",
         cancelText: "Cancel",
@@ -926,16 +934,16 @@ export default function OrderDetails() {
                 {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 50%)</span>}
                 {!isCustomOrder && <span style={{ color: "#2e7d32", marginLeft: 4 }}>(Standard - 25%)</span>}
               </label>
-              <span>₹{formatIndianNumber(minAdvanceAmount)}</span>
+              <span>₹{formatIndianNumber(pricing.minAdvanceAmount)}</span>
             </div>
           </div>
 
           {(discountApplied || birthdayApplied) && (
             <div className="row3">
-              <div className="field">
+              {/* <div className="field">
                 <label>Discount %:</label>
                 <span>{pricing.discountPercent}%</span>
-              </div>
+              </div> */}
               <div className="field">
                 <label>Discount Amount:</label>
                 <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
@@ -944,10 +952,6 @@ export default function OrderDetails() {
                 <label>Net Payable:</label>
                 <span>₹{formatIndianNumber(pricing.netPayable)}</span>
               </div>
-            </div>
-          )}
-
-          <div className="row3">
             <div className="field">
               <label>Advance Payment (Amount):</label>
               <input
@@ -966,6 +970,10 @@ export default function OrderDetails() {
                 max={totalAmount}
               />
             </div>
+            </div>
+          )}
+
+          <div className="row3">
             <div className="field">
               <label>Balance:</label>
               <span style={{ fontWeight: "600", color: pricing.remaining > 0 ? "#333" : "#2e7d32" }}>

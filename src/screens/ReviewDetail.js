@@ -425,7 +425,7 @@ export default function ReviewDetail() {
           <div className="row3">
             <div className="field"><label>Mode of Payment:</label><span>{order.payment_mode || "—"}</span></div>
             <div className="field"><label>Total Amount:</label><span>₹{formatIndianNumber(totalAmount)}</span></div>
-            <div className="field"><label>Discount %:</label><span>{pricing.discountPercent}%</span></div>
+            {/* <div className="field"><label>Discount %:</label><span>{pricing.discountPercent}%</span></div> */}
             <div className="field"><label>Discount Amount:</label><span>₹{formatIndianNumber(pricing.discountAmount)}</span></div>
             <div className="field"><label>Net Payable:</label><span>₹{formatIndianNumber(pricing.netPayable)}</span></div>
             <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>

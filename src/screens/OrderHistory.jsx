@@ -111,6 +111,7 @@ export default function OrderHistory() {
   const [tab, setTab] = useState("orders");
   const [actionLoading, setActionLoading] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [userDesignation, setUserDesignation] = useState("Sales Associate");
   const [pdfLoading, setPdfLoading] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
@@ -268,8 +269,11 @@ export default function OrderHistory() {
           .select("designation")
           .eq("email", user.email)
           .single();
-        if (sp?.designation?.toLowerCase().includes("manager")) {
-          setUserRole("SM");
+        if (sp?.designation) {
+          setUserDesignation(sp.designation);
+          if (sp.designation.toLowerCase().includes("manager")){
+            setUserRole("SM");
+          }
         }
       }
     };
@@ -922,7 +926,7 @@ export default function OrderHistory() {
                             <span className="oh-value">{order.total_quantity || 1}</span>
                           </div>
                           <div className="oh-detail wide">
-                            <span className="oh-label">Sales Associate</span>
+                            <span className="oh-label">{userDesignation}</span>
                             <span className="oh-value">{order.salesperson || "—"} {order.salesperson_phone && `(${formatPhoneNumber(order.salesperson_phone)})`}</span>
                           </div>
                         </div>
