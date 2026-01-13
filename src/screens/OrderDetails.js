@@ -952,6 +952,9 @@ const pricing = useMemo(() => {
                 <label>Net Payable:</label>
                 <span>₹{formatIndianNumber(pricing.netPayable)}</span>
               </div>
+            </div>
+          )}
+          <div className="row3">
             <div className="field">
               <label>Advance Payment (Amount):</label>
               <input
@@ -970,16 +973,15 @@ const pricing = useMemo(() => {
                 max={totalAmount}
               />
             </div>
-            </div>
-          )}
-
-          <div className="row3">
             <div className="field">
               <label>Balance:</label>
               <span style={{ fontWeight: "600", color: pricing.remaining > 0 ? "#333" : "#2e7d32" }}>
                 ₹{formatIndianNumber(pricing.remaining)}
               </span>
             </div>
+          </div>
+
+          <div className="row3">
           </div>
 
           {((paymentMode === "COD" && order.mode_of_delivery === "Home Delivery") || pricing.shippingCharge > 0) && (

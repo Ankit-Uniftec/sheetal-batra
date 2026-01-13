@@ -8,6 +8,7 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import Popup, { usePopup } from "../components/Popup"; // Import Popup component
+import config from "../config/config";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -1042,48 +1043,89 @@ export default function ProductForm() {
       }
 
       try {
-        const { data: variants, error } = await supabase
-          .from("product_variants")
-          .select("*")
-          .eq("product_id", selectedProduct.id);
+        // Fetch latest inventory from Shopify and update our database
+        const { data: { session } } = await supabase.auth.getSession();
 
-        if (error) {
-          console.error("Error fetching variants:", error);
-          setSyncLoading(false);
-          return;
-        }
-
-        setProductVariants(variants || []);
-
-        // Build inventory map - aggregate by size
-        const inventoryMap = {};
-        (variants || []).forEach((v) => {
-          if (v.inventory > 0) {
-            inventoryMap[v.size] = (inventoryMap[v.size] || 0) + v.inventory;
+        // Fetch latest inventory from Shopify and update our database
+        const response = await fetch(
+          `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": config.SUPABASE_KEY,
+              "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+            },
+            body: JSON.stringify({
+              action: "fetch",
+              product_id: selectedProduct.id,
+            }),
           }
-        });
+        );
 
-        setLocalInventory(inventoryMap);
+        const result = await response.json();
 
-        // Set available sizes for sync products here
-        const syncSizes = Object.keys(inventoryMap).filter(size => inventoryMap[size] > 0);
-        const sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
-        syncSizes.sort((a, b) => {
-          const aIdx = sizeOrder.indexOf(a);
-          const bIdx = sizeOrder.indexOf(b);
-          if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
-          if (aIdx === -1) return 1;
-          if (bIdx === -1) return -1;
-          return aIdx - bIdx;
-        });
-        setAvailableSizes(syncSizes);
+        if (result.success && result.inventory) {
+          // Use inventory from Shopify sync
+          setLocalInventory(result.inventory);
 
-        // Set default size if current not in list
-        if (!syncSizes.includes(selectedSize) && syncSizes.length > 0) {
-          setSelectedSize(syncSizes[0]);
+          // Set available sizes for sync products
+          const syncSizes = Object.keys(result.inventory).filter(size => result.inventory[size] > 0);
+          const sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+          syncSizes.sort((a, b) => {
+            const aIdx = sizeOrder.indexOf(a);
+            const bIdx = sizeOrder.indexOf(b);
+            if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+            if (aIdx === -1) return 1;
+            if (bIdx === -1) return -1;
+            return aIdx - bIdx;
+          });
+          setAvailableSizes(syncSizes);
+
+          // Set default size if current not in list
+          if (!syncSizes.includes(selectedSize) && syncSizes.length > 0) {
+            setSelectedSize(syncSizes[0]);
+          }
+
+          console.log("✅ Shopify inventory synced:", result.inventory);
+        } else {
+          // Fallback to database if Shopify sync fails
+          console.warn("Shopify sync failed, falling back to database:", result.error);
+
+          const { data: variants, error } = await supabase
+            .from("product_variants")
+            .select("*")
+            .eq("product_id", selectedProduct.id);
+
+          if (!error) {
+            setProductVariants(variants || []);
+
+            const inventoryMap = {};
+            (variants || []).forEach((v) => {
+              if (v.inventory > 0) {
+                inventoryMap[v.size] = (inventoryMap[v.size] || 0) + v.inventory;
+              }
+            });
+
+            setLocalInventory(inventoryMap);
+
+            const syncSizes = Object.keys(inventoryMap).filter(size => inventoryMap[size] > 0);
+            const sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+            syncSizes.sort((a, b) => {
+              const aIdx = sizeOrder.indexOf(a);
+              const bIdx = sizeOrder.indexOf(b);
+              if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+              if (aIdx === -1) return 1;
+              if (bIdx === -1) return -1;
+              return aIdx - bIdx;
+            });
+            setAvailableSizes(syncSizes);
+
+            if (!syncSizes.includes(selectedSize) && syncSizes.length > 0) {
+              setSelectedSize(syncSizes[0]);
+            }
+          }
         }
-
-        // console.log("✅ Sync product inventory:", inventoryMap);
       } catch (err) {
         console.error("Error fetching variants:", err);
       } finally {
@@ -2529,7 +2571,6 @@ export default function ProductForm() {
             )}
 
             {/* ADDITIONALS */}
-            {!isSyncProduct && (
               <>
                 <div className="measure-bar">
                   <span>Additional Customization</span>
@@ -2597,7 +2638,6 @@ export default function ProductForm() {
                   </div>
                 )}
               </>
-            )}
 
             {/* ORDER DETAILS */}
             <div className="row">

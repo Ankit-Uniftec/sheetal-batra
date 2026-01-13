@@ -7,6 +7,7 @@ import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
+import config from "../config/config";
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -170,7 +171,7 @@ export default function ReviewDetail() {
         }
       }
 
-      // 6️⃣ REDUCE INVENTORY FOR EACH PRODUCT
+    // 6️⃣ REDUCE INVENTORY FOR EACH PRODUCT
       try {
         const items = normalizedOrder.items || order.items || [];
 
@@ -216,6 +217,38 @@ export default function ReviewDetail() {
               }
             } else {
               console.warn(`No variant found for ${item.product_name} size ${item.size}`);
+            }
+
+            // Also reduce on Shopify
+            try {
+              const response = await fetch(
+                `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": config.SUPABASE_KEY,
+                    "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+                  },
+                  body: JSON.stringify({
+                    action: "reduce",
+                    product_id: item.product_id,
+                    size: item.size,
+                    quantity: quantityOrdered,
+                  }),
+                }
+              );
+
+              const reduceResult = await response.json();
+
+              if (reduceResult.success) {
+                console.log(`✅ Shopify inventory reduced: ${item.product_name} (${item.size})`);
+              } else {
+                console.error("Shopify reduce failed:", reduceResult.error);
+              }
+            } catch (shopifyErr) {
+              console.error("Shopify inventory sync failed:", shopifyErr);
+              // Don't block order, just log the error
             }
           } else {
             // For regular products: reduce from products table
