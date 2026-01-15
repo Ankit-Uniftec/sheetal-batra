@@ -221,9 +221,9 @@
 
 /* Badges Row - Top Right */
 .oh-card-badges {
-  position: absolute;
-  top: 15px;
-  right: 15px;
+  /* position: absolute; */
+  /* top: 15px; */
+  /* right: 15px; */
   display: flex;
   gap: 10px;
   align-items: center;
@@ -266,8 +266,9 @@
 /* Card Header */
 .oh-card-top {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
   margin-bottom: 15px;
   padding-bottom: 15px;
   border-bottom: 1px solid #f0f0f0;
@@ -453,7 +454,7 @@
   gap: 8px;
   margin-top: 5px;
   padding-top: 10px;
-  border-top: 1px dashed #eee;
+  /* border-top: 1px dashed #eee; */
 }
 
 .oh-extras .oh-label {
@@ -1049,6 +1050,12 @@
     flex-direction: row;
     overflow-x: auto;
   }
+  
+  .oh-card-top {
+    flex-direction: column;
+    gap: 10px;
+  }
+
 
   .oh-sidebar-card {
     min-width: 200px;

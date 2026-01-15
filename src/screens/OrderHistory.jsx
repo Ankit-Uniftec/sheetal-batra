@@ -927,7 +927,7 @@ export default function OrderHistory() {
                           </div>
                           <div className="oh-detail wide">
                             <span className="oh-label">{userDesignation}</span>
-                            <span className="oh-value">{order.salesperson || "—"} {order.salesperson_phone && `(${formatPhoneNumber(order.salesperson_phone)})`}</span>
+                            <span className="oh-value">{order.salesperson || "—"} {order.salesperson_phone && `(+91 ${formatPhoneNumber(order.salesperson_phone)})`}</span>
                           </div>
                         </div>
 

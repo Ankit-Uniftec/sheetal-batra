@@ -171,7 +171,7 @@ export default function ReviewDetail() {
         }
       }
 
-    // 6️⃣ REDUCE INVENTORY FOR EACH PRODUCT
+      // 6️⃣ REDUCE INVENTORY FOR EACH PRODUCT
       try {
         const items = normalizedOrder.items || order.items || [];
 
@@ -304,21 +304,37 @@ export default function ReviewDetail() {
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
 
-      // Check if session is still valid (don't sign out yet)
-      const { data: { session } } = await supabase.auth.getSession();
+      // ✅ Check if we have a saved associate session
+      const savedSession = sessionStorage.getItem("associateSession");
 
-      if (session) {
-        // Session valid - go to AssociateDashboard with password verification
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+      if (savedSession) {
+        // Restore the salesperson's session
+        const session = JSON.parse(savedSession);
+
+        // Set the session back in Supabase
+        const { error } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token
+        });
+
+        if (error) {
+          console.error("Failed to restore session:", error);
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        console.log("✅ Restored salesperson session");
+
+        // Clean up and navigate
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         navigate("/AssociateDashboard", { replace: true });
       } else {
-        // Session expired - sign out completely and go to login
-        await supabase.auth.signOut();
-        sessionStorage.removeItem("associateSession");
-        sessionStorage.removeItem("returnToAssociate");
-        navigate("/login", { replace: true });
+        // No saved session - just navigate back
+        console.log("⚠️ No saved session found");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        navigate("/AssociateDashboard", { replace: true });
       }
     } catch (e) {
       console.error("Logout error", e);
@@ -459,7 +475,7 @@ export default function ReviewDetail() {
             <div className="field"><label>Mode of Payment:</label><span>{order.payment_mode || "—"}</span></div>
             <div className="field"><label>Total Amount:</label><span>₹{formatIndianNumber(totalAmount)}</span></div>
             {/* <div className="field"><label>Discount %:</label><span>{pricing.discountPercent}%</span></div> */}
-            <div className="field"><label>Discount Amount:</label><span>₹{formatIndianNumber(pricing.discountAmount)}</span></div>
+            <div className="field"><label>Collector Code:</label><span>₹{formatIndianNumber(pricing.discountAmount)}</span></div>
             <div className="field"><label>Net Payable:</label><span>₹{formatIndianNumber(pricing.netPayable)}</span></div>
             <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
           </div>

@@ -9,6 +9,7 @@ import {
   Font,
 } from "@react-pdf/renderer";
 import { styles, COLORS } from "./pdfStyles";
+import formatPhoneNumber from "../utils/formatPhoneNumber";
 
 // Register Noto Sans font for Rupee symbol support
 Font.register({
@@ -152,7 +153,7 @@ const pdfStyles = StyleSheet.create({
   contactText: {
     fontSize: 9,
     color: "#666",
-    textAlign: "center",
+    textAlign: "left",
     marginBottom: 4,
     fontStyle: "italic",
   },
@@ -460,11 +461,11 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
             </View>
 
             {/* Team - Center/Right */}
-            <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team :</Text>
+            <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team: </Text>
 
             {/* Phone - Right */}
             {order.salesperson_phone && (
-              <Text style={pdfStyles.salesPhoneText}>{order.salesperson_phone}</Text>
+              <Text style={pdfStyles.salesPhoneText}>{`(+91 ${formatPhoneNumber(order.salesperson_phone)})`}</Text>
             )}
           </View>
 

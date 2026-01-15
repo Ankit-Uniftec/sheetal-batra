@@ -375,23 +375,56 @@ const SIZE_CHART_US = {
 
 // 🔑 UI label → internal key mapping
 const CATEGORY_KEY_MAP = {
-  "Kurta/Choga/Kaftan": "KurtaChogaKaftan",
+  // Tops - Kurta variants
+  "Short Kurta": "KurtaChogaKaftan",
+  "Kurta": "KurtaChogaKaftan",
+  "Long Kurta": "KurtaChogaKaftan",
+  "Short Choga": "KurtaChogaKaftan",
+  "Choga": "KurtaChogaKaftan",
+  "Long Choga": "KurtaChogaKaftan",
+  "Kaftan": "KurtaChogaKaftan",
+
+  // Tops - Others
+  "Blouse": "Blouse",
+  "Short Anarkali": "Anarkali",
+  "Anarkali": "Anarkali",
+
+  // Bottoms - Salwar variants
+  "Salwar": "SalwarDhoti",
+  "Dhoti": "SalwarDhoti",
+
+  // Bottoms - Churidaar variants
+  "Churidaar": "ChuridaarTrouserPantsPlazo",
+  "Trouser": "ChuridaarTrouserPantsPlazo",
+  "Pants": "ChuridaarTrouserPantsPlazo",
+  "Palazzo": "ChuridaarTrouserPantsPlazo",
+
+  // Bottoms - Sharara variants
+  "Sharara": "ShararaGharara",
+  "Gharara": "ShararaGharara",
+
+  // One-piece
+  "Lehenga": "Lehenga",
+};
+
+const CATEGORY_DISPLAY_NAMES = {
+  "KurtaChogaKaftan": "Kurta / Choga / Kaftan",
   "Blouse": "Blouse",
   "Anarkali": "Anarkali",
-  "Salwar/Dhoti": "SalwarDhoti",
-  "Churidaar/Trouser/Pants/Plazo": "ChuridaarTrouserPantsPlazo",
-  "Sharara/Gharara": "ShararaGharara",
+  "SalwarDhoti": "Salwar / Dhoti",
+  "ChuridaarTrouserPantsPlazo": "Churidaar / Trouser / Pants / Palazzo",
+  "ShararaGharara": "Sharara / Gharara",
   "Lehenga": "Lehenga",
 };
 
 
-const measurementCategories = [
-  "Kurta/Choga/Kaftan",
+const ALL_MEASUREMENT_CATEGORIES = [
+  "Kurta / Choga / Kaftan",
   "Blouse",
   "Anarkali",
-  "Salwar/Dhoti",
-  "Churidaar/Trouser/Pants/Plazo",
-  "Sharara/Gharara",
+  "Salwar / Dhoti",
+  "Churidaar / Trouser / Pants / Palazzo",
+  "Sharara / Gharara",
   "Lehenga",
 ];
 
@@ -545,7 +578,7 @@ export default function ProductForm() {
 
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("Kurta/Choga/Kaftan");
+  const [activeCategory, setActiveCategory] = useState("Kurta / Choga / Kaftan");
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
@@ -569,7 +602,18 @@ export default function ProductForm() {
     setExpandedRowIds((e) => ({ ...e, [id]: !e[id] }));
     // Initialize category for this item if not set
     if (!expandedItemCategories[id]) {
-      setExpandedItemCategories((prev) => ({ ...prev, [id]: "Kurta/Choga/Kaftan" }));
+      const item = orderItems.find(it => it._id === id);
+      let defaultDisplayName = "Kurta / Choga / Kaftan";
+
+      if (item?.top && CATEGORY_KEY_MAP[item.top]) {
+        const categoryKey = CATEGORY_KEY_MAP[item.top];
+        defaultDisplayName = CATEGORY_DISPLAY_NAMES[categoryKey];
+      } else if (item?.bottom && CATEGORY_KEY_MAP[item.bottom]) {
+        const categoryKey = CATEGORY_KEY_MAP[item.bottom];
+        defaultDisplayName = CATEGORY_DISPLAY_NAMES[categoryKey];
+      }
+
+      setExpandedItemCategories((prev) => ({ ...prev, [id]: defaultDisplayName }));
     }
   };
 
@@ -636,6 +680,68 @@ export default function ProductForm() {
     return "Standard";
   };
 
+  // ============= CHANGE #4: Add helper function (After state declarations in ProductForm) =============
+  // ADD this function inside the ProductForm component:
+
+  const getRelevantMeasurementCategories = () => {
+    const categoryKeys = new Set(); // Use Set to avoid duplicates
+
+    // Get category key for selected top
+    if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
+      categoryKeys.add(CATEGORY_KEY_MAP[selectedTop]);
+    }
+
+    // Get category key for selected bottom
+    if (selectedBottom && CATEGORY_KEY_MAP[selectedBottom]) {
+      categoryKeys.add(CATEGORY_KEY_MAP[selectedBottom]);
+    }
+
+    // If no top/bottom selected, show all categories
+    if (categoryKeys.size === 0) {
+      return ALL_MEASUREMENT_CATEGORIES;
+    }
+
+    // Convert keys to display names
+    return Array.from(categoryKeys).map(key => CATEGORY_DISPLAY_NAMES[key]);
+  };
+
+
+  const getRelevantMeasurements = () => {
+    const relevantKeys = new Set();
+
+    if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedTop]);
+    }
+    if (selectedBottom && CATEGORY_KEY_MAP[selectedBottom]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedBottom]);
+    }
+
+    // Filter measurements to only include relevant category keys
+    const filteredMeasurements = {};
+    for (const [key, value] of Object.entries(measurements)) {
+      if (relevantKeys.has(key)) {
+        filteredMeasurements[key] = value;
+      }
+    }
+
+    return filteredMeasurements;
+  };
+
+  // ============= CHANGE #5: Add helper to get category key from display name =============
+  // ADD this function inside the ProductForm component:
+
+  const getCategoryKeyFromDisplayName = (displayName) => {
+    // Find the key that matches this display name
+    for (const [key, value] of Object.entries(CATEGORY_DISPLAY_NAMES)) {
+      if (value === displayName) {
+        return key;
+      }
+    }
+    return null;
+  };
+
+
+
 
   const updateItem = (id, patch) =>
     setOrderItems((prev) =>
@@ -669,7 +775,7 @@ export default function ProductForm() {
 
   // MANUAL AUTO-POPULATE FUNCTION
   const handleAutoPopulate = () => {
-    const categoryKey = CATEGORY_KEY_MAP[activeCategory];
+    const categoryKey = getCategoryKeyFromDisplayName(activeCategory) || activeCategory;
     if (!categoryKey) return;
 
     // ONLY use customer saved measurements (this makes it Custom)
@@ -1267,17 +1373,49 @@ export default function ProductForm() {
 
   }, [selectedProduct, isKidsProduct, colors, globalExtras, customerSavedMeasurements]);
 
-  // AUTO-FILL SIZE CHART VALUES WHEN SIZE CHANGES
+  useEffect(() => {
+    if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
+      const categoryKey = CATEGORY_KEY_MAP[selectedTop];
+      const displayName = CATEGORY_DISPLAY_NAMES[categoryKey];
+      setActiveCategory(displayName);
+    } else if (selectedBottom && CATEGORY_KEY_MAP[selectedBottom]) {
+      const categoryKey = CATEGORY_KEY_MAP[selectedBottom];
+      const displayName = CATEGORY_DISPLAY_NAMES[categoryKey];
+      setActiveCategory(displayName);
+    }
+  }, [selectedTop, selectedBottom]);
+
+
+  // ✅ AUTO-FILL SIZE CHART VALUES FOR ALL RELEVANT CATEGORIES
   useEffect(() => {
     if (!selectedSize || !selectedProduct) return;
-
-    const categoryKey = CATEGORY_KEY_MAP[activeCategory];
-    if (!categoryKey) return;
 
     const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
     const sizeData = currentSizeChart[selectedSize];
 
-    if (sizeData) {
+    if (!sizeData) return;
+
+    // Get all relevant categories (top + bottom)
+    const relevantKeys = new Set();
+    if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedTop]);
+    }
+    if (selectedBottom && CATEGORY_KEY_MAP[selectedBottom]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedBottom]);
+    }
+
+    // If no top/bottom selected, use activeCategory as fallback
+    if (relevantKeys.size === 0) {
+      const activeCategoryKey = getCategoryKeyFromDisplayName(activeCategory) || activeCategory;
+      if (activeCategoryKey) {
+        relevantKeys.add(activeCategoryKey);
+      }
+    }
+
+    // Auto-fill measurements for ALL relevant categories
+    const updatedMeasurements = {};
+
+    relevantKeys.forEach(categoryKey => {
       const fieldsForCategory = isKidsProduct
         ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
         : measurementFields[categoryKey] || [];
@@ -1289,16 +1427,57 @@ export default function ProductForm() {
       if (fieldsForCategory.includes("Length") && sizeData.Length != null) newValues.Length = sizeData.Length;
 
       if (Object.keys(newValues).length > 0) {
-        setMeasurements((prev) => ({
-          ...prev,
-          [categoryKey]: {
-            ...(prev[categoryKey] || {}),
-            ...newValues,
-          },
-        }));
+        updatedMeasurements[categoryKey] = newValues;
       }
+    });
+
+    // Update all categories at once
+    if (Object.keys(updatedMeasurements).length > 0) {
+      setMeasurements((prev) => {
+        const updated = { ...prev };
+        Object.entries(updatedMeasurements).forEach(([categoryKey, values]) => {
+          updated[categoryKey] = {
+            ...(prev[categoryKey] || {}),
+            ...values,
+          };
+        });
+        return updated;
+      });
     }
-  }, [selectedSize, activeCategory, isKidsProduct, selectedProduct]);
+  }, [selectedSize, isKidsProduct, selectedProduct, selectedTop, selectedBottom]);
+
+  // ✅ Clean up measurements when product/top/bottom changes
+  useEffect(() => {
+    if (!selectedProduct) {
+      // Clear all measurements when no product selected
+      setMeasurements({});
+      return;
+    }
+
+    // Get relevant category keys for current selection
+    const relevantKeys = new Set();
+
+    if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedTop]);
+    }
+    if (selectedBottom && CATEGORY_KEY_MAP[selectedBottom]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedBottom]);
+    }
+
+    // If no top/bottom selected yet, don't clean (user might be in process of selecting)
+    if (relevantKeys.size === 0) return;
+
+    // Remove measurements that are no longer relevant
+    setMeasurements((prev) => {
+      const cleaned = {};
+      for (const [key, value] of Object.entries(prev)) {
+        if (relevantKeys.has(key)) {
+          cleaned[key] = value;
+        }
+      }
+      return cleaned;
+    });
+  }, [selectedProduct, selectedTop, selectedBottom]);
 
 
   // ADD PRODUCT
@@ -1379,7 +1558,7 @@ export default function ProductForm() {
       size: selectedSize,
       quantity: quantity,
       price: getBasePrice(), // CHANGE #1: Use base price without extras
-      measurements,
+      measurements: getRelevantMeasurements(),
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: "", // Initialize notes as empty for new products
       isKids: isKidsProduct,
@@ -1681,7 +1860,7 @@ export default function ProductForm() {
         size: selectedSize,
         quantity,
         price: getBasePrice(), // Use base price
-        measurements,
+        measurements: getRelevantMeasurements(),
         image_url: selectedProduct.image_url || selectedProduct.image || null,
         notes: comments, // Initialize notes as empty for auto-added products
         isKids: isKidsProduct,
@@ -1793,21 +1972,37 @@ export default function ProductForm() {
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
 
-      // Check if session is still valid (don't sign out yet)
-      const { data: { session } } = await supabase.auth.getSession();
+      // ✅ Check if we have a saved associate session
+      const savedSession = sessionStorage.getItem("associateSession");
 
-      if (session) {
-        // Session valid - go to AssociateDashboard with password verification
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+      if (savedSession) {
+        // Restore the salesperson's session
+        const session = JSON.parse(savedSession);
+
+        // Set the session back in Supabase
+        const { error } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token
+        });
+
+        if (error) {
+          console.error("Failed to restore session:", error);
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        console.log("✅ Restored salesperson session");
+
+        // Clean up and navigate
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         navigate("/AssociateDashboard", { replace: true });
       } else {
-        // Session expired - sign out completely and go to login
-        await supabase.auth.signOut();
-        sessionStorage.removeItem("associateSession");
-        sessionStorage.removeItem("returnToAssociate");
-        navigate("/login", { replace: true });
+        // No saved session - just navigate back
+        console.log("⚠️ No saved session found");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        navigate("/AssociateDashboard", { replace: true });
       }
     } catch (e) {
       console.error("Logout error", e);
@@ -2132,69 +2327,91 @@ export default function ProductForm() {
                           {/* ROW 4: Custom Measurements */}
                           <div className="measure-container edit-measure-container">
                             <div className="measure-menu">
-                              {measurementCategories.map((cat) => (
-                                <div
-                                  key={cat}
-                                  className={
-                                    itemActiveCategory === cat
-                                      ? "measure-item active break-words"
-                                      : "measure-item break-words"
-                                  }
-                                  onClick={() =>
-                                    setExpandedItemCategories((prev) => ({
-                                      ...prev,
-                                      [item._id]: cat,
-                                    }))
-                                  }
-                                >
-                                  {cat}
-                                </div>
-                              ))}
+                              {(() => {
+                                const categoryKeys = new Set();
+
+                                if (item.top && CATEGORY_KEY_MAP[item.top]) {
+                                  categoryKeys.add(CATEGORY_KEY_MAP[item.top]);
+                                }
+                                if (item.bottom && CATEGORY_KEY_MAP[item.bottom]) {
+                                  categoryKeys.add(CATEGORY_KEY_MAP[item.bottom]);
+                                }
+
+                                const displayNames = categoryKeys.size > 0
+                                  ? Array.from(categoryKeys).map(key => CATEGORY_DISPLAY_NAMES[key])
+                                  : ALL_MEASUREMENT_CATEGORIES;
+
+                                return displayNames.map((displayName) => {
+                                  const categoryKey = getCategoryKeyFromDisplayName(displayName);
+                                  const itemCategoryKey = getCategoryKeyFromDisplayName(itemActiveCategory) || itemActiveCategory;
+
+                                  return (
+                                    <div
+                                      key={displayName}
+                                      className={
+                                        categoryKey === itemCategoryKey || displayName === itemActiveCategory
+                                          ? "measure-item active break-words"
+                                          : "measure-item break-words"
+                                      }
+                                      onClick={() =>
+                                        setExpandedItemCategories((prev) => ({
+                                          ...prev,
+                                          [item._id]: displayName,
+                                        }))
+                                      }
+                                    >
+                                      {displayName}
+                                    </div>
+                                  );
+                                });
+                              })()}
                             </div>
 
                             <div className="measure-fields">
                               <h3 className="measure-title">Custom Measurements (in)</h3>
                               <div className="measure-grid">
-                                {(itemIsKids
-                                  ? KIDS_MEASUREMENT_FIELDS[itemCategoryKey] || []
-                                  : measurementFields[itemCategoryKey] || []
-                                ).map((field) => {
-                                  const currentSizeChart = itemIsKids ? KIDS_SIZE_CHART : SIZE_CHART_US;
-                                  const sizeData = currentSizeChart[item.size] || {};
-                                  const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
-                                  const isAutoField = autoFilledFields.includes(field);
-                                  const sizeChartValue = sizeData[field];
-                                  const currentValue = item.measurements?.[itemCategoryKey]?.[field];
+                                {(() => {
+                                  const itemCategoryKey = getCategoryKeyFromDisplayName(itemActiveCategory) || itemActiveCategory;
+                                  const fields = itemIsKids
+                                    ? KIDS_MEASUREMENT_FIELDS[itemCategoryKey] || []
+                                    : measurementFields[itemCategoryKey] || [];
 
-                                  // CHANGE #2: Check if value is edited (different from size chart)
-                                  const isEdited = isAutoField &&
-                                    currentValue !== undefined &&
-                                    currentValue !== "" &&
-                                    sizeChartValue !== undefined &&
-                                    Number(currentValue) !== Number(sizeChartValue);
+                                  return fields.map((field) => {
+                                    const currentSizeChart = itemIsKids ? KIDS_SIZE_CHART : SIZE_CHART_US;
+                                    const sizeData = currentSizeChart[item.size] || {};
+                                    const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+                                    const isAutoField = autoFilledFields.includes(field);
+                                    const sizeChartValue = sizeData[field];
+                                    const currentValue = item.measurements?.[itemCategoryKey]?.[field];
 
-                                  // Determine if this is an auto-filled unedited value
-                                  const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
+                                    const isEdited = isAutoField &&
+                                      currentValue !== undefined &&
+                                      currentValue !== "" &&
+                                      sizeChartValue !== undefined &&
+                                      Number(currentValue) !== Number(sizeChartValue);
 
-                                  return (
-                                    <div className="measure-field" key={field}>
-                                      <label>{field}</label>
-                                      <input
-                                        type="number"
-                                        className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
-                                        value={currentValue || ""}
-                                        onChange={(e) =>
-                                          updateItemMeasurement(
-                                            item._id,
-                                            itemCategoryKey,
-                                            field,
-                                            e.target.value
-                                          )
-                                        }
-                                      />
-                                    </div>
-                                  );
-                                })}
+                                    const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
+
+                                    return (
+                                      <div className="measure-field" key={field}>
+                                        <label>{field}</label>
+                                        <input
+                                          type="number"
+                                          className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
+                                          value={currentValue || ""}
+                                          onChange={(e) =>
+                                            updateItemMeasurement(
+                                              item._id,
+                                              itemCategoryKey,
+                                              field,
+                                              e.target.value
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                    );
+                                  });
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -2493,19 +2710,23 @@ export default function ProductForm() {
             {showMeasurements && (
               <div className="measure-container">
                 <div className="measure-menu">
-                  {measurementCategories.map((cat) => (
-                    <div
-                      key={cat}
-                      className={
-                        activeCategory === cat
-                          ? "measure-item active break-words"
-                          : "measure-item break-words"
-                      }
-                      onClick={() => setActiveCategory(cat)}
-                    >
-                      {cat}
-                    </div>
-                  ))}
+                  {getRelevantMeasurementCategories().map((displayName) => {
+                    const categoryKey = getCategoryKeyFromDisplayName(displayName);
+                    return (
+                      <div
+                        key={displayName}
+                        className={
+                          getCategoryKeyFromDisplayName(activeCategory) === categoryKey ||
+                            activeCategory === displayName
+                            ? "measure-item active break-words"
+                            : "measure-item break-words"
+                        }
+                        onClick={() => setActiveCategory(displayName)}
+                      >
+                        {displayName}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="measure-fields">
@@ -2522,122 +2743,123 @@ export default function ProductForm() {
                   </div>
 
                   <div className="measure-grid">
-                    {(isKidsProduct
-                      ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
-                      : measurementFields[categoryKey] || []
-                    ).map((field) => {
-                      const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
-                      const sizeData = currentSizeChart[selectedSize] || {};
-                      const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
-                      const isAutoField = autoFilledFields.includes(field);
-                      const sizeChartValue = sizeData[field];
-                      const currentValue = measurements[categoryKey]?.[field];
+                    {(() => {
+                      const categoryKey = getCategoryKeyFromDisplayName(activeCategory) || activeCategory;
+                      const fields = isKidsProduct
+                        ? KIDS_MEASUREMENT_FIELDS[categoryKey] || []
+                        : measurementFields[categoryKey] || [];
 
-                      // CHANGE #2: Check if value is edited (different from size chart)
-                      const isEdited = isAutoField &&
-                        currentValue !== undefined &&
-                        currentValue !== "" &&
-                        sizeChartValue !== undefined &&
-                        Number(currentValue) !== Number(sizeChartValue);
+                      return fields.map((field) => {
+                        const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+                        const sizeData = currentSizeChart[selectedSize] || {};
+                        const autoFilledFields = ["Bust", "Waist", "Hip", "Length"];
+                        const isAutoField = autoFilledFields.includes(field);
+                        const sizeChartValue = sizeData[field];
+                        const currentValue = measurements[categoryKey]?.[field];
 
-                      // Determine if this is an auto-filled unedited value
-                      const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
+                        const isEdited = isAutoField &&
+                          currentValue !== undefined &&
+                          currentValue !== "" &&
+                          sizeChartValue !== undefined &&
+                          Number(currentValue) !== Number(sizeChartValue);
 
-                      return (
-                        <div className="measure-field" key={field}>
-                          <label>{field}</label>
-                          <input
-                            type="number"
-                            className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
-                            value={currentValue || ""}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setMeasurements((prev) => ({
-                                ...prev,
-                                [categoryKey]: {
-                                  ...(prev[categoryKey] || {}),
-                                  [field]: val,
-                                },
-                              }));
-                            }}
-                          />
-                        </div>
-                      );
-                    })}
+                        const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
+
+                        return (
+                          <div className="measure-field" key={field}>
+                            <label>{field}</label>
+                            <input
+                              type="number"
+                              className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
+                              value={currentValue || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMeasurements((prev) => ({
+                                  ...prev,
+                                  [categoryKey]: {
+                                    ...(prev[categoryKey] || {}),
+                                    [field]: val,
+                                  },
+                                }));
+                              }}
+                            />
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
-
                 </div>
               </div>
             )}
 
             {/* ADDITIONALS */}
-              <>
-                <div className="measure-bar">
-                  <span>Additional Customization</span>
+            <>
+              <div className="measure-bar">
+                <span>Additional Customization</span>
+                <button
+                  className="plus-btn"
+                  onClick={() => setShowAdditionals(!showAdditionals)}
+                >
+                  {showAdditionals ? "−" : "+"}
+                </button>
+              </div>
+
+              {showAdditionals && (
+                <div className="additionals-container">
+                  <div className="additionals-list">
+                    {selectedAdditionals.map((item, index) => (
+                      <div key={index} className="additional-row">
+                        <input
+                          type="text"
+                          className="input-line additional-name"
+                          placeholder="Item name"
+                          value={item.name}
+                          onChange={(e) => {
+                            const newAdditionals = [...selectedAdditionals];
+                            newAdditionals[index].name = e.target.value;
+                            setSelectedAdditionals(newAdditionals);
+                          }}
+                        />
+                        <input
+                          type="number"
+                          className="input-line additional-price"
+                          placeholder="Price"
+                          min={0}
+                          value={item.price}
+                          onChange={(e) => {
+                            const newAdditionals = [...selectedAdditionals];
+                            newAdditionals[index].price = Number(e.target.value) || 0;
+                            setSelectedAdditionals(newAdditionals);
+                          }}
+                        />
+                        <button
+                          className="remove-additional-btn"
+                          onClick={() => {
+                            setSelectedAdditionals((prev) =>
+                              prev.filter((_, i) => i !== index)
+                            );
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
                   <button
-                    className="plus-btn"
-                    onClick={() => setShowAdditionals(!showAdditionals)}
+                    className="add-additional-btn"
+                    onClick={() => {
+                      setSelectedAdditionals((prev) => [
+                        ...prev,
+                        { name: "", price: "" },
+                      ]);
+                    }}
                   >
-                    {showAdditionals ? "−" : "+"}
+                    + Add More
                   </button>
                 </div>
-
-                {showAdditionals && (
-                  <div className="additionals-container">
-                    <div className="additionals-list">
-                      {selectedAdditionals.map((item, index) => (
-                        <div key={index} className="additional-row">
-                          <input
-                            type="text"
-                            className="input-line additional-name"
-                            placeholder="Item name"
-                            value={item.name}
-                            onChange={(e) => {
-                              const newAdditionals = [...selectedAdditionals];
-                              newAdditionals[index].name = e.target.value;
-                              setSelectedAdditionals(newAdditionals);
-                            }}
-                          />
-                          <input
-                            type="number"
-                            className="input-line additional-price"
-                            placeholder="Price"
-                            min={0}
-                            value={item.price}
-                            onChange={(e) => {
-                              const newAdditionals = [...selectedAdditionals];
-                              newAdditionals[index].price = Number(e.target.value) || 0;
-                              setSelectedAdditionals(newAdditionals);
-                            }}
-                          />
-                          <button
-                            className="remove-additional-btn"
-                            onClick={() => {
-                              setSelectedAdditionals((prev) =>
-                                prev.filter((_, i) => i !== index)
-                              );
-                            }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <button
-                      className="add-additional-btn"
-                      onClick={() => {
-                        setSelectedAdditionals((prev) => [
-                          ...prev,
-                          { name: "", price: "" },
-                        ]);
-                      }}
-                    >
-                      + Add More
-                    </button>
-                  </div>
-                )}
-              </>
+              )}
+            </>
 
             {/* ORDER DETAILS */}
             <div className="row">

@@ -160,7 +160,7 @@ export default function OrderDetails() {
     return (Number(discountPercent) || 0) + (Number(birthdayDiscount) || 0);
   }, [discountPercent, birthdayDiscount]);
 
-const pricing = useMemo(() => {
+  const pricing = useMemo(() => {
     const pct = Math.min(100, Math.max(0, Number(totalDiscount) || 0));
     const discountAmount = (totalAmount * pct) / 100;
     const hasDiscount = discountApplied || birthdayApplied;
@@ -197,7 +197,7 @@ const pricing = useMemo(() => {
     };
   }, [totalDiscount, discountPercent, birthdayDiscount, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery, discountApplied, birthdayApplied, minAdvancePercent]);
 
-  
+
   // Check if advance is below minimum
   const isAdvanceBelowMinimum = sanitizedAdvance < pricing.minAdvanceAmount;
 
@@ -540,21 +540,41 @@ const pricing = useMemo(() => {
 
   const handleLogout = async () => {
     try {
+      // Clear form data
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
 
-      const { data: { session } } = await supabase.auth.getSession();
+      // ✅ Check if we have a saved associate session
+      const savedSession = sessionStorage.getItem("associateSession");
 
-      if (session) {
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+      if (savedSession) {
+        // Restore the salesperson's session
+        const session = JSON.parse(savedSession);
+
+        // Set the session back in Supabase
+        const { error } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token
+        });
+
+        if (error) {
+          console.error("Failed to restore session:", error);
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        console.log("✅ Restored salesperson session");
+
+        // Clean up and navigate
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         navigate("/AssociateDashboard", { replace: true });
       } else {
-        await supabase.auth.signOut();
-        sessionStorage.removeItem("associateSession");
-        sessionStorage.removeItem("returnToAssociate");
-        navigate("/login", { replace: true });
+        // No saved session - just navigate back
+        console.log("⚠️ No saved session found");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        navigate("/AssociateDashboard", { replace: true });
       }
     } catch (e) {
       console.error("Logout error", e);
@@ -945,7 +965,7 @@ const pricing = useMemo(() => {
                 <span>{pricing.discountPercent}%</span>
               </div> */}
               <div className="field">
-                <label>Discount Amount:</label>
+                <label>Collector Code:</label>
                 <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
               </div>
               <div className="field">

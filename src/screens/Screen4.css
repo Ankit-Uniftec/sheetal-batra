@@ -637,6 +637,7 @@ select,
   position: relative;
   width: 100%;
   color: #111;
+  top: 10px;
 }
 
 .ss-control {

@@ -55,57 +55,88 @@ export default function Dashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [showRevenue, setShowRevenue] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ORDERS_PER_PAGE = 20;
+
   // Check if user is Store Manager
   const isSM = useMemo(() => {
     return salesperson?.designation?.toLowerCase().includes("manager");
   }, [salesperson]);
 
-  // Stats
-  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-  const totalOrders = orders.length;
-  const totalClients = new Set(orders.map((o) => o.user_id)).size;
-  const activeOrders = orders.filter(
-    (o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "delivered" &&
-      formatDate(o.created_at) === formatDate(new Date())
-  );
+  // ✅ OPTIMIZED: Memoize heavy calculations
+  const stats = useMemo(() => {
+    const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+    const totalOrders = orders.length;
+    const totalClients = new Set(orders.map((o) => o.user_id)).size;
+    const activeOrders = orders.filter(
+      (o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "delivered" &&
+        formatDate(o.created_at) === formatDate(new Date())
+    );
+
+    return { totalRevenue, totalOrders, totalClients, activeOrders };
+  }, [orders]);
 
   // Sales Target - use DB value or default to 800000
   const DEFAULT_SALES_TARGET = 800000;
   const salesTarget = salesperson?.sales_target > 0 ? salesperson.sales_target : DEFAULT_SALES_TARGET;
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      // console.log("Logged in:", data.user?.email);
+  // ✅ OPTIMIZED: Memoize ordersByDate
+  const ordersByDate = useMemo(() => {
+    return orders.reduce((acc, order) => {
+      const date = order.delivery_date ? formatDate(order.delivery_date) : null;
+      if (date) {
+        acc[date] = (acc[date] || 0) + 1;
+      }
+      return acc;
+    }, {});
+  }, [orders]);
+
+  // ✅ OPTIMIZED: Memoize filtered orders
+  const filteredOrders = useMemo(() => {
+    if (!orderSearch.trim()) return orders;
+    const q = orderSearch.toLowerCase();
+    return orders.filter((order) => {
+      const productName = order.items?.[0]?.product_name?.toLowerCase() || "";
+      const productId = String(order.id || "").toLowerCase();
+      const clientName = order.delivery_name?.toLowerCase() || "";
+      return productId.includes(q) || productName.includes(q) || clientName.includes(q);
     });
-  }, []);
+  }, [orders, orderSearch]);
 
-  useEffect(() => {
-    if (location.state?.fromBuyerVerification) {
-      setShowPasswordModal(true);
-    }
-  }, [location]);
+  // ✅ OPTIMIZED: Paginated orders
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
+    return filteredOrders.slice(startIndex, startIndex + ORDERS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
 
+  // ✅ OPTIMIZED: Memoize filtered clients
+  const filteredClients = useMemo(() => {
+    if (!clientSearch.trim()) return clients;
+    const q = clientSearch.toLowerCase();
+    return clients.filter((client) => {
+      const name = client.name?.toLowerCase() || "";
+      const phone = client.phone?.toLowerCase() || "";
+      return name.includes(q) || phone.includes(q);
+    });
+  }, [clients, clientSearch]);
+
+  // ✅ OPTIMIZED: Consolidated password modal check
   useEffect(() => {
-    const fromBuyerVerification =
+    const needsPassword =
       location.state?.fromBuyerVerification ||
-      sessionStorage.getItem("fromBuyerVerification") === "true";
+      sessionStorage.getItem("fromBuyerVerification") === "true" ||
+      sessionStorage.getItem("requirePasswordVerificationOnDashboard") === "true" ||
+      sessionStorage.getItem("requirePasswordVerificationOnReturn") === "true";
 
-    if (fromBuyerVerification) {
+    if (needsPassword) {
       setShowPasswordModal(true);
+      // Clear all flags at once
       sessionStorage.removeItem("fromBuyerVerification");
-    }
-  }, []);
-
-  useEffect(() => {
-    const requireLogoutVerification = sessionStorage.getItem("requirePasswordVerificationOnDashboard") === "true";
-    const requireReturnVerification = sessionStorage.getItem("requirePasswordVerificationOnReturn") === "true";
-
-    if (requireLogoutVerification || requireReturnVerification) {
-      setShowPasswordModal(true);
       sessionStorage.removeItem("requirePasswordVerificationOnDashboard");
       sessionStorage.removeItem("requirePasswordVerificationOnReturn");
     }
-  }, [location]);
+  }, [location.state]);
 
   const verifyPassword = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -119,83 +150,28 @@ export default function Dashboard() {
       return;
     }
     setShowPasswordModal(false);
+    setPasswordError("");
   };
 
-  useEffect(() => {
-    const loadSalesperson = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) return;
+  // ✅ OPTIMIZED: Extract clients from orders (no extra DB query)
+  const extractClientsFromOrders = async (orders) => {
+    setClientsLoading(true);
 
-      const { data, error } = await supabase
-        .from("salesperson")
-        .select("*")
-        .eq("email", user.email)
-        .single();
-
-      if (error) {
-        console.log("Salesperson fetch error:", error);
-        return;
+    const map = new Map();
+    orders.forEach((order) => {
+      if (order.delivery_email) {
+        map.set(order.delivery_email, {
+          name: order.delivery_name,
+          email: order.delivery_email,
+          phone: order.delivery_phone,
+          user_id: order.user_id,
+        });
       }
-      setSalesperson(data);
-    };
-    loadSalesperson();
-  }, []);
+    });
 
-  useEffect(() => {
-    if (!salesperson) return;
+    const uniqueClients = Array.from(map.values());
 
-    const loadOrders = async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("salesperson_email", salesperson.email)
-        .order("created_at", { ascending: false });
-
-      if (error) console.log("Orders fetch error:", error);
-      setOrders(data || []);
-      setLoading(false);
-    };
-    loadOrders();
-  }, [salesperson]);
-
-  useEffect(() => {
-    if (!salesperson) return;
-
-    const loadClients = async () => {
-      setClientsLoading(true);
-
-      const { data: orderClients, error } = await supabase
-        .from("orders")
-        .select("delivery_name, delivery_email, delivery_phone, user_id")
-        .eq("salesperson_email", salesperson.email);
-
-      if (error) {
-        console.error(error);
-        setClients([]);
-        setClientsLoading(false);
-        return;
-      }
-
-      const map = new Map();
-      orderClients.forEach((c) => {
-        if (c.delivery_email) {
-          map.set(c.delivery_email, {
-            name: c.delivery_name,
-            email: c.delivery_email,
-            phone: c.delivery_phone,
-            user_id: c.user_id,
-          });
-        }
-      });
-
-      const uniqueClients = Array.from(map.values());
-
-      if (uniqueClients.length === 0) {
-        setClients([]);
-        setClientsLoading(false);
-        return;
-      }
-
+    if (uniqueClients.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("email, gender, dob")
@@ -204,19 +180,58 @@ export default function Dashboard() {
       const profileMap = new Map((profiles || []).map((p) => [p.email, p]));
 
       const finalClients = uniqueClients.map((c) => ({
-        name: c.name,
-        email: c.email,
-        phone: c.phone,
-        user_id: c.user_id,
+        ...c,
         gender: profileMap.get(c.email)?.gender || "—",
         dob: formatDate(profileMap.get(c.email)?.dob),
       }));
 
       setClients(finalClients);
-      setClientsLoading(false);
+    }
+
+    setClientsLoading(false);
+  };
+
+  // ✅ OPTIMIZED: Single useEffect for ALL data loading (parallel)
+  useEffect(() => {
+    const loadAllData = async () => {
+      try {
+        console.log('🔍 Loading dashboard data...');
+        const { data: { user } } = await supabase.auth.getUser();
+        console.log('👤 User found:', user?.email || 'NO USER');
+
+        if (!user?.email) {
+          console.log('❌ No user - stopping load');
+          setLoading(false);
+          return;
+        }
+
+        console.log('✅ User exists, fetching data...');
+        // ✅ Fetch salesperson and orders in PARALLEL
+        const [salespersonResult, ordersResult] = await Promise.all([
+          supabase.from("salesperson").select("*").eq("email", user.email).single(),
+          supabase.from("orders").select("*").eq("salesperson_email", user.email).order("created_at", { ascending: false })
+        ]);
+
+        if (salespersonResult.data) {
+          setSalesperson(salespersonResult.data);
+        }
+
+        if (ordersResult.data) {
+          setOrders(ordersResult.data);
+
+          // ✅ Extract clients from orders (no extra DB query for orders)
+          extractClientsFromOrders(ordersResult.data);
+        }
+
+        setLoading(false);
+      } catch (err) {
+        console.error("Load error:", err);
+        setLoading(false);
+      }
     };
-    loadClients();
-  }, [salesperson]);
+
+    loadAllData();
+  }, []);
 
   // Download all attachments
   const downloadAttachments = async (attachments, orderNo) => {
@@ -228,10 +243,7 @@ export default function Dashboard() {
         const response = await fetch(url);
         const blob = await response.blob();
 
-        // Get filename from URL
         const fileName = url.split("/").pop() || `attachment_${i + 1}`;
-
-        // Create download link
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = `${orderNo}_${fileName}`;
@@ -240,7 +252,6 @@ export default function Dashboard() {
         document.body.removeChild(link);
         URL.revokeObjectURL(link.href);
 
-        // Small delay between downloads
         if (i < attachments.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
@@ -249,7 +260,6 @@ export default function Dashboard() {
       }
     }
   };
-
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -300,7 +310,6 @@ export default function Dashboard() {
 
       if (error) throw error;
 
-      // Update local state
       setOrders(prev => prev.map(o =>
         o.id === order.id ? { ...o, status: "delivered", delivered_at: new Date().toISOString() } : o
       ));
@@ -394,7 +403,6 @@ export default function Dashboard() {
   const openEditModal = (e, order) => {
     e.stopPropagation();
     const item = order.items?.[0] || {};
-    // Handle color as object or string
     let colorValue = "";
     if (typeof item.color === 'object' && item.color !== null) {
       colorValue = item.color.name || item.color.hex || "";
@@ -450,7 +458,6 @@ export default function Dashboard() {
 
       if (error) throw error;
 
-      // Update local state
       setOrders(prev => prev.map(o => {
         if (o.id === editingOrder.id) {
           return {
@@ -476,7 +483,6 @@ export default function Dashboard() {
       setActionLoading(null);
     }
   };
-
 
   // Download all attachments
   const handleDownloadAttachments = async (e, order) => {
@@ -622,36 +628,7 @@ export default function Dashboard() {
     }
   };
 
-  // Filter clients based on search
-  const filteredClients = clients.filter((client) => {
-    if (!clientSearch.trim()) return true;
-    const q = clientSearch.toLowerCase();
-    const name = client.name?.toLowerCase() || "";
-    const phone = client.phone?.toLowerCase() || "";
-    return name.includes(q) || phone.includes(q);
-  });
-
   if (loading) return <p className="loading-text">Loading Dashboard...</p>;
-
-  const ordersByDate = orders.reduce((acc, order) => {
-    const date = order.delivery_date ? formatDate(order.delivery_date) : null;
-    if (date) {
-      acc[date] = (acc[date] || 0) + 1;
-    }
-    return acc;
-  }, {});
-
-  const filteredOrders = orders.filter((order) => {
-    if (!orderSearch.trim()) return true;
-    const q = orderSearch.toLowerCase();
-    const productName = order.items?.[0]?.product_name?.toLowerCase() || "";
-    const productId = String(order.id || "").toLowerCase();
-    const clientName = order.delivery_name?.toLowerCase() || "";
-    return productId.includes(q) || productName.includes(q) || clientName.includes(q);
-  });
-
-  // console.log(orders);
-
 
   const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
 
@@ -667,6 +644,7 @@ export default function Dashboard() {
                 placeholder="Enter password"
                 value={enteredPassword}
                 onChange={(e) => setEnteredPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && verifyPassword()}
               />
               <p
                 type="button"
@@ -677,7 +655,6 @@ export default function Dashboard() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
                   :
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye-closed-icon lucide-eye-closed"><path d="m15 18-.722-3.25" /><path d="M2 8a10.645 10.645 0 0 0 20 0" /><path d="m20 15-1.726-2.05" /><path d="m4 15 1.726-2.05" /><path d="m9 18 .722-3.25" /></svg>
-
                 }
               </p>
             </div>
@@ -793,7 +770,6 @@ export default function Dashboard() {
       <div className={`ad-dashboard-wrapper ${showPasswordModal || editingOrder ? "ad-blurred" : ""}`}>
         <div className="ad-top-header">
           <img src={Logo} className="logo4" alt="logo" />
-          {/* <h1 className="ad-order-title">My Dashboard</h1> */}
           <button className="ad-logout-btn ad-desktop-logout-btn" onClick={handleLogout}>↪</button>
           <div className="ad-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
             <div className="ad-bar"></div>
@@ -816,51 +792,50 @@ export default function Dashboard() {
 
           {activeTab === "dashboard" && (
             <>
-
               <div className="ad-cell ad-total-revenue">
                 <div className="ad-stat-card">
                   <p className="ad-stat-title">Total Revenue</p>
                   <div className="ad-stat-content">
                     <span className="ad-stat-value">
-                      {showRevenue ? `₹${formatIndianNumber(totalRevenue)}` : "₹ ••••••"}
+                      {showRevenue ? `₹${formatIndianNumber(stats.totalRevenue)}` : "₹ ••••••"}
                     </span>
                     <button
                       className="bg-transparent border-none"
                       onClick={() => setShowRevenue(!showRevenue)}
                     >
-                      {showRevenue
-                        ?
+                      {showRevenue ?
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
                         :
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye-closed-icon lucide-eye-closed"><path d="m15 18-.722-3.25" /><path d="M2 8a10.645 10.645 0 0 0 20 0" /><path d="m20 15-1.726-2.05" /><path d="m4 15 1.726-2.05" /><path d="m9 18 .722-3.25" /></svg>}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye-closed-icon lucide-eye-closed"><path d="m15 18-.722-3.25" /><path d="M2 8a10.645 10.645 0 0 0 20 0" /><path d="m20 15-1.726-2.05" /><path d="m4 15 1.726-2.05" /><path d="m9 18 .722-3.25" /></svg>
+                      }
                     </button>
                   </div>
                 </div>
               </div>
               <div className="ad-cell ad-total-orders">
-                <StatCard title="Total Orders" className="gold-text" value={formatIndianNumber(totalOrders)} />
+                <StatCard title="Total Orders" className="gold-text" value={formatIndianNumber(stats.totalOrders)} />
               </div>
               <div className="ad-cell ad-total-clients">
-                <StatCard title="Total Clients" value={formatIndianNumber(totalClients)} />
+                <StatCard title="Total Clients" value={formatIndianNumber(stats.totalClients)} />
               </div>
               <div className="ad-cell ad-sales-target">
                 <div className="ad-sales-card">
                   <div className="ad-sales-header">
                     <div>
-                      <p className="ad-sales-label">Sales Target 
-                      <span className="ad-sales-percent">({Math.min((totalRevenue / salesTarget) * 100, 100).toFixed(1)}%)</span></p>
-                      <p className="ad-sales-progress">{totalRevenue >= salesTarget ? "Completed! " : "In Progress "}</p>
+                      <p className="ad-sales-label">Sales Target
+                        <span className="ad-sales-percent">({Math.min((stats.totalRevenue / salesTarget) * 100, 100).toFixed(1)}%)</span></p>
+                      <p className="ad-sales-progress">{stats.totalRevenue >= salesTarget ? "Completed! " : "In Progress "}</p>
                     </div>
                   </div>
                   <div className="ad-sales-scale">
-                    <span>₹{formatIndianNumber(totalRevenue)}</span>
+                    <span>₹{formatIndianNumber(stats.totalRevenue)}</span>
                     <span>₹{formatIndianNumber(salesTarget)}</span>
                   </div>
                   <div className="ad-progress-bar">
                     <div
                       className="ad-progress-fill"
                       style={{
-                        width: `${Math.min((totalRevenue / salesTarget) * 100, 100)}%`,
+                        width: `${Math.min((stats.totalRevenue / salesTarget) * 100, 100)}%`,
                         height: '10px',
                         background: '#d5b85a',
                         borderRadius: '20px'
@@ -872,14 +847,14 @@ export default function Dashboard() {
               <div className="ad-cell ad-active-orders">
                 <div className="ad-orders-card">
                   <div className="ad-card-header">
-                    <span className="ad-card-title">Today's Orders ({activeOrders.length})</span>
+                    <span className="ad-card-title">Today's Orders ({stats.activeOrders.length})</span>
                     <button className="ad-view-btn" onClick={() => setActiveTab("orders")}>View All</button>
                   </div>
                   <div className="ad-cardbox">
-                    {activeOrders.length === 0 ? (
+                    {stats.activeOrders.length === 0 ? (
                       <p>No active orders</p>
                     ) : (
-                      activeOrders.map((o) => (
+                      stats.activeOrders.map((o) => (
                         <div className="ad-order-item" key={o.id}>
                           <p><b>Order No:</b> {o.order_no}</p>
                           <p><b>Client Name:</b> {o.delivery_name}</p>
@@ -909,14 +884,17 @@ export default function Dashboard() {
                   type="text"
                   placeholder="Search by Order ID, Product Name or Client Name"
                   value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
+                  onChange={(e) => {
+                    setOrderSearch(e.target.value);
+                    setCurrentPage(1); // Reset to first page on search
+                  }}
                 />
               </div>
 
               <div className="ad-order-list-scroll">
                 {filteredOrders.length === 0 && <p className="ad-muted">No orders found for this associate.</p>}
 
-                {filteredOrders.map((order) => {
+                {paginatedOrders.map((order) => {
                   const item = order.items?.[0] || {};
                   const imgSrc = item.image_url || "/placeholder.png";
                   const hoursSince = getHoursSinceOrder(order.created_at);
@@ -928,7 +906,6 @@ export default function Dashboard() {
                       onClick={() => viewCustomerOrders(order)}
                       style={{ cursor: 'pointer' }}
                     >
-                      {/* Badges Row - Top Right */}
                       <div className="ad-order-header">
                         <div className="ad-header-info">
                           <div className="ad-header-item">
@@ -1087,7 +1064,6 @@ export default function Dashboard() {
                               </span>
                             </div>
                           )}
-                          {/* Additionals */}
                           {item.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0 && (
                             <div className="ad-detail-item" style={{ gridColumn: 'span 2' }}>
                               <span className="ad-order-label">Additionals:</span>
@@ -1095,7 +1071,7 @@ export default function Dashboard() {
                                 {item.additionals.filter(a => a.name && a.name.trim() !== "").map((additional, idx, arr) => (
                                   <span key={idx}>
                                     {additional.name} (₹{formatIndianNumber(additional.price)})
-                                    {idx < item.additionals.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
+                                    {idx < arr.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
                                   </span>
                                 ))}
                               </span>
@@ -1104,7 +1080,6 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Action Buttons - Only Mark Delivered */}
                       {canMarkDelivered(order) && (
                         <div className="ad-order-actions">
                           <button
@@ -1119,6 +1094,29 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
+
+                {/* Pagination Controls */}
+                {filteredOrders.length > ORDERS_PER_PAGE && (
+                  <div className="ad-pagination">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(p => p - 1)}
+                      className="ad-pagination-btn"
+                    >
+                      ← Previous
+                    </button>
+                    <span className="ad-pagination-info">
+                      Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
+                    </span>
+                    <button
+                      disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
+                      onClick={() => setCurrentPage(p => p + 1)}
+                      className="ad-pagination-btn"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1127,9 +1125,7 @@ export default function Dashboard() {
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Calendar</h2>
 
-              {/* iPhone-style Calendar */}
               <div className="ad-ios-calendar">
-                {/* Month Navigation */}
                 <div className="ad-ios-cal-header">
                   <button
                     className="ad-ios-nav-btn"
@@ -1158,14 +1154,12 @@ export default function Dashboard() {
                   </button>
                 </div>
 
-                {/* Day Labels */}
                 <div className="ad-ios-days-row">
                   {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
                     <div key={day} className="ad-ios-day-label">{day}</div>
                   ))}
                 </div>
 
-                {/* Date Grid */}
                 <div className="ad-ios-date-grid">
                   {(() => {
                     const year = new Date(calendarDate).getFullYear();
@@ -1204,7 +1198,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Orders Section Below Calendar */}
               {selectedCalendarDate && (
                 <div className="ad-calendar-orders-section">
                   <div className="ad-card-header">
@@ -1245,7 +1238,7 @@ export default function Dashboard() {
               <div className="ad-profile-card">
                 <div className="ad-profile-row"><span className="ad-label">Name</span><span className="ad-value">{salesperson.saleperson}</span></div>
                 <div className="ad-profile-row"><span className="ad-label">Email</span><span className="ad-value">{salesperson.email}</span></div>
-                <div className="ad-profile-row"><span className="ad-label">Phone</span><span className="ad-value">{formatPhoneNumber(salesperson.personal_phone)}</span></div>
+                <div className="ad-profile-row"><span className="ad-label">Phone</span><span className="ad-value">+91 {(salesperson.personal_phone)}</span></div>
                 <div className="ad-profile-row"><span className="ad-label">Joining Date</span><span className="ad-value">{formatDate(salesperson.join_date)}</span></div>
                 <div className="ad-profile-row"><span className="ad-label">Store Name</span><span className="ad-value">{salesperson.store_name}</span></div>
                 <div className="ad-profile-row"><span className="ad-label">Designation</span><span className="ad-value">{salesperson.designation}</span></div>
@@ -1257,7 +1250,6 @@ export default function Dashboard() {
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Client Book ({filteredClients.length})</h2>
 
-              {/* Client Search Bar */}
               <div className="ad-order-search-bar">
                 <input
                   type="text"
@@ -1277,10 +1269,7 @@ export default function Dashboard() {
                     <thead>
                       <tr>
                         <th>Name</th>
-                        {/* <th>Email</th> */}
                         <th>Phone</th>
-                        {/* <th>Gender</th>
-                        <th>Date of Birth</th> */}
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -1288,10 +1277,7 @@ export default function Dashboard() {
                       {filteredClients.map((c, i) => (
                         <tr key={i}>
                           <td data-label="Name">{c.name}</td>
-                          {/* <td data-label="Email">{c.email}</td> */}
                           <td data-label="Phone">{c.phone}</td>
-                          {/* <td data-label="Gender">{c.gender}</td> */}
-                          {/* <td data-label="Date of Birth">{formatDate(c.dob)}</td> */}
                           <td data-label="Action">
                             <button
                               className="ad-view-btn"
