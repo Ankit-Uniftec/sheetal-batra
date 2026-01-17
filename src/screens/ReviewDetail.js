@@ -8,6 +8,7 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import config from "../config/config";
+import { generateAllPdfs } from "../utils/pdfUtils";
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -85,8 +86,9 @@ export default function ReviewDetail() {
   const discountAmount = Number(order?.discount_amount) || 0;
   const netPayable = Number(order?.net_total) || 0;
   const remaining = Number(order?.remaining_payment) || 0;
+  const storeCreditUsed = Number(order?.store_credit_used) || 0;
 
-  const pricing = { discountPercent, discountAmount, netPayable, remaining };
+  const pricing = { discountPercent, discountAmount, netPayable, remaining, storeCreditUsed };
 
   const handlePlaceOrder = () => setShowSignature(true);
 
@@ -120,7 +122,7 @@ export default function ReviewDetail() {
         net_total: pricing.netPayable,
         remaining_payment: pricing.remaining,
         signature_url: sigData.publicUrl,
-        created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
+        // created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
         delivery_date: toISODate(order.delivery_date),
         join_date: toISODate(order.join_date),
         billing_date: toISODate(order.billing_date),
@@ -128,7 +130,7 @@ export default function ReviewDetail() {
       };
 
       // Remove measurement saving flags from order data (they shouldn't be stored in orders table)
-      const { save_measurements, measurements_to_save, ...orderDataToInsert } = normalizedOrder;
+      const { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;
 
       // 3️⃣ GENERATE ORDER NUMBER
       const { data: orderNo, error: orderNoError } = await supabase.rpc(
@@ -148,7 +150,56 @@ export default function ReviewDetail() {
       if (insertError) throw insertError;
       if (!insertedOrder) throw new Error("Order insert failed");
 
-      // 5️⃣ SAVE CUSTOMER MEASUREMENTS (if changed)
+      // 5️⃣.0 GENERATE PDFs & SEND WHATSAPP (Fire & Forget)
+      const orderWithItems = {
+        ...insertedOrder,
+        items: normalizedOrder.items || order.items || [],
+      };
+
+      generateAllPdfs(orderWithItems)
+        .then(async (pdfUrls) => {
+          console.log("✅ PDFs generated:", pdfUrls);
+
+          // Send WhatsApp with Customer PDF
+          if (pdfUrls?.customer_url) {
+            try {
+              console.log("📱 Sending WhatsApp...");
+
+              const response = await fetch(
+                `${config.SUPABASE_URL}/functions/v1/spur-whatsapp`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": config.SUPABASE_KEY,
+                    "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+                  },
+                  body: JSON.stringify({
+                    customerName: orderWithItems.delivery_name,
+                    customerPhone: orderWithItems.delivery_phone,
+                    customerCountry: orderWithItems.delivery_country || "India",
+                    pdfUrl: pdfUrls.customer_url,
+                  }),
+                }
+              );
+
+              const result = await response.json();
+
+              if (result.success) {
+                console.log("✅ WhatsApp sent!");
+              } else {
+                console.error("❌ WhatsApp failed:", result);
+              }
+            } catch (err) {
+              console.error("❌ WhatsApp error:", err);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("❌ PDF/WhatsApp failed:", err);
+        });
+
+      // 5️⃣.1 SAVE CUSTOMER MEASUREMENTS (if changed)
       if (order.save_measurements && order.measurements_to_save) {
         try {
           const { error: measurementError } = await supabase
@@ -168,6 +219,33 @@ export default function ReviewDetail() {
           }
         } catch (err) {
           console.error("Error saving measurements:", err);
+        }
+      }
+
+      // 5️⃣.2 DEDUCT STORE CREDIT (if used)
+      if (order.store_credit_used && order.store_credit_used > 0) {
+        try {
+          const updateData = {
+            store_credit: order.store_credit_remaining || 0,
+          };
+
+          // Clear expiry if no remaining credit
+          if (!order.store_credit_remaining || order.store_credit_remaining <= 0) {
+            updateData.store_credit_expiry = null;
+          }
+
+          const { error: creditError } = await supabase
+            .from("profiles")
+            .update(updateData)
+            .eq("id", order.user_id);
+
+          if (creditError) {
+            console.error("Error deducting store credit:", creditError);
+          } else {
+            console.log(`✅ Store credit deducted: ₹${order.store_credit_used} used, ₹${order.store_credit_remaining || 0} remaining`);
+          }
+        } catch (err) {
+          console.error("Error deducting store credit:", err);
         }
       }
 
@@ -460,30 +538,49 @@ export default function ReviewDetail() {
           )}
         </div>
 
-        {/* <div className="section-box">
-          <h3>Salesperson Details</h3>
-          <div className="row3">
-            <div className="field"><label>Name:</label><span>{order.salesperson || "—"}</span></div>
-            <div className="field"><label>Email:</label><span>{order.salesperson_email || "—"}</span></div>
-            <div className="field"><label>Phone:</label><span>{order.salesperson_phone || "—"}</span></div>
-          </div>
-        </div> */}
-
         <div className="section-box">
           <h3>Payment Details</h3>
           <div className="row3">
-            <div className="field"><label>Mode of Payment:</label><span>{order.payment_mode || "—"}</span></div>
+            <div className="field">
+              <label>Mode of Payment:</label>
+              {order.is_split_payment ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {JSON.parse(order.payment_mode).map((sp, idx) => (
+                    <span key={idx} style={{
+                      background: "#e3f2fd",
+                      padding: "4px 10px",
+                      borderRadius: "12px",
+                      fontSize: "13px",
+                      color: "#1565c0",
+                      fontWeight: "500",
+                    }}>
+                      {sp.mode}: ₹{formatIndianNumber(sp.amount)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span>{order.payment_mode || "—"}</span>
+              )}
+            </div>
             <div className="field"><label>Total Amount:</label><span>₹{formatIndianNumber(totalAmount)}</span></div>
-            {/* <div className="field"><label>Discount %:</label><span>{pricing.discountPercent}%</span></div> */}
-            <div className="field"><label>Collector Code:</label><span>₹{formatIndianNumber(pricing.discountAmount)}</span></div>
-            <div className="field"><label>Net Payable:</label><span>₹{formatIndianNumber(pricing.netPayable)}</span></div>
-            <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
+            <div className="field"><label>Collector Code:</label><span>- ₹{formatIndianNumber(pricing.discountAmount)}</span></div>
           </div>
-          {pricing.discountPercent > 0 && (
+
+          {/* Store Credit Row */}
+          {pricing.storeCreditUsed > 0 && (
             <div className="row3">
-              <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
+              <div className="field">
+                <label>Store Credit Applied:</label>
+                <span style={{ color: "#7b1fa2", fontWeight: "600" }}>- ₹{formatIndianNumber(pricing.storeCreditUsed)}</span>
+              </div>
             </div>
           )}
+
+          <div className="row3">
+            <div className="field"><label>Net Payable:</label><span style={{ fontWeight: "600" }}>₹{formatIndianNumber(pricing.netPayable)}</span></div>
+            <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
+            <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
+          </div>
         </div>
 
         <button className="confirm-btn" disabled={loading} onClick={handlePlaceOrder}>

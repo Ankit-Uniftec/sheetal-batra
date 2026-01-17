@@ -17,6 +17,15 @@ const COLORS = {
   black: "#000000",
 };
 
+// Helper to safely get string value (never returns empty string)
+const safeString = (value, fallback = "—") => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") {
+    return value.trim() === "" ? fallback : value;
+  }
+  return String(value) || fallback;
+};
+
 // Helper to format date
 const formatDate = (dateStr) => {
   if (!dateStr) return "—";
@@ -28,6 +37,7 @@ const formatDate = (dateStr) => {
     year: "numeric",
   }).replace(/\//g, ".");
 };
+
 // Helper to calculate T-2 date (delivery date - 2 days)
 const getWarehouseDate = (dateStr) => {
   if (!dateStr) return "—";
@@ -323,7 +333,7 @@ const InfoRow = ({ label, value, highlight = false }) => (
   <View style={warehouseStyles.infoRow}>
     <Text style={warehouseStyles.infoLabel}>{label}</Text>
     <Text style={highlight ? warehouseStyles.infoValueHighlight : warehouseStyles.infoValue}>
-      {value || "—"}
+      {safeString(value)}
     </Text>
   </View>
 );
@@ -331,11 +341,18 @@ const InfoRow = ({ label, value, highlight = false }) => (
 // Product Item Component - Shows top/bottom/extras WITH colors, additionals WITHOUT price
 // Hides empty fields
 const ProductItem = ({ item }) => {
-  const hasTop = item?.top;
-  const hasBottom = item?.bottom;
-  const hasSize = item?.size;
-  const hasExtras = item?.extras && item.extras.length > 0;
-  const hasAdditionals = item?.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0;
+  const hasTop = item?.top && item.top.trim() !== "";
+  const hasBottom = item?.bottom && item.bottom.trim() !== "";
+  const hasSize = item?.size && item.size.trim() !== "";
+  
+  // Filter extras to only those with valid names
+  const validExtras = (item?.extras || []).filter(e => e.name && e.name.trim() !== "");
+  const hasExtras = validExtras.length > 0;
+  
+  // Filter additionals to only those with valid names
+  const validAdditionals = (item?.additionals || []).filter(a => a.name && a.name.trim() !== "" && a.name.trim() !== " ");
+  const hasAdditionals = validAdditionals.length > 0;
+  
   const category = item?.category || (item?.isKids ? "Kids" : "Women");
 
   return (
@@ -344,7 +361,7 @@ const ProductItem = ({ item }) => {
         <Image src={item.image_url} style={warehouseStyles.productImage} />
       )}
       <View style={warehouseStyles.productDetails}>
-        <Text style={warehouseStyles.productName}>{item?.product_name || "—"}</Text>
+        <Text style={warehouseStyles.productName}>{safeString(item?.product_name)}</Text>
 
         <View style={warehouseStyles.productGrid}>
           {/* Top with color swatch - only if present */}
@@ -352,7 +369,7 @@ const ProductItem = ({ item }) => {
             <View style={warehouseStyles.productField}>
               <Text style={warehouseStyles.fieldLabel}>Top</Text>
               <View style={warehouseStyles.colorRow}>
-                <Text style={warehouseStyles.fieldValue}>{item.top}</Text>
+                <Text style={warehouseStyles.fieldValue}>{safeString(item.top)}</Text>
                 {item?.top_color?.hex && (
                   <View
                     style={[
@@ -370,7 +387,7 @@ const ProductItem = ({ item }) => {
             <View style={warehouseStyles.productField}>
               <Text style={warehouseStyles.fieldLabel}>Bottom</Text>
               <View style={warehouseStyles.colorRow}>
-                <Text style={warehouseStyles.fieldValue}>{item.bottom}</Text>
+                <Text style={warehouseStyles.fieldValue}>{safeString(item.bottom)}</Text>
                 {item?.bottom_color?.hex && (
                   <View
                     style={[
@@ -386,7 +403,7 @@ const ProductItem = ({ item }) => {
           {/* Category - always show */}
           <View style={warehouseStyles.productField}>
             <Text style={warehouseStyles.fieldLabel}>Category</Text>
-            <Text style={warehouseStyles.fieldValue}>{category}</Text>
+            <Text style={warehouseStyles.fieldValue}>{safeString(category)}</Text>
           </View>
 
           {/* Quantity - always show */}
@@ -402,7 +419,7 @@ const ProductItem = ({ item }) => {
           {hasSize && (
             <View style={warehouseStyles.productField}>
               <Text style={warehouseStyles.fieldLabel}>Size</Text>
-              <Text style={warehouseStyles.fieldValue}>{item.size}</Text>
+              <Text style={warehouseStyles.fieldValue}>{safeString(item.size)}</Text>
             </View>
           )}
 
@@ -411,9 +428,9 @@ const ProductItem = ({ item }) => {
             <View style={warehouseStyles.productFieldWide}>
               <Text style={warehouseStyles.fieldLabel}>Extras</Text>
               <View style={warehouseStyles.extrasContainer}>
-                {item.extras.map((extra, idx) => (
+                {validExtras.map((extra, idx) => (
                   <View key={idx} style={warehouseStyles.extraItem}>
-                    <Text style={warehouseStyles.extraName}>{extra.name}</Text>
+                    <Text style={warehouseStyles.extraName}>{safeString(extra.name)}</Text>
                     {extra.color?.hex && (
                       <View
                         style={[
@@ -433,7 +450,7 @@ const ProductItem = ({ item }) => {
             <View style={warehouseStyles.productFieldWide}>
               <Text style={warehouseStyles.fieldLabel}>Additionals</Text>
               <Text style={warehouseStyles.fieldValue}>
-                {item.additionals.map((a) => a.name).join(", ")}
+                {validAdditionals.map((a) => a.name).join(", ") || "—"}
               </Text>
             </View>
           )}
@@ -448,7 +465,7 @@ const BarcodePlaceholder = ({ label }) => (
   <View style={warehouseStyles.barcodeItem}>
     <Text style={warehouseStyles.barcodeItemLabel}>{label}</Text>
     <View style={warehouseStyles.barcodeItemBox}>
-      <Text style={warehouseStyles.barcodeText}></Text>
+      <Text style={warehouseStyles.barcodeText}> </Text>
     </View>
   </View>
 );
@@ -464,7 +481,9 @@ const MeasurementsDisplay = ({ measurements }) => {
     const fields = measurements[category];
     if (!fields || typeof fields !== "object") return false;
     // Check if any field has a value
-    return Object.values(fields).some((val) => val !== "" && val !== undefined && val !== null);
+    return Object.values(fields).some((val) => 
+      val !== "" && val !== " " && val !== undefined && val !== null
+    );
   });
 
   if (categories.length === 0) {
@@ -477,7 +496,7 @@ const MeasurementsDisplay = ({ measurements }) => {
         const fields = measurements[category];
         // Get only fields with values
         const fieldEntries = Object.entries(fields).filter(
-          ([_, value]) => value !== "" && value !== undefined && value !== null
+          ([_, value]) => value !== "" && value !== " " && value !== undefined && value !== null
         );
 
         if (fieldEntries.length === 0) return null;
@@ -489,7 +508,7 @@ const MeasurementsDisplay = ({ measurements }) => {
               {fieldEntries.map(([fieldName, value]) => (
                 <View key={fieldName} style={warehouseStyles.measurementItem}>
                   <Text style={warehouseStyles.measurementLabel}>
-                    {fieldName}: <Text style={warehouseStyles.measurementValue}>{value}</Text>
+                    {fieldName}: <Text style={warehouseStyles.measurementValue}>{safeString(value)}</Text>
                   </Text>
                 </View>
               ))}
@@ -525,6 +544,10 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
   // Use item's delivery date, fallback to order's delivery date
   const itemDeliveryDate = item.delivery_date || order.delivery_date;
 
+  // Get notes - filter out empty strings
+  const notes = item.notes || order.comments || order.delivery_notes;
+  const hasNotes = notes && notes.trim() !== "";
+
   return (
     <Document>
       <Page size="A4" style={warehouseStyles.page}>
@@ -536,7 +559,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
           <View style={warehouseStyles.barcodeSection}>
             <Text style={warehouseStyles.barcodeLabel}>Master</Text>
             <View style={warehouseStyles.barcodePlaceholder}>
-              <Text style={warehouseStyles.barcodeText}></Text>
+              <Text style={warehouseStyles.barcodeText}> </Text>
             </View>
           </View>
         </View>
@@ -559,7 +582,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             />
             <InfoRow
               label="DELIVERY TO:"
-              value={order.delivery_location || order.delivery_city || order.mode_of_delivery || "—"}
+              value={order.delivery_location || order.delivery_city || order.mode_of_delivery}
             />
             <InfoRow
               label="CLIENT NAME:"
@@ -597,13 +620,13 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
         <SectionBar title="Product Details" />
         <ProductItem item={item} />
 
-        {/* Notes Section - only show if notes exist */}
-        {(item.notes || order.comments || order.delivery_notes) && (
+        {/* Notes Section - only show if notes exist and are not empty */}
+        {hasNotes && (
           <View style={warehouseStyles.commentsSection}>
             <Text style={warehouseStyles.commentsLabel}>Notes:</Text>
             <View style={warehouseStyles.commentsBox}>
               <Text style={warehouseStyles.commentsText}>
-                {item.notes || order.comments || order.delivery_notes}
+                {notes}
               </Text>
             </View>
           </View>

@@ -8,6 +8,7 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
+import { usePopup } from "../components/Popup";
 
 // Measurement categories and fields (same as Screen4)
 const CATEGORY_KEY_MAP = {
@@ -68,10 +69,87 @@ const getHoursSinceOrder = (createdAt) => {
   return (now - orderDate) / (1000 * 60 * 60);
 };
 
-const isAfterDeliveryDate = (deliveryDate) => {
-  if (!deliveryDate) return false;
-  return new Date() > new Date(deliveryDate);
+const getHoursSinceDelivery = (deliveredAt) => {
+  if (!deliveredAt) return Infinity;
+  const deliveryDate = new Date(deliveredAt);
+  const now = new Date();
+  return (now - deliveryDate) / (1000 * 60 * 60);
 };
+
+// Check if order is non-returnable/non-exchangeable
+// Refund is still applicable for brand-fault cases
+const checkNonReturnable = (order) => {
+  const item = order.items?.[0] || {};
+  const reasons = [];
+
+  // 1. Custom orders (order_type is "Custom")
+  const isCustomOrder = order.order_type === "Custom";
+  if (isCustomOrder) reasons.push("Custom order");
+
+  // 2. International orders
+  const isInternational = order.delivery_country && 
+    order.delivery_country.toLowerCase() !== "india";
+  if (isInternational) reasons.push("International order");
+
+  // 3. Discounted / sale items
+  const isDiscounted = Number(order.discount_percent) > 0 || 
+    Number(order.discount_amount) > 0;
+  if (isDiscounted) reasons.push("Discounted/sale item");
+
+  // 4. Orders paid with store credits
+  const paidWithStoreCredit = Number(order.store_credit_used) > 0;
+  if (paidWithStoreCredit) reasons.push("Store credit order");
+
+  // 5. Gift certificate orders
+  const isGiftCertificate = order.is_gift_certificate || item.is_gift_certificate;
+  if (isGiftCertificate) reasons.push("Gift certificate");
+
+  // 6. Orders with extras (customized items)
+  const hasExtras = item.extras && item.extras.length > 0;
+  if (hasExtras) reasons.push("Customized with extras");
+
+  return {
+    isNonReturnable: reasons.length > 0,
+    reasons
+  };
+};
+
+// Reason Options
+const CANCEL_REASONS = [
+  { value: "new_order_placed", label: "New order placed" },
+  { value: "change_in_requirement", label: "Change in requirement" },
+  { value: "delivery_timeline_not_suitable", label: "Delivery timeline not suitable" },
+  { value: "other", label: "Other" },
+];
+
+const EXCHANGE_TYPES = [
+  { value: "size_exchange", label: "Size Exchange" },
+  { value: "product_exchange", label: "Product Exchange" },
+];
+
+const PRODUCT_EXCHANGE_REASONS = [
+  { value: "fit_not_meet_expectations", label: "Fit did not meet expectations" },
+  { value: "style_preference_changed", label: "Style preference changed" },
+  { value: "fabric_or_finish_concern", label: "Fabric or finish concern" },
+  { value: "color_variation", label: "Color variation" },
+  { value: "other", label: "Other" },
+];
+
+const RETURN_REASONS = [
+  { value: "fit_not_meet_expectations", label: "Fit did not meet expectations" },
+  { value: "style_preference_changed", label: "Style preference changed" },
+  { value: "fabric_or_finish_concern", label: "Fabric or finish concern" },
+  { value: "delivery_timeline_concern", label: "Delivery timeline concern" },
+  { value: "change_in_requirement", label: "Change in requirement" },
+  { value: "other", label: "Other" },
+];
+
+const REFUND_REASONS = [
+  { value: "product_was_faulty", label: "Product was faulty" },
+  { value: "incorrect_product_delivered", label: "Incorrect product delivered" },
+  { value: "delivery_delayed", label: "Delivery delayed" },
+  { value: "other", label: "Other" },
+];
 
 // Color display component
 function ColorDot({ color }) {
@@ -128,13 +206,22 @@ export default function OrderHistory() {
   const [editActiveCategory, setEditActiveCategory] = useState("Kurta/Choga/Kaftan");
   const [editMeasurements, setEditMeasurements] = useState({});
 
-  // Action dropdowns state
-  const [selectedCancellation, setSelectedCancellation] = useState({});
-  const [selectedExchange, setSelectedExchange] = useState({});
+  // Action modal state
+  const [actionModal, setActionModal] = useState(null); // { type: 'cancel'|'revoke'|'exchange'|'return'|'refund', order: order }
+  const [actionReason, setActionReason] = useState("");
+  const [actionOtherReason, setActionOtherReason] = useState("");
+  const [exchangeType, setExchangeType] = useState("");
+  const [exchangeReason, setExchangeReason] = useState("");
 
   // Search state
-  // Search state
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [attachmentLoading, setAttachmentLoading] = useState(null);
+
+  // Popup hook
+  const { showPopup, PopupComponent } = usePopup();
+
+  const isSM = userRole === "SM";
 
   // Reset to page 1 when search changes
   useEffect(() => {
@@ -145,10 +232,6 @@ export default function OrderHistory() {
   const customerName = customerFromState?.name || profile?.full_name || "Customer";
   const customerEmail = customerFromState?.email || profile?.email || "";
   const customerPhone = customerFromState?.phone || profile?.phone || "";
-
-  const [attachmentLoading, setAttachmentLoading] = useState(null);
-
-  const isSM = userRole === "SM";
 
   // Image URL helper
   const publicImageUrl = (src) => {
@@ -180,7 +263,6 @@ export default function OrderHistory() {
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
   const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
-  const goToPage = (page) => setCurrentPage(page);
   const goToPrevious = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
   const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
 
@@ -226,39 +308,6 @@ export default function OrderHistory() {
     }
   };
 
-
-  // Download all attachments
-  const downloadAttachments = async (attachments, orderNo) => {
-    if (!attachments || attachments.length === 0) return;
-
-    for (let i = 0; i < attachments.length; i++) {
-      const url = attachments[i];
-      try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-
-        // Get filename from URL
-        const fileName = url.split("/").pop() || `attachment_${i + 1}`;
-
-        // Create download link
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `${orderNo}_${fileName}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-
-        // Small delay between downloads
-        if (i < attachments.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } catch (err) {
-        console.error("Download failed for:", url, err);
-      }
-    }
-  };
-
   // Check user role
   useEffect(() => {
     const checkUserRole = async () => {
@@ -271,7 +320,7 @@ export default function OrderHistory() {
           .single();
         if (sp?.designation) {
           setUserDesignation(sp.designation);
-          if (sp.designation.toLowerCase().includes("manager")){
+          if (sp.designation.toLowerCase().includes("manager")) {
             setUserRole("SM");
           }
         }
@@ -342,47 +391,268 @@ export default function OrderHistory() {
     fetchData();
   }, [user, fromAssociate, customerFromState]);
 
-  // Permission helpers
-  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36 && order.status !== "cancelled";
+  // ==================== PERMISSION HELPERS ====================
+
+  // 1. Edit - within 36 hrs, Pending only
+  const canEdit = (order) => {
+    const hoursSince = getHoursSinceOrder(order.created_at);
+    return hoursSince <= 36 && order.status?.toLowerCase() === "pending";
+  };
+
+  // 2. Cancel - within 24 hrs, Pending only
   const canCancel = (order) => {
-    const hrs = getHoursSinceOrder(order.created_at);
-    const afterDel = isAfterDeliveryDate(order.delivery_date);
-    return (hrs <= 24 || afterDel || (isSM && hrs > 24)) && order.status !== "cancelled";
-  };
-  const canExchangeReturn = (order) => {
-    const afterDel = isAfterDeliveryDate(order.delivery_date);
-    const isDel = order.status?.toLowerCase() === "delivered";
-    const hrs = getHoursSinceOrder(order.created_at);
-    return (afterDel || isDel || (isSM && hrs > 24)) && order.status !== "cancelled" && order.status !== "exchange_return";
+    const hoursSince = getHoursSinceOrder(order.created_at);
+    return hoursSince <= 24 && order.status?.toLowerCase() === "pending";
   };
 
-  // Options
-  const getCancellationOptions = (order) => {
-    return [
-      { value: "change_in_requirement", label: "Change in Requirement" },
-      { value: "delivery_timeline_no_longer_works", label: "Delivery Timeline No Longer Works" },
-      { value: "duplicate_order", label: "Duplicate Order" },
-      { value: "order_placed_by_mistake", label: "Order Placed by Mistake" },
-    ];
+  // 3. Revoke - after 24 hrs, Pending only (replaces Cancel)
+  const canRevoke = (order) => {
+    const hoursSince = getHoursSinceOrder(order.created_at);
+    return hoursSince > 24 && order.status?.toLowerCase() === "pending";
   };
 
-  const getExchangeOptions = (order) => {
-    const hrs = getHoursSinceOrder(order.created_at);
-    const afterDel = isAfterDeliveryDate(order.delivery_date);
-    const isDel = order.status?.toLowerCase() === "delivered";
-    const opts = [];
-    if (afterDel || isDel) {
-      opts.push(
-        { value: "exchange_size", label: "Exchange (Size)" },
-        { value: "exchange_other", label: "Exchange (Other)" },
-        { value: "client_not_like_product", label: "Client Didn't Like Product" },
-        { value: "client_not_like_quality", label: "Client Didn't Like Quality" }
-      );
+  // 4. Check if within 72 hrs post delivery
+  const isWithin72HrsPostDelivery = (order) => {
+    if (order.status?.toLowerCase() !== "delivered" || !order.delivered_at) return false;
+    const hoursSinceDelivery = getHoursSinceDelivery(order.delivered_at);
+    return hoursSinceDelivery <= 72;
+  };
+
+  // 5. Exchange - within 72 hrs post delivery, NOT for non-returnable items
+  const canExchange = (order) => {
+    if (!isWithin72HrsPostDelivery(order)) return false;
+    const { isNonReturnable } = checkNonReturnable(order);
+    return !isNonReturnable;
+  };
+
+  // 6. Return for Store Credit - within 72 hrs post delivery, NOT for non-returnable items
+  const canReturn = (order) => {
+    if (!isWithin72HrsPostDelivery(order)) return false;
+    const { isNonReturnable } = checkNonReturnable(order);
+    return !isNonReturnable;
+  };
+
+  // 7. Refund - within 72 hrs post delivery, available for ALL items (brand-fault only)
+  const canRefund = (order) => {
+    return isWithin72HrsPostDelivery(order);
+  };
+
+  // ==================== ACTION HANDLERS ====================
+
+  // Open action modal
+  const openActionModal = (e, type, order) => {
+    e.stopPropagation();
+    setActionModal({ type, order });
+    setActionReason("");
+    setActionOtherReason("");
+    setExchangeType("");
+    setExchangeReason("");
+  };
+
+  // Close action modal
+  const closeActionModal = () => {
+    setActionModal(null);
+    setActionReason("");
+    setActionOtherReason("");
+    setExchangeType("");
+    setExchangeReason("");
+  };
+
+  // Handle Cancel Order
+  const handleCancelOrder = async () => {
+    if (!actionModal?.order) return;
+    
+    if (!actionReason) {
+      showPopup({ type: "warning", title: "Selection Required", message: "Please select a reason", confirmText: "OK" });
+      return;
     }
-    if (isSM && hrs > 24 && !afterDel) {
-      opts.push({ value: "store_credit_given", label: "Store Credit Given" });
+    
+    if (actionReason === "other" && !actionOtherReason.trim()) {
+      showPopup({ type: "warning", title: "Input Required", message: "Please provide a reason in the text field", confirmText: "OK" });
+      return;
     }
-    return opts;
+
+    const order = actionModal.order;
+    const finalReason = actionReason === "other" ? `Other: ${actionOtherReason}` : actionReason;
+
+    setActionLoading(order.id);
+    try {
+      await supabase.from("orders").update({
+        status: "cancelled",
+        cancellation_reason: finalReason,
+        cancelled_at: new Date().toISOString(),
+      }).eq("id", order.id);
+
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: finalReason } : o));
+      closeActionModal();
+      showPopup({ type: "success", title: "Order Cancelled", message: "Order has been cancelled successfully!", confirmText: "OK" });
+    } catch (err) {
+      showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle Revoke Order
+  const handleRevokeOrder = async () => {
+    if (!actionModal?.order) return;
+
+    const order = actionModal.order;
+
+    setActionLoading(order.id);
+    try {
+      await supabase.from("orders").update({
+        status: "revoked",
+        revoked_at: new Date().toISOString(),
+        cancellation_reason: "Brand-Initiated (Pre-Delivery) - Unable to fulfil order",
+      }).eq("id", order.id);
+
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "revoked" } : o));
+      closeActionModal();
+      showPopup({ type: "success", title: "Order Revoked", message: "Order revoked successfully! Full refund will be initiated.", confirmText: "OK" });
+    } catch (err) {
+      showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle Exchange
+  const handleExchange = async () => {
+    if (!actionModal?.order) return;
+
+    if (!exchangeType) {
+      showPopup({ type: "warning", title: "Selection Required", message: "Please select exchange type", confirmText: "OK" });
+      return;
+    }
+
+    if (exchangeType === "product_exchange") {
+      if (!exchangeReason) {
+        showPopup({ type: "warning", title: "Selection Required", message: "Please select a reason for product exchange", confirmText: "OK" });
+        return;
+      }
+      if (exchangeReason === "other" && !actionOtherReason.trim()) {
+        showPopup({ type: "warning", title: "Input Required", message: "Please provide a reason in the text field", confirmText: "OK" });
+        return;
+      }
+    }
+
+    const order = actionModal.order;
+    let finalReason = exchangeType === "size_exchange" 
+      ? "Size Exchange" 
+      : exchangeReason === "other" 
+        ? `Product Exchange - Other: ${actionOtherReason}` 
+        : `Product Exchange - ${exchangeReason}`;
+
+    setActionLoading(order.id);
+    try {
+      await supabase.from("orders").update({
+        status: "exchange_return",
+        exchange_reason: finalReason,
+        exchange_requested_at: new Date().toISOString(),
+      }).eq("id", order.id);
+
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "exchange_return", exchange_reason: finalReason } : o));
+      closeActionModal();
+      showPopup({ type: "success", title: "Exchange Processed", message: "Exchange request has been processed successfully!", confirmText: "OK" });
+    } catch (err) {
+      showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle Return for Store Credit
+  const handleReturn = async () => {
+    if (!actionModal?.order) return;
+
+    if (!actionReason) {
+      showPopup({ type: "warning", title: "Selection Required", message: "Please select a reason", confirmText: "OK" });
+      return;
+    }
+
+    if (actionReason === "other" && !actionOtherReason.trim()) {
+      showPopup({ type: "warning", title: "Input Required", message: "Please provide a reason in the text field", confirmText: "OK" });
+      return;
+    }
+
+    const order = actionModal.order;
+    const finalReason = actionReason === "other" ? `Other: ${actionOtherReason}` : actionReason;
+
+    setActionLoading(order.id);
+    try {
+      // Update order status
+      await supabase.from("orders").update({
+        status: "return_store_credit",
+        return_reason: finalReason,
+        exchange_requested_at: new Date().toISOString(),
+      }).eq("id", order.id);
+
+      // Add store credit to user profile
+      const creditAmount = Number(order.grand_total) || 0;
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + 12); // 12 months validity
+
+      // Get current store credit
+      const currentCredit = Number(profile?.store_credit) || 0;
+      const newCredit = currentCredit + creditAmount;
+
+      await supabase.from("profiles").update({
+        store_credit: newCredit,
+        store_credit_expiry: expiryDate.toISOString().split('T')[0],
+      }).eq("id", order.user_id);
+
+      // Update local profile state
+      setProfile(prev => ({
+        ...prev,
+        store_credit: newCredit,
+        store_credit_expiry: expiryDate.toISOString().split('T')[0],
+      }));
+
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "return_store_credit", return_reason: finalReason } : o));
+      closeActionModal();
+      showPopup({ type: "success", title: "Return Processed", message: `₹${formatIndianNumber(creditAmount)} store credits added to your account. Valid for 12 months.`, confirmText: "OK" });
+    } catch (err) {
+      showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle Refund Request
+  const handleRefund = async () => {
+    if (!actionModal?.order) return;
+
+    if (!actionReason) {
+      showPopup({ type: "warning", title: "Selection Required", message: "Please select a reason", confirmText: "OK" });
+      return;
+    }
+
+    if (actionReason === "other" && !actionOtherReason.trim()) {
+      showPopup({ type: "warning", title: "Input Required", message: "Please provide a reason in the text field", confirmText: "OK" });
+      return;
+    }
+
+    const order = actionModal.order;
+    const finalReason = actionReason === "other" ? `Other: ${actionOtherReason}` : actionReason;
+
+    setActionLoading(order.id);
+    try {
+      await supabase.from("orders").update({
+        status: "refund_requested",
+        refund_reason: finalReason,
+        refund_status: "pending",
+        exchange_requested_at: new Date().toISOString(),
+      }).eq("id", order.id);
+
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "refund_requested", refund_reason: finalReason } : o));
+      closeActionModal();
+      showPopup({ type: "success", title: "Refund Submitted", message: "Refund request submitted successfully! Subject to approval.", confirmText: "OK" });
+    } catch (err) {
+      showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   // Edit handlers
@@ -474,53 +744,9 @@ export default function OrderHistory() {
       setOrders(prev => prev.map(o => o.id === editingOrder.id ? { ...o, items: updatedItems, ...editFormData } : o));
       setEditingOrder(null);
       setEditMeasurements({});
-      alert("Order updated!");
+      showPopup({ type: "success", title: "Order Updated", message: "Order has been updated successfully!", confirmText: "OK" });
     } catch (err) {
-      alert("Failed: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleCancellation = async (e, order) => {
-    e.stopPropagation();
-    const reason = selectedCancellation[order.id];
-    if (!reason) { alert("Select a reason"); return; }
-    if (!window.confirm("Cancel this order?")) return;
-    setActionLoading(order.id);
-    try {
-      await supabase.from("orders").update({
-        status: "cancelled",
-        cancellation_reason: reason,
-        cancelled_at: new Date().toISOString(),
-      }).eq("id", order.id);
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled" } : o));
-      setSelectedCancellation(prev => ({ ...prev, [order.id]: "" }));
-      alert("Order cancelled!");
-    } catch (err) {
-      alert("Failed: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleExchangeReturn = async (e, order) => {
-    e.stopPropagation();
-    const reason = selectedExchange[order.id];
-    if (!reason) { alert("Select a reason"); return; }
-    if (!window.confirm("Process exchange/return?")) return;
-    setActionLoading(order.id);
-    try {
-      await supabase.from("orders").update({
-        status: "exchange_return",
-        exchange_reason: reason,
-        exchange_requested_at: new Date().toISOString(),
-      }).eq("id", order.id);
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "exchange_return" } : o));
-      setSelectedExchange(prev => ({ ...prev, [order.id]: "" }));
-      alert("Exchange/Return processed!");
-    } catch (err) {
-      alert("Failed: " + err.message);
+      showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
       setActionLoading(null);
     }
@@ -532,7 +758,6 @@ export default function OrderHistory() {
   };
 
   const handleLogout = async () => {
-    // await supabase.auth.signOut();
     navigate("/AssociateDashboard", { replace: true });
   };
 
@@ -563,18 +788,20 @@ export default function OrderHistory() {
       }
     } catch (err) {
       console.error("Download failed:", err);
-      alert("Failed to download attachments");
+      showPopup({ type: "error", title: "Download Failed", message: "Failed to download attachments. Please try again.", confirmText: "OK" });
     } finally {
       setAttachmentLoading(null);
     }
   };
 
-
   const getStatusClass = (status) => {
     switch (status?.toLowerCase()) {
       case "delivered": return "delivered";
       case "cancelled": return "cancelled";
+      case "revoked": return "cancelled";
       case "exchange_return": return "exchange";
+      case "return_store_credit": return "exchange";
+      case "refund_requested": return "exchange";
       default: return "active";
     }
   };
@@ -583,7 +810,10 @@ export default function OrderHistory() {
     switch (status?.toLowerCase()) {
       case "delivered": return "Delivered";
       case "cancelled": return "Cancelled";
+      case "revoked": return "Revoked";
       case "exchange_return": return "Exchange/Return";
+      case "return_store_credit": return "Return (Store Credit)";
+      case "refund_requested": return "Refund Requested";
       default: return "Active";
     }
   };
@@ -595,6 +825,9 @@ export default function OrderHistory() {
 
   return (
     <div className="oh-page">
+      {/* Popup Component */}
+      {PopupComponent}
+
       {/* Edit Modal */}
       {editingOrder && (
         <div className="oh-modal-overlay">
@@ -752,6 +985,199 @@ export default function OrderHistory() {
         </div>
       )}
 
+      {/* Action Modal */}
+      {actionModal && (
+        <div className="oh-modal-overlay">
+          <div className="oh-modal">
+            <div className="oh-modal-header">
+              <h3>
+                {actionModal.type === "cancel" && "Cancel Order"}
+                {actionModal.type === "revoke" && "Revoke Order"}
+                {actionModal.type === "exchange" && "Exchange Request"}
+                {actionModal.type === "return" && "Return for Store Credit"}
+                {actionModal.type === "refund" && "Cash Refund Request"}
+              </h3>
+              <button className="oh-modal-close" onClick={closeActionModal}>✕</button>
+            </div>
+            <div className="oh-modal-body">
+              <p className="oh-modal-order-info">
+                <strong>Order:</strong> {actionModal.order?.order_no} | 
+                <strong> Amount:</strong> ₹{formatIndianNumber(actionModal.order?.grand_total)}
+              </p>
+
+              {/* Cancel Order Form */}
+              {actionModal.type === "cancel" && (
+                <>
+                  <div className="oh-modal-field">
+                    <label>Reason for Cancellation *</label>
+                    <select
+                      value={actionReason}
+                      onChange={(e) => setActionReason(e.target.value)}
+                      className="oh-select-full"
+                    >
+                      <option value="">Select Reason</option>
+                      {CANCEL_REASONS.map(r => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {actionReason === "other" && (
+                    <div className="oh-modal-field">
+                      <label>Please specify *</label>
+                      <textarea
+                        value={actionOtherReason}
+                        onChange={(e) => setActionOtherReason(e.target.value)}
+                        placeholder="Enter reason..."
+                        className="oh-textarea"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Revoke Order Form */}
+              {actionModal.type === "revoke" && (
+                <div className="oh-revoke-notice">
+                  <p>⚠️ This action is used when the brand is unable to fulfil the order within the committed delivery timeline due to production, operational, or unforeseen constraints.</p>
+                  <ul>
+                    <li>Order will be cancelled as Brand-Initiated (Pre-Delivery)</li>
+                    <li>Full refund will be initiated to the original payment mode</li>
+                    <li>Warehouse will be notified to stop production</li>
+                  </ul>
+                </div>
+              )}
+
+              {/* Exchange Form */}
+              {actionModal.type === "exchange" && (
+                <>
+                  <div className="oh-modal-field">
+                    <label>Exchange Type *</label>
+                    <select
+                      value={exchangeType}
+                      onChange={(e) => { setExchangeType(e.target.value); setExchangeReason(""); }}
+                      className="oh-select-full"
+                    >
+                      <option value="">Select Type</option>
+                      {EXCHANGE_TYPES.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {exchangeType === "product_exchange" && (
+                    <>
+                      <div className="oh-modal-field">
+                        <label>Reason for Exchange *</label>
+                        <select
+                          value={exchangeReason}
+                          onChange={(e) => setExchangeReason(e.target.value)}
+                          className="oh-select-full"
+                        >
+                          <option value="">Select Reason</option>
+                          {PRODUCT_EXCHANGE_REASONS.map(r => (
+                            <option key={r.value} value={r.value}>{r.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {exchangeReason === "other" && (
+                        <div className="oh-modal-field">
+                          <label>Please specify * (Subject to approval)</label>
+                          <textarea
+                            value={actionOtherReason}
+                            onChange={(e) => setActionOtherReason(e.target.value)}
+                            placeholder="Enter reason..."
+                            className="oh-textarea"
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Return Form */}
+              {actionModal.type === "return" && (
+                <>
+                  <div className="oh-modal-field">
+                    <label>Reason for Return *</label>
+                    <select
+                      value={actionReason}
+                      onChange={(e) => setActionReason(e.target.value)}
+                      className="oh-select-full"
+                    >
+                      <option value="">Select Reason</option>
+                      {RETURN_REASONS.map(r => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {actionReason === "other" && (
+                    <div className="oh-modal-field">
+                      <label>Please specify * (Subject to approval)</label>
+                      <textarea
+                        value={actionOtherReason}
+                        onChange={(e) => setActionOtherReason(e.target.value)}
+                        placeholder="Enter reason..."
+                        className="oh-textarea"
+                      />
+                    </div>
+                  )}
+                  <div className="oh-credit-notice">
+                    <p>💳 Store Credit: ₹{formatIndianNumber(actionModal.order?.grand_total)} will be added to customer's account</p>
+                    <p>📅 Validity: 12 months from today</p>
+                  </div>
+                </>
+              )}
+
+              {/* Refund Form */}
+              {actionModal.type === "refund" && (
+                <>
+                  <div className="oh-modal-field">
+                    <label>Reason for Refund * (Brand-fault cases only)</label>
+                    <select
+                      value={actionReason}
+                      onChange={(e) => setActionReason(e.target.value)}
+                      className="oh-select-full"
+                    >
+                      <option value="">Select Reason</option>
+                      {REFUND_REASONS.map(r => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {actionReason === "other" && (
+                    <div className="oh-modal-field">
+                      <label>Please specify * (Subject to approval)</label>
+                      <textarea
+                        value={actionOtherReason}
+                        onChange={(e) => setActionOtherReason(e.target.value)}
+                        placeholder="Enter reason..."
+                        className="oh-textarea"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="oh-modal-footer">
+              <button className="oh-modal-btn cancel" onClick={closeActionModal}>Cancel</button>
+              <button
+                className={`oh-modal-btn ${actionModal.type === "cancel" || actionModal.type === "revoke" ? "danger" : "save"}`}
+                onClick={() => {
+                  if (actionModal.type === "cancel") handleCancelOrder();
+                  else if (actionModal.type === "revoke") handleRevokeOrder();
+                  else if (actionModal.type === "exchange") handleExchange();
+                  else if (actionModal.type === "return") handleReturn();
+                  else if (actionModal.type === "refund") handleRefund();
+                }}
+                disabled={actionLoading === actionModal.order?.id}
+              >
+                {actionLoading === actionModal.order?.id ? "Processing..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="oh-header">
         <img src={Logo} alt="logo" className="oh-logo" onClick={handleLogout} />
@@ -786,6 +1212,17 @@ export default function OrderHistory() {
                 <span className={`oh-mini-badge ${getStatusClass(o.status)}`}>{getStatusText(o.status)}</span>
               </div>
             ))}
+          </div>
+          <div className="oh-sidebar-card">
+            <h4>Store Credits</h4>
+            {profile?.store_credit > 0 ? (
+              <div className="oh-store-credit-info">
+                <p className="oh-credit-amount">₹{formatIndianNumber(profile.store_credit)}</p>
+                <p className="oh-credit-expiry">Valid till: {formatDate(profile.store_credit_expiry)}</p>
+              </div>
+            ) : (
+              <p className="muted">No store credits</p>
+            )}
           </div>
           <div className="oh-sidebar-card">
             <h4>Loyalty Points</h4>
@@ -830,14 +1267,15 @@ export default function OrderHistory() {
                 const hrs = getHoursSinceOrder(order.created_at);
                 const editOk = canEdit(order);
                 const cancelOk = canCancel(order);
-                const exchangeOk = canExchangeReturn(order);
-                const cancelOpts = getCancellationOptions(order);
-                const exchangeOpts = getExchangeOptions(order);
+                const revokeOk = canRevoke(order);
+                const exchangeOk = canExchange(order);
+                const returnOk = canReturn(order);
+                const refundOk = canRefund(order);
+                const { isNonReturnable, reasons: nonReturnableReasons } = checkNonReturnable(order);
 
                 return (
                   <div key={order.id} className="oh-order-card">
                     {/* Card Header */}
-                    {/* Card Header - Replace existing oh-card-top */}
                     <div className="oh-card-top">
                       <div className="oh-card-info">
                         <div className="oh-header-item">
@@ -902,10 +1340,6 @@ export default function OrderHistory() {
                             <span className="oh-label">Bottom</span>
                             <span className="oh-value">{item.bottom || "—"} {item.bottom_color && <ColorDot color={item.bottom_color} />}</span>
                           </div>
-                          {/* <div className="oh-detail">
-                            <span className="oh-label">Color</span>
-                            <span className="oh-value"><ColorDot color={item.color} /></span>
-                          </div> */}
                           <div className="oh-detail">
                             <span className="oh-label">Size</span>
                             <span className="oh-value">{item.size || "—"}</span>
@@ -927,7 +1361,7 @@ export default function OrderHistory() {
                           </div>
                           <div className="oh-detail wide">
                             <span className="oh-label">{userDesignation}</span>
-                            <span className="oh-value">{order.salesperson || "—"} {order.salesperson_phone && `(+91 ${formatPhoneNumber(order.salesperson_phone)})`}</span>
+                            <span className="oh-value">{order.salesperson || "—"} {order.salesperson_phone && `( ${formatPhoneNumber(order.salesperson_phone)})`}</span>
                           </div>
                         </div>
 
@@ -967,7 +1401,7 @@ export default function OrderHistory() {
                               {item.additionals.filter(a => a.name && a.name.trim() !== "").map((additional, idx, arr) => (
                                 <span key={idx}>
                                   {additional.name} (₹{formatIndianNumber(additional.price)})
-                                  {idx < item.additionals.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
+                                  {idx < arr.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
                                 </span>
                               ))}
                             </span>
@@ -978,41 +1412,54 @@ export default function OrderHistory() {
 
                     {/* Card Footer - Actions */}
                     <div className="oh-card-actions">
+                      {/* Edit Button */}
                       {editOk && (
-                        <button className="oh-btn edit" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
+                        <button className="oh-btn edit" onClick={(e) => openEditModal(e, order)}>
+                          Edit Order
+                        </button>
                       )}
-                      {cancelOk && cancelOpts.length > 0 && (
-                        <div className="oh-action-group">
-                          <select
-                            value={selectedCancellation[order.id] || ""}
-                            onChange={(e) => setSelectedCancellation({ ...selectedCancellation, [order.id]: e.target.value })}
-                            className="oh-select"
-                          >
-                            <option value="">Cancel Order</option>
-                            {cancelOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                          {selectedCancellation[order.id] && (
-                            <button className="oh-btn danger" onClick={(e) => handleCancellation(e, order)} disabled={actionLoading === order.id}>
-                              {actionLoading === order.id ? "..." : "Confirm"}
-                            </button>
-                          )}
-                        </div>
+
+                      {/* Cancel Button - within 24 hrs */}
+                      {cancelOk && (
+                        <button className="oh-btn danger" onClick={(e) => openActionModal(e, "cancel", order)}>
+                          Cancel Order
+                        </button>
                       )}
-                      {exchangeOk && exchangeOpts.length > 0 && (
-                        <div className="oh-action-group">
-                          <select
-                            value={selectedExchange[order.id] || ""}
-                            onChange={(e) => setSelectedExchange({ ...selectedExchange, [order.id]: e.target.value })}
-                            className="oh-select"
-                          >
-                            <option value="">Exchange / Return</option>
-                            {exchangeOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                          </select>
-                          {selectedExchange[order.id] && (
-                            <button className="oh-btn primary" onClick={(e) => handleExchangeReturn(e, order)} disabled={actionLoading === order.id}>
-                              {actionLoading === order.id ? "..." : "Process"}
-                            </button>
-                          )}
+
+                      {/* Revoke Button - after 24 hrs, before delivery */}
+                      {revokeOk && (
+                        <button className="oh-btn warning" onClick={(e) => openActionModal(e, "revoke", order)}>
+                          Revoke Order
+                        </button>
+                      )}
+
+                      {/* Post-delivery actions */}
+                      {/* Exchange - NOT for non-returnable items */}
+                      {exchangeOk && (
+                        <button className="oh-btn primary" onClick={(e) => openActionModal(e, "exchange", order)}>
+                          Exchange
+                        </button>
+                      )}
+
+                      {/* Return for Store Credit - NOT for non-returnable items */}
+                      {returnOk && (
+                        <button className="oh-btn secondary" onClick={(e) => openActionModal(e, "return", order)}>
+                          Return (Store Credit)
+                        </button>
+                      )}
+
+                      {/* Refund - available for ALL items (brand-fault only) */}
+                      {refundOk && (
+                        <button className="oh-btn outline" onClick={(e) => openActionModal(e, "refund", order)}>
+                          Refund Request
+                        </button>
+                      )}
+
+                      {/* Non-returnable notice */}
+                      {isWithin72HrsPostDelivery(order) && isNonReturnable && (
+                        <div className="oh-non-returnable-notice">
+                          <span className="oh-notice-icon">ℹ️</span>
+                          <span>Exchange/Return not available: {nonReturnableReasons.join(", ")}</span>
                         </div>
                       )}
                     </div>
@@ -1021,7 +1468,7 @@ export default function OrderHistory() {
               })}
 
               {/* Pagination */}
-              {orders.length > ordersPerPage && (
+              {filteredOrders.length > ordersPerPage && (
                 <div className="oh-pagination">
                   <button onClick={goToPrevious} disabled={currentPage === 1}>← Prev</button>
                   <span className="oh-page-info">Page {currentPage} of {totalPages}</span>
@@ -1040,6 +1487,22 @@ export default function OrderHistory() {
                 <div><strong>Phone:</strong> {profile?.phone || customerPhone || "—"}</div>
                 <div><strong>Gender:</strong> {profile?.gender || "—"}</div>
               </div>
+
+              {/* Store Credits Section */}
+              <h3 style={{ marginTop: "30px" }}>Store Credits</h3>
+              {profile?.store_credit > 0 ? (
+                <div className="oh-store-credit-card">
+                  <div className="oh-credit-balance">
+                    <span className="oh-credit-label">Available Balance</span>
+                    <span className="oh-credit-value">₹{formatIndianNumber(profile.store_credit)}</span>
+                  </div>
+                  <div className="oh-credit-expiry-info">
+                    <span>Valid till: {formatDate(profile.store_credit_expiry)}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="oh-no-measurements">No store credits available.</p>
+              )}
 
               {/* Measurements History */}
               <h3 style={{ marginTop: "30px" }}>Measurements History</h3>

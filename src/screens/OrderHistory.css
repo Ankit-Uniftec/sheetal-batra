@@ -159,6 +159,63 @@
   font-size: 14px;
 }
 
+/* ===== STORE CREDITS - SIDEBAR ===== */
+.oh-store-credit-info {
+  text-align: center;
+  padding: 10px 0;
+}
+
+.oh-store-credit-info .oh-credit-amount {
+  font-size: 28px;
+  font-weight: 700;
+  color: #d5b85a;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.oh-store-credit-info .oh-credit-expiry {
+  font-size: 12px;
+  color: #888;
+}
+
+/* ===== STORE CREDITS - PROFILE TAB ===== */
+.oh-store-credit-card {
+  background: linear-gradient(135deg, #fff9e6 0%, #fff5d6 100%);
+  border: 1px solid #e8d89c;
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 15px;
+}
+
+.oh-credit-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.oh-credit-label {
+  font-size: 14px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.oh-credit-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #d5b85a;
+}
+
+.oh-credit-expiry-info {
+  text-align: center;
+  padding-top: 12px;
+  border-top: 1px dashed #e0d090;
+  font-size: 13px;
+  color: #888;
+}
+
 /* ===== CONTENT ===== */
 .oh-content {
   flex: 1;
@@ -221,12 +278,10 @@
 
 /* Badges Row - Top Right */
 .oh-card-badges {
-  /* position: absolute; */
-  /* top: 15px; */
-  /* right: 15px; */
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .oh-badge {
@@ -454,7 +509,6 @@
   gap: 8px;
   margin-top: 5px;
   padding-top: 10px;
-  /* border-top: 1px dashed #eee; */
 }
 
 .oh-extras .oh-label {
@@ -473,7 +527,7 @@
   gap: 5px;
 }
 
-/* Card Actions */
+/* ===== CARD ACTIONS - UPDATED ===== */
 .oh-card-actions {
   display: flex;
   gap: 12px;
@@ -505,14 +559,19 @@
   border-color: #d5b85a;
 }
 
+/* ===== ACTION BUTTONS - PROJECT THEME ===== */
 .oh-btn {
-  padding: 8px 16px;
+  padding: 10px 18px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .oh-btn.edit {
@@ -524,22 +583,61 @@
   background: #c4a84a;
 }
 
+/* Cancel Button - Subtle red */
 .oh-btn.danger {
-  background: #ff5252;
-  color: #fff;
+  background: #fff;
+  color: #c62828;
+  border: 1.5px solid #c62828;
 }
 
 .oh-btn.danger:hover {
-  background: #e04545;
+  background: #ffebee;
 }
 
+/* Revoke Button - Warning orange */
+.oh-btn.warning {
+  background: #fff;
+  color: #e65100;
+  border: 1.5px solid #e65100;
+}
+
+.oh-btn.warning:hover {
+  background: #fff3e0;
+}
+
+/* Exchange Button - Gold primary */
 .oh-btn.primary {
-  background: #4caf50;
+  background: #d5b85a;
   color: #fff;
+  border: 1.5px solid #d5b85a;
 }
 
 .oh-btn.primary:hover {
-  background: #43a047;
+  background: #c4a84a;
+  border-color: #c4a84a;
+}
+
+/* Return Button - Gold outline */
+.oh-btn.secondary {
+  background: #fff;
+  color: #d5b85a;
+  border: 1.5px solid #d5b85a;
+}
+
+.oh-btn.secondary:hover {
+  background: #fffdf5;
+}
+
+/* Refund Button - Neutral outline */
+.oh-btn.outline {
+  background: #fff;
+  color: #666;
+  border: 1.5px solid #ddd;
+}
+
+.oh-btn.outline:hover {
+  border-color: #bbb;
+  color: #333;
 }
 
 .oh-btn:disabled {
@@ -607,7 +705,7 @@
   border-bottom: 1px solid #f0f0f0;
 }
 
-/* ===== MODAL ===== */
+/* ===== MODAL - BASE ===== */
 .oh-modal-overlay {
   position: fixed;
   inset: 0;
@@ -617,16 +715,29 @@
   justify-content: center;
   z-index: 1000;
   padding: 20px;
+  backdrop-filter: blur(4px);
 }
 
 .oh-modal {
   background: white;
   border-radius: 16px;
   width: 100%;
-  max-width: 600px;
+  max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .oh-modal-header {
@@ -652,6 +763,11 @@
   border-radius: 50%;
   cursor: pointer;
   font-size: 16px;
+  transition: all 0.2s;
+}
+
+.oh-modal-close:hover {
+  background: #eee;
 }
 
 .oh-modal-body {
@@ -721,14 +837,174 @@
   color: #333;
 }
 
+.oh-modal-btn.cancel:hover {
+  background: #eee;
+}
+
 .oh-modal-btn.save {
   background: #d5b85a;
   border: none;
   color: white;
 }
 
+.oh-modal-btn.save:hover {
+  background: #c4a84a;
+}
+
 .oh-modal-btn.save:disabled {
   background: #ccc;
+}
+
+.oh-modal-btn.danger {
+  background: linear-gradient(135deg, #ff5252 0%, #e04545 100%);
+  border: none;
+  color: white;
+}
+
+.oh-modal-btn.danger:hover {
+  background: linear-gradient(135deg, #e04545 0%, #c62828 100%);
+}
+
+/* ===== ACTION MODAL SPECIFIC STYLES ===== */
+.oh-modal-order-info {
+  background: #f9f9f9;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.oh-modal-order-info strong {
+  color: #333;
+  margin-right: 4px;
+}
+
+/* Full Width Select Dropdown */
+.oh-select-full {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  transition: all 0.2s;
+}
+
+.oh-select-full:hover {
+  border-color: #ccc;
+}
+
+.oh-select-full:focus {
+  outline: none;
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.15);
+}
+
+/* Textarea */
+.oh-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  min-height: 100px;
+  resize: vertical;
+  transition: all 0.2s;
+}
+
+.oh-textarea:hover {
+  border-color: #ccc;
+}
+
+.oh-textarea:focus {
+  outline: none;
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.15);
+}
+
+.oh-textarea::placeholder {
+  color: #999;
+}
+
+/* Revoke Notice */
+.oh-revoke-notice {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  border: 1px solid #ffcc80;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.oh-revoke-notice p {
+  margin: 0 0 12px 0;
+  color: #e65100;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.oh-revoke-notice ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.oh-revoke-notice li {
+  color: #bf360c;
+  font-size: 13px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.oh-revoke-notice li:last-child {
+  margin-bottom: 0;
+}
+
+/* Credit Notice */
+.oh-credit-notice {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border: 1px solid #a5d6a7;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-top: 8px;
+}
+
+.oh-credit-notice p {
+  margin: 0 0 8px 0;
+  color: #2e7d32;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.oh-credit-notice p:last-child {
+  margin-bottom: 0;
+}
+
+/* Non-Returnable Notice */
+.oh-non-returnable-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #e65100;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.oh-notice-icon {
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 /* ===== FLOATING BACK ===== */
@@ -747,9 +1023,8 @@
   box-shadow: 0 4px 12px rgba(213, 184, 90, 0.4);
   display: none;
 }
-/* Add these styles to your OrderHistory.css */
 
-/* Larger modal for measurements */
+/* ===== LARGE MODAL (Edit Order) ===== */
 .oh-modal-large {
   max-width: 900px;
   width: 95%;
@@ -846,62 +1121,6 @@
 .oh-measure-field input:focus {
   outline: none;
   border-color: #d5b85a;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .oh-measure-container {
-    flex-direction: column;
-  }
-  
-  .oh-measure-menu {
-    width: 100%;
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    border-right: none;
-    border-bottom: 1px solid #eee;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-  
-  .oh-measure-menu::-webkit-scrollbar {
-    height: 4px;
-  }
-  
-  .oh-measure-menu::-webkit-scrollbar-track {
-    background: #f1f1f1;
-  }
-  
-  .oh-measure-menu::-webkit-scrollbar-thumb {
-    background: #d5b85a;
-    border-radius: 4px;
-  }
-  
-  .oh-measure-item {
-    flex-shrink: 0;
-    white-space: nowrap;
-    padding: 10px 15px;
-    text-align: center;
-    border-bottom: none;
-    border-right: 1px solid #eee;
-    font-size: 12px;
-  }
-  
-  .oh-measure-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .oh-measure-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .oh-measure-item {
-    padding: 8px 12px;
-    font-size: 11px;
-  }
 }
 
 /* ===== MEASUREMENTS HISTORY CARDS ===== */
@@ -1056,9 +1275,50 @@
     gap: 10px;
   }
 
-
   .oh-sidebar-card {
     min-width: 200px;
+  }
+
+  .oh-measure-container {
+    flex-direction: column;
+  }
+  
+  .oh-measure-menu {
+    width: 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #eee;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  
+  .oh-measure-menu::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  .oh-measure-menu::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+  
+  .oh-measure-menu::-webkit-scrollbar-thumb {
+    background: #d5b85a;
+    border-radius: 4px;
+  }
+  
+  .oh-measure-item {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 10px 15px;
+    text-align: center;
+    border-bottom: none;
+    border-right: 1px solid #eee;
+    font-size: 12px;
+  }
+  
+  .oh-measure-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -1134,6 +1394,11 @@
     text-align: center;
   }
 
+  .oh-modal {
+    max-width: 95%;
+    margin: 10px;
+  }
+
   .oh-modal-row {
     flex-direction: column;
   }
@@ -1194,5 +1459,27 @@
 
   .oh-value {
     font-size: 13px;
+  }
+
+  .oh-measure-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .oh-measure-item {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .oh-modal-body {
+    padding: 16px;
+  }
+
+  .oh-modal-footer {
+    padding: 16px;
+    flex-direction: column;
+  }
+
+  .oh-modal-btn {
+    width: 100%;
   }
 }

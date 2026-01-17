@@ -26,6 +26,15 @@ Font.register({
   ],
 });
 
+// Helper to safely get string value (never returns empty string)
+const safeString = (value, fallback = "—") => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") {
+    return value.trim() === "" ? fallback : value;
+  }
+  return String(value) || fallback;
+};
+
 // Helper to format Indian numbers with ₹ symbol
 const formatINR = (num) => {
   if (!num) return "₹ 0";
@@ -65,8 +74,10 @@ const formatDateTime = (dateStr) => {
 // Get color name from color object
 const getColorName = (color) => {
   if (!color) return "—";
-  if (typeof color === "string") return color;
-  if (typeof color === "object" && color.name) return color.name;
+  if (typeof color === "string") return color.trim() === "" ? "—" : color;
+  if (typeof color === "object" && color.name) {
+    return color.name.trim() === "" ? "—" : color.name;
+  }
   return "—";
 };
 
@@ -76,6 +87,15 @@ const getColorHex = (color) => {
   if (typeof color === "string") return color.startsWith("#") ? color : "#CCCCCC";
   if (typeof color === "object" && color.hex) return color.hex;
   return "#CCCCCC";
+};
+
+// Check if color name is valid (not empty)
+const hasValidColorName = (color) => {
+  if (!color) return false;
+  if (typeof color === "object" && color.name) {
+    return color.name.trim() !== "";
+  }
+  return false;
 };
 
 // Custom styles for this component
@@ -97,11 +117,7 @@ const pdfStyles = StyleSheet.create({
   },
   // Sales Associate section - fixed at bottom
   salesAssociateSection: {
-    // position: "absolute",
-    // bottom: 60,
-    // left: 40,
-    // right: 40,
-    marginTop:20,
+    marginTop: 20,
   },
   // Sales Associate row
   salesAssociateRow: {
@@ -174,7 +190,7 @@ const SectionBar = ({ title }) => (
 const Field = ({ label, value, style }) => (
   <View style={[styles.fieldBlock, style]}>
     <Text style={styles.label}>{label}</Text>
-    <Text style={[styles.value, pdfStyles.inrText]}>{value || "—"}</Text>
+    <Text style={[styles.value, pdfStyles.inrText]}>{safeString(value)}</Text>
   </View>
 );
 
@@ -192,8 +208,8 @@ const ColorField = ({ label, color }) => (
 // Product Item Component
 const ProductItem = ({ item, order, showPricing = true }) => {
   const category = item?.category || (item?.isKids ? "Kids" : "Women");
-  const hasTop = item?.top;
-  const hasBottom = item?.bottom;
+  const hasTop = item?.top && item.top.trim() !== "";
+  const hasBottom = item?.bottom && item.bottom.trim() !== "";
   const hasExtras = item?.extras && item.extras.length > 0;
   const hasAdditionals = item?.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0;
 
@@ -205,7 +221,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
       <View style={styles.productDetails}>
         {/* Product Name and Delivery Date Row */}
         <View style={styles.rowSpaceBetween}>
-          <Text style={styles.productName}>{item?.product_name || "—"}</Text>
+          <Text style={styles.productName}>{safeString(item?.product_name)}</Text>
           {order.delivery_date && (
             <View style={{ alignItems: "flex-end" }}>
               <Text style={styles.label}>Estimated Delivery Date:</Text>
@@ -222,11 +238,13 @@ const ProductItem = ({ item, order, showPricing = true }) => {
           {hasTop && (
             <View style={[styles.productField, { width: "25%" }]}>
               <Text style={styles.label}>Top</Text>
-              <Text style={styles.value}>{item.top}</Text>
+              <Text style={styles.value}>{safeString(item.top)}</Text>
               {item?.top_color?.hex && (
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
                   <View style={[styles.colorSwatch, { backgroundColor: item.top_color.hex }]} />
-                  <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.top_color.name || ""}</Text>
+                  {hasValidColorName(item.top_color) && (
+                    <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.top_color.name}</Text>
+                  )}
                 </View>
               )}
             </View>
@@ -236,11 +254,13 @@ const ProductItem = ({ item, order, showPricing = true }) => {
           {hasBottom && (
             <View style={[styles.productField, { width: "25%" }]}>
               <Text style={styles.label}>Bottom</Text>
-              <Text style={styles.value}>{item.bottom}</Text>
+              <Text style={styles.value}>{safeString(item.bottom)}</Text>
               {item?.bottom_color?.hex && (
                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
                   <View style={[styles.colorSwatch, { backgroundColor: item.bottom_color.hex }]} />
-                  <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.bottom_color.name || ""}</Text>
+                  {hasValidColorName(item.bottom_color) && (
+                    <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.bottom_color.name}</Text>
+                  )}
                 </View>
               )}
             </View>
@@ -252,11 +272,13 @@ const ProductItem = ({ item, order, showPricing = true }) => {
               <Text style={styles.label}>Extras</Text>
               {item.extras.map((extra, idx) => (
                 <View key={idx} style={{ marginBottom: 2 }}>
-                  <Text style={styles.value}>{extra.name}</Text>
+                  <Text style={styles.value}>{safeString(extra.name)}</Text>
                   {extra.color?.hex && (
                     <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
                       <View style={[styles.colorSwatch, { backgroundColor: extra.color.hex }]} />
-                      <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{extra.color.name || ""}</Text>
+                      {hasValidColorName(extra.color) && (
+                        <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{extra.color.name}</Text>
+                      )}
                     </View>
                   )}
                 </View>
@@ -267,17 +289,17 @@ const ProductItem = ({ item, order, showPricing = true }) => {
           {/* Category */}
           <View style={[styles.productField, { width: "20%" }]}>
             <Text style={styles.label}>Category</Text>
-            <Text style={styles.value}>{category}</Text>
+            <Text style={styles.value}>{safeString(category)}</Text>
           </View>
         </View>
 
         {/* Second Row: Size and Additionals */}
         <View style={styles.productGrid}>
           {/* Size */}
-          {item?.size && (
+          {item?.size && item.size.trim() !== "" && (
             <View style={[styles.productField, { width: "20%" }]}>
               <Text style={styles.label}>Size</Text>
-              <Text style={styles.value}>{item.size}</Text>
+              <Text style={styles.value}>{safeString(item.size)}</Text>
             </View>
           )}
 
@@ -288,7 +310,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
               {item.additionals.filter(a => a.name && a.name.trim() !== "").map((additional, idx) => (
                 <View key={idx} style={{ marginBottom: 2 }}>
                   <Text style={[styles.value, pdfStyles.inrText]}>
-                    {additional.name} - ₹ {Number(additional.price).toLocaleString("en-IN")}
+                    {safeString(additional.name)} - ₹ {Number(additional.price || 0).toLocaleString("en-IN")}
                   </Text>
                 </View>
               ))}
@@ -317,7 +339,7 @@ const PaymentRow = ({ label, value, isTotal = false, prefix = "+" }) => (
       {label}
     </Text>
     <Text style={[isTotal ? styles.paymentTotalValue : styles.paymentValue, pdfStyles.inrText]}>
-      {isTotal ? "" : prefix + "  "}{formatINR(value)}
+      {isTotal ? " " : prefix + " "}{formatINR(value)}
     </Text>
   </View>
 );
@@ -343,6 +365,20 @@ const PageFooter = () => (
   </View>
 );
 
+// Safe JSON parse for payment mode
+const parsePaymentMode = (paymentMode) => {
+  if (!paymentMode) return null;
+  try {
+    const parsed = JSON.parse(paymentMode);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
 // Main Customer PDF Document
 const CustomerOrderPdf = ({ order, logoUrl }) => {
   if (!order) {
@@ -354,8 +390,9 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
   const discountAmount = Number(order.discount_amount) || 0;
   const advancePayment = Number(order.advance_payment) || 0;
   const collectorsCode = Number(order.collectors_code) || 0;
+  const storeCreditUsed = Number(order.store_credit_used) || 0;
   const netTotal = grandTotal - discountAmount - collectorsCode;
-  const remaining = netTotal - advancePayment;
+  const remaining = netTotal - advancePayment - storeCreditUsed;
 
   // GST Calculation (flat 18% deduction)
   const gstAmount = Math.round(grandTotal * 0.18);
@@ -364,19 +401,42 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
   // Helper to get billing address
   const getBillingAddress = () => {
     if (order.billing_same) {
-      return [
+      const addr = [
         order.delivery_address,
         order.delivery_city,
         order.delivery_state,
         order.delivery_pincode,
-      ].filter(Boolean).join(", ");
+      ].filter(v => v && String(v).trim() !== "").join(", ");
+      return addr || "—";
     }
-    return [
+    const addr = [
       order.billing_address,
       order.billing_city,
       order.billing_state,
       order.billing_pincode,
-    ].filter(Boolean).join(", ");
+    ].filter(v => v && String(v).trim() !== "").join(", ");
+    return addr || "—";
+  };
+
+  // Helper to get delivery address
+  const getDeliveryAddress = () => {
+    if (order.delivery_address) {
+      const addr = [
+        order.delivery_address,
+        order.delivery_city,
+        order.delivery_state,
+        order.delivery_pincode,
+      ].filter(v => v && String(v).trim() !== "").join(", ");
+      if (addr) return addr;
+    }
+
+    if (order.mode_of_delivery === "Delhi Store") {
+      return "S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048";
+    }
+    if (order.mode_of_delivery === "Ludhiana Store") {
+      return "S.C.O no. 22, Sun View Plaza Ludhiana, Punjab 142027";
+    }
+    return "—";
   };
 
   return (
@@ -395,7 +455,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <View style={styles.titleSection}>
           <Text style={styles.title}>Order Copy</Text>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order ID: {order.order_no || order.order_id || "—"}</Text>
+            <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
@@ -403,35 +463,20 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         {/* Personal Details */}
         <SectionBar title="Personal Details" />
         <View style={styles.rowSpaceBetween}>
-          <Text style={styles.value}>{order.delivery_name || "—"}</Text>
-          {order.delivery_email && (
+          <Text style={styles.value}>{safeString(order.delivery_name)}</Text>
+          {order.delivery_email?.trim() && (
             <Text style={styles.value}>{order.delivery_email}</Text>
           )}
         </View>
         <View style={styles.fieldBlock}>
           <Text style={[styles.label, { marginTop: 10 }]}>Delivery Address:</Text>
-          <Text style={styles.value}>
-            {order.delivery_address
-              ? [
-                order.delivery_address,
-                order.delivery_city,
-                order.delivery_state,
-                order.delivery_pincode,
-              ]
-                .filter(Boolean)
-                .join(", ")
-              : order.mode_of_delivery === "Delhi Store"
-                ? "S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048"
-                : order.mode_of_delivery === "Ludhiana Store"
-                  ? "S.C.O no. 22, Sun View Plaza Ludhiana, Punjab 142027"
-                  : "—"}
-          </Text>
+          <Text style={styles.value}>{getDeliveryAddress()}</Text>
         </View>
-        {order.delivery_phone && (
+        {order.delivery_phone?.trim() && (
           <View style={{ alignItems: "flex-end", marginTop: -30 }}>
             <Text style={styles.value}>{order.delivery_phone}</Text>
           </View>
-        )}
+        ) }
 
         {/* Product Details */}
         <SectionBar title="Product Details" />
@@ -452,7 +497,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
           <View style={pdfStyles.salesAssociateRow}>
             {/* Name - Left */}
             <View style={pdfStyles.salesNameSection}>
-              {order.salesperson && (
+              {order.salesperson?.trim() && (
                 <View style={styles.row}>
                   <Text style={styles.label}>Name: </Text>
                   <Text style={styles.value}>{order.salesperson}</Text>
@@ -464,8 +509,8 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
             <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team: </Text>
 
             {/* Phone - Right */}
-            {order.salesperson_phone && (
-              <Text style={pdfStyles.salesPhoneText}>{`(+91 ${formatPhoneNumber(order.salesperson_phone)})`}</Text>
+            {order.salesperson_phone?.trim() && (
+              <Text style={pdfStyles.salesPhoneText}>{` ${formatPhoneNumber(order.salesperson_phone)}`}</Text>
             )}
           </View>
 
@@ -496,7 +541,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <View style={styles.titleSection}>
           <Text style={styles.title}>Order Copy</Text>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order ID: {order.order_no || order.order_id || "—"}</Text>
+            <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
@@ -511,22 +556,37 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
                 value={order.billing_company || order.delivery_name}
               />
             )}
-            {order.billing_gstin && (
+            {order.billing_gstin?.trim() && (
               <Field label="GSTIN:" value={order.billing_gstin} />
             )}
-            {getBillingAddress() && (
-              <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Billing Address</Text>
-                <Text style={styles.value}>{getBillingAddress()}</Text>
-              </View>
-            )}
+            <View style={styles.fieldBlock}>
+              <Text style={styles.label}>Billing Address</Text>
+              <Text style={styles.value}>{getBillingAddress()}</Text>
+            </View>
           </View>
           <View style={styles.column}>
-            {order.payment_mode && (
-              <Field
-                label="Mode of Payment:"
-                value={order.payment_mode}
-              />
+            {order.payment_mode?.trim() && (
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>Mode of Payment:</Text>
+                {order.is_split_payment && parsePaymentMode(order.payment_mode) ? (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 2 }}>
+                    {parsePaymentMode(order.payment_mode).map((sp, idx) => (
+                      <Text key={idx} style={[styles.value, pdfStyles.inrText, {
+                        backgroundColor: "#e3f2fd",
+                        padding: "3px 8px",
+                        borderRadius: 4,
+                        marginRight: 6,
+                        marginBottom: 4,
+                        fontSize: 9,
+                      }]}>
+                        {safeString(sp.mode, "Payment")}: ₹ {Number(sp.amount || 0).toLocaleString("en-IN")}
+                      </Text>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.value}>{safeString(order.payment_mode)}</Text>
+                )}
+              </View>
             )}
             {advancePayment > 0 && (
               <Field label="Advance Amount Paid:" value={formatINR(advancePayment)} />
@@ -545,6 +605,9 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
             )}
             {collectorsCode > 0 && (
               <PaymentRow label="Collectors Code:" value={collectorsCode} prefix="-" />
+            )}
+            {storeCreditUsed > 0 && (
+              <PaymentRow label="Store Credit Applied:" value={storeCreditUsed} prefix="-" />
             )}
             {advancePayment > 0 && (
               <PaymentRow label="Total Advance Paid:" value={advancePayment} prefix="-" />

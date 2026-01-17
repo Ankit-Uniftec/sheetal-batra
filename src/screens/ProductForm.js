@@ -1116,7 +1116,7 @@ export default function ProductForm() {
         .select("name, price, sort_order")
         .order("sort_order", { ascending: true });
 
-      console.log("extras:", data);
+      // console.log("extras:", data);
 
 
       if (error) {

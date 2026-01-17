@@ -9,6 +9,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { SearchableSelect } from "../components/SearchableSelect";
 import Popup from "../components/Popup";
+import SplitPaymentModal from "../components/SplitPaymentModal";
 
 const countryOptions = [
   { label: "India", value: "India" },
@@ -78,6 +79,17 @@ export default function OrderDetails() {
   const [discountApplied, setDiscountApplied] = useState(false);
   const [birthdayApplied, setBirthdayApplied] = useState(false);
   const [appliedCode, setAppliedCode] = useState("");
+  const [codWaiverApplied, setCodWaiverApplied] = useState(false);
+
+  // Store Credit
+  const [storeCreditApplied, setStoreCreditApplied] = useState(false);
+  const [availableStoreCredit, setAvailableStoreCredit] = useState(0);
+  const [storeCreditExpiry, setStoreCreditExpiry] = useState(null);
+
+  // Split Payment
+  const [isSplitPayment, setIsSplitPayment] = useState(false);
+  const [splitPayments, setSplitPayments] = useState([]);
+  const [showSplitModal, setShowSplitModal] = useState(false);
 
   // Billing
   const [billingSame, setBillingSame] = useState(true);
@@ -138,10 +150,19 @@ export default function OrderDetails() {
     [order?.grand_total]
   );
 
+  // Calculate extras total from all items (discount should NOT apply on extras)
+  const extrasTotal = useMemo(() => {
+    const items = order?.items || [];
+    return items.reduce((total, item) => {
+      const itemExtras = item.extras || [];
+      const itemExtrasTotal = itemExtras.reduce((sum, extra) => sum + (Number(extra.price) || 0), 0);
+      return total + itemExtrasTotal;
+    }, 0);
+  }, [order?.items]);
+
   // Check if order is Custom (50% advance) or Standard (25% advance)
   const isCustomOrder = order?.order_type === "Custom";
   const minAdvancePercent = isCustomOrder ? 0.5 : 0.25;
-  // const minAdvanceAmount = totalAmount * minAdvancePercent;
 
   // Allow any advance amount (don't force minimum)
   const sanitizedAdvance = useMemo(() => {
@@ -160,9 +181,22 @@ export default function OrderDetails() {
     return (Number(discountPercent) || 0) + (Number(birthdayDiscount) || 0);
   }, [discountPercent, birthdayDiscount]);
 
+  // Check if store credit is valid (not expired)
+  const isStoreCreditValid = useMemo(() => {
+    if (!storeCreditExpiry) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiryDate = new Date(storeCreditExpiry);
+    return expiryDate >= today && availableStoreCredit > 0;
+  }, [storeCreditExpiry, availableStoreCredit]);
+
   const pricing = useMemo(() => {
     const pct = Math.min(100, Math.max(0, Number(totalDiscount) || 0));
-    const discountAmount = (totalAmount * pct) / 100;
+
+    // Calculate base amount for discount (excluding extras)
+    const baseAmountForDiscount = totalAmount - extrasTotal;
+    const discountAmount = (baseAmountForDiscount * pct) / 100;
+
     const hasDiscount = discountApplied || birthdayApplied;
 
     let netPayable = Math.max(0, totalAmount - discountAmount);
@@ -174,28 +208,73 @@ export default function OrderDetails() {
     }
     setShippingCharge(currentShippingCharge);
 
-    if (paymentMode === "COD" && order.mode_of_delivery === "Home Delivery") {
-      netPayable += COD_CHARGE;
+    // Check if Cash is used in advance payment (normal or split)
+    const hasCashPayment = isSplitPayment
+      ? splitPayments.some(p => p.mode === "Cash")
+      : paymentMode === "COD";
+
+    // COD charge - waived if codWaiverApplied is true
+    const appliedCodCharge = (hasCashPayment && order.mode_of_delivery === "Home Delivery" && !codWaiverApplied)
+      ? COD_CHARGE
+      : 0;
+
+    if (appliedCodCharge > 0) {
+      netPayable += appliedCodCharge;
     }
 
-    // Calculate min advance: on netPayable if discount applied, otherwise on totalAmount
-    const minAdvanceBase = hasDiscount ? netPayable : totalAmount;
+    // Calculate store credit to be used
+    // Store credit is applied AFTER discounts, COD charge, and shipping
+    let storeCreditUsed = 0;
+    let netAfterStoreCredit = netPayable;
+
+    if (storeCreditApplied && isStoreCreditValid) {
+      // Use full store credit or order value, whichever is less
+      storeCreditUsed = Math.min(availableStoreCredit, netPayable);
+      netAfterStoreCredit = Math.max(0, netPayable - storeCreditUsed);
+    }
+
+    // Calculate min advance: on netAfterStoreCredit if store credit applied, 
+    // on netPayable if discount applied, otherwise on totalAmount
+    const minAdvanceBase = storeCreditApplied ? netAfterStoreCredit : (hasDiscount ? netPayable : totalAmount);
     const minAdvanceAmount = minAdvanceBase * minAdvancePercent;
 
-    const remaining = Math.max(0, netPayable - sanitizedAdvance);
+    const remaining = Math.max(0, netAfterStoreCredit - sanitizedAdvance);
 
     return {
       discountPercent: pct,
       discountAmount,
       netPayable,
+      netAfterStoreCredit,
       remaining,
       shippingCharge: currentShippingCharge,
       regularDiscount: Number(discountPercent) || 0,
       birthdayDiscount: Number(birthdayDiscount) || 0,
       minAdvanceAmount,
       hasDiscount,
+      codCharge: appliedCodCharge,
+      storeCreditUsed,
+      remainingStoreCredit: availableStoreCredit - storeCreditUsed,
     };
-  }, [totalDiscount, discountPercent, birthdayDiscount, totalAmount, sanitizedAdvance, paymentMode, deliveryCountry, order.mode_of_delivery, discountApplied, birthdayApplied, minAdvancePercent]);
+  }, [
+    totalDiscount,
+    discountPercent,
+    birthdayDiscount,
+    totalAmount,
+    extrasTotal,
+    sanitizedAdvance,
+    paymentMode,
+    deliveryCountry,
+    order.mode_of_delivery,
+    discountApplied,
+    birthdayApplied,
+    minAdvancePercent,
+    codWaiverApplied,
+    isSplitPayment,
+    splitPayments,
+    storeCreditApplied,
+    availableStoreCredit,
+    isStoreCreditValid
+  ]);
 
 
   // Check if advance is below minimum
@@ -242,7 +321,15 @@ export default function OrderDetails() {
           .eq("id", user.id)
           .single();
 
-        if (!cancelled) setProfile(prof || null);
+        if (!cancelled) {
+          setProfile(prof || null);
+          
+          // Set store credit info from profile
+          if (prof) {
+            setAvailableStoreCredit(Number(prof.store_credit) || 0);
+            setStoreCreditExpiry(prof.store_credit_expiry || null);
+          }
+        }
       }
 
       if (!cachedEmail) return;
@@ -284,6 +371,11 @@ export default function OrderDetails() {
         if (data.birthdayApplied !== undefined) setBirthdayApplied(data.birthdayApplied);
         if (data.appliedCode) setAppliedCode(data.appliedCode);
         if (data.paymentMode) setPaymentMode(data.paymentMode);
+        if (data.codWaiverApplied !== undefined) setCodWaiverApplied(data.codWaiverApplied);
+        if (data.storeCreditApplied !== undefined) setStoreCreditApplied(data.storeCreditApplied);
+
+        if (data.isSplitPayment !== undefined) setIsSplitPayment(data.isSplitPayment);
+        if (data.splitPayments) setSplitPayments(data.splitPayments);
 
         if (data.billingSame !== undefined) setBillingSame(data.billingSame);
         if (data.billingAddress) setBillingAddress(data.billingAddress);
@@ -331,6 +423,10 @@ export default function OrderDetails() {
       deliveryState,
       deliveryPincode,
       deliveryNotes,
+      codWaiverApplied,
+      storeCreditApplied,
+      isSplitPayment,
+      splitPayments,
     };
     sessionStorage.setItem("screen6FormData", JSON.stringify(formData));
   }, [
@@ -355,6 +451,10 @@ export default function OrderDetails() {
     deliveryState,
     deliveryPincode,
     deliveryNotes,
+    codWaiverApplied,
+    storeCreditApplied,
+    isSplitPayment,
+    splitPayments,
   ]);
 
   if (!profile || !order) return <p>Loading...</p>;
@@ -365,6 +465,14 @@ export default function OrderDetails() {
       ? `${deliveryAddress}, ${deliveryCountry}, ${deliveryCity}, ${deliveryState} - ${deliveryPincode}`
       : `${billingAddress}, ${billingCountry}, ${billingCity}, ${billingState} - ${billingPincode}`;
 
+    // Payment mode storage
+    let paymentModeValue;
+    if (isSplitPayment) {
+      paymentModeValue = JSON.stringify(splitPayments); // Store as JSON string
+    } else {
+      paymentModeValue = paymentMode === "COD" ? "Cash" : paymentMode;
+    }
+
     const payload = {
       ...order,
       user_id: user.id,
@@ -372,8 +480,12 @@ export default function OrderDetails() {
       remaining_payment: pricing.remaining,
       discount_percent: pricing.discountPercent,
       discount_amount: pricing.discountAmount,
-      grand_total_after_discount: pricing.netPayable,
-      net_total: pricing.netPayable,
+      grand_total_after_discount: pricing.netAfterStoreCredit,
+      net_total: pricing.netAfterStoreCredit,
+
+      // Store credit info
+      store_credit_used: pricing.storeCreditUsed,
+      store_credit_remaining: pricing.remainingStoreCredit,
 
       delivery_name: profile.full_name,
       delivery_email: profile.email,
@@ -390,8 +502,9 @@ export default function OrderDetails() {
       billing_country: billingCountry,
       billing_company: billingCompany || null,
       billing_gstin: billingGST || null,
-      payment_mode: paymentMode,
-      cod_charge: paymentMode === "COD" ? COD_CHARGE : 0,
+      payment_mode: paymentModeValue,
+      is_split_payment: isSplitPayment,
+      cod_charge: pricing.codCharge,
       shipping_charge: pricing.shippingCharge,
 
       salesperson: selectedSP?.saleperson || null,
@@ -420,8 +533,6 @@ export default function OrderDetails() {
       const minPercentLabel = isCustomOrder ? "50%" : "25%";
       showPopup({
         title: "Minimum Advance Requirement",
-        // message: `Order Type: ${isCustomOrder ? "Custom" : "Standard"}\nMinimum Required: ₹${formatIndianNumber(minAdvanceAmount)} (${minPercentLabel})\nEntered Amount: ₹${formatIndianNumber(sanitizedAdvance)}\n\nDo you want to continue anyway?`,
-        // message: `Advance entered by you is less than ${minPercentLabel} \n\nMinimum advance required for this order is: ₹${formatIndianNumber(minAdvanceAmount)}`,
         message: `The entered amount is below the minimum advance of ₹${formatIndianNumber(pricing.minAdvanceAmount)} (${minPercentLabel})`,
         type: "confirm",
         confirmText: "Continue",
@@ -444,6 +555,39 @@ export default function OrderDetails() {
         title: "Invalid Code",
         message: "Please enter a valid collector code.",
         type: "warning",
+      });
+      return;
+    }
+
+    // Check for FREECOD code
+    if (code === "FREECOD") {
+      if (codWaiverApplied) {
+        showPopup({
+          title: "Already Applied",
+          message: "Free COD code already applied!",
+          type: "warning",
+        });
+        return;
+      }
+
+      // Check if Cash is used in advance payment (normal or split)
+      const hasCashPayment = isSplitPayment
+        ? splitPayments.some(p => p.mode === "Cash")
+        : paymentMode === "COD";
+
+      if (! hasCashPayment || order.mode_of_delivery !== "Home Delivery") {
+        showPopup({
+          title: "Not Applicable",
+          message: "FREECOD is only applicable for Cash on Delivery with Home Delivery.",
+          type: "warning",
+        });
+        return;
+      }
+      setCodWaiverApplied(true);
+      showPopup({
+        title: "Free COD Applied!",
+        message: "COD charge of ₹250 has been waived!",
+        type: "success",
       });
       return;
     }
@@ -527,6 +671,72 @@ export default function OrderDetails() {
     }
   };
 
+  const handleApplyStoreCredit = () => {
+    if (!isStoreCreditValid) {
+      showPopup({
+        title: "Store Credit Unavailable",
+        message: availableStoreCredit > 0 
+          ? "Your store credit has expired." 
+          : "You don't have any store credits available.",
+        type: "warning",
+        confirmText: "OK",
+      });
+      return;
+    }
+
+    if (storeCreditApplied) {
+      showPopup({
+        title: "Already Applied",
+        message: "Store credit is already applied to this order.",
+        type: "warning",
+        confirmText: "OK",
+      });
+      return;
+    }
+
+    const creditToUse = Math.min(availableStoreCredit, pricing.netPayable);
+    const remainingCredit = availableStoreCredit - creditToUse;
+
+    showPopup({
+      title: "Apply Store Credit?",
+      message: `Available: ₹${formatIndianNumber(availableStoreCredit)} • Will use: ₹${formatIndianNumber(creditToUse)}${remainingCredit > 0 ? ` • Remaining: ₹${formatIndianNumber(remainingCredit)}` : ""}`,
+      type: "confirm",
+      confirmText: "Apply",
+      cancelText: "Cancel",
+      onConfirm: () => {
+        setStoreCreditApplied(true);
+        showPopup({
+          title: "Store Credit Applied! 💳",
+          message: `₹${formatIndianNumber(creditToUse)} store credit applied to your order!`,
+          type: "success",
+          confirmText: "OK",
+        });
+      },
+    });
+  };
+
+  const removeStoreCredit = () => {
+    setStoreCreditApplied(false);
+  };
+
+  const handleSplitPaymentSave = (payments, totalAmount) => {
+    setSplitPayments(payments);
+    setIsSplitPayment(true);
+    setAdvancePayment(totalAmount);
+
+    // Check if any payment is Cash for COD charge logic
+    const hasCash = payments.some(p => p.mode === "Cash");
+    if (!hasCash && codWaiverApplied) {
+      setCodWaiverApplied(false);
+    }
+  };
+
+  const removeSplitPayment = () => {
+    setIsSplitPayment(false);
+    setSplitPayments([]);
+    setAdvancePayment("");
+  };
+
   const removeRegularDiscount = () => {
     setDiscountPercent(0);
     setDiscountApplied(false);
@@ -536,6 +746,10 @@ export default function OrderDetails() {
   const removeBirthdayDiscount = () => {
     setBirthdayDiscount(0);
     setBirthdayApplied(false);
+  };
+
+  const removeCodWaiver = () => {
+    setCodWaiverApplied(false);
   };
 
   const handleLogout = async () => {
@@ -838,14 +1052,86 @@ export default function OrderDetails() {
               >
                 {isCustomOrder ? "Custom Order" : "Standard Order"}
               </span>
-              <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white !important' }}>
+              <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white', borderRadius: 5, }}>
                 Collector Code
               </button>
+              <button
+                onClick={() => setShowSplitModal(true)}
+                className="apply-discount-btn"
+                style={{ background: '#1565c0', border: "none", height: "30px", color: 'white', borderRadius: 5, }}
+              >
+                Split Payment
+              </button>
+              {/* Store Credit Button - Only show if user has store credits */}
+              {availableStoreCredit > 0 && (
+                <button
+                  onClick={handleApplyStoreCredit}
+                  className="apply-discount-btn"
+                  style={{ 
+                    background: storeCreditApplied ? '#4caf50' : '#9c27b0', 
+                    border: "none", 
+                    height: "30px", 
+                    color: 'white', 
+                    borderRadius: 5,
+                    opacity: !isStoreCreditValid ? 0.6 : 1,
+                  }}
+                  disabled={!isStoreCreditValid}
+                >
+                  💳 Store Credit
+                </button>
+              )}
             </div>
           </div>
 
+          {/* Store Credit Info Banner */}
+          {availableStoreCredit > 0 && (
+            <div
+              style={{
+                background: isStoreCreditValid ? "#f3e5f5" : "#ffebee",
+                border: `1px solid ${isStoreCreditValid ? "#ce93d8" : "#ef9a9a"}`,
+                borderRadius: "8px",
+                padding: "12px 16px",
+                marginBottom: "16px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <span style={{ fontWeight: "600", color: isStoreCreditValid ? "#7b1fa2" : "#c62828" }}>
+                  💳 Store Credit Available: ₹{formatIndianNumber(availableStoreCredit)}
+                </span>
+                <span style={{ 
+                  fontSize: "12px", 
+                  color: isStoreCreditValid ? "#666" : "#c62828", 
+                  marginLeft: "12px" 
+                }}>
+                  {isStoreCreditValid 
+                    ? `Valid till: ${formatDate(storeCreditExpiry)}` 
+                    : `Expired on: ${formatDate(storeCreditExpiry)}`}
+                </span>
+              </div>
+              {!storeCreditApplied && isStoreCreditValid && (
+                <button
+                  onClick={handleApplyStoreCredit}
+                  style={{
+                    background: "#9c27b0",
+                    color: "white",
+                    border: "none",
+                    padding: "6px 16px",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontWeight: "500",
+                  }}
+                >
+                  Apply
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Applied Discounts Display */}
-          {(discountApplied || birthdayApplied) && (
+          {(discountApplied || birthdayApplied || codWaiverApplied || storeCreditApplied) && (
             <div
               className="applied-discounts"
               style={{
@@ -925,23 +1211,102 @@ export default function OrderDetails() {
                   Total: {totalDiscount}% OFF
                 </div>
               )}
+              {codWaiverApplied && (
+                <div
+                  className="discount-tag cod-waiver"
+                  style={{
+                    background: "#e3f2fd",
+                    color: "#1565c0",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>FREECOD (₹250 waived)</span>
+                  <button
+                    onClick={removeCodWaiver}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
+              {storeCreditApplied && (
+                <div
+                  className="discount-tag store-credit"
+                  style={{
+                    background: "#f3e5f5",
+                    color: "#7b1fa2",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>💳 Store Credit (₹{formatIndianNumber(pricing.storeCreditUsed)})</span>
+                  <button
+                    onClick={removeStoreCredit}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
             </div>
           )}
 
           <div className="row3">
             <div className="field">
               <label>Mode of Payment:</label>
-              <select
-                className="input-select"
-                value={paymentMode}
-                onChange={(e) => setPaymentMode(e.target.value)}
-              >
-                <option value="UPI">UPI</option>
-                <option value="COD">Cash</option>
-                <option value="Credit Card">Credit Card</option>
-                <option value="Debit Card">Debit Card</option>
-                <option value="Net Banking">Net Banking</option>
-              </select>
+              {isSplitPayment ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+                  {splitPayments.map((sp, idx) => (
+                    <span key={idx} style={{
+                      background: "#e3f2fd",
+                      padding: "4px 10px",
+                      borderRadius: "12px",
+                      fontSize: "13px",
+                    }}>
+                      {sp.mode} (₹{formatIndianNumber(sp.amount)})
+                    </span>
+                  ))}
+                  <button
+                    onClick={removeSplitPayment}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#c62828",
+                    }}
+                  >×</button>
+                </div>
+              ) : (
+                <select
+                  className="input-select"
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                >
+                  <option value="UPI">UPI</option>
+                  <option value="COD">Cash</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Debit Card">Debit Card</option>
+                  <option value="Net Banking">Net Banking</option>
+                </select>
+              )}
             </div>
 
             <div className="field">
@@ -960,20 +1325,37 @@ export default function OrderDetails() {
 
           {(discountApplied || birthdayApplied) && (
             <div className="row3">
-              {/* <div className="field">
-                <label>Discount %:</label>
-                <span>{pricing.discountPercent}%</span>
-              </div> */}
               <div className="field">
                 <label>Collector Code:</label>
-                <span>₹{formatIndianNumber(pricing.discountAmount)}</span>
+                <span>- ₹{formatIndianNumber(pricing.discountAmount)}</span>
               </div>
               <div className="field">
-                <label>Net Payable:</label>
+                <label>Subtotal:</label>
                 <span>₹{formatIndianNumber(pricing.netPayable)}</span>
               </div>
             </div>
           )}
+
+          {/* Store Credit Applied Row */}
+          {storeCreditApplied && pricing.storeCreditUsed > 0 && (
+            <div className="row3">
+              <div className="field">
+                <label>Store Credit Applied:</label>
+                <span style={{ color: "#7b1fa2", fontWeight: "600" }}>- ₹{formatIndianNumber(pricing.storeCreditUsed)}</span>
+              </div>
+              <div className="field">
+                <label>Net Payable:</label>
+                <span style={{ fontWeight: "700", color: "#2e7d32" }}>₹{formatIndianNumber(pricing.netAfterStoreCredit)}</span>
+              </div>
+              {pricing.remainingStoreCredit > 0 && (
+                <div className="field">
+                  <label>Remaining Store Credit:</label>
+                  <span style={{ color: "#666" }}>₹{formatIndianNumber(pricing.remainingStoreCredit)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="row3">
             <div className="field">
               <label>Advance Payment (Amount):</label>
@@ -983,14 +1365,16 @@ export default function OrderDetails() {
                 value={advancePayment}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value) || '';
-                  // Cap at total amount
-                  if (val > totalAmount) {
-                    setAdvancePayment(totalAmount);
+                  const maxAmount = storeCreditApplied ? pricing.netAfterStoreCredit : totalAmount;
+                  if (val > maxAmount) {
+                    setAdvancePayment(maxAmount);
                   } else {
                     setAdvancePayment(e.target.value);
                   }
                 }}
-                max={totalAmount}
+                max={storeCreditApplied ? pricing.netAfterStoreCredit : totalAmount}
+                disabled={isSplitPayment}
+                style={isSplitPayment ? { background: "#f5f5f5" } : {}}
               />
             </div>
             <div className="field">
@@ -1001,15 +1385,12 @@ export default function OrderDetails() {
             </div>
           </div>
 
-          <div className="row3">
-          </div>
-
-          {((paymentMode === "COD" && order.mode_of_delivery === "Home Delivery") || pricing.shippingCharge > 0) && (
+          {(pricing.codCharge > 0 || pricing.shippingCharge > 0) && (
             <div className="row3">
-              {paymentMode === "COD" && (
+              {pricing.codCharge > 0 && (
                 <div className="field">
-                  <label>COD Charge:</label>
-                  <span>₹{formatIndianNumber(COD_CHARGE)}</span>
+                  <label>Cash Charge:</label>
+                  <span>₹{formatIndianNumber(pricing.codCharge)}</span>
                 </div>
               )}
               {pricing.shippingCharge > 0 && (
@@ -1037,9 +1418,16 @@ export default function OrderDetails() {
         message={popup.message}
         type={popup.type}
         onConfirm={handlePopupConfirm}
-        // confirmText={popup.confirmText}
+        confirmText={popup.confirmText}
         cancelText={popup.cancelText}
         showCancel={popup.type === "confirm"}
+      />
+      {/* Split Payment Modal */}
+      <SplitPaymentModal
+        isOpen={showSplitModal}
+        onClose={() => setShowSplitModal(false)}
+        onSave={handleSplitPaymentSave}
+        maxAmount={storeCreditApplied ? pricing.netAfterStoreCredit : pricing.netPayable}
       />
     </div>
   );

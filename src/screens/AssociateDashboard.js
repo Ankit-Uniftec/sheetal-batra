@@ -600,17 +600,17 @@ export default function Dashboard() {
   };
 
   // Check permissions
-  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36;
+  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36 && order.status?.toLowerCase() === "pending";
   const canCancel = (order) => {
     const hoursSince = getHoursSinceOrder(order.created_at);
-    const afterDelivery = isAfterDeliveryDate(order.delivery_date);
-    return hoursSince <= 24 || afterDelivery || (isSM && hoursSince > 24);
+    return hoursSince <= 24 && order.status?.toLowerCase() === "pending";
   };
   const canExchangeReturn = (order) => {
-    const afterDelivery = isAfterDeliveryDate(order.delivery_date);
     const isDelivered = order.status?.toLowerCase() === "delivered";
-    const hoursSince = getHoursSinceOrder(order.created_at);
-    return afterDelivery || isDelivered || (isSM && hoursSince > 24);
+    if (!isDelivered || !order.delivered_at) return false;
+
+    const hoursSinceDelivery = (new Date() - new Date(order.delivered_at)) / (1000 * 60 * 60);
+    return hoursSinceDelivery <= 72;
   };
   const canMarkDelivered = (order) => {
     const status = order.status?.toLowerCase();
