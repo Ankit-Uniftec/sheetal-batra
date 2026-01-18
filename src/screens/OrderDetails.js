@@ -777,7 +777,6 @@ export default function OrderDetails() {
           return;
         }
 
-        console.log("✅ Restored salesperson session");
 
         // Clean up and navigate
         sessionStorage.removeItem("associateSession");

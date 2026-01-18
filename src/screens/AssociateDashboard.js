@@ -195,17 +195,13 @@ export default function Dashboard() {
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        console.log('🔍 Loading dashboard data...');
         const { data: { user } } = await supabase.auth.getUser();
-        console.log('👤 User found:', user?.email || 'NO USER');
 
         if (!user?.email) {
           console.log('❌ No user - stopping load');
           setLoading(false);
           return;
         }
-
-        console.log('✅ User exists, fetching data...');
         // ✅ Fetch salesperson and orders in PARALLEL
         const [salespersonResult, ordersResult] = await Promise.all([
           supabase.from("salesperson").select("*").eq("email", user.email).single(),

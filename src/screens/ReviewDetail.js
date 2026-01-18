@@ -70,6 +70,20 @@ const compressSignature = (signaturePad) => {
   });
 };
 
+const checkEmptyFields = (obj, prefix = "") => {
+  const emptyFields = [];
+  for (const [key, value] of Object.entries(obj)) {
+    const fieldPath = prefix ? `${prefix}.${key}` : key;
+    if (value === "" || value === null || value === undefined) {
+      emptyFields.push({ field: fieldPath, value, type: typeof value });
+    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      emptyFields.push(...checkEmptyFields(value, fieldPath));
+    }
+  }
+  return emptyFields;
+};
+// ========== END DEBUG HELPERS ==========
+
 export default function ReviewDetail() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,6 +91,7 @@ export default function ReviewDetail() {
   const order = location.state?.orderPayload;
 
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Placing order...");
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
 
@@ -100,8 +115,13 @@ export default function ReviewDetail() {
 
     try {
       setLoading(true);
+      setLoadingMessage("Uploading signature...");
 
-      // 1️⃣ UPLOAD SIGNATURE
+      const emptyFields = checkEmptyFields(order);
+      if (emptyFields.length > 0) {
+        console.log("⚠️ Found empty fields that might cause PDF issues:");
+      }
+
       const blob = await compressSignature(sigPad);
       const path = `${user.id}/signature_${Date.now()}.jpg`;
 
@@ -109,10 +129,14 @@ export default function ReviewDetail() {
         .from("signature")
         .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
 
-      if (sigError) throw sigError;
+      if (sigError) {
+        console.error("❌ Signature upload error:", sigError);
+        throw sigError;
+      }
 
       const { data: sigData } = supabase.storage.from("signature").getPublicUrl(path);
 
+      setLoadingMessage("Saving order...");
       // 2️⃣ PREPARE ORDER DATA
       const normalizedOrder = {
         ...order,
@@ -122,84 +146,88 @@ export default function ReviewDetail() {
         net_total: pricing.netPayable,
         remaining_payment: pricing.remaining,
         signature_url: sigData.publicUrl,
-        // created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
+        created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
         delivery_date: toISODate(order.delivery_date),
         join_date: toISODate(order.join_date),
         billing_date: toISODate(order.billing_date),
         expected_delivery: toISODate(order.expected_delivery),
       };
 
-      // Remove measurement saving flags from order data (they shouldn't be stored in orders table)
+      // Remove measurement saving flags from order data
       const { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;
 
+      setLoadingMessage("Generating invoice PDFs...");
       // 3️⃣ GENERATE ORDER NUMBER
       const { data: orderNo, error: orderNoError } = await supabase.rpc(
         "generate_order_no",
         { p_store: normalizedOrder.mode_of_delivery }
       );
 
-      if (orderNoError) throw orderNoError;
+      if (orderNoError) {
+        console.error("❌ Order number generation error:", orderNoError);
+        throw orderNoError;
+      }
 
       // 4️⃣ INSERT ORDER
+
       const { data: insertedOrder, error: insertError } = await supabase
         .from("orders")
         .insert({ ...orderDataToInsert, order_no: orderNo })
         .select()
         .single();
 
-      if (insertError) throw insertError;
-      if (!insertedOrder) throw new Error("Order insert failed");
+      if (insertError) {
+        console.error("❌ Order insert error:", insertError);
+        console.error("❌ Error details:", JSON.stringify(insertError, null, 2));
+        throw insertError;
+      }
 
-      // 5️⃣.0 GENERATE PDFs & SEND WHATSAPP (Fire & Forget)
+      if (!insertedOrder) {
+        console.error("❌ No order returned after insert");
+        throw new Error("Order insert failed");
+      }
+
+      setLoadingMessage("Sending confirmation...");
+      // 5️⃣.0 GENERATE PDFs & SEND WHATSAPP
       const orderWithItems = {
         ...insertedOrder,
         items: normalizedOrder.items || order.items || [],
       };
+      try {
+        const pdfUrls = await generateAllPdfs(orderWithItems);
 
-      generateAllPdfs(orderWithItems)
-        .then(async (pdfUrls) => {
-          console.log("✅ PDFs generated:", pdfUrls);
+        // Send WhatsApp with Customer PDF
+        if (pdfUrls?.customer_url) {
+          try {
 
-          // Send WhatsApp with Customer PDF
-          if (pdfUrls?.customer_url) {
-            try {
-              console.log("📱 Sending WhatsApp...");
-
-              const response = await fetch(
-                `${config.SUPABASE_URL}/functions/v1/spur-whatsapp`,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "apikey": config.SUPABASE_KEY,
-                    "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-                  },
-                  body: JSON.stringify({
-                    customerName: orderWithItems.delivery_name,
-                    customerPhone: orderWithItems.delivery_phone,
-                    customerCountry: orderWithItems.delivery_country || "India",
-                    pdfUrl: pdfUrls.customer_url,
-                  }),
-                }
-              );
-
-              const result = await response.json();
-
-              if (result.success) {
-                console.log("✅ WhatsApp sent!");
-              } else {
-                console.error("❌ WhatsApp failed:", result);
+            const response = await fetch(
+              `${config.SUPABASE_URL}/functions/v1/spur-whatsapp`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "apikey": config.SUPABASE_KEY,
+                  "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+                },
+                body: JSON.stringify({
+                  customerName: orderWithItems.delivery_name,
+                  customerPhone: orderWithItems.delivery_phone,
+                  customerCountry: orderWithItems.delivery_country || "India",
+                  pdfUrl: pdfUrls.customer_url,
+                }),
               }
-            } catch (err) {
-              console.error("❌ WhatsApp error:", err);
-            }
-          }
-        })
-        .catch((err) => {
-          console.error("❌ PDF/WhatsApp failed:", err);
-        });
+            );
 
-      // 5️⃣.1 SAVE CUSTOMER MEASUREMENTS (if changed)
+          } catch (err) {
+            console.error("❌ WhatsApp error:", err);
+          }
+        }
+      } catch (pdfError) {
+        console.error("❌ PDF generation failed:", pdfError);
+        // Continue anyway - order is already placed
+      }
+
+      // 5️⃣.1 SAVE CUSTOMER MEASUREMENTS
       if (order.save_measurements && order.measurements_to_save) {
         try {
           const { error: measurementError } = await supabase
@@ -212,27 +240,27 @@ export default function ReviewDetail() {
             });
 
           if (measurementError) {
-            console.error("Error saving measurements:", measurementError);
-            // Don't fail the order, just log the error
-          } else {
-            console.log("✅ Customer measurements saved successfully");
+            console.error("❌ Measurement save error:", measurementError);
           }
         } catch (err) {
-          console.error("Error saving measurements:", err);
+          console.error("❌ Measurement save exception:", err);
         }
+      } else {
+        console.log("ℹ️ No measurements to save");
       }
 
-      // 5️⃣.2 DEDUCT STORE CREDIT (if used)
+      // 5️⃣.2 DEDUCT STORE CREDIT
       if (order.store_credit_used && order.store_credit_used > 0) {
+
         try {
           const updateData = {
             store_credit: order.store_credit_remaining || 0,
           };
 
-          // Clear expiry if no remaining credit
           if (!order.store_credit_remaining || order.store_credit_remaining <= 0) {
             updateData.store_credit_expiry = null;
           }
+
 
           const { error: creditError } = await supabase
             .from("profiles")
@@ -240,29 +268,29 @@ export default function ReviewDetail() {
             .eq("id", order.user_id);
 
           if (creditError) {
-            console.error("Error deducting store credit:", creditError);
-          } else {
-            console.log(`✅ Store credit deducted: ₹${order.store_credit_used} used, ₹${order.store_credit_remaining || 0} remaining`);
+            console.error("❌ Store credit deduction error:", creditError);
           }
         } catch (err) {
-          console.error("Error deducting store credit:", err);
+          console.error("❌ Store credit exception:", err);
         }
+      } else {
+        console.log("ℹ️ No store credit used in this order");
       }
 
-      // 6️⃣ REDUCE INVENTORY FOR EACH PRODUCT
+      // 6️⃣ REDUCE INVENTORY
       try {
         const items = normalizedOrder.items || order.items || [];
 
         for (const item of items) {
-          if (!item.product_id) continue;
+          if (!item.product_id) {
+            continue;
+          }
 
           const quantityOrdered = item.quantity || 1;
 
-          console.log("Item:", item.product_name, "sync_enabled:", item.sync_enabled);
-
-          // Check if this is a sync product (LXRTS)
           if (item.sync_enabled) {
-            // For sync products: reduce from product_variants table
+            // Sync product logic
+
             const { data: variants, error: fetchError } = await supabase
               .from("product_variants")
               .select("id, inventory, size")
@@ -273,7 +301,7 @@ export default function ReviewDetail() {
               .limit(1);
 
             if (fetchError) {
-              console.error(`Failed to fetch variant for ${item.product_name}:`, fetchError);
+              console.error(`   ❌ Variant fetch error:`, fetchError);
               continue;
             }
 
@@ -287,17 +315,13 @@ export default function ReviewDetail() {
                 .eq("id", variant.id);
 
               if (updateError) {
-                console.error(`Failed to update variant inventory for ${item.product_name}:`, updateError);
-              } else {
-                console.log(
-                  `✅ Sync product inventory updated: ${item.product_name} (${item.size}): ${variant.inventory} → ${newInventory}`
-                );
+                console.error(`   ❌ Variant update error:`, updateError);
               }
             } else {
-              console.warn(`No variant found for ${item.product_name} size ${item.size}`);
+              console.warn(`   ⚠️ No variant found for size ${item.size}`);
             }
 
-            // Also reduce on Shopify
+            // Shopify sync
             try {
               const response = await fetch(
                 `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
@@ -318,18 +342,16 @@ export default function ReviewDetail() {
               );
 
               const reduceResult = await response.json();
-
               if (reduceResult.success) {
-                console.log(`✅ Shopify inventory reduced: ${item.product_name} (${item.size})`);
               } else {
-                console.error("Shopify reduce failed:", reduceResult.error);
+                console.error("   ❌ Shopify reduce failed:", reduceResult.error);
               }
             } catch (shopifyErr) {
-              console.error("Shopify inventory sync failed:", shopifyErr);
-              // Don't block order, just log the error
+              console.error("   ❌ Shopify sync error:", shopifyErr);
             }
           } else {
-            // For regular products: reduce from products table
+            // Regular product logic
+
             const { data: productData, error: fetchError } = await supabase
               .from("products")
               .select("inventory, name")
@@ -346,30 +368,30 @@ export default function ReviewDetail() {
                 .eq("id", item.product_id);
 
               if (updateError) {
-                console.error(`Failed to update inventory for ${productData.name}:`, updateError);
-              } else {
-                console.log(
-                  `✅ Inventory updated: ${productData.name} (${currentInventory} → ${newInventory})`
-                );
-              }
+                console.error(`   ❌ Product update error:`, updateError);
+              } 
+            } else {
+              console.error("   ❌ Product fetch error:", fetchError);
             }
           }
         }
       } catch (inventoryError) {
-        console.error("Error updating inventory:", inventoryError);
-        // Don't block order completion if inventory update fails
+        console.error("❌ Inventory update exception:", inventoryError);
       }
 
       // 7️⃣ CLEAR SESSION & NAVIGATE
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
+
       navigate("/order-placed", {
         state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
         replace: true,
       });
 
     } catch (e) {
-      console.error("❌ Order failed:", e);
+      console.error("❌ Error message:", e.message);
+      console.error("❌ Error stack:", e.stack);
+      console.error("❌ Full error:", e);
       alert(e.message || "Failed to place order");
       setLoading(false);
       setShowSignature(false);
@@ -378,18 +400,14 @@ export default function ReviewDetail() {
 
   const handleLogout = async () => {
     try {
-      // Clear form data
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
 
-      // ✅ Check if we have a saved associate session
       const savedSession = sessionStorage.getItem("associateSession");
 
       if (savedSession) {
-        // Restore the salesperson's session
         const session = JSON.parse(savedSession);
 
-        // Set the session back in Supabase
         const { error } = await supabase.auth.setSession({
           access_token: session.access_token,
           refresh_token: session.refresh_token
@@ -401,16 +419,12 @@ export default function ReviewDetail() {
           return;
         }
 
-        console.log("✅ Restored salesperson session");
 
-        // Clean up and navigate
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         navigate("/AssociateDashboard", { replace: true });
       } else {
-        // No saved session - just navigate back
-        console.log("⚠️ No saved session found");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         navigate("/AssociateDashboard", { replace: true });
       }
@@ -427,7 +441,7 @@ export default function ReviewDetail() {
       {loading && (
         <div className="global-loader">
           <img src={Logo} alt="Loading" className="loader-logo" />
-          <p>Placing order...</p>
+          <p>{loadingMessage}</p>
         </div>
       )}
 

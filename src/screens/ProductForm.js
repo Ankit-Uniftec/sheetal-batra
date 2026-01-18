@@ -1192,8 +1192,6 @@ export default function ProductForm() {
           if (!syncSizes.includes(selectedSize) && syncSizes.length > 0) {
             setSelectedSize(syncSizes[0]);
           }
-
-          console.log("✅ Shopify inventory synced:", result.inventory);
         } else {
           // Fallback to database if Shopify sync fails
           console.warn("Shopify sync failed, falling back to database:", result.error);
@@ -1482,7 +1480,6 @@ export default function ProductForm() {
 
   // ADD PRODUCT
   const handleAddProduct = () => {
-    console.log("Adding product:", selectedProduct?.name, "isSyncProduct:", isSyncProduct);
     if (!selectedProduct) {
       showPopup({
         title: "Product Required",
@@ -1991,7 +1988,6 @@ export default function ProductForm() {
           return;
         }
 
-        console.log("✅ Restored salesperson session");
 
         // Clean up and navigate
         sessionStorage.removeItem("associateSession");

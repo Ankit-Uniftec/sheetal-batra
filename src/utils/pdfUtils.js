@@ -160,7 +160,6 @@ export const downloadWarehousePdf = async (order, setLoading = null) => {
           .getPublicUrl(filename);
 
         warehouseUrls.push(urlData?.publicUrl);
-        console.log(`✅ Warehouse PDF ${i + 1} already exists, using existing URL`);
         continue;
       }
 
@@ -186,7 +185,6 @@ export const downloadWarehousePdf = async (order, setLoading = null) => {
       if (uploadError) {
         // If file already exists error, just get the URL
         if (uploadError.message?.includes("already exists") || uploadError.statusCode === 409) {
-          console.log(`File ${filename} already exists, getting URL`);
           const { data: urlData } = supabase.storage
             .from("invoices")
             .getPublicUrl(filename);
@@ -202,7 +200,6 @@ export const downloadWarehousePdf = async (order, setLoading = null) => {
         .getPublicUrl(filename);
 
       warehouseUrls.push(urlData?.publicUrl);
-      console.log(`✅ Warehouse PDF ${i + 1} uploaded successfully`);
     }
 
     // Update order with all warehouse PDF URLs
@@ -329,13 +326,11 @@ export const generateAllPdfs = async (order, setLoading = null) => {
 
   // ========== CUSTOMER PDF ==========
   try {
-    console.log("📄 Generating Customer PDF for order:", order.order_no);
     
     const customerPdfBlob = await pdf(
       <CustomerOrderPdf order={orderData} logoUrl={logoUrl} />
     ).toBlob();
 
-    console.log("📤 Uploading Customer PDF...");
     
     const { error: uploadError } = await supabase.storage
       .from("invoices")
@@ -352,7 +347,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
         .getPublicUrl(`orders/${order.order_no}_customer.pdf`);
 
       customerUrl = customerUrlData?.publicUrl;
-      console.log("✅ Customer PDF uploaded:", customerUrl);
     }
   } catch (customerError) {
     console.error("❌ Customer PDF generation failed:", customerError);
@@ -362,7 +356,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
   for (let i = 0; i < totalItems; i++) {
     try {
       const item = items[i];
-      console.log(`📄 Generating Warehouse PDF ${i + 1} for:`, item.product_name);
 
       const pdfBlob = await pdf(
         <WarehouseOrderPdf
@@ -374,7 +367,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
         />
       ).toBlob();
 
-      console.log(`📤 Uploading Warehouse PDF ${i + 1}...`);
 
       const filename = `orders/${order.order_no}_warehouse_${i + 1}.pdf`;
       
@@ -394,7 +386,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
           .getPublicUrl(filename);
 
         warehouseUrls.push(urlData?.publicUrl);
-        console.log(`✅ Warehouse PDF ${i + 1} uploaded`);
       }
     } catch (warehouseError) {
       console.error(`❌ Warehouse PDF ${i + 1} generation failed:`, warehouseError);
@@ -417,8 +408,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
     }
 
     if (Object.keys(updateData).length > 0) {
-      console.log("📝 Updating order with URLs:", updateData);
-      
       const { error: updateError } = await supabase
         .from("orders")
         .update(updateData)
@@ -426,11 +415,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
 
       if (updateError) {
         console.error("❌ Database update failed:", updateError);
-      } else {
-        console.log("✅ Order updated with PDF URLs");
-      }
-    } else {
-      console.log("⚠️ No PDF URLs to update in database");
+      } 
     }
   } catch (dbError) {
     console.error("❌ Database update error:", dbError);
