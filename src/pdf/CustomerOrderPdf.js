@@ -224,7 +224,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
           <Text style={styles.productName}>{safeString(item?.product_name)}</Text>
           {order.delivery_date && (
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.label}>Estimated Delivery Date:</Text>
+              <Text style={styles.label}>Delivery Date:</Text>
               <Text style={styles.deliveryDateHighlight}>
                 {formatDate(order.delivery_date)}
               </Text>

@@ -7,6 +7,7 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
+import { usePopup } from "../components/Popup";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -23,6 +24,9 @@ const isAfterDeliveryDate = (deliveryDate) => {
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Popup hook
+  const { showPopup, PopupComponent } = usePopup();
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [salesperson, setSalesperson] = useState(null);
@@ -66,10 +70,18 @@ export default function Dashboard() {
 
   // ✅ OPTIMIZED: Memoize heavy calculations
   const stats = useMemo(() => {
-    const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-    const totalOrders = orders.length;
-    const totalClients = new Set(orders.map((o) => o.user_id)).size;
-    const activeOrders = orders.filter(
+    // Filter out Warehouse alterations for all stats
+    const displayOrders = orders.filter((o) => {
+      if (o.is_alteration) {
+        return o.alteration_location === "In-Store";
+      }
+      return true;
+    });
+
+    const totalRevenue = displayOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+    const totalOrders = displayOrders.length;
+    const totalClients = new Set(displayOrders.map((o) => o.user_id)).size;
+    const activeOrders = displayOrders.filter(
       (o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "delivered" &&
         formatDate(o.created_at) === formatDate(new Date())
     );
@@ -93,14 +105,26 @@ export default function Dashboard() {
   }, [orders]);
 
   // ✅ OPTIMIZED: Memoize filtered orders
+  // Filter out Warehouse alterations - only show regular orders + In-Store alterations
   const filteredOrders = useMemo(() => {
-    if (!orderSearch.trim()) return orders;
+    // First, filter by alteration location
+    const baseOrders = orders.filter((order) => {
+      if (order.is_alteration) {
+        return order.alteration_location === "In-Store";
+      }
+      return true; // Show all regular orders
+    });
+
+    // Then apply search filter
+    if (!orderSearch.trim()) return baseOrders;
+
     const q = orderSearch.toLowerCase();
-    return orders.filter((order) => {
+    return baseOrders.filter((order) => {
       const productName = order.items?.[0]?.product_name?.toLowerCase() || "";
       const productId = String(order.id || "").toLowerCase();
       const clientName = order.delivery_name?.toLowerCase() || "";
-      return productId.includes(q) || productName.includes(q) || clientName.includes(q);
+      const orderNo = order.order_no?.toLowerCase() || "";
+      return productId.includes(q) || productName.includes(q) || clientName.includes(q) || orderNo.includes(q);
     });
   }, [orders, orderSearch]);
 
@@ -292,31 +316,49 @@ export default function Dashboard() {
   // Mark as Delivered
   const handleMarkDelivered = async (e, order) => {
     e.stopPropagation();
-    if (!window.confirm("Mark this order as delivered?")) return;
 
-    setActionLoading(order.id);
-    try {
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          status: "delivered",
-          delivered_at: new Date().toISOString(),
-        })
-        .eq("id", order.id);
+    showPopup({
+      type: "confirm",
+      title: "Mark as Delivered",
+      message: "Mark this order as delivered?",
+      confirmText: "Yes, Deliver",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setActionLoading(order.id);
+        try {
+          const { error } = await supabase
+            .from("orders")
+            .update({
+              status: "delivered",
+              delivered_at: new Date().toISOString(),
+            })
+            .eq("id", order.id);
 
-      if (error) throw error;
+          if (error) throw error;
 
-      setOrders(prev => prev.map(o =>
-        o.id === order.id ? { ...o, status: "delivered", delivered_at: new Date().toISOString() } : o
-      ));
+          setOrders(prev => prev.map(o =>
+            o.id === order.id ? { ...o, status: "delivered", delivered_at: new Date().toISOString() } : o
+          ));
 
-      alert("Order marked as delivered!");
-    } catch (err) {
-      console.error("Mark delivered error:", err);
-      alert("Failed to update: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+          showPopup({
+            type: "success",
+            title: "Order Delivered",
+            message: "Order marked as delivered!",
+            confirmText: "OK",
+          });
+        } catch (err) {
+          console.error("Mark delivered error:", err);
+          showPopup({
+            type: "error",
+            title: "Error",
+            message: "Failed to update: " + err.message,
+            confirmText: "OK",
+          });
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   // Handle Cancellation
@@ -324,37 +366,59 @@ export default function Dashboard() {
     e.stopPropagation();
     const reason = selectedCancellation[order.id];
     if (!reason) {
-      alert("Please select a cancellation reason");
+      showPopup({
+        type: "warning",
+        title: "Selection Required",
+        message: "Please select a cancellation reason",
+        confirmText: "OK",
+      });
       return;
     }
 
-    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+    showPopup({
+      type: "confirm",
+      title: "Cancel Order",
+      message: "Are you sure you want to cancel this order?",
+      confirmText: "Yes, Cancel",
+      cancelText: "No",
+      onConfirm: async () => {
+        setActionLoading(order.id);
+        try {
+          const { error } = await supabase
+            .from("orders")
+            .update({
+              status: "cancelled",
+              cancellation_reason: reason,
+              cancelled_at: new Date().toISOString(),
+            })
+            .eq("id", order.id);
 
-    setActionLoading(order.id);
-    try {
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          status: "cancelled",
-          cancellation_reason: reason,
-          cancelled_at: new Date().toISOString(),
-        })
-        .eq("id", order.id);
+          if (error) throw error;
 
-      if (error) throw error;
+          setOrders(prev => prev.map(o =>
+            o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: reason } : o
+          ));
 
-      setOrders(prev => prev.map(o =>
-        o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: reason } : o
-      ));
-
-      setSelectedCancellation(prev => ({ ...prev, [order.id]: "" }));
-      alert("Order cancelled successfully!");
-    } catch (err) {
-      console.error("Cancellation error:", err);
-      alert("Failed to cancel: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+          setSelectedCancellation(prev => ({ ...prev, [order.id]: "" }));
+          showPopup({
+            type: "success",
+            title: "Order Cancelled",
+            message: "Order cancelled successfully!",
+            confirmText: "OK",
+          });
+        } catch (err) {
+          console.error("Cancellation error:", err);
+          showPopup({
+            type: "error",
+            title: "Error",
+            message: "Failed to cancel: " + err.message,
+            confirmText: "OK",
+          });
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   // Handle Exchange/Return
@@ -362,37 +426,59 @@ export default function Dashboard() {
     e.stopPropagation();
     const reason = selectedExchange[order.id];
     if (!reason) {
-      alert("Please select an exchange/return reason");
+      showPopup({
+        type: "warning",
+        title: "Selection Required",
+        message: "Please select an exchange/return reason",
+        confirmText: "OK",
+      });
       return;
     }
 
-    if (!window.confirm("Process this exchange/return request?")) return;
+    showPopup({
+      type: "confirm",
+      title: "Exchange/Return",
+      message: "Process this exchange/return request?",
+      confirmText: "Yes, Process",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setActionLoading(order.id);
+        try {
+          const { error } = await supabase
+            .from("orders")
+            .update({
+              status: "exchange_return",
+              exchange_reason: reason,
+              exchange_requested_at: new Date().toISOString(),
+            })
+            .eq("id", order.id);
 
-    setActionLoading(order.id);
-    try {
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          status: "exchange_return",
-          exchange_reason: reason,
-          exchange_requested_at: new Date().toISOString(),
-        })
-        .eq("id", order.id);
+          if (error) throw error;
 
-      if (error) throw error;
+          setOrders(prev => prev.map(o =>
+            o.id === order.id ? { ...o, status: "exchange_return", exchange_reason: reason } : o
+          ));
 
-      setOrders(prev => prev.map(o =>
-        o.id === order.id ? { ...o, status: "exchange_return", exchange_reason: reason } : o
-      ));
-
-      setSelectedExchange(prev => ({ ...prev, [order.id]: "" }));
-      alert("Exchange/Return processed successfully!");
-    } catch (err) {
-      console.error("Exchange error:", err);
-      alert("Failed to process: " + err.message);
-    } finally {
-      setActionLoading(null);
-    }
+          setSelectedExchange(prev => ({ ...prev, [order.id]: "" }));
+          showPopup({
+            type: "success",
+            title: "Request Processed",
+            message: "Exchange/Return processed successfully!",
+            confirmText: "OK",
+          });
+        } catch (err) {
+          console.error("Exchange error:", err);
+          showPopup({
+            type: "error",
+            title: "Error",
+            message: "Failed to process: " + err.message,
+            confirmText: "OK",
+          });
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   // Open Edit Modal
@@ -471,10 +557,20 @@ export default function Dashboard() {
       }));
 
       setEditingOrder(null);
-      alert("Order updated successfully!");
+      showPopup({
+        type: "success",
+        title: "Order Updated",
+        message: "Order updated successfully!",
+        confirmText: "OK",
+      });
     } catch (err) {
       console.error("Save edit error:", err);
-      alert("Failed to save: " + err.message);
+      showPopup({
+        type: "error",
+        title: "Error",
+        message: "Failed to save: " + err.message,
+        confirmText: "OK",
+      });
     } finally {
       setActionLoading(null);
     }
@@ -507,7 +603,12 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("Download failed:", err);
-      alert("Failed to download attachments");
+      showPopup({
+        type: "error",
+        title: "Download Failed",
+        message: "Failed to download attachments",
+        confirmText: "OK",
+      });
     } finally {
       setAttachmentLoading(null);
     }
@@ -630,6 +731,9 @@ export default function Dashboard() {
 
   return (
     <div className="ad-dashboardContent">
+      {/* Popup Component */}
+      {PopupComponent}
+
       {showPasswordModal && (
         <div className="ad-password-modal">
           <div className="ad-password-box">

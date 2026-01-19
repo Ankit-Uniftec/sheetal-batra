@@ -87,12 +87,12 @@ const checkNonReturnable = (order) => {
   if (isCustomOrder) reasons.push("Custom order");
 
   // 2. International orders
-  const isInternational = order.delivery_country && 
+  const isInternational = order.delivery_country &&
     order.delivery_country.toLowerCase() !== "india";
   if (isInternational) reasons.push("International order");
 
   // 3. Discounted / sale items
-  const isDiscounted = Number(order.discount_percent) > 0 || 
+  const isDiscounted = Number(order.discount_percent) > 0 ||
     Number(order.discount_amount) > 0;
   if (isDiscounted) reasons.push("Discounted/sale item");
 
@@ -243,10 +243,20 @@ export default function OrderHistory() {
 
   // Filter orders by search query
   const filteredOrders = useMemo(() => {
-    if (!searchQuery.trim()) return orders;
+    // First, filter by alteration location
+    // Show regular orders + In-Store alterations only (not Warehouse alterations)
+    const baseOrders = orders.filter((order) => {
+      if (order.is_alteration) {
+        return order.alteration_location === "In-Store";
+      }
+      return true;
+    });
+
+    // Then apply search filter
+    if (!searchQuery.trim()) return baseOrders;
 
     const query = searchQuery.toLowerCase().trim();
-    return orders.filter((order) => {
+    return baseOrders.filter((order) => {
       const item = order.items?.[0] || {};
       return (
         order.order_no?.toLowerCase().includes(query) ||
@@ -461,12 +471,12 @@ export default function OrderHistory() {
   // Handle Cancel Order
   const handleCancelOrder = async () => {
     if (!actionModal?.order) return;
-    
+
     if (!actionReason) {
       showPopup({ type: "warning", title: "Selection Required", message: "Please select a reason", confirmText: "OK" });
       return;
     }
-    
+
     if (actionReason === "other" && !actionOtherReason.trim()) {
       showPopup({ type: "warning", title: "Input Required", message: "Please provide a reason in the text field", confirmText: "OK" });
       return;
@@ -538,10 +548,10 @@ export default function OrderHistory() {
     }
 
     const order = actionModal.order;
-    let finalReason = exchangeType === "size_exchange" 
-      ? "Size Exchange" 
-      : exchangeReason === "other" 
-        ? `Product Exchange - Other: ${actionOtherReason}` 
+    let finalReason = exchangeType === "size_exchange"
+      ? "Size Exchange"
+      : exchangeReason === "other"
+        ? `Product Exchange - Other: ${actionOtherReason}`
         : `Product Exchange - ${exchangeReason}`;
 
     setActionLoading(order.id);
@@ -1001,7 +1011,7 @@ export default function OrderHistory() {
             </div>
             <div className="oh-modal-body">
               <p className="oh-modal-order-info">
-                <strong>Order:</strong> {actionModal.order?.order_no} | 
+                <strong>Order:</strong> {actionModal.order?.order_no} |
                 <strong> Amount:</strong> ₹{formatIndianNumber(actionModal.order?.grand_total)}
               </p>
 
@@ -1274,7 +1284,14 @@ export default function OrderHistory() {
                 const { isNonReturnable, reasons: nonReturnableReasons } = checkNonReturnable(order);
 
                 return (
-                  <div key={order.id} className="oh-order-card">
+                  <div
+                    key={order.id}
+                    className="oh-order-card"
+                    onClick={() => navigate(`/order/${order.id}`, {
+                      state: { fromAssociate, customer: customerFromState }
+                    })}
+                    style={{ cursor: 'pointer' }}
+                  >
                     {/* Card Header */}
                     <div className="oh-card-top">
                       <div className="oh-card-info">

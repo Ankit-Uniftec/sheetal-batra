@@ -14,6 +14,7 @@ import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced"
 import EditOrder from "./screens/EditOrder/EditOrder";
 import InventoryDashboard from "./screens/InventoryDashboard/InventoryDashboard";
 import AccountsDashboard from "./screens/AccountsDashboard/AccountsDashboard";
+import OrderDetailPage from "./pages/OrderDetailPage";
 
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
         <Route path="/edit-order" element={<EditOrder/>}/>
         <Route path="/inventoryDashboard" element={<InventoryDashboard/>} />
         <Route path="/accounts" element={<AccountsDashboard/>}/>
+        <Route path="/order/:orderId" element={<OrderDetailPage/>}/>
       </Routes>
     </BrowserRouter>
   );
