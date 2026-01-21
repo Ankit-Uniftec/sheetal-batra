@@ -1051,13 +1051,13 @@ export default function OrderDetails() {
               >
                 {isCustomOrder ? "Custom Order" : "Standard Order"}
               </span>
-              <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", height: "30px", color: 'white', borderRadius: 5, }}>
+              <button onClick={handleDiscount} className="apply-discount-btn" style={{ background: '#d5b85a', border: "none", color: 'white', borderRadius: 5, }}>
                 Collector Code
               </button>
               <button
                 onClick={() => setShowSplitModal(true)}
                 className="apply-discount-btn"
-                style={{ background: '#1565c0', border: "none", height: "30px", color: 'white', borderRadius: 5, }}
+                style={{ background: '#1565c0', border: "none", color: 'white', borderRadius: 5, }}
               >
                 Split Payment
               </button>
@@ -1312,7 +1312,7 @@ export default function OrderDetails() {
               <label>Total Amount:</label>
               <span>₹{formatIndianNumber(totalAmount)}</span>
             </div>
-            <div className="field">
+            <div className="field flex-wrap">
               <label>
                 Min. Advance
                 {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 50%)</span>}

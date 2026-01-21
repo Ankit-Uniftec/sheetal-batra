@@ -275,13 +275,16 @@
   height: 180px;
   border-radius: 8px;
   overflow: hidden;
-  background: #f5f5f5;
+  /* background: #f5f5f5; */
 }
 
 .odp-product-image img {
-  width: 100%;
+  /* width: 120px; */
   height: 100%;
-  object-fit: cover;
+  /* flex-shrink: 0; */
+  border-radius: 8px;
+  /* overflow: hidden; */
+  background: #f9f9f9;
 }
 
 .odp-product-details {

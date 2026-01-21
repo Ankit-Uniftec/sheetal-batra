@@ -469,7 +469,7 @@ export default function ReviewDetail() {
                     <span>{item.notes}</span>
                   </div>
                 )}
-                <div className="row3">
+                <div className="grid grid-cols-2 gap-5 mb-5 max-lg:grid-cols-1">
                   <div className="field">
                     <label>Top:</label>
                     <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
