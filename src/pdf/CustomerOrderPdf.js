@@ -510,7 +510,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
 
             {/* Phone - Right */}
             {order.salesperson_phone?.trim() && (
-              <Text style={pdfStyles.salesPhoneText}>{` ${formatPhoneNumber(order.salesperson_phone)}`}</Text>
+              <Text style={pdfStyles.salesPhoneText}>{` +91 ${(order.salesperson_phone)}`}</Text>
             )}
           </View>
 
