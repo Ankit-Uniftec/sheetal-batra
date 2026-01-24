@@ -2054,16 +2054,16 @@ export default function ProductForm() {
       {PopupComponent}
 
       {/* HEADER */}
-      <div className="header">
-        <img src={Logo} className="logo4" alt="logo" onClick={handleLogout} />
-        <h2 className="order-title">Order Form</h2>
-      </div>
+      <header className="pf-header">
+        <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleLogout} />
+        <h1 className="pf-header-title">Order Form</h1>
+      </header>
 
       <div className="screen4-card">
         <div className="screen4-layout">
           {/*left side */}
           <div className="screen4-form">
-            <h2 className="product-title">Product</h2>
+            <h4 className="product-title">Product</h4>
 
             {/* Category Dropdown - Women/Kids */}
             <div className="category-dropdown-container">

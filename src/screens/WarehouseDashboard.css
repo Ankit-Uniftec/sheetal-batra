@@ -107,7 +107,7 @@
   flex-shrink: 0;
   position: fixed;
   left: 0;
-  top: 115px;
+  top: 80px;
   height: calc(100vh - 83px);
   overflow-y: auto;
   z-index: 50;
@@ -161,7 +161,7 @@
   flex: 1;
   margin-top: 50px;
   padding: 24px;
-  margin-left: 320px;
+  margin-left: 300px;
   min-height: calc(100vh - 83px);
 }
 
@@ -958,3 +958,322 @@
   }
 }
 
+/* ========== CALENDAR STYLES ========== */
+.wd-calendar-wrapper {
+  padding-right: 150px;
+}
+
+.wd-ios-calendar {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  backdrop-filter: blur(10px);
+}
+
+/* Header */
+.wd-ios-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  gap: 20px;
+}
+
+.wd-ios-month-year {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  min-width: 160px;
+  text-align: center;
+}
+
+.wd-ios-nav-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #d5b85a;
+  cursor: pointer;
+  padding: 5px 12px;
+  transition: transform 0.15s;
+  line-height: 1;
+}
+
+.wd-ios-nav-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+.wd-ios-nav-btn:disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Day Labels */
+.wd-ios-days-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.wd-ios-day-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  padding: 8px 0;
+  text-transform: uppercase;
+}
+
+/* Date Grid */
+.wd-ios-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.wd-ios-date-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  padding: 12px 8px;
+  min-height: 60px;
+}
+
+.wd-ios-date-cell:hover:not(.wd-ios-empty) {
+  background: rgba(213, 184, 90, 0.1);
+}
+
+.wd-ios-date-cell.wd-ios-empty {
+  cursor: default;
+}
+
+.wd-ios-date-num {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.wd-ios-empty .wd-ios-date-num {
+  visibility: hidden;
+}
+
+/* Today */
+.wd-ios-date-cell.wd-ios-today {
+  background: #d5b85a;
+  border-radius: 12px;
+}
+
+.wd-ios-date-cell.wd-ios-today .wd-ios-date-num {
+  color: white;
+  font-weight: 600;
+}
+
+.wd-ios-date-cell.wd-ios-today .wd-ios-order-count {
+  background: white;
+  color: #d5b85a;
+}
+
+/* Selected */
+.wd-ios-date-cell.wd-ios-selected:not(.wd-ios-today) {
+  background: rgba(213, 184, 90, 0.12);
+  box-shadow: inset 0 0 0 2px #d5b85a;
+}
+
+.wd-ios-date-cell.wd-ios-selected .wd-ios-date-num {
+  font-weight: 600;
+  color: #d5b85a;
+}
+
+/* Order Count Badge */
+.wd-ios-order-count {
+  font-size: 11px;
+  font-weight: 600;
+  background: #d5b85a;
+  color: white;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  margin-top: 4px;
+}
+
+/* ========== ORDERS SECTION BELOW CALENDAR ========== */
+.wd-calendar-orders-section {
+  margin-top: 20px;
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+}
+
+.wd-calendar-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.wd-calendar-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.wd-calendar-orders-list {
+  max-height: 350px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+
+.wd-calendar-order-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.wd-calendar-order-item:hover {
+  background: #fafafa;
+  padding-left: 10px;
+}
+
+.wd-calendar-order-item:last-child {
+  border-bottom: none;
+}
+
+.wd-calendar-order-item p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.wd-calendar-order-item b {
+  color: #d5b85a;
+}
+
+.wd-no-orders {
+  color: #999;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ========== CALENDAR RESPONSIVE ========== */
+@media (max-width: 1024px) {
+  .wd-ios-date-cell {
+    min-height: 55px;
+    padding: 10px 6px;
+  }
+
+  .wd-ios-date-num {
+    font-size: 15px;
+  }
+
+  .wd-ios-order-count {
+    font-size: 10px;
+    min-width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .wd-ios-calendar {
+    padding: 16px;
+  }
+
+  .wd-ios-date-cell {
+    min-height: 50px;
+    padding: 8px 4px;
+    border-radius: 10px;
+  }
+
+  .wd-ios-date-num {
+    font-size: 14px;
+  }
+
+  .wd-ios-order-count {
+    font-size: 9px;
+    min-width: 16px;
+    height: 16px;
+    margin-top: 2px;
+  }
+
+  .wd-ios-day-label {
+    font-size: 11px;
+    padding: 6px 0;
+  }
+
+  .wd-ios-month-year {
+    font-size: 16px;
+    min-width: 140px;
+  }
+
+  .wd-ios-nav-btn {
+    font-size: 20px;
+    padding: 5px 8px;
+  }
+
+  .wd-calendar-wrapper {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .wd-ios-calendar {
+    padding: 12px;
+  }
+
+  .wd-ios-cal-header {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .wd-ios-month-year {
+    font-size: 15px;
+    min-width: 120px;
+  }
+
+  .wd-ios-date-cell {
+    min-height: 44px;
+    padding: 6px 2px;
+    border-radius: 8px;
+  }
+
+  .wd-ios-date-num {
+    font-size: 13px;
+  }
+
+  .wd-ios-order-count {
+    font-size: 8px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+  }
+
+  .wd-ios-day-label {
+    font-size: 10px;
+  }
+
+  .wd-ios-date-grid {
+    gap: 4px;
+  }
+
+  .wd-calendar-orders-section {
+    padding: 14px;
+  }
+
+  .wd-calendar-order-item p {
+    font-size: 13px;
+  }
+
+  .wd-calendar-wrapper {
+    padding: 12px;
+  }
+}

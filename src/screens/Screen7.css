@@ -10,7 +10,7 @@
   width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
-  padding: 20px;
+  padding-bottom: 20px;
   margin: 0;
 }
 
@@ -24,7 +24,7 @@
 }
 
 .screen6-container {
-  padding: 20px 20px 0 20px !important; /* Adjust container padding, remove bottom padding */
+  padding: 40px 40px 0 40px !important; /* Adjust container padding, remove bottom padding */
   padding-top: 0 !important; /* Remove top padding from container */
 }
 
