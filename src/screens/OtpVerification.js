@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen1.css";
 import Logo from "../images/logo.png";
-import formatPhoneNumber from "../utils/formatPhoneNumber";
+// import formatPhoneNumber from "../utils/formatPhoneNumber";
 
 /* ----------------------------------
    COUNTRY CODE CONFIG (OBJECT ARRAY)
@@ -38,7 +38,7 @@ const COUNTRY_CODES = [
   { code: "+968", label: "Oman", flag: "🇴🇲" },
 
   // Americas
-  
+
   { code: "+52", label: "Mexico", flag: "🇲🇽" },
   { code: "+55", label: "Brazil", flag: "🇧🇷" },
 
@@ -90,6 +90,8 @@ export default function OtpVerification() {
 
     setLoading(false);
 
+    console.log(phoneNumber);
+    
     if (error) {
       alert(error.message);
       return;
@@ -99,6 +101,7 @@ export default function OtpVerification() {
       state: {
         mobile: normalized,
         phoneNumber,
+        countryCode,
         fromAssociate: location.state?.fromAssociate || false,
       },
     });
@@ -131,11 +134,14 @@ export default function OtpVerification() {
           <select
             className="country-code"
             value={countryCode}
-            onChange={(e) => setCountryCode(e.target.value)}
+            onChange={(e) => {
+              console.log("Country changed to:", e.target.value); // Debug
+              setCountryCode(e.target.value);
+            }}
           >
             {COUNTRY_CODES.map((c) => (
               <option key={c.code} value={c.code}>
-                {c.flag} {c.code} 
+                {c.flag} {c.code}
               </option>
             ))}
           </select>
@@ -143,7 +149,8 @@ export default function OtpVerification() {
           <input
             className="phone-input"
             placeholder="Enter mobile number"
-            
+            type="tel"
+            value={mobile}  // ✅ ADD THIS - makes it a controlled input
             onChange={(e) => setMobile(e.target.value)}
           />
         </div>
@@ -157,7 +164,7 @@ export default function OtpVerification() {
           <a
             href="https://sheetalbatra.com/pages/privacy-policy"
             target="new"
-           
+
           >
             Terms & Privacy Policy
           </a>

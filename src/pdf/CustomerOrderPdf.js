@@ -6,13 +6,39 @@ import {
   View,
   Image,
   StyleSheet,
+  Font,
 } from "@react-pdf/renderer";
 import { styles, COLORS } from "./pdfStyles";
+import formatPhoneNumber from "../utils/formatPhoneNumber";
 
-// Helper to format Indian numbers
+// Register Noto Sans font for Rupee symbol support
+Font.register({
+  family: "NotoSans",
+  fonts: [
+    {
+      src: "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans@4.5.0/files/noto-sans-all-400-normal.woff",
+      fontWeight: 400,
+    },
+    {
+      src: "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans@4.5.0/files/noto-sans-all-700-normal.woff",
+      fontWeight: 700,
+    },
+  ],
+});
+
+// Helper to safely get string value (never returns empty string)
+const safeString = (value, fallback = "—") => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") {
+    return value.trim() === "" ? fallback : value;
+  }
+  return String(value) || fallback;
+};
+
+// Helper to format Indian numbers with ₹ symbol
 const formatINR = (num) => {
-  if (!num) return "INR 0";
-  return `INR ${Number(num).toLocaleString("en-IN")}`;
+  if (!num) return "₹ 0";
+  return `₹ ${Number(num).toLocaleString("en-IN")}`;
 };
 
 // Helper to format date
@@ -48,8 +74,10 @@ const formatDateTime = (dateStr) => {
 // Get color name from color object
 const getColorName = (color) => {
   if (!color) return "—";
-  if (typeof color === "string") return color;
-  if (typeof color === "object" && color.name) return color.name;
+  if (typeof color === "string") return color.trim() === "" ? "—" : color;
+  if (typeof color === "object" && color.name) {
+    return color.name.trim() === "" ? "—" : color.name;
+  }
   return "—";
 };
 
@@ -60,6 +88,96 @@ const getColorHex = (color) => {
   if (typeof color === "object" && color.hex) return color.hex;
   return "#CCCCCC";
 };
+
+// Check if color name is valid (not empty)
+const hasValidColorName = (color) => {
+  if (!color) return false;
+  if (typeof color === "object" && color.name) {
+    return color.name.trim() !== "";
+  }
+  return false;
+};
+
+// Custom styles for this component
+const pdfStyles = StyleSheet.create({
+  // Watermark styles - half visible on page edge, maintain aspect ratio
+  watermarkRight: {
+    position: "absolute",
+    right: -340,
+    top: "20%",
+    width: 700,
+    opacity: 0.08,
+  },
+  watermarkLeft: {
+    position: "absolute",
+    left: -340,
+    top: "20%",
+    width: 700,
+    opacity: 0.08,
+  },
+  // Sales Associate section - fixed at bottom
+  salesAssociateSection: {
+    marginTop: 20,
+  },
+  // Sales Associate row
+  salesAssociateRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  salesNameSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  salesTeamText: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 10,
+    color: "#333",
+  },
+  salesPhoneText: {
+    textAlign: "right",
+    fontSize: 10,
+    color: "#333",
+  },
+  // Footer styles
+  pageFooter: {
+    position: "absolute",
+    bottom: 20,
+    left: 40,
+    right: 40,
+  },
+  footerDivider: {
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+    marginBottom: 8,
+  },
+  footerText: {
+    fontSize: 8,
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  // Contact section (above footer)
+  contactSection: {
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  contactText: {
+    fontSize: 9,
+    color: "#666",
+    textAlign: "left",
+    marginBottom: 4,
+    fontStyle: "italic",
+  },
+  // INR text with font
+  inrText: {
+    fontFamily: "NotoSans",
+  },
+});
 
 // Section Header Component
 const SectionBar = ({ title }) => (
@@ -72,7 +190,7 @@ const SectionBar = ({ title }) => (
 const Field = ({ label, value, style }) => (
   <View style={[styles.fieldBlock, style]}>
     <Text style={styles.label}>{label}</Text>
-    <Text style={styles.value}>{value || "—"}</Text>
+    <Text style={[styles.value, pdfStyles.inrText]}>{safeString(value)}</Text>
   </View>
 );
 
@@ -88,78 +206,131 @@ const ColorField = ({ label, color }) => (
 );
 
 // Product Item Component
-const ProductItem = ({ item, showPricing = true }) => (
-  <View style={styles.productRow}>
-    {item.image_url && (
-      <Image src={item.image_url} style={styles.productImage} />
-    )}
-    <View style={styles.productDetails}>
-      <View style={styles.rowSpaceBetween}>
-        <Text style={styles.productName}>{item?.product_name || "—"}</Text>
-        {item?.delivery_date && (
-          <View>
-            <Text style={styles.label}>Estimated Delivery Date:</Text>
-            <Text style={styles.deliveryDateHighlight}>
-              {formatDate(item.delivery_date)}
-            </Text>
+const ProductItem = ({ item, order, showPricing = true }) => {
+  const category = item?.category || (item?.isKids ? "Kids" : "Women");
+  const hasTop = item?.top && item.top.trim() !== "";
+  const hasBottom = item?.bottom && item.bottom.trim() !== "";
+  const hasExtras = item?.extras && item.extras.length > 0;
+  const hasAdditionals = item?.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0;
+
+  return (
+    <View style={styles.productRow}>
+      {item.image_url && (
+        <Image src={item.image_url} style={styles.productImage} />
+      )}
+      <View style={styles.productDetails}>
+        {/* Product Name and Delivery Date Row */}
+        <View style={styles.rowSpaceBetween}>
+          <Text style={styles.productName}>{safeString(item?.product_name)}</Text>
+          {order.delivery_date && (
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={styles.label}>Delivery Date:</Text>
+              <Text style={styles.deliveryDateHighlight}>
+                {formatDate(order.delivery_date)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Product Details Grid */}
+        <View style={styles.productGrid}>
+          {/* Top - only if present */}
+          {hasTop && (
+            <View style={[styles.productField, { width: "25%" }]}>
+              <Text style={styles.label}>Top</Text>
+              <Text style={styles.value}>{safeString(item.top)}</Text>
+              {item?.top_color?.hex && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+                  <View style={[styles.colorSwatch, { backgroundColor: item.top_color.hex }]} />
+                  {hasValidColorName(item.top_color) && (
+                    <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.top_color.name}</Text>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Bottom - only if present */}
+          {hasBottom && (
+            <View style={[styles.productField, { width: "25%" }]}>
+              <Text style={styles.label}>Bottom</Text>
+              <Text style={styles.value}>{safeString(item.bottom)}</Text>
+              {item?.bottom_color?.hex && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+                  <View style={[styles.colorSwatch, { backgroundColor: item.bottom_color.hex }]} />
+                  {hasValidColorName(item.bottom_color) && (
+                    <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{item.bottom_color.name}</Text>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Extras - only if present */}
+          {hasExtras && (
+            <View style={[styles.productField, { width: "30%" }]}>
+              <Text style={styles.label}>Extras</Text>
+              {item.extras.map((extra, idx) => (
+                <View key={idx} style={{ marginBottom: 2 }}>
+                  <Text style={styles.value}>{safeString(extra.name)}</Text>
+                  {extra.color?.hex && (
+                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                      <View style={[styles.colorSwatch, { backgroundColor: extra.color.hex }]} />
+                      {hasValidColorName(extra.color) && (
+                        <Text style={[styles.value, { marginLeft: 4, fontSize: 8 }]}>{extra.color.name}</Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Category */}
+          <View style={[styles.productField, { width: "20%" }]}>
+            <Text style={styles.label}>Category</Text>
+            <Text style={styles.value}>{safeString(category)}</Text>
+          </View>
+        </View>
+
+        {/* Second Row: Size and Additionals */}
+        <View style={styles.productGrid}>
+          {/* Size */}
+          {item?.size && item.size.trim() !== "" && (
+            <View style={[styles.productField, { width: "20%" }]}>
+              <Text style={styles.label}>Size</Text>
+              <Text style={styles.value}>{safeString(item.size)}</Text>
+            </View>
+          )}
+
+          {/* Additionals - only if present */}
+          {hasAdditionals && (
+            <View style={[styles.productField, { width: "50%" }]}>
+              <Text style={styles.label}>Additionals</Text>
+              {item.additionals.filter(a => a.name && a.name.trim() !== "").map((additional, idx) => (
+                <View key={idx} style={{ marginBottom: 2 }}>
+                  <Text style={[styles.value, pdfStyles.inrText]}>
+                    {safeString(additional.name)} - ₹ {Number(additional.price || 0).toLocaleString("en-IN")}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Pricing Row */}
+        {showPricing && (
+          <View style={styles.pricingRow}>
+            <View style={styles.pricingField}>
+              <Text style={styles.label}>Product Value</Text>
+              <Text style={[styles.value, { fontFamily: "NotoSans", fontWeight: 700 }]}>{formatINR(item?.price)}</Text>
+            </View>
           </View>
         )}
       </View>
-
-      <View style={styles.productGrid}>
-        <View style={styles.productField}>
-          <Text style={styles.label}>Top</Text>
-          <Text style={styles.value}>{item?.top || "—"}</Text>
-        </View>
-        <View style={styles.productField}>
-          <Text style={styles.label}>Bottom</Text>
-          <Text style={styles.value}>{item?.bottom || "—"}</Text>
-        </View>
-        <View style={styles.productField}>
-          <Text style={styles.label}>Additionals</Text>
-          <Text style={styles.value}>
-            {item?.extras?.map((e) => e?.name).filter(Boolean).join(", ") || "—"}
-          </Text>
-        </View>
-        {/* <View style={styles.productField}>
-          <Text style={styles.label}>Color</Text>
-          <View style={styles.colorRow}>
-            <View
-              style={[
-                styles.colorSwatch,
-                { backgroundColor: getColorHex(item.color) },
-              ]}
-            />
-            <Text style={styles.value}>{getColorName(item.color)}</Text>
-          </View>
-        </View> */}
-        <View style={styles.productField}>
-          <Text style={styles.label}>Size</Text>
-          <Text style={styles.value}>{item?.size || "—"}</Text>
-        </View>
-      </View>
-
-      {showPricing && (
-        <View style={styles.pricingRow}>
-          <View style={styles.pricingField}>
-            <Text style={styles.label}>Product Value</Text>
-            <Text style={styles.value}>{formatINR(item?.price)}</Text>
-          </View>
-          <View style={styles.pricingField}>
-            <Text style={styles.label}>Discount Value</Text>
-            <Text style={styles.value}>{formatINR(item?.discount || 0)}</Text>
-          </View>
-          <View style={styles.pricingField}>
-            <Text style={styles.label}>Final Value</Text>
-            <Text style={styles.value}>
-              {formatINR((item?.price || 0) - (item?.discount || 0))}
-            </Text>
-          </View>
-        </View>
-      )}
     </View>
-  </View>
-);
+  );
+};
 
 // Payment Row Component
 const PaymentRow = ({ label, value, isTotal = false, prefix = "+" }) => (
@@ -167,11 +338,46 @@ const PaymentRow = ({ label, value, isTotal = false, prefix = "+" }) => (
     <Text style={isTotal ? styles.paymentTotalLabel : styles.paymentLabel}>
       {label}
     </Text>
-    <Text style={isTotal ? styles.paymentTotalValue : styles.paymentValue}>
-      {isTotal ? "" : prefix + "  "}{formatINR(value)}
+    <Text style={[isTotal ? styles.paymentTotalValue : styles.paymentValue, pdfStyles.inrText]}>
+      {isTotal ? " " : prefix + " "}{formatINR(value)}
     </Text>
   </View>
 );
+
+// Watermark Component - uses logoUrl (same image as header logo)
+const WatermarkRight = ({ logoUrl }) => {
+  if (!logoUrl) return null;
+  return <Image src={logoUrl} style={pdfStyles.watermarkRight} />;
+};
+
+const WatermarkLeft = ({ logoUrl }) => {
+  if (!logoUrl) return null;
+  return <Image src={logoUrl} style={pdfStyles.watermarkLeft} />;
+};
+
+// Page Footer Component
+const PageFooter = () => (
+  <View style={pdfStyles.pageFooter} fixed>
+    <View style={pdfStyles.footerDivider} />
+    <Text style={pdfStyles.footerText}>
+      Incase of any issues or escalations, please email us at: foundersoffice@sheetalbatra.com
+    </Text>
+  </View>
+);
+
+// Safe JSON parse for payment mode
+const parsePaymentMode = (paymentMode) => {
+  if (!paymentMode) return null;
+  try {
+    const parsed = JSON.parse(paymentMode);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
 
 // Main Customer PDF Document
 const CustomerOrderPdf = ({ order, logoUrl }) => {
@@ -180,28 +386,76 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
     return <Document><Page size="A4" style={styles.page}><Text>Error: Order data is missing.</Text></Page></Document>;
   }
 
-  const items = order.items || [];
   const grandTotal = Number(order.grand_total) || 0;
   const discountAmount = Number(order.discount_amount) || 0;
   const advancePayment = Number(order.advance_payment) || 0;
-  const netTotal = Number(order.net_total) || grandTotal;
-  const remaining = Number(order.remaining_payment) || 0;
+  const collectorsCode = Number(order.collectors_code) || 0;
+  const storeCreditUsed = Number(order.store_credit_used) || 0;
+  const netTotal = grandTotal - discountAmount - collectorsCode;
+  const remaining = netTotal - advancePayment - storeCreditUsed;
+
+  // GST Calculation (flat 18% deduction)
+  const gstAmount = Math.round(grandTotal * 0.18);
+  const baseAmount = grandTotal - gstAmount;
+
+  // Helper to get billing address
+  const getBillingAddress = () => {
+    if (order.billing_same) {
+      const addr = [
+        order.delivery_address,
+        order.delivery_city,
+        order.delivery_state,
+        order.delivery_pincode,
+      ].filter(v => v && String(v).trim() !== "").join(", ");
+      return addr || "—";
+    }
+    const addr = [
+      order.billing_address,
+      order.billing_city,
+      order.billing_state,
+      order.billing_pincode,
+    ].filter(v => v && String(v).trim() !== "").join(", ");
+    return addr || "—";
+  };
+
+  // Helper to get delivery address
+  const getDeliveryAddress = () => {
+    if (order.delivery_address) {
+      const addr = [
+        order.delivery_address,
+        order.delivery_city,
+        order.delivery_state,
+        order.delivery_pincode,
+      ].filter(v => v && String(v).trim() !== "").join(", ");
+      if (addr) return addr;
+    }
+
+    if (order.mode_of_delivery === "Delhi Store") {
+      return "S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048";
+    }
+    if (order.mode_of_delivery === "Ludhiana Store") {
+      return "S.C.O no. 22, Sun View Plaza Ludhiana, Punjab 142027";
+    }
+    return "—";
+  };
 
   return (
     <Document>
       {/* PAGE 1 - Personal Details, Product Details, Sales Associate */}
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={[styles.page, { paddingBottom: 140 }]}>
+        {/* Watermark - Right side (half visible) */}
+        <WatermarkRight logoUrl={logoUrl} />
+
         {/* Header with Logo */}
         <View style={styles.header}>
           {logoUrl && <Image src={logoUrl} style={styles.logo} />}
-          {/* <Text style={styles.brandName}>S H E E T A L   B A T R A</Text> */}
         </View>
 
         {/* Title Section */}
         <View style={styles.titleSection}>
           <Text style={styles.title}>Order Copy</Text>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order ID: {order.id || order.order_id || "—"}</Text>
+            <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
@@ -209,68 +463,85 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         {/* Personal Details */}
         <SectionBar title="Personal Details" />
         <View style={styles.rowSpaceBetween}>
-          <Text style={styles.value}>{order.delivery_name || "—"}</Text>
-          <Text style={styles.value}>{order.delivery_email || "—"}</Text>
+          <Text style={styles.value}>{safeString(order.delivery_name)}</Text>
+          {order.delivery_email?.trim() && (
+            <Text style={styles.value}>{order.delivery_email}</Text>
+          )}
         </View>
         <View style={styles.fieldBlock}>
           <Text style={[styles.label, { marginTop: 10 }]}>Delivery Address:</Text>
-          <Text style={styles.value}>
-            {[
-              order.delivery_address,
-              order.delivery_city,
-              order.delivery_state,
-              order.delivery_pincode,
-            ]
-              .filter(Boolean)
-              .join(", ") || "—"}
-          </Text>
+          <Text style={styles.value}>{getDeliveryAddress()}</Text>
         </View>
-        <View style={{ alignItems: "flex-end", marginTop: -30 }}>
-          <Text style={styles.value}>{order.delivery_phone || "—"}</Text>
-        </View>
+        {order.delivery_phone?.trim() && (
+          <View style={{ alignItems: "flex-end", marginTop: -30 }}>
+            <Text style={styles.value}>{order.delivery_phone}</Text>
+          </View>
+        ) }
 
         {/* Product Details */}
         <SectionBar title="Product Details" />
-        {items.map((item, index) => (
-          <ProductItem key={index} item={item} showPricing={true} />
-        ))}
+        <View wrap>
+          {(order.items || []).map((item, index) => (
+            <ProductItem
+              key={index}
+              item={item}
+              order={order}
+              showPricing={true}
+            />
+          ))}
+        </View>
 
-        {/* Sales Associate Details */}
-        <SectionBar title="Sales Associate Details" />
-        <View style={styles.rowSpaceBetween}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Name: </Text>
-            <Text style={styles.value}>{order.salesperson || "—"}</Text>
+        {/* Sales Associate Details - Fixed at bottom */}
+        <View style={pdfStyles.salesAssociateSection}>
+          <SectionBar title="Sales Associate Details" />
+          <View style={pdfStyles.salesAssociateRow}>
+            {/* Name - Left */}
+            <View style={pdfStyles.salesNameSection}>
+              {order.salesperson?.trim() && (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Name: </Text>
+                  <Text style={styles.value}>{order.salesperson}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Team - Center/Right */}
+            <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team: </Text>
+
+            {/* Phone - Right */}
+            {order.salesperson_phone?.trim() && (
+              <Text style={pdfStyles.salesPhoneText}>{` +91 ${(order.salesperson_phone)}`}</Text>
+            )}
           </View>
-          <Text style={styles.value}>In-Store Client Relations Team</Text>
-          <Text style={styles.value}>{order.salesperson_phone || "—"}</Text>
+
+          {/* Contact Section */}
+          <View style={pdfStyles.contactSection}>
+            <Text style={pdfStyles.contactText}>
+              Kindly allow our customer care team up to 8 hours to thoughtfully
+              assist you with your query.
+            </Text>
+          </View>
         </View>
 
-        {/* Contact Footer */}
-        <View style={styles.contactFooter}>
-          <Text style={styles.contactText}>
-            Kindly allow our customer care team up to 8 hours to thoughtfully
-            assist you with your query.
-          </Text>
-          <Text style={styles.contactEmail}>
-            Incase of any issues or escalations, please email us at: foundersoffice@sheetalbatra.com
-          </Text>
-        </View>
+        {/* Page Footer */}
+        <PageFooter />
       </Page>
 
       {/* PAGE 2 - Billing, Payment, Signature, Notes, Policy */}
       <Page size="A4" style={styles.page}>
+        {/* Watermark - Left side (half visible) */}
+        <WatermarkLeft logoUrl={logoUrl} />
+
         {/* Header with Logo */}
         <View style={styles.header}>
           {logoUrl && <Image src={logoUrl} style={styles.logo} />}
-          {/* <Text style={styles.brandName}>S H E E T A L   B A T R A</Text> */}
         </View>
 
         {/* Title Section */}
         <View style={styles.titleSection}>
           <Text style={styles.title}>Order Copy</Text>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>Order ID: {order.id || order.order_id || "—"}</Text>
+            <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
@@ -279,40 +550,47 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <SectionBar title="Billing Details" />
         <View style={styles.twoColumn}>
           <View style={styles.column}>
-            <Field
-              label="Company / Individual Name:"
-              value={order.billing_company || order.delivery_name}
-            />
-            <Field label="GSTIN:" value={order.billing_gstin || "—"} />
+            {(order.billing_company || order.delivery_name) && (
+              <Field
+                label="Company / Individual Name:"
+                value={order.billing_company || order.delivery_name}
+              />
+            )}
+            {order.billing_gstin?.trim() && (
+              <Field label="GSTIN:" value={order.billing_gstin} />
+            )}
             <View style={styles.fieldBlock}>
               <Text style={styles.label}>Billing Address</Text>
-              <Text style={styles.value}>
-                {order.billing_same
-                  ? [
-                      order.delivery_address,
-                      order.delivery_city,
-                      order.delivery_state,
-                      order.delivery_pincode,
-                    ]
-                      .filter(Boolean)
-                      .join(", ")
-                  : [
-                      order.billing_address,
-                      order.billing_city,
-                      order.billing_state,
-                      order.billing_pincode,
-                    ]
-                      .filter(Boolean)
-                      .join(", ") || "—"}
-              </Text>
+              <Text style={styles.value}>{getBillingAddress()}</Text>
             </View>
           </View>
           <View style={styles.column}>
-            <Field
-              label="Mode of Payment:"
-              value={order.payment_mode || "Card/ Cash/ UPI/ Other"}
-            />
-            <Field label="Advance Amount Paid:" value={formatINR(advancePayment)} />
+            {order.payment_mode?.trim() && (
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>Mode of Payment:</Text>
+                {order.is_split_payment && parsePaymentMode(order.payment_mode) ? (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 2 }}>
+                    {parsePaymentMode(order.payment_mode).map((sp, idx) => (
+                      <Text key={idx} style={[styles.value, pdfStyles.inrText, {
+                        backgroundColor: "#e3f2fd",
+                        padding: "3px 8px",
+                        borderRadius: 4,
+                        marginRight: 6,
+                        marginBottom: 4,
+                        fontSize: 9,
+                      }]}>
+                        {safeString(sp.mode, "Payment")}: ₹ {Number(sp.amount || 0).toLocaleString("en-IN")}
+                      </Text>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.value}>{safeString(order.payment_mode)}</Text>
+                )}
+              </View>
+            )}
+            {advancePayment > 0 && (
+              <Field label="Advance Amount Paid:" value={formatINR(advancePayment)} />
+            )}
           </View>
         </View>
 
@@ -320,19 +598,20 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <SectionBar title="Payment Details" />
         <View style={styles.twoColumn}>
           <View style={styles.column}>
-            <PaymentRow label="Total Order Value:" value={grandTotal} prefix="+" />
-            <PaymentRow
-              label="Taxes (18% GST):"
-              value={order.tax_amount || 0}
-              prefix="+"
-            />
-            <PaymentRow label="Discount:" value={discountAmount} prefix="-" />
-            <PaymentRow
-              label="Collectors Code:"
-              value={order.collectors_code || 0}
-              prefix="-"
-            />
-            <PaymentRow label="Total Advance Paid:" value={advancePayment} prefix="-" />
+            <PaymentRow label="Order Value (excl. GST):" value={baseAmount} prefix="+" />
+            <PaymentRow label="GST (18%):" value={gstAmount} prefix="+" />
+            {discountAmount > 0 && (
+              <PaymentRow label="Discount:" value={discountAmount} prefix="-" />
+            )}
+            {collectorsCode > 0 && (
+              <PaymentRow label="Collectors Code:" value={collectorsCode} prefix="-" />
+            )}
+            {storeCreditUsed > 0 && (
+              <PaymentRow label="Store Credit Applied:" value={storeCreditUsed} prefix="-" />
+            )}
+            {advancePayment > 0 && (
+              <PaymentRow label="Total Advance Paid:" value={advancePayment} prefix="-" />
+            )}
             <PaymentRow
               label="Total Pending Amount:"
               value={remaining}
@@ -354,55 +633,42 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <View style={styles.noteSection}>
           <Text style={styles.noteTitle}>A Note to You</Text>
           <Text style={styles.noteText}>
-            Our pieces are handcrafted with care and created exclusively for you.
-            Each garment is made to order, honouring traditional techniques and
-            thoughtful detailing. As with all bespoke creations, minor alterations
-            and up to one trial fit may be part of the process to achieve the best
-            possible fit - every body is beautifully unique.
+            Our pieces are handcrafted with care and created exclusively for you. Each garment is made to order, honouring traditional techniques and thoughtful
+            detailing. As with all bespoke creations, minor alterations and up to one trial fit may be part of the process to achieve the best possible fit - every
+            body is beautifully unique.
           </Text>
           <Text style={[styles.noteText, { marginTop: 4 }]}>
-            We believe true luxury lies in time, craftsmanship, and a fit made
-            just for you.
+            We believe true luxury lies in time, craftsmanship, and a fit made just for you.
           </Text>
         </View>
 
         {/* Policy Section */}
-        <View style={styles.policySection}>
+        <View style={[styles.policySection, { marginBottom: 60 }]}>
           <Text style={styles.policyItem}>
-            • At Sheetal Batra, we take pride in crafting each piece with care and
-            precision. As we work with a made-to-order and artisanal production
-            timelines, we request you to kindly review the following policy.
+            • At Sheetal Batra, we take pride in crafting each piece with care and precision. As we work with a made-to-order and artisanal production timelines, we request you to kindly review the following policy.
           </Text>
           <Text style={styles.policyItem}>
-            • You may cancel an order within 24 hours after placing it. No
-            cancellations beyond 24 hours will be entertained barring extenuating
-            circumstances. Any accepted cancellation beyond 24 hours will be
-            exclusively at the discretion of Sheetal Batra Design House. A
-            cancelled order will result in store credit.
+            • You may cancel an order within 24 hours after placing it. No cancellations beyond 24 hours will be entertained barring extenuating circumstances. Any accepted cancellation beyond 24 hours will be exclusively at the discretion of Sheetal Batra Design House. A cancelled order will result in store credit only.
           </Text>
           <Text style={styles.policyItem}>
             • Articles on sale cannot be exchanged or returned.
           </Text>
           <Text style={styles.policyItem}>
-            • Customization requests can be accepted (such as bottom style change,
-            color change, sleeve length change) but products are then on final sale
-            and cannot be returned. Such requests must be pre-paid and COD cannot
-            be accepted as a form of payment in that case.
+            • Customisation requests can be accepted (such as bottom style change, color change, sleeve length change). These products are then on final sale and cannot be returned. Such requests must be pre-paid and COD cannot be accepted as a form of payment in that case.
           </Text>
           <Text style={styles.policyItem}>
-            • The accessories including jewelry, potlis and jutties cannot be
-            exchanged or returned.
+            • The accessories including jewelry, potlis and jutties cannot be exchanged or returned.
           </Text>
           <Text style={styles.policyItem}>
-            • We do not accept returns or exchange gift certificates and jewelry,
-            once dispatched unless it is a manufacturing defect.
+            • Return & Exchange Window: You must raise a return or exchange request within 72 hours of receiving your order. We do not accept requests beyond this window. Valid reasons are subject to approval.
           </Text>
           <Text style={styles.policyItem}>
-            • Return & Exchange Window: You must raise a return or exchange request
-            within 72 hours of receiving your order. We do not accept requests
-            beyond this window.
+            • For a valid exchange: The products must be unused, and in perfect condition, with all original tags intact.
           </Text>
         </View>
+
+        {/* Page Footer */}
+        <PageFooter />
       </Page>
     </Document>
   );

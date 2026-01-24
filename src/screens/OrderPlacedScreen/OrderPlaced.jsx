@@ -9,13 +9,13 @@ export default function OrderPlaced() {
   const location = useLocation();
   const order = location.state?.order;
 
-  const [showConfetti, setShowConfetti] = useState(true);
+  // const [showConfetti, setShowConfetti] = useState(true);
 
-  useEffect(() => {
-    // Hide confetti after 3 seconds
-    const timer = setTimeout(() => setShowConfetti(false), 3000);
-    return () => clearTimeout(timer);
-  }, []);
+  // useEffect(() => {
+  //   // Hide confetti after 3 seconds
+  //   const timer = setTimeout(() => setShowConfetti(false), 3000);
+  //   return () => clearTimeout(timer);
+  // }, []);
 
   const handleBackToDashboard = async () => {
     try {
@@ -38,10 +38,10 @@ export default function OrderPlaced() {
           return;
         }
       }
-      navigate("/login", { replace: true });
+      navigate("/AssociateDashboard", { replace: true });
     } catch (e) {
       console.error("Logout restore error", e);
-      navigate("/login", { replace: true });
+      navigate("/AssociateDashboard", { replace: true });
     }
   };
 
@@ -61,7 +61,7 @@ export default function OrderPlaced() {
   return (
     <div className="order-placed-bg">
       {/* Confetti Animation */}
-      {showConfetti && (
+      {/* {showConfetti && (
         <div className="confetti-container">
           {[...Array(50)].map((_, i) => (
             <div
@@ -77,7 +77,7 @@ export default function OrderPlaced() {
             />
           ))}
         </div>
-      )}
+      )} */}
 
       {/* Header */}
       <div className="op-header">
@@ -108,20 +108,20 @@ export default function OrderPlaced() {
         </div>
 
         {/* Success Message */}
-        <h1 className="success-title">Order Placed Successfully!</h1>
+        <h1 className="success-title">Your Order is Confirmed</h1>
         <p className="success-subtitle">
-          Thank you for your order. Your order has been received and is being processed.
+          Thank you for choosing Sheetal Batra. Your order has been successfully placed and is being thoughtfully crafted
         </p>
 
         {/* Order ID Box */}
         <div className="order-id-box">
           <span className="order-id-label">Order ID</span>
-          <span className="order-id-value">#{order.id}</span>
+          <span className="order-id-value">#{order.order_no}</span>
         </div>
 
         {/* Back to Dashboard Button */}
         <button className="op-btn op-btn-primary" onClick={handleBackToDashboard}>
-          Back to Dashboard
+          Return to Dashboard
         </button>
       </div>
     </div>

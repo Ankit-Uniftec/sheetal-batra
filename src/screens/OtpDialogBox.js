@@ -69,7 +69,7 @@ export default function OtpDialogBox() {
       return;
     }
 
-    const formatted = "+91" + phoneNumber.replace(/\D/g, "").slice(-10);
+    const formatted = phoneNumber;
 
     await supabase.from("profiles").upsert({
       id: data.user.id,
@@ -130,7 +130,7 @@ export default function OtpDialogBox() {
        
 
         <div className="otpBox">
-          <p className="otp-text">OTP has been sent to {formatPhoneNumber(mobile)}</p>
+          <p className="otp-text">OTP has been sent to {phoneNumber}</p>
 
           {otp.map((v, i) => (
             <input

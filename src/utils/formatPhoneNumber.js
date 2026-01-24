@@ -1,13 +1,20 @@
+// Utility: format phone numbers
 const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber) return "";
   const cleaned = ('' + phoneNumber).replace(/\D/g, '');
-  // Assuming Indian phone numbers, which are typically 10 digits
-  // Format: +91 XXXXX XXXXX
-  const match = cleaned.match(/^(\d{5})(\d{5})$/);
-  if (match) {
-    return '+91 ' + match[1] + ' ' + match[2];
+  
+  // For 10-digit numbers (Indian format: XXXXX XXXXX)
+  if (cleaned.length === 10) {
+    return cleaned.slice(0, 5) + ' ' + cleaned.slice(5);
   }
-  // If it's not a 10-digit number, return as is or with a default formatting
+  
+  // For numbers with country code (e.g., +911234567890)
+  if (cleaned.length > 10) {
+    const last10 = cleaned.slice(-10);
+    const countryPart = cleaned.slice(0, -10);
+    return '+' + countryPart + ' ' + last10.slice(0, 5) + ' ' + last10.slice(5);
+  }
+  
   return phoneNumber;
 };
 

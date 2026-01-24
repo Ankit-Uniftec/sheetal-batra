@@ -1,0 +1,442 @@
+/* ============================================
+   ALTERATION MODAL STYLES
+   ============================================ */
+
+.alteration-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.alteration-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* Header */
+.alteration-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.alteration-modal-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.alteration-count-badge {
+  padding: 4px 12px;
+  background: #fff3e0;
+  color: #e65100;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.alteration-modal-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f5f5f5;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.alteration-modal-close:hover {
+  background: #e0e0e0;
+}
+
+/* Product Info */
+.alteration-product-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.alteration-product-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.alteration-product-details h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 4px 0;
+}
+
+.alteration-product-details p {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+}
+
+/* Body */
+.alteration-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* Fields */
+.alteration-field {
+  margin-bottom: 20px;
+}
+
+.alteration-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.alteration-field input,
+.alteration-field select,
+.alteration-field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  background: white;
+  transition: all 0.2s;
+}
+
+.alteration-field input:focus,
+.alteration-field select:focus,
+.alteration-field textarea:focus {
+  outline: none;
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.1);
+}
+
+.alteration-field textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.alteration-field-note {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.alteration-field-note.urgent {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* Measurements Button */
+.alteration-measurements-btn {
+  width: 100%;
+  padding: 12px;
+  background: #f5f5f5;
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.alteration-measurements-btn:hover {
+  background: #e8e8e8;
+  border-color: #d5b85a;
+}
+
+/* Measurements Section */
+.alteration-measurements-section {
+  margin-bottom: 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.alteration-measure-container {
+  display: flex;
+  min-height: 300px;
+}
+
+.alteration-measure-menu {
+  width: 180px;
+  background: #f8f9fa;
+  border-right: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+.alteration-measure-item {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  border-bottom: 1px solid #e0e0e0;
+  transition: all 0.2s;
+}
+
+.alteration-measure-item:hover {
+  background: #f0f0f0;
+}
+
+.alteration-measure-item.active {
+  background: white;
+  color: #d5b85a;
+  font-weight: 600;
+  border-left: 3px solid #d5b85a;
+}
+
+.alteration-measure-fields {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.alteration-measure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.alteration-measure-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.alteration-measure-field label {
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+  margin-bottom: 0;
+}
+
+.alteration-measure-field input {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+/* Attachments */
+.alteration-attachments {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.alteration-attachment-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.alteration-attachment-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.alteration-attachment-item .remove-attachment {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alteration-attachment-add {
+  width: 80px;
+  height: 80px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.alteration-attachment-add:hover {
+  border-color: #d5b85a;
+  color: #d5b85a;
+}
+
+/* Address Section */
+.alteration-address-section {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.alteration-address-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 16px 0;
+}
+
+.alteration-address-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.alteration-address-grid .alteration-field {
+  margin-bottom: 0;
+}
+
+/* Footer */
+.alteration-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.alteration-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.alteration-btn.cancel {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  color: #666;
+}
+
+.alteration-btn.cancel:hover {
+  background: #e0e0e0;
+}
+
+.alteration-btn.submit {
+  background: #d5b85a;
+  border: none;
+  color: white;
+}
+
+.alteration-btn.submit:hover {
+  background: #c4a84a;
+}
+
+.alteration-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .alteration-modal-overlay {
+    padding: 0;
+  }
+
+  .alteration-modal {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .alteration-modal-header {
+    padding: 16px;
+  }
+
+  .alteration-modal-header h2 {
+    font-size: 16px;
+  }
+
+  .alteration-product-info {
+    padding: 12px 16px;
+  }
+
+  .alteration-modal-body {
+    padding: 16px;
+  }
+
+  .alteration-measure-container {
+    flex-direction: column;
+  }
+
+  .alteration-measure-menu {
+    width: 100%;
+    display: flex;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .alteration-measure-item {
+    white-space: nowrap;
+    border-bottom: none;
+    border-right: 1px solid #e0e0e0;
+  }
+
+  .alteration-measure-item.active {
+    border-left: none;
+    border-bottom: 3px solid #d5b85a;
+  }
+
+  .alteration-address-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .alteration-modal-footer {
+    padding: 16px;
+  }
+
+  .alteration-btn {
+    flex: 1;
+  }
+}

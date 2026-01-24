@@ -4,13 +4,17 @@ import OtpDialogBox from "./screens/OtpDialogBox";
 import CustomerDetailForm from "./screens/CustomerDetailForm";
 import ProductForm from "./screens/ProductForm";
 import OrderDetails  from "./screens/OrderDetails";
-import ReviewDetail from "./screens/Screen7";
+import ReviewDetail from "./screens/ReviewDetail";
 import SALogin from "./screens/SALogin";
 import AssociateDashboard from "./screens/AssociateDashboard";
 import WarehouseDashboard from "./screens/WarehouseDashboard";
 import OrderHistory from "./screens/OrderHistory";
 import {  Navigate } from "react-router-dom";
-import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced";
+import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced"
+import EditOrder from "./screens/EditOrder/EditOrder";
+import InventoryDashboard from "./screens/InventoryDashboard/InventoryDashboard";
+import AccountsDashboard from "./screens/AccountsDashboard/AccountsDashboard";
+import OrderDetailPage from "./pages/OrderDetailPage";
 
 
 function App() {
@@ -28,7 +32,11 @@ function App() {
         <Route path="/AssociateDashboard" element={<AssociateDashboard />} />
         <Route path="/warehouseDashboard" element={<WarehouseDashboard />} />
         <Route path="/orderHistory" element={<OrderHistory />} />
-        <Route path="/order-placed" element={<OrderPlaced/>}/>
+        <Route path="order-placed" element={<OrderPlaced />}/>
+        <Route path="/edit-order" element={<EditOrder/>}/>
+        <Route path="/inventoryDashboard" element={<InventoryDashboard/>} />
+        <Route path="/accounts" element={<AccountsDashboard/>}/>
+        <Route path="/order/:orderId" element={<OrderDetailPage/>}/>
       </Routes>
     </BrowserRouter>
   );

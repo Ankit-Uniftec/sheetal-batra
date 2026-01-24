@@ -2,16 +2,16 @@
 @import "./Screen6.css";
 
 /* Overrides specific to Screen7 layout */
-.screen7 {
+.rd-screen7 {
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
   background-position: center;
   min-height: 100vh;
-  width: 100%; /* Ensure full width */
-  box-sizing: border-box; /* Include padding in width calculation */
-  overflow-x: hidden; /* Prevent horizontal scrolling */
-  padding: 0; /* Remove padding from the screen7 container */
-  margin: 0; /* Ensure no margin on the screen7 container */
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  padding: 20px;
+  margin: 0;
 }
 
 .screen7-header {
@@ -32,7 +32,7 @@
   font-family: "Athleas", serif !important;
   text-align: center;
   font-size: 32px;
-  padding-right: 20px;
+  padding-right: 20px ;
   color: #d5b85a !important;
 }
 
@@ -135,8 +135,8 @@ h3 {
 
 /* ------- Tablet view ------- */
 @media (min-width: 601px) and (max-width: 1024px) {
-  .screen7 {
-    padding: 0 !important; /* Ensure no padding on the screen itself in tablet view */
+  .rd-screen7 {
+    padding: 20px !important; /* Ensure no padding on the screen itself in tablet view */
     margin: 0 !important; /* Ensure no margin on the screen itself in tablet view */
   }
   .screen7-header {

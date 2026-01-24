@@ -425,7 +425,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     marginBottom: 12,
-    marginTop: 15,
+    marginTop: 20,
   },
   sectionTitle: {
     fontSize: 11,
@@ -489,12 +489,13 @@ export const styles = StyleSheet.create({
   productGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
+    marginTop:10,
   },
   productField: {
-    flex: 1,
-    minWidth: 90,
+    // flex: 1,
+    // minWidth: 90,
     marginBottom: 8,
-    marginRight: 15,
+    paddingRight: 10,
   },
 
   /* =========================
@@ -505,12 +506,12 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   colorSwatch: {
-    width: 20,
-    height: 12,
-    borderRadius: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 2,
     borderWidth: 1,
-    borderColor: "#CCCCCC",
-    marginRight: 6,
+    borderColor: "#DDD",
+    // marginRight: 6,
   },
 
   /* =========================
@@ -532,8 +533,8 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
+    // borderBottomWidth: 1,
+    // borderBottomColor: "#EEEEEE",
   },
   paymentLabel: {
     fontSize: 10,
@@ -545,7 +546,7 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 6,
-    borderTopWidth: 2,
+    borderTopWidth: 1,
     borderTopColor: COLORS.dark,
     marginTop: 6,
   },
@@ -592,7 +593,7 @@ export const styles = StyleSheet.create({
   },
   noteText: {
     fontSize: 8,
-    color: COLORS.gray,
+    color: COLORS.black,
     lineHeight: 1.4,
   },
 
@@ -607,9 +608,9 @@ export const styles = StyleSheet.create({
   },
   policyItem: {
     fontSize: 7,
-    color: COLORS.gray,
+    color: COLORS.black,
     marginBottom: 4,
-    lineHeight: 1.3,
+    fontStyle:"italic"
   },
 
   /* =========================

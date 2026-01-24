@@ -1,0 +1,576 @@
+/* ===================================
+   EDIT ORDER PAGE STYLES
+   =================================== */
+
+.edit-order-page {
+  background-image: url("../../images/Screen1bg.png");
+  background-size: cover;
+  background-position: center;
+  min-height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+/* ===== HEADER ===== */
+.eo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom: 2px solid #d5b85a;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.eo-logo {
+  width: 150px;
+  cursor: pointer;
+}
+
+.eo-title {
+  font-family: "Athleas", serif !important;
+  text-align: center;
+  font-size: 28px;
+  color: #d5b85a !important;
+  margin: 0;
+}
+
+.eo-back-btn {
+  background: #d5b85a;
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.eo-back-btn:hover {
+  background: #c9a94e;
+}
+
+/* ===== STATUS BANNER ===== */
+.eo-status-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+  padding: 14px 24px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+.eo-status-banner.editable {
+  background: #e8f5e9;
+  border-bottom-color: #c8e6c9;
+}
+
+.eo-status-banner.readonly {
+  background: #fff3e0;
+  border-bottom-color: #ffe0b2;
+}
+
+.eo-status-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eo-status-label {
+  font-size: 14px;
+  color: #666;
+}
+
+.eo-status-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.eo-status-badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.eo-status-badge.active {
+  background: #4caf50;
+  color: white;
+}
+
+.eo-status-badge.expired {
+  background: #ff9800;
+  color: white;
+}
+
+/* ===== CONTAINER ===== */
+.eo-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* ===== SECTION BOX ===== */
+.eo-section-box {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+}
+
+.eo-section-box h3 {
+  font-family: "Athleas", serif !important;
+  color: #d5b85a !important;
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.eo-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.eo-section-header h3 {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/* ===== EDIT BUTTONS ===== */
+.eo-edit-btn {
+  background: #d5b85a;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.eo-edit-btn:hover {
+  background: #c9a94e;
+}
+
+.eo-edit-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.eo-save-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.eo-save-btn:hover {
+  background: #43a047;
+}
+
+.eo-save-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.eo-cancel-btn {
+  background: #f5f5f5;
+  color: #666;
+  border: 1px solid #ddd;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.eo-cancel-btn:hover {
+  background: #eee;
+}
+
+/* ===== PRODUCT BOX ===== */
+.eo-product-box {
+  display: flex;
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.eo-prod-img {
+  width: 140px;
+  height: 180px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #f2e9d3;
+}
+
+.eo-product-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ===== ROWS & FIELDS ===== */
+.eo-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.eo-field {
+  flex: 1;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eo-field-wide {
+  flex: 2;
+  min-width: 300px;
+}
+
+.eo-field label {
+  font-size: 13px;
+  color: #888;
+  font-weight: 500;
+}
+
+.eo-field span {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.eo-field-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eo-field input,
+.eo-field select {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.eo-field input:focus,
+.eo-field select:focus {
+  border-color: #d5b85a;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.1);
+}
+
+/* ===== ORDER STATUS ===== */
+.eo-order-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.eo-order-status.pending {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.eo-order-status.processing {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.eo-order-status.delivered {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.eo-order-status.cancelled {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+/* ===== EXTRAS ===== */
+.eo-extras-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.eo-extra-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f9f9f9;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ===== ACTIONS BOX ===== */
+.eo-actions-box {
+  background: #fafafa;
+  border: 2px solid #f0f0f0;
+}
+
+.eo-action-row {
+  margin-top: 16px;
+}
+
+.eo-action-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.eo-action-select {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  max-width: 400px;
+}
+
+.eo-action-btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.eo-cancel-order-btn {
+  background: #f44336;
+  color: white;
+}
+
+.eo-cancel-order-btn:hover:not(:disabled) {
+  background: #d32f2f;
+}
+
+.eo-exchange-btn {
+  background: #2196f3;
+  color: white;
+}
+
+.eo-exchange-btn:hover:not(:disabled) {
+  background: #1976d2;
+}
+
+.eo-action-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.eo-no-actions {
+  color: #888;
+  font-size: 14px;
+  text-align: center;
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+/* ===== FLOATING BACK ===== */
+.eo-floating-back {
+  position: fixed;
+  bottom: 30px;
+  left: 30px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #d5b85a;
+  color: white;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(213, 184, 90, 0.4);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.eo-floating-back:hover {
+  background: #c9a94e;
+  transform: scale(1.1);
+}
+
+/* ===== LOADER ===== */
+.global-loader {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.95);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader-logo {
+  width: 120px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.global-loader p {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #555;
+  letter-spacing: 0.5px;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.7; }
+}
+
+/* ===== NO ORDER ===== */
+.no-order {
+  text-align: center;
+  padding: 60px;
+  font-size: 18px;
+  color: #888;
+}
+
+/* ===================================
+   RESPONSIVE STYLES
+   =================================== */
+
+/* Tablet */
+@media (min-width: 601px) and (max-width: 1024px) {
+  .eo-container {
+    padding: 20px;
+  }
+
+  .eo-status-banner {
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  .eo-product-box {
+    gap: 16px;
+  }
+
+  .eo-prod-img {
+    width: 120px;
+    height: 160px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .eo-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .eo-logo {
+    width: 120px;
+  }
+
+  .eo-title {
+    font-size: 22px;
+  }
+
+  .eo-back-btn {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .eo-status-banner {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .eo-container {
+    padding: 16px;
+  }
+
+  .eo-section-box {
+    padding: 16px;
+  }
+
+  .eo-product-box {
+    flex-direction: column;
+  }
+
+  .eo-prod-img {
+    width: 100%;
+    height: 240px;
+  }
+
+  .eo-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .eo-field {
+    min-width: 100%;
+  }
+
+  .eo-field-wide {
+    min-width: 100%;
+  }
+
+  .eo-action-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .eo-action-select {
+    max-width: 100%;
+  }
+
+  .eo-edit-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .eo-save-btn,
+  .eo-cancel-btn {
+    width: 100%;
+  }
+
+  .eo-floating-back {
+    bottom: 20px;
+    left: 20px;
+    width: 45px;
+    height: 45px;
+  }
+}

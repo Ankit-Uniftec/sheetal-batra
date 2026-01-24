@@ -40,6 +40,7 @@
   background: #d5b85a;
   color: white !important;
   border: none;
+  margin-top: 50px;
   padding: 15px 17px;
   border-radius: 8px;
   font-size: 19px;
@@ -330,8 +331,13 @@
   
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
 }
 
+.ad-sales-percent {
+  padding-left: 10px;
+  color: #d5b85a !important;
+}
 .ad-sales-label {
   font-family: "Athleas", serif !important;
   font-size: 16px !important;
@@ -363,6 +369,30 @@
   height: 10px;
   background: #d5b85a;
   border-radius: 20px;
+}
+
+.ad-attachments-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ad-attachments-btn:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.ad-attachments-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Active Orders */
@@ -430,6 +460,60 @@
   color: white !important;
   border: none;
   font-size: 28px;
+}
+
+/* ==================== PAGINATION STYLES ==================== */
+/* Add these styles to your AssociateDashboard.css file */
+
+.ad-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin: 30px 0;
+  padding: 20px;
+}
+
+.ad-pagination-btn {
+  padding: 10px 20px;
+  background: #d5b85a;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.ad-pagination-btn:hover:not(:disabled) {
+  background: #c4a749;
+  transform: translateY(-2px);
+}
+
+.ad-pagination-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ad-pagination-info {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .ad-pagination {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .ad-pagination-btn {
+    width: 100%;
+    max-width: 200px;
+  }
 }
 
 /* -------------- TABLET (768px to 1024px) -------------- */
@@ -1032,39 +1116,42 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eee;
+  padding: 16px 16px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .ad-header-info {
   display: flex;
-  gap: 40px;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .ad-header-item {
   display: flex;
-  /* flex-direction: column; */
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .ad-header-label {
-  font-size: 12px;
-  color: #666;
-  font-weight: 500;
+  font-size: 10px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .ad-header-value {
-  font-size: 14px;
-  color: #333;
+  font-size: 13px;
   font-weight: 600;
+  color: #333;
 }
 
 .ad-header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .ad-view-details-btn {
@@ -1082,22 +1169,20 @@
 }
 
 .ad-print-pdf-btn {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: none;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  color: #333;
-  cursor: pointer;
-  transition: all 0.2s;
+  gap: 4px;
 }
 
 .ad-print-pdf-btn:hover {
   background: #f5f5f5;
-  border-color: #ccc;
+  border-color: #d5b85a;
 }
 
 .ad-pdf-icon {
@@ -1220,7 +1305,7 @@
 
 .ad-order-label{
   color: #d5b85a !important;
-  font-size: 14px;
+  font-size: 28px;
   font-weight: 600;
 }
 
@@ -1264,5 +1349,738 @@
 
   .ad-decorative-line {
     display: none;
+  }
+}
+
+/* ===================================
+   ASSOCIATE DASHBOARD - ORDER MANAGEMENT ADDITIONS
+   Add this to your AssociateDashboard.css
+   =================================== */
+
+/* ===== ORDER STATUS BADGE ===== */
+.ad-badges-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ad-order-status-badge {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.ad-status-active {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.ad-status-delivered {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #bbdefb;
+}
+
+.ad-status-cancelled {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+.ad-status-exchange {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+}
+
+.ad-status-processing {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #e1bee7;
+}
+
+/* ===== EDITABLE BADGE ===== */
+.ad-editable-badge {
+  padding: 5px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #fff8e1;
+  color: #f57c00;
+  border: 1px solid #ffe082;
+}
+
+/* ===== ORDER CARD ADJUSTMENTS ===== */
+.ad-order-card {
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f0f0f0;
+  transition: all 0.2s ease;
+}
+
+.ad-order-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Remove golden decorative line */
+.ad-decorative-line {
+  display: none !important;
+}
+
+/* ===== ORDER ACTIONS BAR ===== */
+.ad-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f0f0;
+  align-items: center;
+}
+
+.ad-action-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ad-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ad-edit-btn {
+  background: #d5b85a;
+  color: white;
+}
+
+.ad-edit-btn:hover:not(:disabled) {
+  background: #c9a94e;
+}
+
+.ad-delivered-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.ad-delivered-btn:hover:not(:disabled) {
+  background: #43a047;
+}
+
+.ad-cancel-btn {
+  background: #f44336;
+  color: white;
+}
+
+.ad-cancel-btn:hover:not(:disabled) {
+  background: #d32f2f;
+}
+
+.ad-exchange-btn {
+  background: #2196f3;
+  color: white;
+}
+
+.ad-exchange-btn:hover:not(:disabled) {
+  background: #1976d2;
+}
+
+/* ===== ACTION DROPDOWN ===== */
+.ad-action-dropdown {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ad-action-dropdown select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  min-width: 180px;
+  cursor: pointer;
+}
+
+.ad-action-dropdown select:focus {
+  border-color: #d5b85a;
+  outline: none;
+}
+
+/* ===== EDIT MODAL ===== */
+.ad-edit-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.ad-edit-box {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.ad-edit-box h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.4rem;
+  color: #d5b85a;
+  font-family: "Athleas", serif;
+}
+
+.ad-close-modal {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f5f5f5;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ad-close-modal:hover {
+  background: #eee;
+}
+
+/* ===== EDIT FORM ===== */
+.ad-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ad-edit-row {
+  display: flex;
+  gap: 16px;
+}
+
+.ad-edit-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ad-edit-field.ad-edit-full {
+  flex: none;
+  width: 100%;
+}
+
+.ad-edit-field label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.ad-edit-field input,
+.ad-edit-field select {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.ad-edit-field input:focus,
+.ad-edit-field select:focus {
+  border-color: #d5b85a;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.1);
+}
+
+.ad-edit-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.ad-edit-cancel {
+  padding: 10px 24px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ad-edit-cancel:hover {
+  background: #eee;
+}
+
+.ad-edit-save {
+  padding: 10px 24px;
+  background: #d5b85a;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ad-edit-save:hover:not(:disabled) {
+  background: #c9a94e;
+}
+
+.ad-edit-save:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* ===== BLUR EFFECT ===== */
+.ad-blurred {
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+/* ===== FONT SIZE CONSISTENCY ===== */
+.ad-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ad-order-label {
+  font-size: 14px;
+  color: #888;
+}
+
+.ad-header-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ad-header-label {
+  font-size: 12px;
+  color: #888;
+}
+
+/* ===== PRODUCT THUMB CLICKABLE ===== */
+.ad-product-thumb {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.ad-product-thumb:hover {
+  transform: scale(1.02);
+}
+
+/* ===== ORDER ITEM IN DASHBOARD ===== */
+.ad-order-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ad-order-item:last-child {
+  border-bottom: none;
+}
+
+.ad-password-input-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.ad-password-input-wrapper input {
+  width: 100%;
+  padding-right: 45px;
+}
+
+.ad-eye-btn {
+  position: absolute;
+  right: 15px;
+  top:2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ad-eye-btn:hover {
+  opacity: 0.7;
+}
+
+/* ==================== iPHONE STYLE CALENDAR (FULL WIDTH) ==================== */
+.ad-ios-calendar {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  backdrop-filter: blur(10px);
+}
+
+/* Header */
+.ad-ios-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  gap: 20px;
+}
+
+.ad-ios-month-year {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  min-width: 160px;
+  text-align: center;
+}
+
+.ad-ios-nav-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #d5b85a;
+  cursor: pointer;
+  padding: 5px 12px;
+  transition: transform 0.15s;
+  line-height: 1;
+}
+
+.ad-ios-nav-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+}
+
+.ad-ios-nav-btn:disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Day Labels */
+.ad-ios-days-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.ad-ios-day-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  padding: 8px 0;
+  text-transform: uppercase;
+}
+
+/* Date Grid */
+.ad-ios-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.ad-ios-date-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  padding: 12px 8px;
+  min-height: 60px;
+}
+
+.ad-ios-date-cell:hover:not(.ad-ios-empty) {
+  background: rgba(213, 184, 90, 0.1);
+}
+
+.ad-ios-date-cell.ad-ios-empty {
+  cursor: default;
+}
+
+.ad-ios-date-num {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ad-ios-empty .ad-ios-date-num {
+  visibility: hidden;
+}
+
+/* Today */
+.ad-ios-date-cell.ad-ios-today {
+  background: #d5b85a;
+  border-radius: 12px;
+}
+
+.ad-ios-date-cell.ad-ios-today .ad-ios-date-num {
+  color: white;
+  font-weight: 600;
+}
+
+.ad-ios-date-cell.ad-ios-today .ad-ios-order-count {
+  background: white;
+  color: #d5b85a;
+}
+
+/* Selected */
+.ad-ios-date-cell.ad-ios-selected:not(.ad-ios-today) {
+  background: rgba(213, 184, 90, 0.12);
+  box-shadow: inset 0 0 0 2px #d5b85a;
+}
+
+.ad-ios-date-cell.ad-ios-selected .ad-ios-date-num {
+  font-weight: 600;
+  color: #d5b85a;
+}
+
+/* Order Count Badge */
+.ad-ios-order-count {
+  font-size: 11px;
+  font-weight: 600;
+  background: #d5b85a;
+  color: white;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  margin-top: 4px;
+}
+
+/* ========== ORDERS SECTION BELOW CALENDAR ========== */
+.ad-calendar-orders-section {
+  margin-top: 20px;
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+}
+
+.ad-calendar-orders-list {
+  max-height: 350px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+
+.ad-calendar-orders-section .ad-order-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.ad-calendar-orders-section .ad-order-item:hover {
+  background: #fafafa;
+  padding-left: 10px;
+}
+
+.ad-calendar-orders-section .ad-order-item:last-child {
+  border-bottom: none;
+}
+
+.ad-calendar-orders-section .ad-order-item p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.ad-calendar-orders-section .ad-order-item b {
+  color: #d5b85a;
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 1024px) {
+  .ad-ios-date-cell {
+    min-height: 55px;
+    padding: 10px 6px;
+  }
+
+  .ad-ios-date-num {
+    font-size: 15px;
+  }
+
+  .ad-ios-order-count {
+    font-size: 10px;
+    min-width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .ad-ios-calendar {
+    padding: 16px;
+  }
+
+  .ad-ios-date-cell {
+    min-height: 50px;
+    padding: 8px 4px;
+    border-radius: 10px;
+  }
+
+  .ad-ios-date-num {
+    font-size: 14px;
+  }
+
+  .ad-ios-order-count {
+    font-size: 9px;
+    min-width: 16px;
+    height: 16px;
+    margin-top: 2px;
+  }
+
+  .ad-ios-day-label {
+    font-size: 11px;
+    padding: 6px 0;
+  }
+
+  .ad-ios-month-year {
+    font-size: 16px;
+    min-width: 140px;
+  }
+
+  .ad-ios-nav-btn {
+    font-size: 20px;
+    padding: 5px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-ios-calendar {
+    padding: 12px;
+  }
+
+  .ad-ios-cal-header {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .ad-ios-month-year {
+    font-size: 15px;
+    min-width: 120px;
+  }
+
+  .ad-ios-date-cell {
+    min-height: 44px;
+    padding: 6px 2px;
+    border-radius: 8px;
+  }
+
+  .ad-ios-date-num {
+    font-size: 13px;
+  }
+
+  .ad-ios-order-count {
+    font-size: 8px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+  }
+
+  .ad-ios-day-label {
+    font-size: 10px;
+  }
+
+  .ad-ios-date-grid {
+    gap: 4px;
+  }
+
+  .ad-calendar-orders-section {
+    padding: 14px;
+  }
+
+  .ad-calendar-orders-section .ad-order-item p {
+    font-size: 13px;
+  }
+}
+
+/* ===== RESPONSIVE ADJUSTMENTS ===== */
+@media (max-width: 768px) {
+  .ad-badges-row {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .ad-order-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ad-action-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .ad-action-dropdown {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .ad-action-dropdown select {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .ad-action-dropdown button {
+    width: 100%;
+  }
+
+  .ad-edit-row {
+    flex-direction: column;
+  }
+
+  .ad-edit-actions {
+    flex-direction: column;
+  }
+
+  .ad-edit-cancel,
+  .ad-edit-save {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-edit-box {
+    padding: 16px;
+  }
+
+  .ad-edit-box h3 {
+    font-size: 1.2rem;
   }
 }
