@@ -443,6 +443,18 @@
   color: white;
 }
 
+/* Pagination Ellipsis - for smart pagination */
+.wd-pagination-ellipsis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+  color: #666;
+  user-select: none;
+}
+
 /* Search Bar */
 .wd-search-bar {
   position: relative;
@@ -949,6 +961,13 @@
     height: 32px;
     font-size: 13px;
   }
+
+  .wd-pagination-ellipsis {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+
     .wd-measurement-grid {
     grid-template-columns: 1fr;
   }

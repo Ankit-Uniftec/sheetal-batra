@@ -253,6 +253,54 @@ const WarehouseDashboard = () => {
   const goToPrevious = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
   const goToNext = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
 
+  // Smart pagination - generate page numbers with ellipsis
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible + 2) {
+      // Show all pages if total is small (7 or fewer)
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Always show first page
+      pages.push(1);
+      
+      // Calculate start and end of visible window
+      let start = Math.max(2, currentPage - 1);
+      let end = Math.min(totalPages - 1, currentPage + 1);
+      
+      // Adjust window to show at least 3 middle pages
+      if (currentPage <= 3) {
+        end = Math.min(totalPages - 1, 4);
+      }
+      if (currentPage >= totalPages - 2) {
+        start = Math.max(2, totalPages - 3);
+      }
+      
+      // Add ellipsis before middle pages if needed
+      if (start > 2) {
+        pages.push('...');
+      }
+      
+      // Add middle pages
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      
+      // Add ellipsis after middle pages if needed
+      if (end < totalPages - 1) {
+        pages.push('...');
+      }
+      
+      // Always show last page
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  };
+
   // Get alteration type display
   const getAlterationTypeLabel = (type) => {
     const types = {
@@ -568,7 +616,7 @@ const WarehouseDashboard = () => {
                 )}
               </div>
 
-              {/* Pagination Controls */}
+              {/* Pagination Controls - SMART PAGINATION */}
               {!loading && filteredOrders.length > ordersPerPage && (
                 <div className="wd-pagination">
                   <button
@@ -580,14 +628,18 @@ const WarehouseDashboard = () => {
                   </button>
 
                   <div className="wd-pagination-pages">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                      <button
-                        key={page}
-                        className={`wd-pagination-page ${currentPage === page ? "active" : ""}`}
-                        onClick={() => goToPage(page)}
-                      >
-                        {page}
-                      </button>
+                    {getPageNumbers().map((page, idx) => (
+                      page === '...' ? (
+                        <span key={`ellipsis-${idx}`} className="wd-pagination-ellipsis">...</span>
+                      ) : (
+                        <button
+                          key={page}
+                          className={`wd-pagination-page ${currentPage === page ? "active" : ""}`}
+                          onClick={() => goToPage(page)}
+                        >
+                          {page}
+                        </button>
+                      )
                     ))}
                   </div>
 
