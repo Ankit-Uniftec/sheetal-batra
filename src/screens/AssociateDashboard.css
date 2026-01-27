@@ -1,10 +1,10 @@
 * {
   font-family: "Futura", sans-serif !important;
-  color:black;
+  color: black;
 }
 
 .ad-dashboard-wrapper {
-  
+
   min-height: 100vh;
   width: 100%;
 
@@ -18,8 +18,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  
+
 }
+
 .ad-blurred {
   filter: blur(6px);
   pointer-events: none;
@@ -28,39 +29,64 @@
 
 
 /* ---------------- HEADER ---------------- */
-
-.ad-top-header {
-  width: 100% !important;
+.ad-header {
   display: flex;
-  /* grid-template-columns: 1fr auto 1fr !important; 3-column grid */
   align-items: center;
   justify-content: space-between;
+  padding: 16px 40px;
+  /* background: rgba(255, 255, 255, 0.95); */
+  /* border-bottom: 1px solid #eee; */
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  margin-bottom: 20px;
 }
-.ad-logout-btn{
-  background: #d5b85a;
-  color: white !important;
-  border: none;
-  margin-top: 50px;
-  padding: 15px 17px;
-  border-radius: 8px;
-  font-size: 19px;
-  font-weight: 500;
+
+.ad-header-logo {
+  height: 70px;
   cursor: pointer;
 }
 
-/* Hamburger Icon */
+.ad-header-title {
+  font-family: "Athleas", serif !important;
+  font-size: 24px;
+  color: #d5b85a !important;
+  margin: 0;
+  font-weight: 600;
+}
+
+.ad-header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.ad-header-btn {
+  background: #d5b85a;
+  color: white !important;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ad-header-btn:hover {
+  background: #c9a94e;
+}
+
+/* Hamburger Icon - Hidden on desktop */
 .ad-hamburger-icon {
-  display: none; /* Hidden by default, shown in media query */
+  display: none;
   flex-direction: column;
   justify-content: space-around;
   width: 30px;
   height: 25px;
   cursor: pointer;
-  position: absolute;
-  right: 20px; /* Adjust as needed */
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1001; /* Above other content */
+  z-index: 1001;
 }
 
 .ad-hamburger-icon .ad-bar {
@@ -70,34 +96,6 @@
   border-radius: 5px;
   transition: all 0.3s ease;
 }
-
-/* .ad-logout-btn {
-  display: grid !important;
-  border: 1px solid #d5b85a;
-  background-color: #d5b85a !important;
-  height: 50px;
-  width: 50px;
-  cursor: pointer;
-  color: #fff !important;
-   margin-bottom: 25px !important; 
-   text-align: center !important;
-} */
-
-/* .ad-title {
-  display: grid !important;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  padding:20px 32px;
-  position: relative;
-  width:100%;
-  font-family: "Athleas", serif !important;
-  justify-self: center; 
-  text-align: center;
-  font-size: 32px;
-  font-weight: 500;
-  color: #d5b85a !important;
- 
-} */
 
 
 /* ---------------- MAIN GRID (3 ROW × 4 COLUMN) ---------------- */
@@ -121,20 +119,22 @@
   border: 1px solid #D4D4D4;
   border-radius: 8px;
   overflow: visible;
-  transition: transform 0.3s ease-in-out; /* For smooth slide-in/out */
+  transition: transform 0.3s ease-in-out;
+  /* For smooth slide-in/out */
 }
 
 .ad-hello-box {
   background: #d5b85a;
   padding: 10px;
-  color:white !important;
+  color: white !important;
   border-radius: 8px;
   font-weight: 500;
 
 }
+
 .ad-clickable {
   cursor: pointer;
-    color:white !important;
+  color: white !important;
 }
 
 
@@ -150,6 +150,7 @@
   font-size: 15px;
   cursor: pointer;
 }
+
 .ad-menu-item-logout {
   display: none;
 }
@@ -157,13 +158,15 @@
 .ad-menu-item.active {
   font-weight: bold;
   color: #d5b85a;
-  position: relative; /* Needed for pseudo-element positioning */
+  position: relative;
+  /* Needed for pseudo-element positioning */
 }
 
 .ad-menu-item.active::after {
   content: "";
   position: absolute;
-  left: 12px; /* Align with padding */
+  left: 12px;
+  /* Align with padding */
   bottom: 4px;
   width: 95px;
 
@@ -174,7 +177,8 @@
 
 
 .ad-profile-wrapper {
-  padding-top: 0;        /* same as Order Details */
+  padding-top: 0;
+  /* same as Order Details */
 }
 
 
@@ -182,7 +186,8 @@
   font-family: "Athleas", serif !important;
   font-size: 26px;
   font-weight: 600;
-  margin: 0 0 15px 0;    /* EXACT same as Order Details */
+  margin: 0 0 15px 0;
+  /* EXACT same as Order Details */
   padding-left: 5px;
   color: black !important;
 }
@@ -217,6 +222,7 @@
   font-size: 16px;
   font-weight: 600;
 }
+
 .ad-password-modal {
   filter: none !important;
 }
@@ -230,15 +236,27 @@
 
 /* ---- Row 1 ---- */
 
-.ad-total-revenue { grid-row: 1; grid-column: 2;  }
-.ad-total-orders  { grid-row: 1; grid-column: 3; }
-.ad-total-clients { grid-row: 1; grid-column: 4; }
+.ad-total-revenue {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+.ad-total-orders {
+  grid-row: 1;
+  grid-column: 3;
+}
+
+.ad-total-clients {
+  grid-row: 1;
+  grid-column: 4;
+}
 
 /* ---- Row 2 ---- */
 
 .ad-sales-target {
   grid-row: 2;
-  grid-column: 2 / 4; /* spans 2 columns */
+  grid-column: 2 / 4;
+  /* spans 2 columns */
 }
 
 /* ---- Row 2–3 Alerts ---- */
@@ -247,7 +265,7 @@
   grid-row: 2 / 4;
   grid-column: 4;
   padding: 20px;
-  
+
   border-radius: 12px;
   background: #FFFFFFB0;
   border: 1px solid #D4D4D4;
@@ -262,28 +280,29 @@
   font-family: "Athleas", serif !important;
   color: #d5b85a !important;
   font-size: 16px !important;
-  
+
 }
 
 .ad-alerts-body {
   margin-top: 12px;
   height: 440px;
   border-radius: 10px;
-  
+
 }
 
 /* ---- Row 3 ---- */
 
 .ad-active-orders {
-  
+
   grid-row: 3;
-  grid-column: 2 / 4; /* spans 2 columns */
+  grid-column: 2 / 4;
+  /* spans 2 columns */
 }
 
 /* ---------------- CARDS ---------------- */
 
 .ad-gold-text {
-  color:#d5b85a !important;
+  color: #d5b85a !important;
 }
 
 .ad-stat-card {
@@ -296,14 +315,15 @@
 .ad-stat-title {
   margin-top: 2px;
   font-family: "Athleas", serif !important;
- font-size: 16px !important;
- color: #d5b85a !important;
+  font-size: 16px !important;
+  color: #d5b85a !important;
 }
 
 .ad-stat-content {
   display: flex;
   justify-content: space-between;
-  align-items: center; /* Added to vertically center content */
+  align-items: center;
+  /* Added to vertically center content */
   margin-top: 10px;
   color: #d5b85a !important;
 }
@@ -315,20 +335,20 @@
 }
 
 .ad-stat-change {
- color: #d5b85a !important;
+  color: #d5b85a !important;
 }
 
 /* Sales Card */
 .ad-sales-card {
- background: #FFFFFFB0;
-  padding: 20px ;
+  background: #FFFFFFB0;
+  padding: 20px;
   padding-top: 2px;
   border-radius: 12px;
   border: 1px solid #D4D4D4;
 }
 
 .ad-sales-header {
-  
+
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -338,6 +358,7 @@
   padding-left: 10px;
   color: #d5b85a !important;
 }
+
 .ad-sales-label {
   font-family: "Athleas", serif !important;
   font-size: 16px !important;
@@ -404,7 +425,7 @@
   border: 1px solid #D4D4D4;
   overflow: hidden;
 }
- 
+
 .ad-card-header {
   display: flex;
   justify-content: space-between;
@@ -415,8 +436,10 @@
   font-size: 16px !important;
   color: #d5b85a !important;
 }
+
 .ad-view-btn {
-  width: 60px; /* Reduced width */
+  width: 60px;
+  /* Reduced width */
   padding: 2px 5px !important;
   border-radius: 3px !important;
   background-color: #d5b85a;
@@ -425,10 +448,12 @@
   cursor: pointer;
   font-size: 14px;
 }
+
 .ad-cardbox {
   height: 250px !important;
   overflow-y: auto;
-  overflow-x: auto;   /* ✅ STOPS sideways overflow */
+  overflow-x: auto;
+  /* ✅ STOPS sideways overflow */
   padding-right: 6px;
 }
 
@@ -509,7 +534,7 @@
     flex-direction: column;
     gap: 10px;
   }
-  
+
   .ad-pagination-btn {
     width: 100%;
     max-width: 200px;
@@ -519,10 +544,11 @@
 /* -------------- TABLET (768px to 1024px) -------------- */
 
 @media (max-width: 1024px) and (min-width: 768px) {
-  
-  
+
+
   .ad-grid-table {
-    grid-template-columns: 150px 1fr 1fr 200px; /* scale down */
+    grid-template-columns: 150px 1fr 1fr 200px;
+    /* scale down */
     gap: 10px;
   }
 
@@ -531,21 +557,22 @@
   }
 
   .ad-stat-card {
-    
+
     padding: 14px;
     width: 170px;
 
   }
-  .ad-cardbox{
-    
-    
+
+  .ad-cardbox {
+
+
     overflow: auto !important;
   }
 
   .ad-stat-value {
-    
+
     font-size: 26px;
-    color:black !important;
+    color: black !important;
   }
 
   .ad-sales-card {
@@ -556,7 +583,7 @@
   .ad-orders-card {
     height: 260px;
     padding: 16px;
-    
+
   }
 
   .ad-alerts-box {
@@ -566,26 +593,29 @@
   }
 
   .ad-title {
-    font-size: 26px; /* shrink title */
+    font-size: 26px;
+    /* shrink title */
   }
 
   .ad-logo {
-    width: 150px; /* shrink logo */
+    width: 150px;
+    /* shrink logo */
   }
 
   .ad-logout-btn {
     width: 45px;
     height: 45px;
   }
-  
+
 }
+
 .ad-password-modal {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -626,7 +656,8 @@
 
 .ad-order-details-tab {
   padding: 20px;
-  grid-column: 2 / -1; /* span full width */
+  grid-column: 2 / -1;
+  /* span full width */
   width: 100%;
 }
 
@@ -639,14 +670,14 @@
 }
 
 /* Center & size order cards same as OrderHistory */
-.ad-order-details-tab  {
+.ad-order-details-tab {
   width: 760px;
   max-width: 100%;
   margin: 0 auto;
   border-radius: 16px !important;
   padding: 14px !important;
   background: #fff;
-  box-shadow: 0 10px 24px rgba(0,0,0,.06) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .06) !important;
   position: relative;
 }
 
@@ -680,13 +711,13 @@
 
 /* Responsive adjustments */
 @media (max-width: 1024px) {
-  .ad-order-details-tab  {
+  .ad-order-details-tab {
     width: 700px;
   }
 }
 
 @media (max-width: 700px) {
-  .ad-order-details-tab  {
+  .ad-order-details-tab {
     width: 100%;
   }
 
@@ -703,22 +734,28 @@
     grid-template-columns: 1fr;
   }
 }
+
 /* Wraps the entire Order Details tab */
 .ad-order-details-wrapper {
-  grid-column: span 3;        /* Stays aligned with main content */
+  grid-column: span 3;
+  /* Stays aligned with main content */
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 140px); /* Fit under header */
+  height: calc(100vh - 140px);
+  /* Fit under header */
   padding-top: 4px;
   padding-left: 20px;
   padding-right: 20px;
-  padding-bottom: 20px; /* Corrected typo */
-  overflow-x: auto; /* Allow horizontal scrolling for content inside */
-  overflow-y: auto; /* Allow vertical scrolling for content inside */
+  padding-bottom: 20px;
+  /* Corrected typo */
+  overflow-x: auto;
+  /* Allow horizontal scrolling for content inside */
+  overflow-y: auto;
+  /* Allow vertical scrolling for content inside */
 }
 
 /* The title aligned to top at same horizontal level as sidebar */
-.ad-order-details-wrapper  {
+.ad-order-details-wrapper {
   font-family: "Athleas", serif !important;
   font-size: 26px;
   font-weight: 600;
@@ -726,7 +763,8 @@
   padding-left: 5px;
   color: black !important;
 }
-.ad-order-title{
+
+.ad-order-title {
   font-family: "Athleas", serif !important;
   font-size: 26px;
   font-weight: 600;
@@ -740,7 +778,8 @@
 .ad-order-list-scroll {
   flex: 1;
   overflow-y: auto;
-  padding-right: 10px; /* so scrollbar doesn’t overlap cards */
+  padding-right: 10px;
+  /* so scrollbar doesn’t overlap cards */
 }
 
 /* Optional: smooth scroll feel */
@@ -752,20 +791,25 @@
   background: #c7a24f;
   border-radius: 4px;
 }
+
 /* .ad-order-card{
   margin: 3px;
 } */
 
 
 @media (max-width:768px) {
-  .ad-dashboardContent{
+  .ad-dashboardContent {
     overflow-y: auto;
     overflow-x: auto;
   }
+
   .ad-calendar-grid {
-    grid-template-columns: repeat(7, minmax(80px, 1fr)); /* Ensure minimum column width for each day */
-    overflow-x: auto; /* Explicitly enable horizontal scrolling */
-    -webkit-overflow-scrolling: touch; /* For smoother scrolling on iOS */
+    grid-template-columns: repeat(7, minmax(80px, 1fr));
+    /* Ensure minimum column width for each day */
+    overflow-x: auto;
+    /* Explicitly enable horizontal scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* For smoother scrolling on iOS */
   }
 }
 
@@ -865,43 +909,59 @@
 
 .ad-table-wrapper {
   background: #fff;
-  padding: 20px; /* Increased padding */
+  padding: 20px;
+  /* Increased padding */
   border-radius: 16px;
   width: 100%;
   box-sizing: border-box;
   overflow: auto !important;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); /* Added subtle shadow */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  /* Added subtle shadow */
 }
 
 .ad-clients-table {
   width: 100%;
-  min-width: 1200px; /* Ensure minimum width for horizontal scrolling */
-  table-layout: auto; /* Allow columns to size based on content */
+  min-width: 1200px;
+  /* Ensure minimum width for horizontal scrolling */
+  table-layout: auto;
+  /* Allow columns to size based on content */
   border-collapse: collapse;
 }
 
 /* Headers */
 .ad-clients-table th {
-  background: #d5b85a; /* Gold background for headers */
-  padding: 12px 15px; /* Adjusted padding */
+  background: #d5b85a;
+  /* Gold background for headers */
+  padding: 12px 15px;
+  /* Adjusted padding */
   text-align: left;
-  font-weight: 700; /* Bolder font weight */
-  font-size: 15px; /* Slightly larger font size */
-  color: #fff !important; /* White text color */
+  font-weight: 700;
+  /* Bolder font weight */
+  font-size: 15px;
+  /* Slightly larger font size */
+  color: #fff !important;
+  /* White text color */
   white-space: nowrap;
-  border-bottom: 2px solid #c7a24f; /* Darker gold border */
+  border-bottom: 2px solid #c7a24f;
+  /* Darker gold border */
 }
 
 /* Cells */
 .ad-clients-table td {
-  padding: 12px 15px; /* Adjusted padding */
-  font-size: 14px; /* Slightly larger font size */
+  padding: 12px 15px;
+  /* Adjusted padding */
+  font-size: 14px;
+  /* Slightly larger font size */
   line-height: 1.ad-5;
   border-bottom: 1px solid #eee;
-  white-space: nowrap; /* Ensure content stays on one line */
-  overflow: hidden; /* Hide overflowing content */
-  text-overflow: ellipsis; /* Show ellipsis for truncated text */
-  color: #333; /* Darker text color */
+  white-space: nowrap;
+  /* Ensure content stays on one line */
+  overflow: hidden;
+  /* Hide overflowing content */
+  text-overflow: ellipsis;
+  /* Show ellipsis for truncated text */
+  color: #333;
+  /* Darker text color */
 }
 
 /* Hover effect for rows */
@@ -912,27 +972,32 @@
 /* Column widths (adjusted to display complete values inline) */
 .ad-clients-table th:nth-child(1),
 .ad-clients-table td:nth-child(1) {
-  width: 20%; /* Name */
+  width: 20%;
+  /* Name */
 }
 
 .ad-clients-table th:nth-child(2),
 .ad-clients-table td:nth-child(2) {
-  width: 35%; /* Email - increased width */
+  width: 35%;
+  /* Email - increased width */
 }
 
 .ad-clients-table th:nth-child(3),
 .ad-clients-table td:nth-child(3) {
-  width: 20%; /* Phone */
+  width: 20%;
+  /* Phone */
 }
 
 .ad-clients-table th:nth-child(4),
 .ad-clients-table td:nth-child(4) {
-  width: 12%; /* Gender */
+  width: 12%;
+  /* Gender */
 }
 
 .ad-clients-table th:nth-child(5),
 .ad-clients-table td:nth-child(5) {
-  width: 13%; /* Date of Birth */
+  width: 13%;
+  /* Date of Birth */
 }
 
 /* Empty text */
@@ -948,61 +1013,51 @@
 /* ---------- MOBILE VIEW (max-width: 767px) ---------- */
 @media (max-width: 767px) {
   .ad-dashboard-wrapper {
-    padding: 20px; /* Adjust padding for smaller screens */
+    padding: 20px;
+    /* Adjust padding for smaller screens */
   }
 
-.ad-top-header {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    align-items: center !important;
-    
-    
+  /* New Header Mobile Styles */
+  .ad-header {
+    padding: 12px 20px;
   }
 
-  /* Logo */
-  .ad-top-header .ad-logo {
-    justify-self: start;
-    
-    
+  .ad-header-logo {
+    height: 40px;
   }
 
-  /* Title */
-  .ad-dashboard-title {
-    justify-self: center;
-    white-space: nowrap;
-    font-size: 15px !important;
-    
-    
+  .ad-header-title {
+    font-size: 16px;
   }
 
-  /* Logout / Hamburger */
-  .ad-top-header .ad-desktop-logout-btn {
-    display: none; /* Hide desktop logout button on mobile */
+  .ad-header-btn {
+    display: none;
+    /* Hide logout button on mobile */
   }
 
   .ad-hamburger-icon {
-    display: flex; /* Show hamburger icon */
-    position: absolute; /* Position relative to top-header */
-     /* left: 20px; */
-   
-    top: 13%;
-    transform: translateY(-50%);
-    z-index: 1001; /* Above other content */
+    display: flex;
+    /* Show hamburger on mobile */
+    position: relative;
+    right: 0;
+    top: 0;
+    transform: none;
   }
 
- 
-.ad-menu-item-logout {
-  display: block;
-  padding: 8px 12px;
-  font-size: 15px;
-  cursor: pointer;
-  margin-left: 10px;
-}
- 
+  .ad-menu-item-logout {
+    display: block;
+    padding: 8px 12px;
+    font-size: 15px;
+    cursor: pointer;
+    margin-left: 10px;
+  }
+
 
   .ad-grid-table {
-    grid-template-columns: 1fr; /* Single column layout */
-    grid-template-rows: auto; /* Auto rows */
+    grid-template-columns: 1fr;
+    /* Single column layout */
+    grid-template-rows: auto;
+    /* Auto rows */
     gap: 15px;
   }
 
@@ -1010,24 +1065,32 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: 250px; /* Width of the sidebar when open */
+    width: 250px;
+    /* Width of the sidebar when open */
     height: 100vh;
-    transform: translateX(-100%); /* Hidden by default */
-    background: #FFFFFF; /* Solid background for overlay */
+    transform: translateX(-100%);
+    /* Hidden by default */
+    background: #FFFFFF;
+    /* Solid background for overlay */
     z-index: 1000;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.2);
-    padding-top: 80px; /* Space for header */
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    padding-top: 80px;
+    /* Space for header */
     border-radius: 0;
-    grid-row: unset; /* Remove grid-row property */
-    grid-column: unset; /* Remove grid-column property */
+    grid-row: unset;
+    /* Remove grid-row property */
+    grid-column: unset;
+    /* Remove grid-column property */
   }
 
   .ad-sidebar.ad-open {
-    transform: translateX(0); /* Slide in */
+    transform: translateX(0);
+    /* Slide in */
   }
 
   .ad-hello-box {
-    margin: 0 10px; /* Adjust margin for mobile sidebar */
+    margin: 0 10px;
+    /* Adjust margin for mobile sidebar */
   }
 
   .ad-menu {
@@ -1050,15 +1113,19 @@
   .ad-active-orders,
   .ad-alerts-box,
   .ad-order-details-wrapper {
-    grid-column: 1 / -1; /* Span full width */
-    grid-row: unset; /* Remove specific grid-row assignments */
+    grid-column: 1 / -1;
+    /* Span full width */
+    grid-row: unset;
+    /* Remove specific grid-row assignments */
   }
 
   .ad-alerts-box {
-    height: auto; /* Adjust height for mobile */
+    height: auto;
+    /* Adjust height for mobile */
   }
 
-  .ad-add-btn, .ad-back-btn {
+  .ad-add-btn,
+  .ad-back-btn {
     bottom: 20px !important;
     left: 20px !important;
     transform: none;
@@ -1068,16 +1135,18 @@
     /* right: 20px !important; */
     left: auto !important;
   }
+
   .ad-view-btn {
-  width: 60px !important; /* Reduced width */
-  padding: 2px 5px !important;
-  border-radius: 3px !important;
-  background-color: #d5b85a;
-  color: white !important;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-}
+    width: 60px !important;
+    /* Reduced width */
+    padding: 2px 5px !important;
+    border-radius: 3px !important;
+    background-color: #d5b85a;
+    color: white !important;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+  }
 
 }
 
@@ -1303,7 +1372,7 @@
   font-weight: 500;
 }
 
-.ad-order-label{
+.ad-order-label {
   color: #d5b85a !important;
   font-size: 28px;
   font-weight: 600;
@@ -1724,7 +1793,7 @@
 .ad-eye-btn {
   position: absolute;
   right: 15px;
-  top:2px;
+  top: 2px;
   background: none;
   border: none;
   cursor: pointer;
@@ -1982,6 +2051,19 @@
 }
 
 @media (max-width: 480px) {
+
+  .ad-header {
+    padding: 10px 16px;
+  }
+
+  .ad-header-logo {
+    height: 35px;
+  }
+
+  .ad-header-title {
+    font-size: 14px;
+  }
+
   .ad-ios-calendar {
     padding: 12px;
   }

@@ -160,7 +160,7 @@ export default function ReviewDetail() {
       // 3️⃣ GENERATE ORDER NUMBER
       const { data: orderNo, error: orderNoError } = await supabase.rpc(
         "generate_order_no",
-        { p_store: normalizedOrder.mode_of_delivery }
+        { p_store: normalizedOrder.salesperson_store || "Delhi Store" }
       );
 
       if (orderNoError) {
@@ -445,10 +445,10 @@ export default function ReviewDetail() {
         </div>
       )}
 
-      <div className="screen6-header">
-        <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
-        <h2 className="title">Review Details</h2>
-      </div>
+      <header className="pf-header">
+        <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleLogout} />
+        <h1 className="pf-header-title">Review Details</h1>
+      </header>
 
       <div className="screen6-container">
         <div className="section-box">

@@ -35,6 +35,10 @@ const WarehouseDashboard = () => {
   const [filterTab, setFilterTab] = useState("all");
   const [statusUpdating, setStatusUpdating] = useState(null);
 
+  // Calendar state
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 5;
@@ -111,6 +115,9 @@ const WarehouseDashboard = () => {
     fetchOrders();
   }, []);
 
+  // Calendar minimum date
+  const MIN_CALENDAR_DATE = new Date(2025, 11, 1); // December 2025
+
   // Filter orders based on filter tab
   // Only show Warehouse alterations (not In-Store)
   const filteredByTab = useMemo(() => {
@@ -158,6 +165,17 @@ const WarehouseDashboard = () => {
       (!o.is_alteration || o.alteration_location === "Warehouse")
     ).length,
   }), [orders]);
+
+  // Memoize ordersByDate for calendar
+  const ordersByDate = useMemo(() => {
+    return orders.reduce((acc, order) => {
+      const date = order.delivery_date ? formatDate(order.delivery_date) : null;
+      if (date) {
+        acc[date] = (acc[date] || 0) + 1;
+      }
+      return acc;
+    }, {});
+  }, [orders]);
 
   const markAsCompleted = async (orderId) => {
     const { error } = await supabase
@@ -284,6 +302,15 @@ const WarehouseDashboard = () => {
             >
               Order History
             </a>
+            <a
+              className={`wd-menu-item ${activeTab === "calendar" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("calendar");
+                setShowSidebar(false);
+              }}
+            >
+              Calendar
+            </a>
             <a className="wd-menu-item" onClick={handleLogout}>
               Log Out
             </a>
@@ -292,6 +319,7 @@ const WarehouseDashboard = () => {
 
         {/* CONTENT AREA */}
         <div className="wd-content-area">
+          {/* ORDERS TAB */}
           {activeTab === "orders" && (
             <div className="wd-orders-section">
               {/* Header with count */}
@@ -318,7 +346,7 @@ const WarehouseDashboard = () => {
               <div className="wd-search-bar">
                 <input
                   type="text"
-                  placeholder="Search by Order ID, Product Name, Customer Name, or Alteration Type..."
+                  placeholder="Search by Order ID, Product Name, Customer Name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="wd-search-input"
@@ -574,10 +602,120 @@ const WarehouseDashboard = () => {
               )}
             </div>
           )}
+
+          {/* CALENDAR TAB - ✅ INSIDE wd-content-area */}
+          {activeTab === "calendar" && (
+            <div className="wd-calendar-wrapper">
+              <h2 className="wd-section-title">Calendar</h2>
+
+              <div className="wd-ios-calendar">
+                <div className="wd-ios-cal-header">
+                  <button
+                    className="wd-ios-nav-btn"
+                    disabled={new Date(calendarDate).getFullYear() === 2025 && new Date(calendarDate).getMonth() === 11}
+                    onClick={() => setCalendarDate(prev => {
+                      const d = new Date(prev);
+                      d.setMonth(d.getMonth() - 1);
+                      if (d < MIN_CALENDAR_DATE) return prev;
+                      return d;
+                    })}
+                  >
+                    ‹
+                  </button>
+                  <span className="wd-ios-month-year">
+                    {new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}
+                  </span>
+                  <button
+                    className="wd-ios-nav-btn"
+                    onClick={() => setCalendarDate(prev => {
+                      const d = new Date(prev);
+                      d.setMonth(d.getMonth() + 1);
+                      return d;
+                    })}
+                  >
+                    ›
+                  </button>
+                </div>
+
+                <div className="wd-ios-days-row">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                    <div key={day} className="wd-ios-day-label">{day}</div>
+                  ))}
+                </div>
+
+                <div className="wd-ios-date-grid">
+                  {(() => {
+                    const year = new Date(calendarDate).getFullYear();
+                    const month = new Date(calendarDate).getMonth();
+                    const firstDayOfMonth = new Date(year, month, 1).getDay();
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    const totalCells = Math.ceil((firstDayOfMonth + daysInMonth) / 7) * 7;
+
+                    return Array.from({ length: totalCells }).map((_, i) => {
+                      const date = i - firstDayOfMonth + 1;
+                      if (date <= 0 || date > daysInMonth) {
+                        return <div key={i} className="wd-ios-date-cell wd-ios-empty" />;
+                      }
+
+                      const currentDay = new Date(year, month, date);
+                      const fullDate = formatDate(currentDay);
+                      const todayDate = formatDate(new Date());
+                      const isToday = fullDate === todayDate;
+                      const isSelected = selectedCalendarDate === fullDate;
+                      const orderCount = ordersByDate[fullDate] || 0;
+
+                      return (
+                        <div
+                          key={i}
+                          className={`wd-ios-date-cell ${isToday ? "wd-ios-today" : ""} ${isSelected ? "wd-ios-selected" : ""} ${orderCount > 0 ? "wd-ios-has-orders" : ""}`}
+                          onClick={() => setSelectedCalendarDate(fullDate)}
+                        >
+                          <span className="wd-ios-date-num">{date}</span>
+                          {orderCount > 0 && (
+                            <span className="wd-ios-order-count">{orderCount}</span>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {selectedCalendarDate && (
+                <div className="wd-calendar-orders-section">
+                  <div className="wd-calendar-header">
+                    <span className="wd-calendar-title">
+                      Orders for {selectedCalendarDate} ({orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length})
+                    </span>
+                  </div>
+
+                  <div className="wd-calendar-orders-list">
+                    {orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length === 0 ? (
+                      <p className="wd-no-orders">No orders scheduled for this date</p>
+                    ) : (
+                      orders
+                        .filter(o => formatDate(o.delivery_date) === selectedCalendarDate)
+                        .map((order) => (
+                          <div
+                            className="wd-calendar-order-item"
+                            key={order.id}
+                          >
+                            <p><b>Order No:</b> {order.order_no}</p>
+                            <p><b>Client Name:</b> {order.delivery_name}</p>
+                            <p><b>Status:</b> {order.status || "Pending"}</p>
+                            <p><b>Delivery Date:</b> {formatDate(order.delivery_date)}</p>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Image Viewer Modal */}
+      {/* Image Viewer Modal - OUTSIDE main layout but inside dashboard wrapper */}
       {viewingImages && (
         <div className="wd-image-modal" onClick={() => setViewingImages(null)}>
           <div className="wd-image-modal-content" onClick={(e) => e.stopPropagation()}>

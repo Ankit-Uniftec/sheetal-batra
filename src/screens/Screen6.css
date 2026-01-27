@@ -6,7 +6,8 @@
   background-image: url("../images/Screen1bg.png");
   background-size: cover;
   background-position: center;
-  min-height: 100vh;
+  /* min-height: 100vh; */
+  height: 100%;
   width: 100%; /* Use 100% instead of 100vw to avoid potential scrollbar issues */
   padding: 0;
   position: relative;
@@ -18,23 +19,6 @@
 
 /* HEADER */ 
 
-.screen6-header {
-  
-  display: grid !important; /* Changed to grid layout */
-  grid-template-columns: auto 1fr auto !important; /* Logo, flexible space, Title */
-  width: 100% !important;
-  align-items: center !important;
-  position: relative !important;
-  box-sizing: border-box; /* Include padding in width calculation */
-  padding: 2px !important; /* Apply consistent padding to the header */
-  margin-top: 50px; /* Adjust this value to align vertically with cards */
-}
-
-.sheetal-logo {
-  width: 150px;
-  cursor: pointer;
-  grid-column: 1; /* Place logo in the first column */
-}
 
 .back-btn {
   border: none;
@@ -74,9 +58,8 @@
 /* MAIN CARD CONTAINER */
 .screen6-container {
   width: 100%;
-  max-width: 100%;
-  padding: 20px; /* Apply consistent padding to the container */
-  padding-top: 20px; /* Add padding-top to create space between header and cards */
+  max-width: 100%; 
+  padding: 20px 40px 0 40px;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -415,15 +398,6 @@
   .title { font-size: 22px; }
   .confirm-btn { padding: 12px; font-size: 15px;color:white; }
 }
-
-/* Optional: respect safe areas (iPhone notches) */
-@supports (padding: max(0px)) {
-  .screen6 {
-    padding-left: max(18px, env(safe-area-inset-left));
-    padding-right: max(18px, env(safe-area-inset-right));
-  }
-}
-
 
 
 /*signature modal css*/

@@ -510,6 +510,7 @@ export default function OrderDetails() {
       salesperson: selectedSP?.saleperson || null,
       salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : null,
       salesperson_email: selectedSP?.email || localStorage.getItem("sp_email") || null,
+      salesperson_store: selectedSP?.store_name || null,
     };
 
     navigate("/orderDetail", { state: { orderPayload: payload } });
@@ -798,10 +799,10 @@ export default function OrderDetails() {
   return (
     <div className="screen6">
       {/* HEADER */}
-      <div className="screen6-header">
-        <img src={Logo} className="sheetal-logo" alt="logo" onClick={handleLogout} />
-        <h2 className="title">Order Detail</h2>
-      </div>
+      <header className="pf-header">
+        <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleLogout} />
+        <h1 className="pf-header-title">Order Detail</h1>
+      </header>
 
       <div className="screen6-container">
         {/* DELIVERY DETAILS */}
