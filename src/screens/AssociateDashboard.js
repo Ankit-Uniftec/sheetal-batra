@@ -885,6 +885,17 @@ export default function Dashboard() {
 
         <div className={`ad-grid-table ${showSidebar ? "ad-sidebar-open" : ""}`}>
           <aside className={`ad-sidebar ${showSidebar ? "ad-open" : ""}`}>
+            {/* <div
+              className={`ad-hello-box ad-clickable ${activeTab === "profile" ? "ad-active" : ""}`}
+             
+            >
+              Hello, {salesperson?.saleperson || "Associate"}
+            </div> */}
+            {/* Logout button for mobile sidebar */}
+
+
+
+
             <nav className="ad-menu">
               <a className={`ad-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>View Profile</a>
               <a className={`ad-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
