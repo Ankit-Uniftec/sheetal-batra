@@ -567,6 +567,11 @@ const WarehouseDashboard = () => {
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
 
                             <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
+                              <p><strong className="wd-label">Client Name:</strong> {order.delivery_name || "-"}</p>
+                              <p><strong className="wd-label">SA Name:</strong> {order.salesperson_name || "-"}</p>
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
                               <div style={{ display: "flex", alignItems: 'center', gap: 10 }}>
                                 <p><strong className="wd-label">Top:</strong> {firstItem.top || "-"} </p>
                                 {firstItem.top_color?.hex && (

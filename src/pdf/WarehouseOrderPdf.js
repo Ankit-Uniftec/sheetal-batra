@@ -63,6 +63,35 @@ const getAlterationTypeLabel = (type) => {
   return types[type] || type || "—";
 };
 
+/**
+ * Helper to categorize measurement keys as "Top" or "Bottom"
+ * Based on exact keys used in the system
+ */
+const getMeasurementLabel = (key) => {
+  if (!key) return key;
+  
+  // TOP garments
+  const topKeys = [
+    "KurtaChogaKaftan",
+    "Blouse", 
+    "Anarkali"
+  ];
+  
+  // BOTTOM garments
+  const bottomKeys = [
+    "SalwarDhoti",
+    "ChuridaarTrouserPantsPlazo",
+    "ShararaGharara"
+  ];
+  
+  if (topKeys.includes(key)) return "Top";
+  if (bottomKeys.includes(key)) return "Bottom";
+  if (key === "Lehenga") return "Lehenga";
+  
+  // Return original key if not matched
+  return key;
+};
+
 // Warehouse specific styles
 const warehouseStyles = StyleSheet.create({
   page: {
@@ -549,7 +578,7 @@ const BarcodePlaceholder = ({ label }) => (
   </View>
 );
 
-// Measurements Display Component
+// Measurements Display Component - NOW WITH Top/Bottom LABELS
 const MeasurementsDisplay = ({ measurements }) => {
   if (!measurements || typeof measurements !== "object") {
     return null;
@@ -577,9 +606,12 @@ const MeasurementsDisplay = ({ measurements }) => {
 
         if (fieldEntries.length === 0) return null;
 
+        // Get simplified label (Top/Bottom) instead of raw key
+        const displayLabel = getMeasurementLabel(category);
+
         return (
           <View key={category} style={warehouseStyles.measurementBox}>
-            <Text style={warehouseStyles.measurementBoxTitle}>{category}</Text>
+            <Text style={warehouseStyles.measurementBoxTitle}>{displayLabel}</Text>
             <View style={warehouseStyles.measurementRow}>
               {fieldEntries.map(([fieldName, value]) => (
                 <View key={fieldName} style={warehouseStyles.measurementItem}>
