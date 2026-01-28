@@ -718,6 +718,24 @@ export default function OrderHistory() {
     }));
   };
 
+  const cleanMeasurements = (measurements) => {
+    const cleaned = {};
+    for (const [category, fields] of Object.entries(measurements || {})) {
+      if (fields && typeof fields === 'object') {
+        const cleanedFields = {};
+        for (const [field, value] of Object.entries(fields)) {
+          if (value !== '' && value !== null && value !== undefined) {
+            cleanedFields[field] = value;
+          }
+        }
+        if (Object.keys(cleanedFields).length > 0) {
+          cleaned[category] = cleanedFields;
+        }
+      }
+    }
+    return cleaned;
+  };
+
   const handleSaveEdit = async () => {
     if (!editingOrder) return;
     setActionLoading(editingOrder.id);
@@ -725,6 +743,9 @@ export default function OrderHistory() {
       // Find the color objects
       const topColorObj = colors.find(c => c.name === editFormData.top_color) || { name: editFormData.top_color, hex: "#888" };
       const bottomColorObj = colors.find(c => c.name === editFormData.bottom_color) || { name: editFormData.bottom_color, hex: "#888" };
+
+      // Clean measurements - remove empty values
+      const cleanedMeasurements = cleanMeasurements(editMeasurements);
 
       const updatedItems = editingOrder.items?.map((item, i) => {
         if (i === 0) {
@@ -735,11 +756,36 @@ export default function OrderHistory() {
             bottom: editFormData.bottom,
             top_color: topColorObj,
             bottom_color: bottomColorObj,
-            measurements: editMeasurements,
+            measurements: cleanedMeasurements,
           };
         }
         return item;
       });
+
+      // Delete old PDF files from storage to force regeneration
+      try {
+        const orderNo = editingOrder.order_no;
+        console.log("🗑️ Deleting PDFs for order:", orderNo);
+
+        if (orderNo) {
+          // Delete customer PDF
+          const customerPath = `orders/${orderNo}_customer.pdf`;
+          const { error: custErr } = await supabase.storage.from("invoices").remove([customerPath]);
+          if (custErr) console.log("❌ Customer PDF delete error:", custErr);
+
+          // Delete warehouse PDFs
+          const items = editingOrder.items || [];
+          for (let i = 0; i < items.length; i++) {
+            const whPath = `orders/${orderNo}_warehouse_${i + 1}.pdf`;
+            const { error: whErr } = await supabase.storage.from("invoices").remove([whPath]);
+            if (whErr) console.log("❌ Warehouse PDF delete error:", whErr);
+          }
+        }
+      } catch (err) {
+        console.log("PDF cleanup error:", err);
+      }
+
+      // Save to database
       const { error } = await supabase.from("orders").update({
         items: updatedItems,
         delivery_date: editFormData.delivery_date,
@@ -749,9 +795,24 @@ export default function OrderHistory() {
         delivery_pincode: editFormData.delivery_pincode,
         mode_of_delivery: editFormData.mode_of_delivery,
         updated_at: new Date().toISOString(),
+        warehouse_url: null,
+        warehouse_urls: null,
+        customer_url: null,
       }).eq("id", editingOrder.id);
+
       if (error) throw error;
-      setOrders(prev => prev.map(o => o.id === editingOrder.id ? { ...o, items: updatedItems, ...editFormData } : o));
+
+      // ✅ FETCH FRESH DATA FROM DB to ensure PDF gets updated measurements
+      const { data: freshOrder } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", editingOrder.id)
+        .single();
+
+      if (freshOrder) {
+        setOrders(prev => prev.map(o => o.id === editingOrder.id ? freshOrder : o));
+      }
+
       setEditingOrder(null);
       setEditMeasurements({});
       showPopup({ type: "success", title: "Order Updated", message: "Order has been updated successfully!", confirmText: "OK" });

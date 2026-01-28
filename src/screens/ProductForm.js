@@ -2388,22 +2388,36 @@ export default function ProductForm() {
 
                                     const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
 
+                                    // Check if auto-populated value changed by more than 2 inches
+                                    const hasLargeDeviation = isAutoField &&
+                                      sizeChartValue !== undefined &&
+                                      currentValue !== undefined &&
+                                      currentValue !== "" &&
+                                      Math.abs(Number(currentValue) - Number(sizeChartValue)) > 2;
+
                                     return (
                                       <div className="measure-field" key={field}>
                                         <label>{field}</label>
-                                        <input
-                                          type="number"
-                                          className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
-                                          value={currentValue || ""}
-                                          onChange={(e) =>
-                                            updateItemMeasurement(
-                                              item._id,
-                                              itemCategoryKey,
-                                              field,
-                                              e.target.value
-                                            )
-                                          }
-                                        />
+                                        <div className="measure-input-wrapper">
+                                          <input
+                                            type="number"
+                                            className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"} ${hasLargeDeviation ? "large-deviation" : ""}`}
+                                            value={currentValue || ""}
+                                            onChange={(e) =>
+                                              updateItemMeasurement(
+                                                item._id,
+                                                itemCategoryKey,
+                                                field,
+                                                e.target.value
+                                              )
+                                            }
+                                          />
+                                          {hasLargeDeviation && (
+                                            <span className="deviation-warning" title={`Changed by more than 2" from size chart (${sizeChartValue}")`}>
+                                              ⚠️
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
                                     );
                                   });
@@ -2761,24 +2775,38 @@ export default function ProductForm() {
 
                         const isAutoFilled = isAutoField && !isEdited && currentValue !== undefined && currentValue !== "";
 
+                        // Check if auto-populated value changed by more than 2 inches
+                        const hasLargeDeviation = isAutoField &&
+                          sizeChartValue !== undefined &&
+                          currentValue !== undefined &&
+                          currentValue !== "" &&
+                          Math.abs(Number(currentValue) - Number(sizeChartValue)) > 2;
+
                         return (
                           <div className="measure-field" key={field}>
                             <label>{field}</label>
-                            <input
-                              type="number"
-                              className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"}`}
-                              value={currentValue || ""}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setMeasurements((prev) => ({
-                                  ...prev,
-                                  [categoryKey]: {
-                                    ...(prev[categoryKey] || {}),
-                                    [field]: val,
-                                  },
-                                }));
-                              }}
-                            />
+                            <div className="measure-input-wrapper">
+                              <input
+                                type="number"
+                                className={`input-line ${isAutoFilled ? "auto-filled" : "manual-input"} ${hasLargeDeviation ? "large-deviation" : ""}`}
+                                value={currentValue || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setMeasurements((prev) => ({
+                                    ...prev,
+                                    [categoryKey]: {
+                                      ...(prev[categoryKey] || {}),
+                                      [field]: val,
+                                    },
+                                  }));
+                                }}
+                              />
+                              {hasLargeDeviation && (
+                                <span className="deviation-warning" title={`Changed by more than 2" from size chart (${sizeChartValue}")`}>
+                                  ⚠️
+                                </span>
+                              )}
+                            </div>
                           </div>
                         );
                       });

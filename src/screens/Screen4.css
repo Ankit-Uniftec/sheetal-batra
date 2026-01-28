@@ -1426,3 +1426,44 @@ select,
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================
+   MEASUREMENT DEVIATION WARNING STYLES
+   ============================================ */
+
+.measure-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.measure-input-wrapper input {
+  flex: 1;
+}
+
+/* Warning border for large deviation */
+.input-line.large-deviation {
+  border-color: #e67e22 !important;
+  background-color: #fff8f0 !important;
+}
+
+/* Warning emoji indicator */
+.deviation-warning {
+  font-size: 14px;
+  cursor: help;
+  animation: pulse-warning 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.deviation-warning:hover {
+  transform: scale(1.2);
+}

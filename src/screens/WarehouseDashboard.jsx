@@ -65,19 +65,27 @@ const WarehouseDashboard = () => {
     });
   }
 
-  // Format measurements safely
+  // Format measurements safely - FILTER OUT EMPTY VALUES
   const renderMeasurements = (m) => {
     if (!m || typeof m !== "object") {
       return <span className="wd-no-measurements">No measurements</span>;
     }
 
-    return Object.entries(m).map(([key, value]) => {
+    const renderedCategories = Object.entries(m).map(([key, value]) => {
       if (typeof value === "object" && value !== null) {
+        // Filter out empty values
+        const nonEmptyFields = Object.entries(value).filter(
+          ([_, v]) => v !== '' && v !== null && v !== undefined
+        );
+
+        // Skip category if all fields are empty
+        if (nonEmptyFields.length === 0) return null;
+
         return (
           <div key={key} className="wd-measurement-card">
             <div className="wd-measurement-card-title">{key}</div>
             <div className="wd-measurement-card-values">
-              {Object.entries(value).map(([subKey, subValue]) => (
+              {nonEmptyFields.map(([subKey, subValue]) => (
                 <span key={subKey} className="wd-measurement-item">
                   <span className="wd-measurement-key">{subKey}:</span>
                   <span className="wd-measurement-value">{subValue}</span>
@@ -88,6 +96,9 @@ const WarehouseDashboard = () => {
         );
       }
 
+      // Skip empty flat values
+      if (value === '' || value === null || value === undefined) return null;
+
       return (
         <div key={key} className="wd-measurement-card wd-flat">
           <span className="wd-measurement-item">
@@ -96,9 +107,16 @@ const WarehouseDashboard = () => {
           </span>
         </div>
       );
-    });
-  };
+    }).filter(Boolean); // Remove null entries
 
+    // If all categories were empty, show no measurements message
+    if (renderedCategories.length === 0) {
+      return <span className="wd-no-measurements">No measurements</span>;
+    }
+
+    return renderedCategories;
+  };
+  
   const fetchOrders = async () => {
     const { data, error } = await supabase
       .from("orders")
@@ -257,7 +275,7 @@ const WarehouseDashboard = () => {
   const getPageNumbers = () => {
     const pages = [];
     const maxVisible = 5;
-    
+
     if (totalPages <= maxVisible + 2) {
       // Show all pages if total is small (7 or fewer)
       for (let i = 1; i <= totalPages; i++) {
@@ -266,11 +284,11 @@ const WarehouseDashboard = () => {
     } else {
       // Always show first page
       pages.push(1);
-      
+
       // Calculate start and end of visible window
       let start = Math.max(2, currentPage - 1);
       let end = Math.min(totalPages - 1, currentPage + 1);
-      
+
       // Adjust window to show at least 3 middle pages
       if (currentPage <= 3) {
         end = Math.min(totalPages - 1, 4);
@@ -278,26 +296,26 @@ const WarehouseDashboard = () => {
       if (currentPage >= totalPages - 2) {
         start = Math.max(2, totalPages - 3);
       }
-      
+
       // Add ellipsis before middle pages if needed
       if (start > 2) {
         pages.push('...');
       }
-      
+
       // Add middle pages
       for (let i = start; i <= end; i++) {
         pages.push(i);
       }
-      
+
       // Add ellipsis after middle pages if needed
       if (end < totalPages - 1) {
         pages.push('...');
       }
-      
+
       // Always show last page
       pages.push(totalPages);
     }
-    
+
     return pages;
   };
 
