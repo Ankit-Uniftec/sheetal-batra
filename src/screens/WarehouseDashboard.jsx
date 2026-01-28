@@ -18,10 +18,36 @@ const ALTERATION_STATUS_OPTIONS = [
 // Filter tabs
 const FILTER_TABS = [
   { value: "all", label: "All Orders" },
-  { value: "regular", label: "Regular Orders" },
-  { value: "alterations", label: "Alterations" },
-  { value: "urgent", label: "Urgent" },
+  { value: "normal", label: "Normal Orders" },
+  { value: "urgent", label: "Urgent Orders" },
+  { value: "unfulfilled", label: "Unfulfilled Orders" },
+  { value: "alteration", label: "Alteration" },
 ];
+
+const getMeasurementLabel = (key) => {
+  if (!key) return key;
+
+  // TOP garments
+  const topKeys = [
+    "KurtaChogaKaftan",
+    "Blouse",
+    "Anarkali"
+  ];
+
+  // BOTTOM garments
+  const bottomKeys = [
+    "SalwarDhoti",
+    "ChuridaarTrouserPantsPlazo",
+    "ShararaGharara"
+  ];
+
+  if (topKeys.includes(key)) return "Top";
+  if (bottomKeys.includes(key)) return "Bottom";
+  if (key === "Lehenga") return "Lehenga";
+
+  // Return original key if not matched
+  return key;
+};
 
 const WarehouseDashboard = () => {
   const navigate = useNavigate();
@@ -52,18 +78,29 @@ const WarehouseDashboard = () => {
     navigate("/login");
   };
 
-  const getWarehouseDate = (dateStr) => {
+  const getWarehouseDate = (dateStr, orderDateStr) => {
     if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    if (isNaN(d)) return "—";
-    // Subtract 2 days for warehouse deadline
-    d.setDate(d.getDate() - 2);
-    return d.toLocaleDateString("en-IN", {
+    const deliveryDate = new Date(dateStr);
+    if (isNaN(deliveryDate)) return "—";
+
+    // If order date provided, check the gap
+    if (orderDateStr) {
+      const orderDate = new Date(orderDateStr);
+      const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
+
+      // Only subtract 2 days if there's enough gap
+      if (daysDiff >= 2) {
+        deliveryDate.setDate(deliveryDate.getDate() - 2);
+      }
+      // If gap < 2 days, show delivery date as-is (no subtraction)
+    }
+
+    return deliveryDate.toLocaleDateString("en-GB", {
       day: "2-digit",
-      month: "short",
+      month: "2-digit",
       year: "numeric",
-    });
-  }
+    }).replace(/\//g, "-");
+  };
 
   // Format measurements safely - FILTER OUT EMPTY VALUES
   const renderMeasurements = (m) => {
@@ -71,7 +108,7 @@ const WarehouseDashboard = () => {
       return <span className="wd-no-measurements">No measurements</span>;
     }
 
-    const renderedCategories = Object.entries(m).map(([key, value]) => {
+    return Object.entries(m).map(([key, value]) => {
       if (typeof value === "object" && value !== null) {
         // Filter out empty values
         const nonEmptyFields = Object.entries(value).filter(
@@ -81,9 +118,12 @@ const WarehouseDashboard = () => {
         // Skip category if all fields are empty
         if (nonEmptyFields.length === 0) return null;
 
+        // Get simplified label (Top/Bottom) instead of raw key
+        const displayLabel = getMeasurementLabel(key);
+
         return (
           <div key={key} className="wd-measurement-card">
-            <div className="wd-measurement-card-title">{key}</div>
+            <div className="wd-measurement-card-title">{displayLabel}</div>
             <div className="wd-measurement-card-values">
               {nonEmptyFields.map(([subKey, subValue]) => (
                 <span key={subKey} className="wd-measurement-item">
@@ -107,16 +147,9 @@ const WarehouseDashboard = () => {
           </span>
         </div>
       );
-    }).filter(Boolean); // Remove null entries
-
-    // If all categories were empty, show no measurements message
-    if (renderedCategories.length === 0) {
-      return <span className="wd-no-measurements">No measurements</span>;
-    }
-
-    return renderedCategories;
+    });
   };
-  
+
   const fetchOrders = async () => {
     const { data, error } = await supabase
       .from("orders")
@@ -140,16 +173,31 @@ const WarehouseDashboard = () => {
   // Only show Warehouse alterations (not In-Store)
   const filteredByTab = useMemo(() => {
     switch (filterTab) {
-      case "regular":
-        return orders.filter(o => !o.is_alteration);
-      case "alterations":
-        // Only show alterations meant for Warehouse
-        return orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse");
-      case "urgent":
+      case "normal":
+        // Normal orders: not alteration, not urgent
         return orders.filter(o =>
-          (o.alteration_status === "upcoming_occasion" || o.is_urgent) &&
+          !o.is_alteration &&
+          !o.is_urgent &&
+          o.order_flag !== "Urgent"
+        );
+      case "urgent":
+        // Urgent orders (excluding alterations or including only Warehouse alterations)
+        return orders.filter(o =>
+          (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
           (!o.is_alteration || o.alteration_location === "Warehouse")
         );
+      case "unfulfilled":
+        // Unfulfilled: not completed, not delivered, not cancelled
+        return orders.filter(o => {
+          const status = o.status?.toLowerCase();
+          return status !== "completed" &&
+            status !== "delivered" &&
+            status !== "cancelled" &&
+            (!o.is_alteration || o.alteration_location === "Warehouse");
+        });
+      case "alteration":
+        // Only show alterations meant for Warehouse
+        return orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse");
       default:
         // "All" tab - show regular orders + Warehouse alterations only
         return orders.filter(o => !o.is_alteration || o.alteration_location === "Warehouse");
@@ -176,12 +224,23 @@ const WarehouseDashboard = () => {
   // Get counts for tabs
   const tabCounts = useMemo(() => ({
     all: orders.filter(o => !o.is_alteration || o.alteration_location === "Warehouse").length,
-    regular: orders.filter(o => !o.is_alteration).length,
-    alterations: orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
+    normal: orders.filter(o =>
+      !o.is_alteration &&
+      !o.is_urgent &&
+      o.order_flag !== "Urgent"
+    ).length,
     urgent: orders.filter(o =>
-      (o.alteration_status === "upcoming_occasion" || o.is_urgent) &&
+      (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
       (!o.is_alteration || o.alteration_location === "Warehouse")
     ).length,
+    unfulfilled: orders.filter(o => {
+      const status = o.status?.toLowerCase();
+      return status !== "completed" &&
+        status !== "delivered" &&
+        status !== "cancelled" &&
+        (!o.is_alteration || o.alteration_location === "Warehouse");
+    }).length,
+    alteration: orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
   }), [orders]);
 
   // Memoize ordersByDate for calendar
@@ -586,20 +645,26 @@ const WarehouseDashboard = () => {
 
                             <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
                               <p><strong className="wd-label">Client Name:</strong> {order.delivery_name || "-"}</p>
-                              <p><strong className="wd-label">SA Name:</strong> {order.salesperson_name || "-"}</p>
+                              <p><strong className="wd-label">SA Name:</strong> {order.salesperson_name || order.salesperson || "-"}</p>
                             </div>
 
                             <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
                               <div style={{ display: "flex", alignItems: 'center', gap: 10 }}>
                                 <p><strong className="wd-label">Top:</strong> {firstItem.top || "-"} </p>
                                 {firstItem.top_color?.hex && (
-                                  <p style={{ backgroundColor: firstItem.top_color.hex, width: 20, height: 20 }}></p>
+                                  <>
+                                    <p style={{ backgroundColor: firstItem.top_color.hex, width: 20, height: 20 }}></p>
+                                    <p>{firstItem.top_color?.name}</p>
+                                  </>
                                 )}
                               </div>
                               <div style={{ display: "flex", alignItems: 'center', gap: 10 }}>
                                 <p><strong className="wd-label">Bottom:</strong> {firstItem.bottom || "-"}</p>
                                 {firstItem.bottom_color?.hex && (
-                                  <p style={{ backgroundColor: firstItem.bottom_color.hex, width: 20, height: 20 }}></p>
+                                  <>
+                                    <p style={{ backgroundColor: firstItem.bottom_color.hex, width: 20, height: 20 }}></p>
+                                    <p>{firstItem.bottom_color?.name}</p>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -618,7 +683,7 @@ const WarehouseDashboard = () => {
 
                             <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
                               <p><strong className="wd-label">Order Date:</strong> {formatDate(order.created_at)}</p>
-                              <p><strong className="wd-label">Delivery Date:</strong> {getWarehouseDate(order.delivery_date)}</p>
+                              <p><strong className="wd-label">Delivery Date:</strong> {getWarehouseDate(order.delivery_date, order.created_at)}</p>
                             </div>
 
                             {/* Status Button - Different for alterations vs regular orders */}

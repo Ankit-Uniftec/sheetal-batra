@@ -39,12 +39,24 @@ const formatDate = (dateStr) => {
 };
 
 // Helper to calculate T-2 date (delivery date - 2 days)
-const getWarehouseDate = (dateStr) => {
+const getWarehouseDate = (dateStr, orderDateStr) => {
   if (!dateStr) return "—";
-  const d = new Date(dateStr);
-  if (isNaN(d)) return "—";
-  d.setDate(d.getDate() - 2);
-  return d.toLocaleDateString("en-GB", {
+  const deliveryDate = new Date(dateStr);
+  if (isNaN(deliveryDate)) return "—";
+
+  // If order date provided, check the gap
+  if (orderDateStr) {
+    const orderDate = new Date(orderDateStr);
+    const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
+
+    // Only subtract 2 days if there's enough gap
+    if (daysDiff >= 2) {
+      deliveryDate.setDate(deliveryDate.getDate() - 2);
+    }
+    // If gap < 2 days, show delivery date as-is (no subtraction)
+  }
+
+  return deliveryDate.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -69,25 +81,25 @@ const getAlterationTypeLabel = (type) => {
  */
 const getMeasurementLabel = (key) => {
   if (!key) return key;
-  
+
   // TOP garments
   const topKeys = [
     "KurtaChogaKaftan",
-    "Blouse", 
+    "Blouse",
     "Anarkali"
   ];
-  
+
   // BOTTOM garments
   const bottomKeys = [
     "SalwarDhoti",
     "ChuridaarTrouserPantsPlazo",
     "ShararaGharara"
   ];
-  
+
   if (topKeys.includes(key)) return "Top";
   if (bottomKeys.includes(key)) return "Bottom";
   if (key === "Lehenga") return "Lehenga";
-  
+
   // Return original key if not matched
   return key;
 };
@@ -462,13 +474,13 @@ const ProductItem = ({ item }) => {
   const hasTop = item?.top && item.top.trim() !== "";
   const hasBottom = item?.bottom && item.bottom.trim() !== "";
   const hasSize = item?.size && item.size.trim() !== "";
-  
+
   const validExtras = (item?.extras || []).filter(e => e.name && e.name.trim() !== "");
   const hasExtras = validExtras.length > 0;
-  
+
   const validAdditionals = (item?.additionals || []).filter(a => a.name && a.name.trim() !== "" && a.name.trim() !== " ");
   const hasAdditionals = validAdditionals.length > 0;
-  
+
   const category = item?.category || (item?.isKids ? "Kids" : "Women");
 
   return (
@@ -587,7 +599,7 @@ const MeasurementsDisplay = ({ measurements }) => {
   const categories = Object.keys(measurements).filter((category) => {
     const fields = measurements[category];
     if (!fields || typeof fields !== "object") return false;
-    return Object.values(fields).some((val) => 
+    return Object.values(fields).some((val) =>
       val !== "" && val !== " " && val !== undefined && val !== null
     );
   });
@@ -658,7 +670,7 @@ const AlterationInfoBox = ({ order }) => (
         </Text>
       </View>
     </View>
-    
+
     {order.alteration_notes && (
       <View style={warehouseStyles.alterationNotesBox}>
         <Text style={warehouseStyles.alterationNotesLabel}>ALTERATION NOTES</Text>
@@ -795,7 +807,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             {isAlteration ? "Updated Measurements" : "Measurements"}
           </Text>
         </View>
-        
+
         <MeasurementsDisplay measurements={item.measurements} />
 
         {/* Bottom Barcodes */}
