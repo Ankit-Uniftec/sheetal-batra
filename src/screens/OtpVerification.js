@@ -3,10 +3,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen1.css";
 import Logo from "../images/logo.png";
-// import formatPhoneNumber from "../utils/formatPhoneNumber";
+import config from "../config/config";
 
 /* ----------------------------------
-   COUNTRY CODE CONFIG (OBJECT ARRAY)
+   COUNTRY CODE CONFIG
 ----------------------------------- */
 const COUNTRY_CODES = [
   { code: "+91", label: "India", flag: "🇮🇳" },
@@ -14,15 +14,11 @@ const COUNTRY_CODES = [
   { code: "+44", label: "UK", flag: "🇬🇧" },
   { code: "+61", label: "Australia", flag: "🇦🇺" },
   { code: "+971", label: "UAE", flag: "🇦🇪" },
-
-  // Europe
   { code: "+49", label: "Germany", flag: "🇩🇪" },
   { code: "+33", label: "France", flag: "🇫🇷" },
   { code: "+39", label: "Italy", flag: "🇮🇹" },
   { code: "+34", label: "Spain", flag: "🇪🇸" },
   { code: "+31", label: "Netherlands", flag: "🇳🇱" },
-
-  // Asia
   { code: "+86", label: "China", flag: "🇨🇳" },
   { code: "+81", label: "Japan", flag: "🇯🇵" },
   { code: "+82", label: "South Korea", flag: "🇰🇷" },
@@ -30,19 +26,12 @@ const COUNTRY_CODES = [
   { code: "+60", label: "Malaysia", flag: "🇲🇾" },
   { code: "+66", label: "Thailand", flag: "🇹🇭" },
   { code: "+62", label: "Indonesia", flag: "🇮🇩" },
-
-  // Middle East
   { code: "+966", label: "Saudi Arabia", flag: "🇸🇦" },
   { code: "+974", label: "Qatar", flag: "🇶🇦" },
   { code: "+965", label: "Kuwait", flag: "🇰🇼" },
   { code: "+968", label: "Oman", flag: "🇴🇲" },
-
-  // Americas
-
   { code: "+52", label: "Mexico", flag: "🇲🇽" },
   { code: "+55", label: "Brazil", flag: "🇧🇷" },
-
-  // Africa
   { code: "+27", label: "South Africa", flag: "🇿🇦" },
   { code: "+234", label: "Nigeria", flag: "🇳🇬" },
   { code: "+20", label: "Egypt", flag: "🇪🇬" },
@@ -56,10 +45,8 @@ export default function OtpVerification() {
   const [countryCode, setCountryCode] = useState("+91");
   const [mobile, setMobile] = useState("");
   const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
-  // -------------------------------------------------------
-  // BACK BUTTON
-  // -------------------------------------------------------
   const handleBack = () => {
     if (location.state?.fromAssociate) {
       navigate("/AssociateDashboard", {
@@ -70,9 +57,6 @@ export default function OtpVerification() {
     }
   };
 
-  // -------------------------------------------------------
-  // SEND OTP
-  // -------------------------------------------------------
   const handleContinue = async () => {
     const normalized = mobile.replace(/\D/g, "");
 
@@ -83,33 +67,106 @@ export default function OtpVerification() {
 
     const phoneNumber = `${countryCode}${normalized}`;
     setLoading(true);
+    setStatusMessage("Checking...");
 
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: phoneNumber,
-    });
+    try {
+      // Step 1: Check if customer exists in profiles table
+      const { data: existingProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("phone", phoneNumber)
+        .single();
 
-    setLoading(false);
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Profile lookup error:", profileError);
+      }
 
-    console.log(phoneNumber);
-    
-    if (error) {
-      alert(error.message);
-      return;
+      if (existingProfile) {
+        // ✅ EXISTING CUSTOMER - Try to auto sign-in
+        // console.log("✅ Existing customer found:", existingProfile.full_name || existingProfile.name);
+        setStatusMessage("Welcome back! Signing you in...");
+
+        // Call edge function to get magic link token
+        const response = await fetch(
+          `${config.SUPABASE_URL}/functions/v1/auto-signin`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": config.SUPABASE_KEY,
+              "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+            },
+            body: JSON.stringify({ phone: phoneNumber }),
+          }
+        );
+
+        const result = await response.json();
+        console.log("Auto-signin response:", result);
+
+        if (result.success && result.token) {
+          // Verify the magic link token to create session
+          const { data: sessionData, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: result.token,
+            type: "magiclink",
+          });
+
+          if (verifyError) {
+            console.error("Token verification error:", verifyError);
+            // Fallback to OTP
+            setStatusMessage("Sending OTP...");
+          } else {
+            // console.log("✅ Session created, user:", sessionData.user?.id);
+            setLoading(false);
+            
+            // Check if profile is complete (has full_name)
+            if (existingProfile.full_name) {
+              navigate("/product");
+            } else {
+              navigate("/userinfo", { state: { phoneNumber } });
+            }
+            return;
+          }
+        } else {
+          console.log("Auto-signin failed:", result.error);
+          // Fallback to OTP if auto-signin fails
+          setStatusMessage("Sending OTP...");
+        }
+      }
+
+      // console.log("Sending OTP to:", phoneNumber);
+      setStatusMessage("Sending OTP...");
+
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: phoneNumber,
+      });
+
+      if (error) {
+        setLoading(false);
+        setStatusMessage("");
+        alert(error.message);
+        return;
+      }
+
+      setLoading(false);
+      navigate("/otp", {
+        state: {
+          mobile: normalized,
+          phoneNumber,
+          countryCode,
+          fromAssociate: location.state?.fromAssociate || false,
+        },
+      });
+
+    } catch (err) {
+      console.error("Error:", err);
+      setLoading(false);
+      setStatusMessage("");
+      alert("Something went wrong. Please try again.");
     }
-
-    navigate("/otp", {
-      state: {
-        mobile: normalized,
-        phoneNumber,
-        countryCode,
-        fromAssociate: location.state?.fromAssociate || false,
-      },
-    });
   };
 
   return (
     <div className="screen1">
-      {/* BACK BUTTON */}
       <button className="back-btn" onClick={handleBack}>
         ←
       </button>
@@ -129,15 +186,11 @@ export default function OtpVerification() {
           <p className="cardp">Your personalised experience awaits.</p>
         </div>
 
-        {/* PHONE INPUT WITH COUNTRY CODE */}
         <div className="phone-wrapper">
           <select
             className="country-code"
             value={countryCode}
-            onChange={(e) => {
-              console.log("Country changed to:", e.target.value); // Debug
-              setCountryCode(e.target.value);
-            }}
+            onChange={(e) => setCountryCode(e.target.value)}
           >
             {COUNTRY_CODES.map((c) => (
               <option key={c.code} value={c.code}>
@@ -150,13 +203,13 @@ export default function OtpVerification() {
             className="phone-input"
             placeholder="Enter mobile number"
             type="tel"
-            value={mobile}  // ✅ ADD THIS - makes it a controlled input
+            value={mobile}
             onChange={(e) => setMobile(e.target.value)}
           />
         </div>
 
         <button className="btn" onClick={handleContinue} disabled={loading}>
-          {loading ? "Sending OTP..." : "Continue"}
+          {loading ? statusMessage || "Please wait..." : "Continue"}
         </button>
 
         <small>
@@ -164,7 +217,6 @@ export default function OtpVerification() {
           <a
             href="https://sheetalbatra.com/pages/privacy-policy"
             target="new"
-
           >
             Terms & Privacy Policy
           </a>
