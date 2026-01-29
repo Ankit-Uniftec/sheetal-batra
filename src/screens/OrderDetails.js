@@ -55,6 +55,7 @@ export default function OrderDetails() {
   const { user } = useAuth();
 
   const order = location.state?.orderPayload;
+  const draftId = location.state?.draftId;
 
   const [profile, setProfile] = useState(null);
   const [selectedSP, setSelectedSP] = useState(null);
@@ -513,7 +514,7 @@ export default function OrderDetails() {
       salesperson_store: selectedSP?.store_name || null,
     };
 
-    navigate("/orderDetail", { state: { orderPayload: payload } });
+    navigate("/orderDetail", { state: { orderPayload: payload, draftId } });
   };
 
   // CONTINUE TO NEXT SCREEN

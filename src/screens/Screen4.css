@@ -1467,3 +1467,205 @@ select,
 .deviation-warning:hover {
   transform: scale(1.2);
 }
+
+/* ============================================================
+   DRAFT ORDERS CSS ADDITIONS
+   ============================================================ */
+
+/* ============================================================
+   ADD TO Screen4.css (ProductForm styles)
+   ============================================================ */
+
+/* Save as Draft Button */
+.draftBtn {
+  background: transparent;
+  border: 2px solid #d5b85a;
+  color: #d5b85a;
+  padding: 12px 24px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.draftBtn:hover {
+  background: #d5b85a;
+  color: white;
+}
+
+.draftBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
+/* ============================================================
+   ADD TO OrderHistory.css 
+   ============================================================ */
+
+/* Draft Orders Section */
+.oh-drafts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.oh-draft-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.oh-draft-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.oh-draft-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.oh-draft-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.oh-draft-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.oh-draft-date {
+  font-size: 12px;
+  color: #888;
+}
+
+.oh-draft-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.oh-draft-items {
+  font-size: 13px;
+  color: #666;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.oh-draft-amount {
+  font-size: 15px;
+  font-weight: 600;
+  color: #D5B85A;
+}
+
+.oh-draft-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.oh-draft-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.oh-draft-product-tag {
+  font-size: 12px;
+  background: #f0f0f0;
+  color: #555;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.oh-draft-more {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+}
+
+.oh-draft-salesperson {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
+}
+
+.oh-draft-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.oh-draft-actions .oh-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.oh-draft-actions .oh-btn.primary {
+  background: #D5B85A;
+  color: white;
+  border: none;
+}
+
+.oh-draft-actions .oh-btn.primary:hover {
+  background: #c4a84a;
+}
+
+.oh-draft-actions .oh-btn.danger {
+  background: transparent;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+}
+
+.oh-draft-actions .oh-btn.danger:hover {
+  background: #dc3545;
+  color: white;
+}
+
+.oh-draft-actions .oh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive styles */
+@media (max-width: 600px) {
+  .oh-draft-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .oh-draft-meta {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  .oh-draft-actions {
+    flex-direction: column;
+  }
+  
+  .oh-draft-actions .oh-btn {
+    width: 100%;
+    text-align: center;
+  }
+}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen4.css";
@@ -507,10 +507,15 @@ const measurementFields = {
 
 export default function ProductForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   // Initialize Popup hook
   const { showPopup, PopupComponent } = usePopup();
+
+  // Draft order states
+  const [saveDraftLoading, setSaveDraftLoading] = useState(false);
+  const [currentDraftId, setCurrentDraftId] = useState(null);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("screen4FormData");
@@ -872,6 +877,92 @@ export default function ProductForm() {
       })
     );
   };
+
+  // ==================== LOAD DRAFT DATA FROM LOCATION STATE ====================
+  useEffect(() => {
+    // Check if we're continuing from a draft
+    if (location.state?.fromDraft && location.state?.draftData) {
+      const draftData = location.state.draftData;
+      const draftId = location.state.draftId;
+      
+      console.log("📝 Loading draft data:", draftId);
+      
+      // Set the draft ID so we can delete it after order placement
+      setCurrentDraftId(draftId);
+      
+      // Load all the form data from draft
+      try {
+        // Product & Colors
+        if (draftData.selectedProduct) setSelectedProduct(draftData.selectedProduct);
+        if (draftData.selectedColor) setSelectedColor(draftData.selectedColor);
+        if (draftData.selectedTop) setSelectedTop(draftData.selectedTop);
+        if (draftData.selectedBottom) setSelectedBottom(draftData.selectedBottom);
+        if (draftData.selectedTopColor) setSelectedTopColor(draftData.selectedTopColor);
+        if (draftData.selectedBottomColor) setSelectedBottomColor(draftData.selectedBottomColor);
+
+        // Extras
+        if (draftData.selectedExtra) setSelectedExtra(draftData.selectedExtra);
+        if (draftData.selectedExtraColor) setSelectedExtraColor(draftData.selectedExtraColor);
+        if (draftData.selectedExtrasWithColors) setSelectedExtrasWithColors(draftData.selectedExtrasWithColors);
+
+        // Additionals
+        if (draftData.selectedAdditionals && draftData.selectedAdditionals.length > 0) {
+          setSelectedAdditionals(draftData.selectedAdditionals);
+        }
+        if (draftData.showAdditionals !== undefined) setShowAdditionals(draftData.showAdditionals);
+
+        // Size & Quantity
+        if (draftData.selectedSize) setSelectedSize(draftData.selectedSize);
+        if (draftData.quantity) setQuantity(draftData.quantity);
+        if (draftData.availableSizes) setAvailableSizes(draftData.availableSizes);
+
+        // Measurements
+        if (draftData.measurements) setMeasurements(draftData.measurements);
+        if (draftData.showMeasurements !== undefined) setShowMeasurements(draftData.showMeasurements);
+        if (draftData.activeCategory) setActiveCategory(draftData.activeCategory);
+
+        // Order Items & Expanded States
+        if (draftData.orderItems) setOrderItems(draftData.orderItems);
+        if (draftData.expandedRowIds) setExpandedRowIds(draftData.expandedRowIds);
+        if (draftData.expandedItemCategories) setExpandedItemCategories(draftData.expandedItemCategories);
+
+        // Delivery & Order Details
+        if (draftData.deliveryDate) setDeliveryDate(draftData.deliveryDate);
+        if (draftData.deliveryNotes) setDeliveryNotes(draftData.deliveryNotes);
+        if (draftData.modeOfDelivery) setModeOfDelivery(draftData.modeOfDelivery);
+        if (draftData.orderFlag) setOrderFlag(draftData.orderFlag);
+        if (draftData.comments) setComments(draftData.comments);
+        if (draftData.attachments) setAttachments(draftData.attachments);
+
+        // Kids Product
+        if (draftData.isKidsProduct !== undefined) setIsKidsProduct(draftData.isKidsProduct);
+
+        // Urgent
+        if (draftData.urgentReason) setUrgentReason(draftData.urgentReason);
+        if (draftData.otherUrgentReason) setOtherUrgentReason(draftData.otherUrgentReason);
+
+        // Product Options
+        if (draftData.tops) setTops(draftData.tops);
+        if (draftData.bottoms) setBottoms(draftData.bottoms);
+
+        // Sync product states
+        if (draftData.isSyncProduct !== undefined) setIsSyncProduct(draftData.isSyncProduct);
+        if (draftData.productVariants) setProductVariants(draftData.productVariants);
+        if (draftData.localInventory) setLocalInventory(draftData.localInventory);
+
+        // Mark as restored so other useEffects don't override
+        isRestoredRef.current = true;
+        
+        showPopup({
+          title: "Draft Loaded",
+          message: "Your draft order has been loaded. Continue where you left off!",
+          type: "success",
+        });
+      } catch (e) {
+        console.error("Error loading draft data:", e);
+      }
+    }
+  }, [location.state]);
 
   // ==================== SESSION STORAGE RESTORE ====================
   useEffect(() => {
@@ -1790,6 +1881,159 @@ export default function ProductForm() {
     event.target.value = "";
   };
 
+  // ==================== SAVE AS DRAFT ====================
+  const handleSaveAsDraft = async () => {
+    // Validate we have at least something to save
+    if (!selectedProduct && orderItems.length === 0) {
+      showPopup({
+        title: "Nothing to Save",
+        message: "Please add at least one product or select a product before saving as draft.",
+        type: "warning",
+      });
+      return;
+    }
+
+    setSaveDraftLoading(true);
+
+    try {
+      // Get current salesperson info from saved session
+      let salespersonName = "";
+      let salespersonEmail = "";
+      const savedSession = sessionStorage.getItem("associateSession");
+      
+      if (savedSession) {
+        try {
+          const session = JSON.parse(savedSession);
+          salespersonEmail = session.user?.email || "";
+          
+          // Get salesperson name
+          const { data: spData } = await supabase
+            .from("salesperson")
+            .select("saleperson, email")
+            .eq("email", session.user?.email)
+            .single();
+          if (spData) {
+            salespersonName = spData.saleperson;
+          }
+        } catch (e) {
+          console.log("Could not get salesperson info:", e);
+        }
+      }
+      
+      // Fallback to current user if no saved session
+      if (!salespersonEmail) {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser?.email) {
+          salespersonEmail = authUser.email;
+        }
+      }
+
+      // Collect all form data (same as sessionStorage)
+      const formData = {
+        selectedProduct,
+        selectedColor,
+        selectedTop,
+        selectedBottom,
+        selectedTopColor,
+        selectedBottomColor,
+        selectedExtra,
+        selectedExtraColor,
+        selectedExtrasWithColors,
+        selectedAdditionals,
+        showAdditionals,
+        selectedSize,
+        quantity,
+        measurements,
+        orderItems,
+        deliveryDate,
+        deliveryNotes,
+        modeOfDelivery,
+        orderFlag,
+        comments,
+        attachments,
+        isKidsProduct,
+        urgentReason,
+        otherUrgentReason,
+        availableSizes,
+        tops,
+        bottoms,
+        showMeasurements,
+        activeCategory,
+        expandedRowIds,
+        expandedItemCategories,
+        isSyncProduct,
+        productVariants,
+        localInventory,
+      };
+
+      // Generate draft name from products
+      const productNames = orderItems.length > 0 
+        ? orderItems.map(item => item.product_name).join(", ")
+        : selectedProduct?.name || "Untitled Draft";
+      
+      const draftName = productNames.length > 50 
+        ? productNames.substring(0, 47) + "..."
+        : productNames;
+
+      // If updating existing draft
+      if (currentDraftId) {
+        const { error } = await supabase
+          .from("draft_orders")
+          .update({
+            form_data: formData,
+            draft_name: draftName,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", currentDraftId);
+
+        if (error) throw error;
+
+        showPopup({
+          title: "Draft Updated",
+          message: "Your draft order has been updated successfully!",
+          type: "success",
+        });
+      } else {
+        // Create new draft
+        const { error } = await supabase
+          .from("draft_orders")
+          .insert({
+            customer_id: user?.id,
+            salesperson_email: salespersonEmail,
+            salesperson_name: salespersonName,
+            draft_name: draftName,
+            form_data: formData,
+          });
+
+        if (error) throw error;
+
+        showPopup({
+          title: "Draft Saved",
+          message: "Your order has been saved as a draft. You can continue later from the customer's profile.",
+          type: "success",
+        });
+      }
+
+      // Clear form data and navigate back
+      sessionStorage.removeItem("screen4FormData");
+      
+      // Navigate back to dashboard after short delay
+      setTimeout(() => {
+        handleLogout();
+      }, 1500);
+
+    } catch (err) {
+      console.error("Save draft error:", err);
+      showPopup({
+        title: "Save Failed",
+        message: "Failed to save draft: " + err.message,
+        type: "error",
+      });
+    } finally {
+      setSaveDraftLoading(false);
+    }
+  };
+
   // SAVE ORDER
   const saveOrder = () => {
     // VALIDATION
@@ -1960,7 +2204,13 @@ export default function ProductForm() {
       created_at: new Date().toISOString(),
     };
 
-    navigate("/confirmDetail", { state: { orderPayload } });
+    // Include draft ID in payload so it can be deleted after order confirmation
+    navigate("/confirmDetail", { 
+      state: { 
+        orderPayload,
+        draftId: currentDraftId, // Pass draft ID to delete after order placement
+      } 
+    });
   };
 
   const handleLogout = async () => {
@@ -3005,6 +3255,14 @@ export default function ProductForm() {
             <div className="footer-btns">
               <button className="productBtn" onClick={handleAddProduct}>
                 Add Product
+              </button>
+
+              <button 
+                className="draftBtn" 
+                onClick={handleSaveAsDraft}
+                disabled={saveDraftLoading}
+              >
+                {saveDraftLoading ? "Saving..." : "Save as Draft"}
               </button>
 
               <button className="continueBtn" onClick={saveOrder}>

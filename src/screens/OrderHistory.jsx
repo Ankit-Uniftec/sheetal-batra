@@ -9,6 +9,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
+import config from "../config/config";
 
 // Measurement categories and fields (same as Screen4)
 const CATEGORY_KEY_MAP = {
@@ -213,6 +214,12 @@ export default function OrderHistory() {
   const [exchangeType, setExchangeType] = useState("");
   const [exchangeReason, setExchangeReason] = useState("");
 
+  // Draft orders state
+  const [draftOrders, setDraftOrders] = useState([]);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [deletingDraft, setDeletingDraft] = useState(null);
+  const [continuingDraft, setContinuingDraft] = useState(null);
+
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -400,6 +407,35 @@ export default function OrderHistory() {
     };
     fetchData();
   }, [user, fromAssociate, customerFromState]);
+
+  useEffect(() => {
+    const fetchDraftOrders = async () => {
+      if (!user?.id && !customerFromState?.user_id) return;
+
+      setDraftsLoading(true);
+      try {
+        const customerId = customerFromState?.user_id || user?.id;
+
+        const { data, error } = await supabase
+          .from("draft_orders")
+          .select("*")
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Error fetching drafts:", error);
+        } else {
+          setDraftOrders(data || []);
+        }
+      } catch (err) {
+        console.error("Draft fetch error:", err);
+      } finally {
+        setDraftsLoading(false);
+      }
+    };
+
+    fetchDraftOrders();
+  }, [user?.id, customerFromState?.user_id]);
 
   // ==================== PERMISSION HELPERS ====================
 
@@ -664,6 +700,129 @@ export default function OrderHistory() {
       setActionLoading(null);
     }
   };
+
+  // Delete a draft order
+  const handleDeleteDraft = async (draftId) => {
+    showPopup({
+      type: "confirm",
+      title: "Delete Draft",
+      message: "Are you sure you want to delete this draft? This action cannot be undone.",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setDeletingDraft(draftId);
+        try {
+          const { error } = await supabase
+            .from("draft_orders")
+            .delete()
+            .eq("id", draftId);
+
+          if (error) throw error;
+
+          setDraftOrders(prev => prev.filter(d => d.id !== draftId));
+          showPopup({
+            type: "success",
+            title: "Draft Deleted",
+            message: "The draft order has been deleted.",
+            confirmText: "OK",
+          });
+        } catch (err) {
+          console.error("Delete draft error:", err);
+          showPopup({
+            type: "error",
+            title: "Error",
+            message: "Failed to delete draft: " + err.message,
+            confirmText: "OK",
+          });
+        } finally {
+          setDeletingDraft(null);
+        }
+      },
+    });
+  };
+
+
+  // Continue a draft order (with auto-signin)
+  const handleContinueDraft = async (draft) => {
+    setContinuingDraft(draft.id);
+
+    try {
+      // Get customer phone from profile
+      const customerPhone = profile?.phone || customerFromState?.phone;
+
+      if (!customerPhone) {
+        showPopup({
+          type: "error",
+          title: "Phone Not Found",
+          message: "Customer phone number not found. Cannot continue draft.",
+          confirmText: "OK",
+        });
+        setContinuingDraft(null);
+        return;
+      }
+
+      // Save current associate session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        sessionStorage.setItem("associateSession", JSON.stringify(session));
+      }
+      sessionStorage.setItem("returnToAssociate", "true");
+      sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+
+      // Call auto-signin edge function
+      const response = await fetch(
+        `${config.SUPABASE_URL}/functions/v1/auto-signin`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": config.SUPABASE_KEY,
+            "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ phone: customerPhone }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success && result.token) {
+        // Verify the token to create a session
+        const { data: sessionData, error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: result.token,
+          type: "magiclink",
+        });
+
+        if (verifyError) {
+          throw new Error("Failed to create session: " + verifyError.message);
+        }
+
+        // Clear any existing form data
+        sessionStorage.removeItem("screen4FormData");
+
+        // Navigate to ProductForm with draft data
+        navigate("/product", {
+          state: {
+            fromDraft: true,
+            draftId: draft.id,
+            draftData: draft.form_data,
+          },
+        });
+      } else {
+        throw new Error(result.error || "Auto-signin failed");
+      }
+    } catch (err) {
+      console.error("Continue draft error:", err);
+      showPopup({
+        type: "error",
+        title: "Error",
+        message: "Failed to continue draft: " + err.message,
+        confirmText: "OK",
+      });
+    } finally {
+      setContinuingDraft(null);
+    }
+  };
+
 
   // Edit handlers
   const openEditModal = (e, order) => {
@@ -1580,6 +1739,93 @@ export default function OrderHistory() {
                 </div>
               ) : (
                 <p className="oh-no-measurements">No store credits available.</p>
+              )}
+
+              {/* Draft Orders Section */}
+              <h3 style={{ marginTop: "30px" }}>Draft Orders</h3>
+              {draftsLoading ? (
+                <p className="oh-loading">Loading drafts...</p>
+              ) : draftOrders.length === 0 ? (
+                <p className="oh-no-measurements">No draft orders found.</p>
+              ) : (
+                <div className="oh-drafts-list">
+                  {draftOrders.map((draft) => {
+                    const formData = draft.form_data || {};
+                    const itemCount = (formData.orderItems?.length || 0) + (formData.selectedProduct ? 1 : 0);
+                    const totalAmount = formData.orderItems?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 0;
+
+                    return (
+                      <div key={draft.id} className="oh-draft-card">
+                        <div className="oh-draft-header">
+                          <div className="oh-draft-info">
+                            <h4 className="oh-draft-name">{draft.draft_name || "Untitled Draft"}</h4>
+                            <span className="oh-draft-date">
+                              Created: {new Date(draft.created_at).toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                          <div className="oh-draft-meta">
+                            <span className="oh-draft-items">{itemCount} item(s)</span>
+                            {totalAmount > 0 && (
+                              <span className="oh-draft-amount">₹{formatIndianNumber(totalAmount)}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Draft Details */}
+                        <div className="oh-draft-details">
+                          {formData.orderItems && formData.orderItems.length > 0 && (
+                            <div className="oh-draft-products">
+                              {formData.orderItems.slice(0, 3).map((item, idx) => (
+                                <span key={idx} className="oh-draft-product-tag">
+                                  {item.product_name} ({item.size})
+                                </span>
+                              ))}
+                              {formData.orderItems.length > 3 && (
+                                <span className="oh-draft-more">+{formData.orderItems.length - 3} more</span>
+                              )}
+                            </div>
+                          )}
+                          {formData.selectedProduct && !formData.orderItems?.length && (
+                            <div className="oh-draft-products">
+                              <span className="oh-draft-product-tag">
+                                {formData.selectedProduct.name} {formData.selectedSize && `(${formData.selectedSize})`}
+                              </span>
+                            </div>
+                          )}
+                          {draft.salesperson_name && (
+                            <span className="oh-draft-salesperson">
+                              By: {draft.salesperson_name}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Draft Actions */}
+                        <div className="oh-draft-actions">
+                          <button
+                            className="oh-btn primary"
+                            onClick={() => handleContinueDraft(draft)}
+                            disabled={continuingDraft === draft.id}
+                          >
+                            {continuingDraft === draft.id ? "Loading..." : "Continue Order"}
+                          </button>
+                          <button
+                            className="oh-btn danger"
+                            onClick={() => handleDeleteDraft(draft.id)}
+                            disabled={deletingDraft === draft.id}
+                          >
+                            {deletingDraft === draft.id ? "..." : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
               {/* Measurements History */}

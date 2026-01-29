@@ -89,6 +89,7 @@ export default function ReviewDetail() {
   const location = useLocation();
   const { user } = useAuth();
   const order = location.state?.orderPayload;
+  const draftId = location.state?.draftId;
 
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Placing order...");
@@ -185,6 +186,16 @@ export default function ReviewDetail() {
       if (!insertedOrder) {
         console.error("❌ No order returned after insert");
         throw new Error("Order insert failed");
+      }
+
+      // Delete draft if this was from a draft order
+      if (draftId) {
+        try {
+          await supabase.from("draft_orders").delete().eq("id", draftId);
+          console.log("✅ Draft deleted after order placement");
+        } catch (err) {
+          console.log("Draft deletion error:", err);
+        }
       }
 
       setLoadingMessage("Sending confirmation...");
@@ -369,7 +380,7 @@ export default function ReviewDetail() {
 
               if (updateError) {
                 console.error(`   ❌ Product update error:`, updateError);
-              } 
+              }
             } else {
               console.error("   ❌ Product fetch error:", fetchError);
             }
