@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import "./SplitPaymentModal.css"; // Optional - if you want separate CSS
+import { usePopup } from "../components/Popup";
 
 const paymentModes = [
   { label: "UPI", value: "UPI" },
@@ -11,6 +12,7 @@ const paymentModes = [
 ];
 
 export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }) {
+  const { showPopup, PopupComponent } = usePopup();
   const [payments, setPayments] = useState([{ mode: "UPI", amount: "" }]);
 
   const addPaymentRow = () => {
@@ -40,7 +42,13 @@ export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }
     );
 
     if (validPayments.length < 2) {
-      alert("Please add at least 2 payment methods with valid amounts for split payment.");
+      showPopup({
+        title: "Payment methods",
+        message: "Please add at least 2 payment methods with valid amounts for split payment.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please add at least 2 payment methods with valid amounts for split payment.");
       return;
     }
 
@@ -62,6 +70,8 @@ export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }
 
   return (
     <div className="split-modal-overlay">
+      {/* Popup Component */}
+      {PopupComponent}
       <div className="split-modal">
         <div className="split-modal-header">
           <h3>Split Payment</h3>

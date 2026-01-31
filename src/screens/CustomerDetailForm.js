@@ -6,8 +6,10 @@ import { supabase } from "../lib/supabaseClient";
 import "../screens/Screen3.css";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate"; // Import formatDate
+import { usePopup } from "../components/Popup";
 
 export default function CustomerDetailForm() {
+  const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -28,33 +30,69 @@ export default function CustomerDetailForm() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      alert("User not logged in.");
+      showPopup({
+        title: "User login",
+        message: "User not logged in.",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("User not logged in.");
       return;
     }
 
     // 🔴 MANDATORY FIELD CHECK
     if (!fullName.trim()) {
-      alert("Please enter your full name.");
+      showPopup({
+        title: "Name Required!",
+        message: "Please enter your full name.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please enter your full name.");
       return;
     }
 
     if (!gender) {
-      alert("Please select your gender.");
+      showPopup({
+        title: "Gender Required!",
+        message: "Please select your gender.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please select your gender.");
       return;
     }
 
     if (!email.trim()) {
-      alert("Please enter your email.");
+      showPopup({
+        title: "Email Required!",
+        message: "Please enter your email.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please enter your email.");
       return;
     }
 
     if (!isValidEmail(email)) {
-      alert("Please enter a valid email address.");
+      showPopup({
+        title: "Invalid Email",
+        message: "Please enter a valid email address",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please enter a valid email address.");
       return;
     }
 
     if (!dob) {
-      alert("Please select your date of birth.");
+      showPopup({
+        title: "Date of birth Required!",
+        message: "Please select your date of birth.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please select your date of birth.");
       return;
     }
 
@@ -80,7 +118,13 @@ export default function CustomerDetailForm() {
       return;
     }
 
-    alert("Welcome to the world of Sheetal Batra");
+    showPopup({
+      title: "Welcome",
+      message: "Welcome to the world of Sheetal Batra",
+      type: "success",
+      confirmText: "Ok",
+    })
+    // alert("Welcome to the world of Sheetal Batra");
     navigate("/product");
   };
 
@@ -94,6 +138,8 @@ export default function CustomerDetailForm() {
 
   return (
     <div className="screen3-root">
+      {/* Popup Component */}
+      {PopupComponent}
       <button className="back-btn" onClick={handleBack}>←</button>
 
       <div className="card3">

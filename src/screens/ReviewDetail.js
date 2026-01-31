@@ -9,6 +9,7 @@ import "./Screen7.css";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import config from "../config/config";
 import { generateAllPdfs } from "../utils/pdfUtils";
+import { usePopup } from "../components/Popup";
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -85,6 +86,7 @@ const checkEmptyFields = (obj, prefix = "") => {
 // ========== END DEBUG HELPERS ==========
 
 export default function ReviewDetail() {
+  const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -110,7 +112,13 @@ export default function ReviewDetail() {
 
   const saveSignatureAndContinue = async () => {
     if (!sigPad || sigPad.isEmpty()) {
-      alert("Please sign before continuing.");
+      showPopup({
+        title: "Sign Required!",
+        message: "Please sign before continuing.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please sign before continuing.");
       return;
     }
 
@@ -449,6 +457,8 @@ export default function ReviewDetail() {
 
   return (
     <div className="rd-screen7">
+      {/* Popup Component */}
+      {PopupComponent}
       {loading && (
         <div className="global-loader">
           <img src={Logo} alt="Loading" className="loader-logo" />

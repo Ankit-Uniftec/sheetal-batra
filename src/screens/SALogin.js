@@ -5,8 +5,10 @@ import "./SALogin.css";
 import Logo from "../images/logo.png";
 import eye from "../images/eye.svg"
 import eyeOff from "../images/eyeOff.svg"
+import { usePopup } from "../components/Popup";
 
 export default function SALogin() {
+  const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -16,7 +18,13 @@ export default function SALogin() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      alert("Please enter email and password.");
+      showPopup({
+        title: "Email and Password Required!",
+        message: "Please enter email and password.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please enter email and password.");
       return;
     }
 
@@ -31,7 +39,13 @@ export default function SALogin() {
     setLoading(false);
 
     if (authError) {
-      alert("Invalid email or password");
+      showPopup({
+        title: "Invalid Credentials",
+        message: "Please enter valid credentials.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Invalid email or password");
       return;
     }
 
@@ -42,7 +56,13 @@ export default function SALogin() {
       .single();
 
     if (!userRecord) {
-      alert("Role not found!");
+      showPopup({
+        title: "Role not found ",
+        message: "",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("Role not found!");
       return;
     }
 
@@ -54,12 +74,20 @@ export default function SALogin() {
     } else if (userRecord.role === "inventory") {
       navigate("/inventoryDashboard");
     } else {
-      alert("Unknown role. Access denied.");
+      showPopup({
+        title: "Unknown role",
+        message: "Access is Denied.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Unknown role. Access denied.");
     }
   };
 
   return (
     <div className="screen1">
+      {/* Popup Component */}
+      {PopupComponent}
       <img src={Logo} alt="logo" className="logo" />
 
       <div className="card">

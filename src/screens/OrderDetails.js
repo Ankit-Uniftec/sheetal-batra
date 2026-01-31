@@ -561,8 +561,8 @@ export default function OrderDetails() {
       return;
     }
 
-    // Check for FREECOD code
-    if (code === "FREECOD") {
+    // Check for SB250 code
+    if (code === "SB250") {
       if (codWaiverApplied) {
         showPopup({
           title: "Already Applied",
@@ -580,7 +580,7 @@ export default function OrderDetails() {
       if (! hasCashPayment || order.mode_of_delivery !== "Home Delivery") {
         showPopup({
           title: "Not Applicable",
-          message: "FREECOD is only applicable for Cash on Delivery with Home Delivery.",
+          message: "SB250 is only applicable for Cash on Delivery with Home Delivery.",
           type: "warning",
         });
         return;
@@ -1226,7 +1226,7 @@ export default function OrderDetails() {
                     fontSize: "14px",
                   }}
                 >
-                  <span>FREECOD (₹250 waived)</span>
+                  <span>SB250 (₹250 waived)</span>
                   <button
                     onClick={removeCodWaiver}
                     style={{

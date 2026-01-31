@@ -5,6 +5,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import "./EditOrder.css";
+import { usePopup } from "../../components/Popup";
 
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
@@ -39,6 +40,7 @@ function ColorDotDisplay({ colorObject }) {
 }
 
 export default function EditOrder() {
+  const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
   const location = useLocation();
   const orderFromState = location.state?.order;
@@ -194,11 +196,23 @@ export default function EditOrder() {
 
       setOrder({ ...order, ...updates });
       setIsEditing(false);
-      alert("Order updated successfully!");
+      showPopup({
+        title: "Order update",
+        message: "Order updated successfully!",
+        type: "success",
+        confirmText: "Ok",
+      })
+      // alert("Order updated successfully!");
 
     } catch (err) {
       console.error("Save error:", err);
-      alert("Failed to save: " + err.message);
+      showPopup({
+        title: "Order update",
+        message: "Failed to save.",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("Failed to save: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -207,7 +221,13 @@ export default function EditOrder() {
   // Handle cancellation
   const handleCancellation = async () => {
     if (!cancellationReason) {
-      alert("Please select a cancellation reason");
+      showPopup({
+        title: "Cancellation",
+        message: "Please select a cancellation reason.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please select a cancellation reason");
       return;
     }
 
@@ -227,12 +247,24 @@ export default function EditOrder() {
 
       if (error) throw error;
 
-      alert("Order cancelled successfully");
+      showPopup({
+        title: "Order update",
+        message: "Order cancelled successfully.",
+        type: "success",
+        confirmText: "Ok",
+      })
+      // alert("Order cancelled successfully");
       navigate(-1);
 
     } catch (err) {
       console.error("Cancellation error:", err);
-      alert("Failed to cancel: " + err.message);
+      showPopup({
+        title: "Order update",
+        message: "Failed to cancel",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("Failed to cancel: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -241,7 +273,13 @@ export default function EditOrder() {
   // Handle exchange/return
   const handleExchangeReturn = async () => {
     if (!exchangeReason) {
-      alert("Please select an exchange/return reason");
+      showPopup({
+        title: "Select Reason",
+        message: "Please select an exchange/return reason.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please select an exchange/return reason");
       return;
     }
 
@@ -261,12 +299,24 @@ export default function EditOrder() {
 
       if (error) throw error;
 
-      alert("Exchange/Return processed successfully");
+      showPopup({
+        title: "Success",
+        message: "Exchange/Return processed successfully.",
+        type: "success",
+        confirmText: "Ok",
+      })
+      // alert("Exchange/Return processed successfully");
       navigate(-1);
 
     } catch (err) {
       console.error("Exchange error:", err);
-      alert("Failed to process: " + err.message);
+      showPopup({
+        title: "Failed",
+        message: "Failed to process.",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("Failed to process: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -286,6 +336,8 @@ export default function EditOrder() {
 
   return (
     <div className="edit-order-page">
+      {/* Popup Component */}
+      {PopupComponent}
       {saving && (
         <div className="global-loader">
           <img src={Logo} alt="Loading" className="loader-logo" />

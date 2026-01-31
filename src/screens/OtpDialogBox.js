@@ -4,8 +4,10 @@ import { supabase } from "../lib/supabaseClient";
 import "./Screen2.css";
 import Logo from "../images/logo.png";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
+import { usePopup } from "../components/Popup";
 
 export default function OtpDialogBox() {
+  const { showPopup, PopupComponent } = usePopup();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -50,7 +52,13 @@ export default function OtpDialogBox() {
     const code = otp.join("");
 
     if (code.length !== 6) {
-      alert("Enter a valid 6-digit OTP");
+      showPopup({
+        title: "Invalid OTP",
+        message: "Enter a valid 6-digit OTP",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Enter a valid 6-digit OTP");
       return;
     }
 
@@ -119,15 +127,17 @@ export default function OtpDialogBox() {
 
   return (
     <div className="screen2-bg">
-      <img src={Logo} alt="logo" className="logo2"  onClick={handleBack}/>
-      <button className="back-btn" onClick={()=>{navigate(-1)}} >
+      {/* Popup Component */}
+      {PopupComponent}
+      <img src={Logo} alt="logo" className="logo2" onClick={handleBack} />
+      <button className="back-btn" onClick={() => { navigate(-1) }} >
         ←
       </button>
 
       <div className="card2">
         <h2 className="title">Welcome to Sheetal Batra</h2>
-         <p className="subtitle">Your personalised experience awaits.</p>
-       
+        <p className="subtitle">Your personalised experience awaits.</p>
+
 
         <div className="otpBox">
           <p className="otp-text">OTP has been sent to {phoneNumber}</p>

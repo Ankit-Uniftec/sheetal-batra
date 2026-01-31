@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import "./Screen1.css";
 import Logo from "../images/logo.png";
 import config from "../config/config";
+import { usePopup } from "../components/Popup";
 
 /* ----------------------------------
    COUNTRY CODE CONFIG
@@ -39,6 +40,7 @@ const COUNTRY_CODES = [
 
 
 export default function OtpVerification() {
+  const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -61,7 +63,13 @@ export default function OtpVerification() {
     const normalized = mobile.replace(/\D/g, "");
 
     if (normalized.length < 6) {
-      alert("Please enter a valid mobile number");
+      showPopup({
+        title: "Invalid mobile number",
+        message: "Please enter a valid mobile number.",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please enter a valid mobile number");
       return;
     }
 
@@ -117,7 +125,7 @@ export default function OtpVerification() {
           } else {
             // console.log("✅ Session created, user:", sessionData.user?.id);
             setLoading(false);
-            
+
             // Check if profile is complete (has full_name)
             if (existingProfile.full_name) {
               navigate("/product");
@@ -161,12 +169,20 @@ export default function OtpVerification() {
       console.error("Error:", err);
       setLoading(false);
       setStatusMessage("");
-      alert("Something went wrong. Please try again.");
+      showPopup({
+        title: "Please try again",
+        message: "Something went wrong.",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("Something went wrong. Please try again.");
     }
   };
 
   return (
     <div className="screen1">
+      {/* Popup Component */}
+      {PopupComponent}
       <button className="back-btn" onClick={handleBack}>
         ←
       </button>

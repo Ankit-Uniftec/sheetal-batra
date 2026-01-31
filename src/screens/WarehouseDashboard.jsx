@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
+import { usePopup } from "../components/Popup";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -50,6 +51,7 @@ const getMeasurementLabel = (key) => {
 };
 
 const WarehouseDashboard = () => {
+  const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
@@ -283,7 +285,13 @@ const WarehouseDashboard = () => {
         fetchOrders();
       } else {
         console.error("Status update failed:", error);
-        alert("Failed to update status");
+        showPopup({
+          title: "Status update",
+          message: "Failed to update status",
+          type: "error",
+          confirmText: "Ok",
+        })
+        // alert("Failed to update status");
       }
     } catch (err) {
       console.error("Error updating status:", err);
@@ -398,6 +406,8 @@ const WarehouseDashboard = () => {
 
   return (
     <div className="wd-dashboard-wrapper">
+      {/* Popup Component */}
+      {PopupComponent}
       {/* HEADER */}
       <div className="wd-top-header">
         <div className="wd-header-left">

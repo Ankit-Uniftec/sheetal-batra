@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import "./AlterationModal.css";
 import { supabase } from "../lib/supabaseClient";
 import formatIndianNumber from "../utils/formatIndianNumber";
+import { usePopup } from "./Popup";
 
 // Measurement categories and fields
 const CATEGORY_KEY_MAP = {
@@ -91,6 +92,7 @@ export default function AlterationModal({
   order,
   existingAlterations = [],
 }) {
+  const { showPopup, PopupComponent } = usePopup();
   const fileInputRef = useRef(null);
 
   // Form state
@@ -181,9 +183,15 @@ export default function AlterationModal({
   // Handle file upload
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files);
-    
+
     if (attachments.length + files.length > 3) {
-      alert("Maximum 3 attachments allowed");
+      showPopup({
+        title: "Attachments",
+        message: "Maximum 3 attachments allowed",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Maximum 3 attachments allowed");
       return;
     }
 
@@ -212,7 +220,13 @@ export default function AlterationModal({
 
     } catch (err) {
       console.error("Upload failed:", err);
-      alert("Failed to upload file(s)");
+      showPopup({
+        title: "File Upload",
+        message: "Failed to upload files",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("Failed to upload file(s)");
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -229,17 +243,35 @@ export default function AlterationModal({
   // Validate form
   const validateForm = () => {
     if (!formData.alteration_type) {
-      alert("Please select alteration type");
+      showPopup({
+        title: "Alteration Type",
+        message: "Please select alteration type",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please select alteration type");
       return false;
     }
     if (!formData.delivery_date) {
-      alert("Please select delivery date");
+      showPopup({
+        title: "Delivery Date",
+        message: "Please select delivery date",
+        type: "warning",
+        confirmText: "Ok",
+      })
+      // alert("Please select delivery date");
       return false;
     }
     if (formData.delivery_type === "Home Delivery") {
-      if (!addressData.delivery_address || !addressData.delivery_city || 
-          !addressData.delivery_state || !addressData.delivery_pincode) {
-        alert("Please fill complete delivery address");
+      if (!addressData.delivery_address || !addressData.delivery_city ||
+        !addressData.delivery_state || !addressData.delivery_pincode) {
+      showPopup({
+        title: "Delivery Address",
+        message: "Please fill complete delivery address",
+        type: "warning",
+        confirmText: "Ok",
+      })
+        // alert("Please fill complete delivery address");
         return false;
       }
     }
@@ -264,7 +296,13 @@ export default function AlterationModal({
 
     } catch (err) {
       console.error("Submit failed:", err);
-      alert("Failed to submit alteration: " + err.message);
+      showPopup({
+        title: "Alteration",
+        message: "Failed to submit alteration",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert("Failed to submit alteration: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -279,6 +317,9 @@ export default function AlterationModal({
 
   return (
     <div className="alteration-modal-overlay" onClick={onClose}>
+      {/* Popup Component */}
+      {PopupComponent}
+
       <div className="alteration-modal" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="alteration-modal-header">
@@ -289,9 +330,9 @@ export default function AlterationModal({
 
         {/* Product Info */}
         <div className="alteration-product-info">
-          <img 
-            src={item.image_url || "/placeholder.png"} 
-            alt={item.product_name} 
+          <img
+            src={item.image_url || "/placeholder.png"}
+            alt={item.product_name}
             className="alteration-product-img"
           />
           <div className="alteration-product-details">
@@ -350,7 +391,7 @@ export default function AlterationModal({
           {/* Measurements */}
           <div className="alteration-field">
             <label>Measurements</label>
-            <button 
+            <button
               type="button"
               className="alteration-measurements-btn"
               onClick={() => setShowMeasurements(!showMeasurements)}
@@ -410,8 +451,8 @@ export default function AlterationModal({
               {attachments.map((url, i) => (
                 <div key={i} className="alteration-attachment-item">
                   <img src={url} alt={`Attachment ${i + 1}`} />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="remove-attachment"
                     onClick={() => removeAttachment(i)}
                   >
@@ -420,7 +461,7 @@ export default function AlterationModal({
                 </div>
               ))}
               {attachments.length < 3 && (
-                <div 
+                <div
                   className="alteration-attachment-add"
                   onClick={() => fileInputRef.current?.click()}
                 >
@@ -525,17 +566,17 @@ export default function AlterationModal({
 
         {/* Footer */}
         <div className="alteration-modal-footer">
-          <button 
-            type="button" 
-            className="alteration-btn cancel" 
+          <button
+            type="button"
+            className="alteration-btn cancel"
             onClick={onClose}
             disabled={submitting}
           >
             Cancel
           </button>
-          <button 
-            type="button" 
-            className="alteration-btn submit" 
+          <button
+            type="button"
+            className="alteration-btn submit"
             onClick={handleSubmit}
             disabled={submitting}
           >
