@@ -58,17 +58,30 @@ const formatDateTime = (dateStr) => {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
-  const date = d.toLocaleDateString("en-GB", {
+  
+  return d.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: "Asia/Kolkata"
   }).replace(/\//g, ".");
-  const time = d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  return `${date}  ${time}`;
+  
+  // const time = d.toLocaleTimeString("en-GB", {
+  //   hour: "2-digit",
+  //   minute: "2-digit",
+  //   second: "2-digit",
+  //   timeZone: "Asia/Kolkata"
+  // });
+  
+  // return `${date}  ${time}`;
+};
+
+// Output: "02.02.2026  15:30:00" (correct IST)
+
+const formatPhone = (phone) => {
+  if (!phone) return '';
+  const cleaned = phone.replace(/^\+?91\s?/, '');
+  return `+91 ${cleaned}`;
 };
 
 // Get color name from color object
@@ -130,16 +143,21 @@ const pdfStyles = StyleSheet.create({
   salesNameSection: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
+    // flex: 1,
+  },
+  Namelabel: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    // marginBottom: 2,
   },
   salesTeamText: {
-    flex: 1,
-    textAlign: "right",
+    // flex: 1,
+    // textAlign: "right",
     fontSize: 10,
     color: "#333",
   },
   salesPhoneText: {
-    textAlign: "right",
+    // textAlign: "right",
     fontSize: 10,
     color: "#333",
   },
@@ -476,7 +494,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
           <View style={{ alignItems: "flex-end", marginTop: -30 }}>
             <Text style={styles.value}>{order.delivery_phone}</Text>
           </View>
-        ) }
+        )}
 
         {/* Product Details */}
         <SectionBar title="Product Details" />
@@ -498,20 +516,21 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
             {/* Name - Left */}
             <View style={pdfStyles.salesNameSection}>
               {order.salesperson?.trim() && (
-                <View style={styles.row}>
-                  <Text style={styles.label}>Name: </Text>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Text style={styles.Namelabel}>Name: </Text>
                   <Text style={styles.value}>{order.salesperson}</Text>
                 </View>
               )}
             </View>
 
             {/* Team - Center/Right */}
-            <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team: </Text>
-
-            {/* Phone - Right */}
-            {order.salesperson_phone?.trim() && (
-              <Text style={pdfStyles.salesPhoneText}>{` +91 ${(order.salesperson_phone)}`}</Text>
-            )}
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team: </Text>
+              {/* Phone - Right */}
+              {order.salesperson_phone?.trim() && (
+                <Text style={pdfStyles.salesPhoneText}>{formatPhone(order.salesperson_phone)}</Text>
+              )}
+            </View>
           </View>
 
           {/* Contact Section */}

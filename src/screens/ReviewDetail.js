@@ -46,6 +46,13 @@ function ColorDotDisplay({ colorObject }) {
   );
 }
 
+const getISTTimestamp = () => {
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffset);
+  return istDate.toISOString().slice(0, 19).replace('T', ' ');
+};
+
 const toISODate = (value) => {
   if (!value) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
@@ -133,7 +140,7 @@ export default function ReviewDetail() {
       net_total: pricing.netPayable,
       remaining_payment: pricing.remaining,
       signature_url: signatureUrl,
-      created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
+      created_at: getISTTimestamp(),
       delivery_date: toISODate(order.delivery_date),
       join_date: toISODate(order.join_date),
       billing_date: toISODate(order.billing_date),
@@ -659,15 +666,15 @@ export default function ReviewDetail() {
             <div className="sig-buttons">
               <button style={{ color: "white" }} onClick={() => sigPad.clear()}>Clear</button>
               <button style={{ color: "white" }} onClick={saveSignatureAndContinue}>Save & Continue</button>
-              <button 
-                style={{ 
-                  color: "white", 
-                  background: "#d5b85a", 
-                  border: "none", 
-                  padding: "10px 20px", 
-                  borderRadius: "4px", 
-                  cursor: "pointer" 
-                }} 
+              <button
+                style={{
+                  color: "white",
+                  background: "#d5b85a",
+                  border: "none",
+                  padding: "10px 20px",
+                  borderRadius: "4px",
+                  cursor: "pointer"
+                }}
                 onClick={handleAutoSignature}
               >
                 Auto

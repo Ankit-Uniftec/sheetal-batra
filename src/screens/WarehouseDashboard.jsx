@@ -22,6 +22,7 @@ const FILTER_TABS = [
   { value: "normal", label: "Normal Orders" },
   { value: "urgent", label: "Urgent Orders" },
   { value: "unfulfilled", label: "Unfulfilled Orders" },
+  { value: "completed", label: "Completed Orders" },
   { value: "alteration", label: "Alteration" },
 ];
 
@@ -75,6 +76,10 @@ const WarehouseDashboard = () => {
   const [viewingImages, setViewingImages] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // Date range filter state
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
@@ -103,6 +108,24 @@ const WarehouseDashboard = () => {
       year: "numeric",
     }).replace(/\//g, "-");
   };
+
+
+  const getWarehouseDateForCalendar = (dateStr, orderDateStr) => {
+    if (!dateStr) return null;
+    const deliveryDate = new Date(dateStr);
+    if (isNaN(deliveryDate)) return null;
+
+    if (orderDateStr) {
+      const orderDate = new Date(orderDateStr);
+      const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
+      if (daysDiff >= 2) {
+        deliveryDate.setDate(deliveryDate.getDate() - 2);
+      }
+    }
+
+    return formatDate(deliveryDate);
+  };
+
 
   // Format measurements safely - FILTER OUT EMPTY VALUES
   const renderMeasurements = (m) => {
@@ -174,81 +197,153 @@ const WarehouseDashboard = () => {
   // Filter orders based on filter tab
   // Only show Warehouse alterations (not In-Store)
   const filteredByTab = useMemo(() => {
+    // Helper to check if order is LXRTS
+    const isLxrtsOrder = (o) => {
+      const productName = o.items?.[0]?.product_name || "";
+      return productName.includes("(LXRTS)");
+    };
+
     switch (filterTab) {
       case "normal":
-        // Normal orders: not alteration, not urgent
-        return orders.filter(o =>
-          !o.is_alteration &&
-          !o.is_urgent &&
-          o.order_flag !== "Urgent"
-        );
-      case "urgent":
-        // Urgent orders (excluding alterations or including only Warehouse alterations)
-        return orders.filter(o =>
-          (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
-          (!o.is_alteration || o.alteration_location === "Warehouse")
-        );
-      case "unfulfilled":
-        // Unfulfilled: not completed, not delivered, not cancelled
         return orders.filter(o => {
+          if (isLxrtsOrder(o)) return false;
+          const status = o.status?.toLowerCase();
+          return !o.is_alteration &&
+            !o.is_urgent &&
+            o.order_flag !== "Urgent" &&
+            status !== "completed" &&
+            status !== "delivered" &&
+            status !== "cancelled";
+        });
+      case "urgent":
+        return orders.filter(o => {
+          if (isLxrtsOrder(o)) return false;
+          return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
+            (!o.is_alteration || o.alteration_location === "Warehouse");
+        });
+      case "unfulfilled":
+        return orders.filter(o => {
+          if (isLxrtsOrder(o)) return false;
           const status = o.status?.toLowerCase();
           return status !== "completed" &&
             status !== "delivered" &&
             status !== "cancelled" &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
         });
+      case "completed":
+        return orders.filter(o => {
+          if (isLxrtsOrder(o)) return false;
+          const status = o.status?.toLowerCase();
+          return (status === "completed" || status === "delivered") &&
+            (!o.is_alteration || o.alteration_location === "Warehouse");
+        });
       case "alteration":
-        // Only show alterations meant for Warehouse
         return orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse");
       default:
-        // "All" tab - show regular orders + Warehouse alterations only
-        return orders.filter(o => !o.is_alteration || o.alteration_location === "Warehouse");
+        // "All" tab - exclude LXRTS
+        return orders.filter(o => {
+          if (isLxrtsOrder(o)) return false;
+          return !o.is_alteration || o.alteration_location === "Warehouse";
+        });
     }
   }, [orders, filterTab]);
 
   // Filter orders based on search
   const filteredOrders = useMemo(() => {
-    if (!searchQuery.trim()) return filteredByTab;
+    let result = filteredByTab;
 
-    const query = searchQuery.toLowerCase();
-    return filteredByTab.filter((order) => {
-      const item = order.items?.[0] || {};
-      return (
-        order.order_no?.toLowerCase().includes(query) ||
-        item.product_name?.toLowerCase().includes(query) ||
-        order.delivery_name?.toLowerCase().includes(query) ||
-        order.status?.toLowerCase().includes(query) ||
-        order.alteration_type?.toLowerCase().includes(query)
-      );
-    });
-  }, [filteredByTab, searchQuery]);
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((order) => {
+        const item = order.items?.[0] || {};
+        return (
+          order.order_no?.toLowerCase().includes(query) ||
+          item.product_name?.toLowerCase().includes(query) ||
+          order.delivery_name?.toLowerCase().includes(query) ||
+          order.status?.toLowerCase().includes(query) ||
+          order.alteration_type?.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    // Apply date range filter (using warehouse date)
+    if (dateFrom || dateTo) {
+      result = result.filter((order) => {
+        const warehouseDate = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
+        if (!warehouseDate) return false;
+
+        // Parse warehouse date (DD-MM-YYYY format from formatDate)
+        const [day, month, year] = warehouseDate.split("-");
+        const orderDate = new Date(year, month - 1, day);
+
+        if (dateFrom) {
+          const fromDate = new Date(dateFrom);
+          if (orderDate < fromDate) return false;
+        }
+
+        if (dateTo) {
+          const toDate = new Date(dateTo);
+          if (orderDate > toDate) return false;
+        }
+
+        return true;
+      });
+    }
+
+    return result;
+  }, [filteredByTab, searchQuery, dateFrom, dateTo]);
 
   // Get counts for tabs
-  const tabCounts = useMemo(() => ({
-    all: orders.filter(o => !o.is_alteration || o.alteration_location === "Warehouse").length,
-    normal: orders.filter(o =>
-      !o.is_alteration &&
-      !o.is_urgent &&
-      o.order_flag !== "Urgent"
-    ).length,
-    urgent: orders.filter(o =>
-      (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
-      (!o.is_alteration || o.alteration_location === "Warehouse")
-    ).length,
-    unfulfilled: orders.filter(o => {
-      const status = o.status?.toLowerCase();
-      return status !== "completed" &&
-        status !== "delivered" &&
-        status !== "cancelled" &&
-        (!o.is_alteration || o.alteration_location === "Warehouse");
-    }).length,
-    alteration: orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
-  }), [orders]);
+  const tabCounts = useMemo(() => {
+    const isLxrtsOrder = (o) => o.items?.[0]?.sync_enabled === true;
+
+    return {
+      all: orders.filter(o => {
+        if (isLxrtsOrder(o)) return false;
+        return !o.is_alteration || o.alteration_location === "Warehouse";
+      }).length,
+      normal: orders.filter(o => {
+        if (isLxrtsOrder(o)) return false;
+        const status = o.status?.toLowerCase();
+        return !o.is_alteration &&
+          !o.is_urgent &&
+          o.order_flag !== "Urgent" &&
+          status !== "completed" &&
+          status !== "delivered" &&
+          status !== "cancelled";
+      }).length,
+      urgent: orders.filter(o => {
+        if (isLxrtsOrder(o)) return false;
+        return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
+          (!o.is_alteration || o.alteration_location === "Warehouse");
+      }).length,
+      unfulfilled: orders.filter(o => {
+        if (isLxrtsOrder(o)) return false;
+        const status = o.status?.toLowerCase();
+        return status !== "completed" &&
+          status !== "delivered" &&
+          status !== "cancelled" &&
+          (!o.is_alteration || o.alteration_location === "Warehouse");
+      }).length,
+      completed: orders.filter(o => {
+        if (isLxrtsOrder(o)) return false;
+        const status = o.status?.toLowerCase();
+        return (status === "completed" || status === "delivered") &&
+          (!o.is_alteration || o.alteration_location === "Warehouse");
+      }).length,
+      alteration: orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
+    };
+  }, [orders]);
 
   // Memoize ordersByDate for calendar
   const ordersByDate = useMemo(() => {
     return orders.reduce((acc, order) => {
-      const date = order.delivery_date ? formatDate(order.delivery_date) : null;
+      if (!order.delivery_date) return acc;
+
+      // Use warehouse date (minus 2 days if gap allows)
+      const warehouseDate = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
+      const date = warehouseDate;
       if (date) {
         acc[date] = (acc[date] || 0) + 1;
       }
@@ -496,6 +591,39 @@ const WarehouseDashboard = () => {
                 )}
               </div>
 
+              {/* Date Range Filter */}
+              <div className="wd-date-filter">
+                <div className="wd-date-field">
+                  <label>From:</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="wd-date-input"
+                  />
+                </div>
+                <div className="wd-date-field">
+                  <label>To:</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="wd-date-input"
+                  />
+                </div>
+                {(dateFrom || dateTo) && (
+                  <button
+                    className="wd-date-clear"
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                  >
+                    Clear Dates
+                  </button>
+                )}
+              </div>
+
               {/* Scrollable Orders Container */}
               <div className="wd-orders-scroll-container">
                 {loading ? (
@@ -700,10 +828,10 @@ const WarehouseDashboard = () => {
                             {!isAlteration && (
                               <button
                                 className="wd-complete-btn"
-                                disabled={order.status === "completed"}
+                                disabled={order.status === "completed" || order.status === "delivered"}
                                 onClick={() => markAsCompleted(order.id)}
                               >
-                                {order.status === "completed" ? "Completed ✔" : "Mark as Completed"}
+                                {order.status === "completed" ? "Completed ✔" : order.status === "delivered" ? "Delivered ✔" : "Mark as Completed"}
                               </button>
                             )}
                           </div>
@@ -835,16 +963,16 @@ const WarehouseDashboard = () => {
                 <div className="wd-calendar-orders-section">
                   <div className="wd-calendar-header">
                     <span className="wd-calendar-title">
-                      Orders for {selectedCalendarDate} ({orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length})
+                      Orders for {selectedCalendarDate} ({orders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length})
                     </span>
                   </div>
 
                   <div className="wd-calendar-orders-list">
-                    {orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length === 0 ? (
+                    {orders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length === 0 ? (
                       <p className="wd-no-orders">No orders scheduled for this date</p>
                     ) : (
                       orders
-                        .filter(o => formatDate(o.delivery_date) === selectedCalendarDate)
+                        .filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate)
                         .map((order) => (
                           <div
                             className="wd-calendar-order-item"
@@ -853,7 +981,7 @@ const WarehouseDashboard = () => {
                             <p><b>Order No:</b> {order.order_no}</p>
                             <p><b>Client Name:</b> {order.delivery_name}</p>
                             <p><b>Status:</b> {order.status || "Pending"}</p>
-                            <p><b>Delivery Date:</b> {formatDate(order.delivery_date)}</p>
+                            {/* <p><b>Delivery Date:</b> {getWarehouseDate(order.delivery_date, order.created_at)}</p> */}
                           </div>
                         ))
                     )}

@@ -1296,3 +1296,50 @@
     padding: 12px;
   }
 }
+
+/* Date Range Filter */
+.wd-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.wd-date-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wd-date-field label {
+  font-weight: 500;
+  color: #333;
+  font-size: 14px;
+}
+
+.wd-date-input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+
+.wd-date-input:focus {
+  border-color: #d5b85a;
+}
+
+.wd-date-clear {
+  padding: 8px 16px;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.wd-date-clear:hover {
+  background: #d32f2f;
+}
