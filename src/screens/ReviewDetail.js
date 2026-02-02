@@ -670,7 +670,7 @@ export default function ReviewDetail() {
                 }} 
                 onClick={handleAutoSignature}
               >
-                Auto (Logo)
+                Auto
               </button>
             </div>
             <button className="close-modal" onClick={() => setShowSignature(false)}>✖</button>
