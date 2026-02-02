@@ -162,7 +162,7 @@ export default function OrderDetails() {
   }, [order?.items]);
 
   // Check if order is Custom (50% advance) or Standard (25% advance)
-  const isCustomOrder = order?.order_type === "Custom";
+  const isCustomOrder = order?.payment_order_type === "Custom";
   const minAdvancePercent = isCustomOrder ? 0.5 : 0.25;
 
   // Allow any advance amount (don't force minimum)

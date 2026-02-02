@@ -685,6 +685,33 @@ export default function ProductForm() {
     return "Standard";
   };
 
+  // FOR PAYMENT - excludes measurements (used for 25%/50% advance calculation)
+  const getItemPaymentOrderType = (item) => {
+    if (!item) return "Standard";
+
+    const product = products.find((p) => p.id === item.product_id);
+    if (!product) return "Standard";
+
+    const defaultTop = product.default_top || product.top_options?.[0] || "";
+    const defaultBottom = product.default_bottom || product.bottom_options?.[0] || "";
+    const defaultColorName = product.default_color || "";
+
+    if (item.top && item.top !== defaultTop) return "Custom";
+    if (item.bottom && item.bottom !== defaultBottom) return "Custom";
+    if (item.top_color?.name && item.top_color.name !== defaultColorName) return "Custom";
+    if (item.bottom_color?.name && item.bottom_color.name !== defaultColorName) return "Custom";
+
+    if (item.additionals && item.additionals.length > 0) {
+      const hasValidAdditional = item.additionals.some(
+        (add) => add.name && add.name.trim() !== ""
+      );
+      if (hasValidAdditional) return "Custom";
+    }
+
+    // NO measurement check - measurements don't affect payment type
+    return "Standard";
+  };
+
   // ============= CHANGE #4: Add helper function (After state declarations in ProductForm) =============
   // ADD this function inside the ProductForm component:
 
@@ -755,6 +782,7 @@ export default function ProductForm() {
         const updated = { ...it, ...patch };
         // Recalculate order_type after update
         updated.order_type = getItemOrderType(updated);
+        updated.payment_order_type = getItemPaymentOrderType(updated);
         return updated;
       })
     );
@@ -884,12 +912,12 @@ export default function ProductForm() {
     if (location.state?.fromDraft && location.state?.draftData) {
       const draftData = location.state.draftData;
       const draftId = location.state.draftId;
-      
+
       console.log("📝 Loading draft data:", draftId);
-      
+
       // Set the draft ID so we can delete it after order placement
       setCurrentDraftId(draftId);
-      
+
       // Load all the form data from draft
       try {
         // Product & Colors
@@ -952,7 +980,7 @@ export default function ProductForm() {
 
         // Mark as restored so other useEffects don't override
         isRestoredRef.current = true;
-        
+
         showPopup({
           title: "Draft Loaded",
           message: "Your draft order has been loaded. Continue where you left off!",
@@ -1652,6 +1680,7 @@ export default function ProductForm() {
       isKids: isKidsProduct,
       category: isKidsProduct ? "Kids" : "Women", // Store category string
       order_type: getOrderType(),
+      payment_order_type: getPaymentOrderType(),
       delivery_date: deliveryDate, // Add delivery date per product
       // Sync product metadata
       sync_enabled: isSyncProduct,
@@ -1813,6 +1842,30 @@ export default function ProductForm() {
     return "Standard";
   };
 
+  // FOR PAYMENT - excludes measurements (used for 25%/50% advance calculation)
+  const getPaymentOrderType = () => {
+    if (!selectedProduct) return "Standard";
+
+    const defaultTop = selectedProduct.default_top || selectedProduct.top_options?.[0] || "";
+    const defaultBottom = selectedProduct.default_bottom || selectedProduct.bottom_options?.[0] || "";
+    const defaultColorName = selectedProduct.default_color || "";
+
+    if (selectedTop && selectedTop !== defaultTop) return "Custom";
+    if (selectedBottom && selectedBottom !== defaultBottom) return "Custom";
+    if (selectedTopColor?.name && selectedTopColor.name !== defaultColorName) return "Custom";
+    if (selectedBottomColor?.name && selectedBottomColor.name !== defaultColorName) return "Custom";
+
+    if (selectedAdditionals && selectedAdditionals.length > 0) {
+      const hasValidAdditional = selectedAdditionals.some(
+        (add) => add.name && add.name.trim() !== ""
+      );
+      if (hasValidAdditional) return "Custom";
+    }
+
+    // NO measurement check - measurements don't affect payment type
+    return "Standard";
+  };
+
   //==================
   // livePrice is TAX-INCLUSIVE
   const gstRate = 0.18;
@@ -1900,12 +1953,12 @@ export default function ProductForm() {
       let salespersonName = "";
       let salespersonEmail = "";
       const savedSession = sessionStorage.getItem("associateSession");
-      
+
       if (savedSession) {
         try {
           const session = JSON.parse(savedSession);
           salespersonEmail = session.user?.email || "";
-          
+
           // Get salesperson name
           const { data: spData } = await supabase
             .from("salesperson")
@@ -1919,7 +1972,7 @@ export default function ProductForm() {
           console.log("Could not get salesperson info:", e);
         }
       }
-      
+
       // Fallback to current user if no saved session
       if (!salespersonEmail) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -1967,11 +2020,11 @@ export default function ProductForm() {
       };
 
       // Generate draft name from products
-      const productNames = orderItems.length > 0 
+      const productNames = orderItems.length > 0
         ? orderItems.map(item => item.product_name).join(", ")
         : selectedProduct?.name || "Untitled Draft";
-      
-      const draftName = productNames.length > 50 
+
+      const draftName = productNames.length > 50
         ? productNames.substring(0, 47) + "..."
         : productNames;
 
@@ -2016,7 +2069,7 @@ export default function ProductForm() {
 
       // Clear form data and navigate back
       sessionStorage.removeItem("screen4FormData");
-      
+
       // Navigate back to dashboard after short delay
       setTimeout(() => {
         handleLogout();
@@ -2106,6 +2159,7 @@ export default function ProductForm() {
         notes: comments, // Initialize notes as empty for auto-added products
         isKids: isKidsProduct,
         order_type: getOrderType(),
+        payment_order_type: getPaymentOrderType(),
         delivery_date: deliveryDate, // Add delivery date per product
         sync_enabled: isSyncProduct,
         shopify_product_id: selectedProduct.shopify_product_id || null,
@@ -2134,6 +2188,10 @@ export default function ProductForm() {
     }
 
     const overallOrderType = finalItems.some((item) => item.order_type === "Custom")
+      ? "Custom"
+      : "Standard";
+
+    const overallPaymentOrderType = finalItems.some((item) => item.payment_order_type === "Custom")
       ? "Custom"
       : "Standard";
 
@@ -2195,6 +2253,7 @@ export default function ProductForm() {
       grand_total: totalOrder,
       total_quantity: finalTotalQuantity,
       order_type: overallOrderType,
+      payment_order_type: overallPaymentOrderType,
 
       // Measurements for customer profile
       save_measurements: measurementsChanged && Object.keys(allMeasurements).length > 0,
@@ -2205,11 +2264,11 @@ export default function ProductForm() {
     };
 
     // Include draft ID in payload so it can be deleted after order confirmation
-    navigate("/confirmDetail", { 
-      state: { 
+    navigate("/confirmDetail", {
+      state: {
         orderPayload,
         draftId: currentDraftId, // Pass draft ID to delete after order placement
-      } 
+      }
     });
   };
 
@@ -3257,8 +3316,8 @@ export default function ProductForm() {
                 Add Product
               </button>
 
-              <button 
-                className="draftBtn" 
+              <button
+                className="draftBtn"
                 onClick={handleSaveAsDraft}
                 disabled={saveDraftLoading}
               >

@@ -11,6 +11,9 @@ import config from "../config/config";
 import { generateAllPdfs } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 
+// Auto Signature Logo URL
+const AUTO_SIGNATURE_URL = "https://qlqvchcvuwjnfranqcmx.supabase.co/storage/v1/object/public/signature/logo.png";
+
 function ColorDotDisplay({ colorObject }) {
   if (!colorObject) return null;
 
@@ -110,6 +113,277 @@ export default function ReviewDetail() {
 
   const handlePlaceOrder = () => setShowSignature(true);
 
+  // ============================================================
+  // SHARED: Process order after signature URL is obtained
+  // ============================================================
+  const processOrderWithSignature = async (signatureUrl) => {
+    const emptyFields = checkEmptyFields(order);
+    if (emptyFields.length > 0) {
+      console.log("⚠️ Found empty fields that might cause PDF issues:");
+    }
+
+    setLoadingMessage("Saving order...");
+
+    // 2️⃣ PREPARE ORDER DATA
+    const normalizedOrder = {
+      ...order,
+      discount_percent: pricing.discountPercent,
+      discount_amount: pricing.discountAmount,
+      grand_total_after_discount: pricing.netPayable,
+      net_total: pricing.netPayable,
+      remaining_payment: pricing.remaining,
+      signature_url: signatureUrl,
+      created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
+      delivery_date: toISODate(order.delivery_date),
+      join_date: toISODate(order.join_date),
+      billing_date: toISODate(order.billing_date),
+      expected_delivery: toISODate(order.expected_delivery),
+    };
+
+    // Remove measurement saving flags from order data
+    const { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;
+
+    setLoadingMessage("Generating invoice PDFs...");
+
+    // 3️⃣ GENERATE ORDER NUMBER
+    const { data: orderNo, error: orderNoError } = await supabase.rpc(
+      "generate_order_no",
+      { p_store: normalizedOrder.salesperson_store || "Delhi Store" }
+    );
+
+    if (orderNoError) {
+      console.error("❌ Order number generation error:", orderNoError);
+      throw orderNoError;
+    }
+
+    // 4️⃣ INSERT ORDER
+    const { data: insertedOrder, error: insertError } = await supabase
+      .from("orders")
+      .insert({ ...orderDataToInsert, order_no: orderNo })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("❌ Order insert error:", insertError);
+      console.error("❌ Error details:", JSON.stringify(insertError, null, 2));
+      throw insertError;
+    }
+
+    if (!insertedOrder) {
+      console.error("❌ No order returned after insert");
+      throw new Error("Order insert failed");
+    }
+
+    // Delete draft if this was from a draft order
+    if (draftId) {
+      try {
+        await supabase.from("draft_orders").delete().eq("id", draftId);
+        console.log("✅ Draft deleted after order placement");
+      } catch (err) {
+        console.log("Draft deletion error:", err);
+      }
+    }
+
+    setLoadingMessage("Sending confirmation...");
+
+    // 5️⃣.0 GENERATE PDFs & SEND WHATSAPP
+    const orderWithItems = {
+      ...insertedOrder,
+      items: normalizedOrder.items || order.items || [],
+    };
+
+    try {
+      const pdfUrls = await generateAllPdfs(orderWithItems);
+
+      // Send WhatsApp with Customer PDF
+      if (pdfUrls?.customer_url) {
+        try {
+          const response = await fetch(
+            `${config.SUPABASE_URL}/functions/v1/spur-whatsapp`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": config.SUPABASE_KEY,
+                "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+              },
+              body: JSON.stringify({
+                customerName: orderWithItems.delivery_name,
+                customerPhone: orderWithItems.delivery_phone,
+                customerCountry: orderWithItems.delivery_country || "India",
+                pdfUrl: pdfUrls.customer_url,
+              }),
+            }
+          );
+        } catch (err) {
+          console.error("❌ WhatsApp error:", err);
+        }
+      }
+    } catch (pdfError) {
+      console.error("❌ PDF generation failed:", pdfError);
+      // Continue anyway - order is already placed
+    }
+
+    // 5️⃣.1 SAVE CUSTOMER MEASUREMENTS
+    if (order.save_measurements && order.measurements_to_save) {
+      try {
+        const { error: measurementError } = await supabase
+          .from("customer_measurements")
+          .insert({
+            customer_id: order.user_id,
+            measurements: order.measurements_to_save,
+            order_id: insertedOrder.id,
+            created_at: new Date().toISOString(),
+          });
+
+        if (measurementError) {
+          console.error("❌ Measurement save error:", measurementError);
+        }
+      } catch (err) {
+        console.error("❌ Measurement save exception:", err);
+      }
+    } else {
+      console.log("ℹ️ No measurements to save");
+    }
+
+    // 5️⃣.2 DEDUCT STORE CREDIT
+    if (order.store_credit_used && order.store_credit_used > 0) {
+      try {
+        const updateData = {
+          store_credit: order.store_credit_remaining || 0,
+        };
+
+        if (!order.store_credit_remaining || order.store_credit_remaining <= 0) {
+          updateData.store_credit_expiry = null;
+        }
+
+        const { error: creditError } = await supabase
+          .from("profiles")
+          .update(updateData)
+          .eq("id", order.user_id);
+
+        if (creditError) {
+          console.error("❌ Store credit deduction error:", creditError);
+        }
+      } catch (err) {
+        console.error("❌ Store credit exception:", err);
+      }
+    } else {
+      console.log("ℹ️ No store credit used in this order");
+    }
+
+    // 6️⃣ REDUCE INVENTORY
+    try {
+      const items = normalizedOrder.items || order.items || [];
+
+      for (const item of items) {
+        if (!item.product_id) {
+          continue;
+        }
+
+        const quantityOrdered = item.quantity || 1;
+
+        if (item.sync_enabled) {
+          // Sync product logic
+          const { data: variants, error: fetchError } = await supabase
+            .from("product_variants")
+            .select("id, inventory, size")
+            .eq("product_id", item.product_id)
+            .eq("size", item.size)
+            .gt("inventory", 0)
+            .order("inventory", { ascending: false })
+            .limit(1);
+
+          if (fetchError) {
+            console.error(`   ❌ Variant fetch error:`, fetchError);
+            continue;
+          }
+
+          if (variants && variants.length > 0) {
+            const variant = variants[0];
+            const newInventory = Math.max(0, variant.inventory - quantityOrdered);
+
+            const { error: updateError } = await supabase
+              .from("product_variants")
+              .update({ inventory: newInventory })
+              .eq("id", variant.id);
+
+            if (updateError) {
+              console.error(`   ❌ Variant update error:`, updateError);
+            }
+          } else {
+            console.warn(`   ⚠️ No variant found for size ${item.size}`);
+          }
+
+          // Shopify sync
+          try {
+            const response = await fetch(
+              `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "apikey": config.SUPABASE_KEY,
+                  "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+                },
+                body: JSON.stringify({
+                  action: "reduce",
+                  product_id: item.product_id,
+                  size: item.size,
+                  quantity: quantityOrdered,
+                }),
+              }
+            );
+
+            const reduceResult = await response.json();
+            if (!reduceResult.success) {
+              console.error("   ❌ Shopify reduce failed:", reduceResult.error);
+            }
+          } catch (shopifyErr) {
+            console.error("   ❌ Shopify sync error:", shopifyErr);
+          }
+        } else {
+          // Regular product logic
+          const { data: productData, error: fetchError } = await supabase
+            .from("products")
+            .select("inventory, name")
+            .eq("id", item.product_id)
+            .single();
+
+          if (!fetchError && productData) {
+            const currentInventory = productData.inventory || 0;
+            const newInventory = Math.max(0, currentInventory - quantityOrdered);
+
+            const { error: updateError } = await supabase
+              .from("products")
+              .update({ inventory: newInventory })
+              .eq("id", item.product_id);
+
+            if (updateError) {
+              console.error(`   ❌ Product update error:`, updateError);
+            }
+          } else {
+            console.error("   ❌ Product fetch error:", fetchError);
+          }
+        }
+      }
+    } catch (inventoryError) {
+      console.error("❌ Inventory update exception:", inventoryError);
+    }
+
+    // 7️⃣ CLEAR SESSION & NAVIGATE
+    sessionStorage.removeItem("screen4FormData");
+    sessionStorage.removeItem("screen6FormData");
+
+    navigate("/order-placed", {
+      state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
+      replace: true,
+    });
+  };
+
+  // ============================================================
+  // CANVAS SIGNATURE: Upload signature and process order
+  // ============================================================
   const saveSignatureAndContinue = async () => {
     if (!sigPad || sigPad.isEmpty()) {
       showPopup({
@@ -117,19 +391,13 @@ export default function ReviewDetail() {
         message: "Please sign before continuing.",
         type: "warning",
         confirmText: "Ok",
-      })
-      // alert("Please sign before continuing.");
+      });
       return;
     }
 
     try {
       setLoading(true);
       setLoadingMessage("Uploading signature...");
-
-      const emptyFields = checkEmptyFields(order);
-      if (emptyFields.length > 0) {
-        console.log("⚠️ Found empty fields that might cause PDF issues:");
-      }
 
       const blob = await compressSignature(sigPad);
       const path = `${user.id}/signature_${Date.now()}.jpg`;
@@ -145,272 +413,32 @@ export default function ReviewDetail() {
 
       const { data: sigData } = supabase.storage.from("signature").getPublicUrl(path);
 
-      setLoadingMessage("Saving order...");
-      // 2️⃣ PREPARE ORDER DATA
-      const normalizedOrder = {
-        ...order,
-        discount_percent: pricing.discountPercent,
-        discount_amount: pricing.discountAmount,
-        grand_total_after_discount: pricing.netPayable,
-        net_total: pricing.netPayable,
-        remaining_payment: pricing.remaining,
-        signature_url: sigData.publicUrl,
-        created_at: order.created_at ? new Date(order.created_at).toISOString() : new Date().toISOString(),
-        delivery_date: toISODate(order.delivery_date),
-        join_date: toISODate(order.join_date),
-        billing_date: toISODate(order.billing_date),
-        expected_delivery: toISODate(order.expected_delivery),
-      };
-
-      // Remove measurement saving flags from order data
-      const { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;
-
-      setLoadingMessage("Generating invoice PDFs...");
-      // 3️⃣ GENERATE ORDER NUMBER
-      const { data: orderNo, error: orderNoError } = await supabase.rpc(
-        "generate_order_no",
-        { p_store: normalizedOrder.salesperson_store || "Delhi Store" }
-      );
-
-      if (orderNoError) {
-        console.error("❌ Order number generation error:", orderNoError);
-        throw orderNoError;
-      }
-
-      // 4️⃣ INSERT ORDER
-
-      const { data: insertedOrder, error: insertError } = await supabase
-        .from("orders")
-        .insert({ ...orderDataToInsert, order_no: orderNo })
-        .select()
-        .single();
-
-      if (insertError) {
-        console.error("❌ Order insert error:", insertError);
-        console.error("❌ Error details:", JSON.stringify(insertError, null, 2));
-        throw insertError;
-      }
-
-      if (!insertedOrder) {
-        console.error("❌ No order returned after insert");
-        throw new Error("Order insert failed");
-      }
-
-      // Delete draft if this was from a draft order
-      if (draftId) {
-        try {
-          await supabase.from("draft_orders").delete().eq("id", draftId);
-          console.log("✅ Draft deleted after order placement");
-        } catch (err) {
-          console.log("Draft deletion error:", err);
-        }
-      }
-
-      setLoadingMessage("Sending confirmation...");
-      // 5️⃣.0 GENERATE PDFs & SEND WHATSAPP
-      const orderWithItems = {
-        ...insertedOrder,
-        items: normalizedOrder.items || order.items || [],
-      };
-      try {
-        const pdfUrls = await generateAllPdfs(orderWithItems);
-
-        // Send WhatsApp with Customer PDF
-        if (pdfUrls?.customer_url) {
-          try {
-
-            const response = await fetch(
-              `${config.SUPABASE_URL}/functions/v1/spur-whatsapp`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "apikey": config.SUPABASE_KEY,
-                  "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-                },
-                body: JSON.stringify({
-                  customerName: orderWithItems.delivery_name,
-                  customerPhone: orderWithItems.delivery_phone,
-                  customerCountry: orderWithItems.delivery_country || "India",
-                  pdfUrl: pdfUrls.customer_url,
-                }),
-              }
-            );
-
-          } catch (err) {
-            console.error("❌ WhatsApp error:", err);
-          }
-        }
-      } catch (pdfError) {
-        console.error("❌ PDF generation failed:", pdfError);
-        // Continue anyway - order is already placed
-      }
-
-      // 5️⃣.1 SAVE CUSTOMER MEASUREMENTS
-      if (order.save_measurements && order.measurements_to_save) {
-        try {
-          const { error: measurementError } = await supabase
-            .from("customer_measurements")
-            .insert({
-              customer_id: order.user_id,
-              measurements: order.measurements_to_save,
-              order_id: insertedOrder.id,
-              created_at: new Date().toISOString(),
-            });
-
-          if (measurementError) {
-            console.error("❌ Measurement save error:", measurementError);
-          }
-        } catch (err) {
-          console.error("❌ Measurement save exception:", err);
-        }
-      } else {
-        console.log("ℹ️ No measurements to save");
-      }
-
-      // 5️⃣.2 DEDUCT STORE CREDIT
-      if (order.store_credit_used && order.store_credit_used > 0) {
-
-        try {
-          const updateData = {
-            store_credit: order.store_credit_remaining || 0,
-          };
-
-          if (!order.store_credit_remaining || order.store_credit_remaining <= 0) {
-            updateData.store_credit_expiry = null;
-          }
-
-
-          const { error: creditError } = await supabase
-            .from("profiles")
-            .update(updateData)
-            .eq("id", order.user_id);
-
-          if (creditError) {
-            console.error("❌ Store credit deduction error:", creditError);
-          }
-        } catch (err) {
-          console.error("❌ Store credit exception:", err);
-        }
-      } else {
-        console.log("ℹ️ No store credit used in this order");
-      }
-
-      // 6️⃣ REDUCE INVENTORY
-      try {
-        const items = normalizedOrder.items || order.items || [];
-
-        for (const item of items) {
-          if (!item.product_id) {
-            continue;
-          }
-
-          const quantityOrdered = item.quantity || 1;
-
-          if (item.sync_enabled) {
-            // Sync product logic
-
-            const { data: variants, error: fetchError } = await supabase
-              .from("product_variants")
-              .select("id, inventory, size")
-              .eq("product_id", item.product_id)
-              .eq("size", item.size)
-              .gt("inventory", 0)
-              .order("inventory", { ascending: false })
-              .limit(1);
-
-            if (fetchError) {
-              console.error(`   ❌ Variant fetch error:`, fetchError);
-              continue;
-            }
-
-            if (variants && variants.length > 0) {
-              const variant = variants[0];
-              const newInventory = Math.max(0, variant.inventory - quantityOrdered);
-
-              const { error: updateError } = await supabase
-                .from("product_variants")
-                .update({ inventory: newInventory })
-                .eq("id", variant.id);
-
-              if (updateError) {
-                console.error(`   ❌ Variant update error:`, updateError);
-              }
-            } else {
-              console.warn(`   ⚠️ No variant found for size ${item.size}`);
-            }
-
-            // Shopify sync
-            try {
-              const response = await fetch(
-                `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "apikey": config.SUPABASE_KEY,
-                    "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-                  },
-                  body: JSON.stringify({
-                    action: "reduce",
-                    product_id: item.product_id,
-                    size: item.size,
-                    quantity: quantityOrdered,
-                  }),
-                }
-              );
-
-              const reduceResult = await response.json();
-              if (reduceResult.success) {
-              } else {
-                console.error("   ❌ Shopify reduce failed:", reduceResult.error);
-              }
-            } catch (shopifyErr) {
-              console.error("   ❌ Shopify sync error:", shopifyErr);
-            }
-          } else {
-            // Regular product logic
-
-            const { data: productData, error: fetchError } = await supabase
-              .from("products")
-              .select("inventory, name")
-              .eq("id", item.product_id)
-              .single();
-
-            if (!fetchError && productData) {
-              const currentInventory = productData.inventory || 0;
-              const newInventory = Math.max(0, currentInventory - quantityOrdered);
-
-              const { error: updateError } = await supabase
-                .from("products")
-                .update({ inventory: newInventory })
-                .eq("id", item.product_id);
-
-              if (updateError) {
-                console.error(`   ❌ Product update error:`, updateError);
-              }
-            } else {
-              console.error("   ❌ Product fetch error:", fetchError);
-            }
-          }
-        }
-      } catch (inventoryError) {
-        console.error("❌ Inventory update exception:", inventoryError);
-      }
-
-      // 7️⃣ CLEAR SESSION & NAVIGATE
-      sessionStorage.removeItem("screen4FormData");
-      sessionStorage.removeItem("screen6FormData");
-
-      navigate("/order-placed", {
-        state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
-        replace: true,
-      });
+      // Process order with uploaded signature URL
+      await processOrderWithSignature(sigData.publicUrl);
 
     } catch (e) {
       console.error("❌ Error message:", e.message);
       console.error("❌ Error stack:", e.stack);
       console.error("❌ Full error:", e);
+      alert(e.message || "Failed to place order");
+      setLoading(false);
+      setShowSignature(false);
+    }
+  };
+
+  // ============================================================
+  // AUTO SIGNATURE: Use logo image instead of canvas signature
+  // ============================================================
+  const handleAutoSignature = async () => {
+    try {
+      setLoading(true);
+      setLoadingMessage("Processing...");
+
+      // Use the logo URL directly as signature
+      await processOrderWithSignature(AUTO_SIGNATURE_URL);
+
+    } catch (e) {
+      console.error("❌ Auto signature error:", e.message);
       alert(e.message || "Failed to place order");
       setLoading(false);
       setShowSignature(false);
@@ -437,7 +465,6 @@ export default function ReviewDetail() {
           navigate("/login", { replace: true });
           return;
         }
-
 
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
@@ -632,6 +659,19 @@ export default function ReviewDetail() {
             <div className="sig-buttons">
               <button style={{ color: "white" }} onClick={() => sigPad.clear()}>Clear</button>
               <button style={{ color: "white" }} onClick={saveSignatureAndContinue}>Save & Continue</button>
+              <button 
+                style={{ 
+                  color: "white", 
+                  background: "#d5b85a", 
+                  border: "none", 
+                  padding: "10px 20px", 
+                  borderRadius: "4px", 
+                  cursor: "pointer" 
+                }} 
+                onClick={handleAutoSignature}
+              >
+                Auto (Logo)
+              </button>
             </div>
             <button className="close-modal" onClick={() => setShowSignature(false)}>✖</button>
           </div>
