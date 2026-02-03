@@ -163,6 +163,12 @@ export default function ReviewDetail() {
       throw orderNoError;
     }
 
+    // ✅ Validate order number was generated
+    if (!orderNo) {
+      console.error("❌ Order number is null/empty");
+      throw new Error("Failed to generate order number. Please try again.");
+    }
+
     // 4️⃣ INSERT ORDER
     const { data: insertedOrder, error: insertError } = await supabase
       .from("orders")

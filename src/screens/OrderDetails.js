@@ -511,7 +511,7 @@ export default function OrderDetails() {
       salesperson: selectedSP?.saleperson || null,
       salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : null,
       salesperson_email: selectedSP?.email || localStorage.getItem("sp_email") || null,
-      salesperson_store: selectedSP?.store_name || null,
+      salesperson_store: selectedSP?.store_name || "Delhi Store",
     };
 
     navigate("/orderDetail", { state: { orderPayload: payload, draftId } });

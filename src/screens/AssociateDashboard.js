@@ -234,6 +234,7 @@ export default function Dashboard() {
 
         if (salespersonResult.data) {
           setSalesperson(salespersonResult.data);
+          localStorage.setItem("sp_email", user.email);
         }
 
         if (ordersResult.data) {
