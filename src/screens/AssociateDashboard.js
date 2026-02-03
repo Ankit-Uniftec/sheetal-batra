@@ -712,7 +712,7 @@ export default function Dashboard() {
   };
   const canMarkDelivered = (order) => {
     const status = order.status?.toLowerCase();
-    return status !== "delivered" && status !== "cancelled" && status !== "exchange_return";
+    return status !== "delivered" && status !== "cancelled" && status !== "exchange_return" && status !== "revoked";
   };
 
   // Get status badge style

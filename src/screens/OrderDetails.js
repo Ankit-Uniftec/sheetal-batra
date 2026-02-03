@@ -324,7 +324,7 @@ export default function OrderDetails() {
 
         if (!cancelled) {
           setProfile(prof || null);
-          
+
           // Set store credit info from profile
           if (prof) {
             setAvailableStoreCredit(Number(prof.store_credit) || 0);
@@ -561,6 +561,9 @@ export default function OrderDetails() {
       return;
     }
 
+    // Count currently applied codes
+    const appliedCodesCount = [discountApplied, birthdayApplied, codWaiverApplied].filter(Boolean).length;
+
     // Check for SB250 code
     if (code === "SB250") {
       if (codWaiverApplied) {
@@ -572,12 +575,22 @@ export default function OrderDetails() {
         return;
       }
 
+      // Check max 2 codes limit
+      if (appliedCodesCount >= 2) {
+        showPopup({
+          title: "Maximum Codes Reached",
+          message: "You can only apply up to 2 collector codes per order.",
+          type: "warning",
+        });
+        return;
+      }
+
       // Check if Cash is used in advance payment (normal or split)
       const hasCashPayment = isSplitPayment
         ? splitPayments.some(p => p.mode === "Cash")
         : paymentMode === "COD";
 
-      if (! hasCashPayment || order.mode_of_delivery !== "Home Delivery") {
+      if (!hasCashPayment || order.mode_of_delivery !== "Home Delivery") {
         showPopup({
           title: "Not Applicable",
           message: "SB250 is only applicable for Cash on Delivery with Home Delivery.",
@@ -623,6 +636,17 @@ export default function OrderDetails() {
           });
           return;
         }
+
+        // Check max 2 codes limit
+        if (appliedCodesCount >= 2) {
+          showPopup({
+            title: "Maximum Codes Reached",
+            message: "You can only apply up to 2 collector codes per order.",
+            type: "warning",
+          });
+          return;
+        }
+
         setBirthdayDiscount(pct);
         setBirthdayApplied(true);
         showPopup({
@@ -631,7 +655,9 @@ export default function OrderDetails() {
           type: "success",
         });
       } else {
+        // Regular discount code
         if (discountApplied) {
+          // Already have a regular discount - offer to replace (doesn't increase count)
           showPopup({
             title: "Replace Discount?",
             message: `You already have "${appliedCode}" (${discountPercent}%) applied.\n\nReplace with "${actualCode}" (${pct}%)?`,
@@ -653,6 +679,17 @@ export default function OrderDetails() {
           });
           return;
         }
+
+        // Check max 2 codes limit for new regular discount
+        if (appliedCodesCount >= 2) {
+          showPopup({
+            title: "Maximum Codes Reached",
+            message: "You can only apply up to 2 collector codes per order.",
+            type: "warning",
+          });
+          return;
+        }
+
         setDiscountPercent(pct);
         setDiscountApplied(true);
         setAppliedCode(actualCode);
@@ -677,8 +714,8 @@ export default function OrderDetails() {
     if (!isStoreCreditValid) {
       showPopup({
         title: "Store Credit Unavailable",
-        message: availableStoreCredit > 0 
-          ? "Your store credit has expired." 
+        message: availableStoreCredit > 0
+          ? "Your store credit has expired."
           : "You don't have any store credits available.",
         type: "warning",
         confirmText: "OK",
@@ -1068,11 +1105,11 @@ export default function OrderDetails() {
                 <button
                   onClick={handleApplyStoreCredit}
                   className="apply-discount-btn"
-                  style={{ 
-                    background: storeCreditApplied ? '#4caf50' : '#9c27b0', 
-                    border: "none", 
-                    height: "30px", 
-                    color: 'white', 
+                  style={{
+                    background: storeCreditApplied ? '#4caf50' : '#9c27b0',
+                    border: "none",
+                    height: "30px",
+                    color: 'white',
                     borderRadius: 5,
                     opacity: !isStoreCreditValid ? 0.6 : 1,
                   }}
@@ -1102,13 +1139,13 @@ export default function OrderDetails() {
                 <span style={{ fontWeight: "600", color: isStoreCreditValid ? "#7b1fa2" : "#c62828" }}>
                   💳 Store Credit Available: ₹{formatIndianNumber(availableStoreCredit)}
                 </span>
-                <span style={{ 
-                  fontSize: "12px", 
-                  color: isStoreCreditValid ? "#666" : "#c62828", 
-                  marginLeft: "12px" 
+                <span style={{
+                  fontSize: "12px",
+                  color: isStoreCreditValid ? "#666" : "#c62828",
+                  marginLeft: "12px"
                 }}>
-                  {isStoreCreditValid 
-                    ? `Valid till: ${formatDate(storeCreditExpiry)}` 
+                  {isStoreCreditValid
+                    ? `Valid till: ${formatDate(storeCreditExpiry)}`
                     : `Expired on: ${formatDate(storeCreditExpiry)}`}
                 </span>
               </div>
@@ -1429,6 +1466,7 @@ export default function OrderDetails() {
         onClose={() => setShowSplitModal(false)}
         onSave={handleSplitPaymentSave}
         maxAmount={storeCreditApplied ? pricing.netAfterStoreCredit : pricing.netPayable}
+        minAdvance={pricing.minAdvanceAmount}
       />
     </div>
   );

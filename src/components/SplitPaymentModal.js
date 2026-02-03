@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import "./SplitPaymentModal.css"; // Optional - if you want separate CSS
+import "./SplitPaymentModal.css";
 import { usePopup } from "../components/Popup";
 
 const paymentModes = [
@@ -11,7 +11,7 @@ const paymentModes = [
   { label: "Net Banking", value: "Net Banking" },
 ];
 
-export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }) {
+export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount, minAdvance = 0 }) {
   const { showPopup, PopupComponent } = usePopup();
   const [payments, setPayments] = useState([{ mode: "UPI", amount: "" }]);
 
@@ -31,10 +31,22 @@ export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }
     setPayments(updated);
   };
 
-  const totalSplitAmount = payments.reduce(
-    (sum, p) => sum + (parseFloat(p.amount) || 0),
-    0
-  );
+  // Total amount entered by SA (this becomes the advance payment)
+  const totalEntered = useMemo(() => {
+    return payments.reduce(
+      (sum, p) => sum + (parseFloat(p.amount) || 0),
+      0
+    );
+  }, [payments]);
+
+  // Balance = Net Payable - Entered (what customer will pay later)
+  const balance = useMemo(() => {
+    return maxAmount - totalEntered;
+  }, [maxAmount, totalEntered]);
+
+  // Status check
+  const isExceeded = totalEntered > maxAmount;
+  const isBelowMin = totalEntered > 0 && totalEntered < minAdvance;
 
   const handleSave = () => {
     const validPayments = payments.filter(
@@ -43,21 +55,35 @@ export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }
 
     if (validPayments.length < 2) {
       showPopup({
-        title: "Payment methods",
-        message: "Please add at least 2 payment methods with valid amounts for split payment.",
+        title: "Payment Methods",
+        message: "Please add at least 2 payment methods for split payment.",
         type: "warning",
         confirmText: "Ok",
-      })
-      // alert("Please add at least 2 payment methods with valid amounts for split payment.");
+      });
       return;
     }
 
-    if (totalSplitAmount > maxAmount) {
-      alert(`Total split amount (₹${totalSplitAmount}) cannot exceed net payable (₹${maxAmount})`);
+    if (totalEntered > maxAmount) {
+      showPopup({
+        title: "Amount Exceeded",
+        message: `Entered amount (₹${formatIndianNumber(totalEntered)}) exceeds net payable (₹${formatIndianNumber(maxAmount)})`,
+        type: "error",
+        confirmText: "Ok",
+      });
       return;
     }
 
-    onSave(validPayments, totalSplitAmount);
+    if (totalEntered <= 0) {
+      showPopup({
+        title: "Enter Amount",
+        message: "Please enter payment amounts.",
+        type: "warning",
+        confirmText: "Ok",
+      });
+      return;
+    }
+
+    onSave(validPayments, totalEntered);
     handleClose();
   };
 
@@ -70,7 +96,6 @@ export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }
 
   return (
     <div className="split-modal-overlay">
-      {/* Popup Component */}
       {PopupComponent}
       <div className="split-modal">
         <div className="split-modal-header">
@@ -78,49 +103,91 @@ export default function SplitPaymentModal({ isOpen, onClose, onSave, maxAmount }
           <button onClick={handleClose} className="split-modal-close">×</button>
         </div>
 
-        <div className="split-modal-max-amount">
-          <span>Max Amount: <strong>₹{formatIndianNumber(maxAmount)}</strong></span>
-        </div>
-
-        {payments.map((payment, index) => (
-          <div key={index} className="split-payment-row">
-            <select
-              value={payment.mode}
-              onChange={(e) => updatePayment(index, "mode", e.target.value)}
-              className="split-payment-select"
-            >
-              {paymentModes.map((pm) => (
-                <option key={pm.value} value={pm.value}>{pm.label}</option>
-              ))}
-            </select>
-            <input
-              type="number"
-              placeholder="Amount"
-              value={payment.amount}
-              onChange={(e) => updatePayment(index, "amount", e.target.value)}
-              className="split-payment-input"
-            />
-            {payments.length > 1 && (
-              <button
-                onClick={() => removePaymentRow(index)}
-                className="split-payment-remove"
-              >×</button>
-            )}
+        {/* Real-time Summary */}
+        <div className="split-summary">
+          <div className="split-summary-item">
+            <span className="split-label">Net Payable</span>
+            <span className="split-value">₹{formatIndianNumber(maxAmount)}</span>
           </div>
-        ))}
+          
+          {minAdvance > 0 && (
+            <div className="split-summary-item">
+              <span className="split-label">Min. Advance</span>
+              <span className="split-value min">₹{formatIndianNumber(minAdvance)}</span>
+            </div>
+          )}
+          
+          <div className="split-divider"></div>
+          
+          <div className="split-summary-item">
+            <span className="split-label">Advance Entered</span>
+            <span className={`split-value ${isExceeded ? 'error' : isBelowMin ? 'warning' : totalEntered > 0 ? 'success' : ''}`}>
+              ₹{formatIndianNumber(totalEntered)}
+            </span>
+          </div>
+          
+          <div className={`split-summary-item balance-row ${isExceeded ? 'error-bg' : ''}`}>
+            <span className="split-label">{isExceeded ? 'Exceeded by' : 'Balance'}</span>
+            <span className={`split-value ${isExceeded ? 'error' : ''}`}>
+              ₹{formatIndianNumber(Math.abs(balance))}
+            </span>
+          </div>
 
-        <button onClick={addPaymentRow} className="split-add-btn">
-          + Add Payment Method
-        </button>
-
-        <div className={`split-total ${totalSplitAmount > maxAmount ? "error" : "success"}`}>
-          <span>Total:</span>
-          <strong>₹{formatIndianNumber(totalSplitAmount)}</strong>
+          {isBelowMin && !isExceeded && (
+            <div className="split-warning">
+              Below minimum advance (₹{formatIndianNumber(minAdvance)})
+            </div>
+          )}
         </div>
 
-        <div className="split-modal-actions">
-          <button onClick={handleClose} className="split-cancel-btn">Cancel</button>
-          <button onClick={handleSave} className="split-save-btn">Save Split Payment</button>
+        {/* Payment Methods */}
+        <div className="split-payments">
+          {payments.map((payment, index) => (
+            <div key={index} className="split-row">
+              <span className="split-num">{index + 1}</span>
+              <select
+                value={payment.mode}
+                onChange={(e) => updatePayment(index, "mode", e.target.value)}
+                className="split-select"
+              >
+                {paymentModes.map((pm) => (
+                  <option key={pm.value} value={pm.value}>{pm.label}</option>
+                ))}
+              </select>
+              <div className="split-input-wrap">
+                <span className="split-rupee">₹</span>
+                <input
+                  type="number"
+                  placeholder="Amount"
+                  value={payment.amount}
+                  onChange={(e) => updatePayment(index, "amount", e.target.value)}
+                  className="split-input"
+                />
+              </div>
+              {payments.length > 1 && (
+                <button
+                  onClick={() => removePaymentRow(index)}
+                  className="split-remove"
+                >×</button>
+              )}
+            </div>
+          ))}
+          
+          <button onClick={addPaymentRow} className="split-add">
+            + Add Payment Method
+          </button>
+        </div>
+
+        {/* Actions */}
+        <div className="split-actions">
+          <button onClick={handleClose} className="split-btn-cancel">Cancel</button>
+          <button 
+            onClick={handleSave} 
+            className={`split-btn-save ${totalEntered > 0 && !isExceeded ? 'active' : ''}`}
+            disabled={isExceeded || totalEntered <= 0}
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>
