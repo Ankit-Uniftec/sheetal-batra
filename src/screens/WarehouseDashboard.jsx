@@ -399,7 +399,7 @@ const WarehouseDashboard = () => {
   const handleGeneratePdf = async (order) => {
     setPdfLoading(order.id);
     try {
-      await downloadWarehousePdf(order);
+      await downloadWarehousePdf(order, null, true);
       fetchOrders();
     } catch (error) {
       console.error("PDF generation failed:", error);

@@ -305,7 +305,7 @@ export default function Dashboard() {
     e.stopPropagation();
     setWarehousePdfLoading(order.id);
     try {
-      await downloadWarehousePdf(order);
+      await downloadWarehousePdf(order, null, true);
     } catch (error) {
       console.error("PDF download failed:", error);
     } finally {
