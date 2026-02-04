@@ -1420,6 +1420,17 @@ export default function Dashboard() {
             if (session) sessionStorage.setItem("associateSession", JSON.stringify(session));
             sessionStorage.setItem("returnToAssociate", "true");
             sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+
+            // ✅ Save salesperson data for the entire order flow
+            if (salesperson) {
+              sessionStorage.setItem("currentSalesperson", JSON.stringify({
+                name: salesperson.saleperson,
+                email: salesperson.email,
+                phone: salesperson.phone,
+                store: salesperson.store_name,
+              }));
+            }
+
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}
         >+</button>

@@ -84,7 +84,7 @@ const checkNonReturnable = (order) => {
   const reasons = [];
 
   // 1. Custom orders (order_type is "Custom")
-  const isCustomOrder = order.order_type === "Custom";
+  const isCustomOrder = order.payment_order_type === "Custom";
   if (isCustomOrder) reasons.push("Custom order");
 
   // 2. International orders

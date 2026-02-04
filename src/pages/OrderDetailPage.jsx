@@ -176,8 +176,9 @@ export default function OrderDetailPage() {
   // Check if alteration can be requested for this order
   const canRequestAlteration = () => {
     if (!order) return false;
+    const status = order.status?.toLowerCase();
     // Only delivered orders can have alterations
-    if (order.status?.toLowerCase() !== "delivered") return false;
+    if (status !== "completed" && status !== "delivered") return false;
     // Can't alter an alteration order
     if (order.is_alteration) return false;
     return true;

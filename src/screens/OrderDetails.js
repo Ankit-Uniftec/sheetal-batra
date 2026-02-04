@@ -311,7 +311,6 @@ export default function OrderDetails() {
 
   // Load user profile + salesperson
   useEffect(() => {
-    const cachedEmail = norm(localStorage.getItem("sp_email"));
     let cancelled = false;
 
     (async () => {
@@ -333,26 +332,39 @@ export default function OrderDetails() {
         }
       }
 
-      if (!cachedEmail) return;
+      // ✅ Get salesperson from sessionStorage (set by AssociateDashboard)
+      const savedSP = sessionStorage.getItem("currentSalesperson");
+      const associateSession = sessionStorage.getItem("associateSession");
 
-      const { data: sp1 } = await supabase
-        .from("salesperson")
-        .select("*")
-        .eq("email", cachedEmail)
-        .limit(1);
+      if (savedSP && !cancelled) {
+        try {
+          const spData = JSON.parse(savedSP);
 
-      let sp = sp1?.[0];
+          // ✅ Validate: Ensure salesperson matches the associate who started the order
+          if (associateSession) {
+            const session = JSON.parse(associateSession);
+            const associateEmail = session?.user?.email;
 
-      if (!sp) {
-        const { data: sp2 } = await supabase
-          .from("salesperson")
-          .select("*")
-          .ilike("email", cachedEmail)
-          .limit(1);
-        sp = sp2?.[0] || null;
+            // If emails don't match, the salesperson data is stale (different associate)
+            if (associateEmail && spData.email && associateEmail.toLowerCase() !== spData.email.toLowerCase()) {
+              console.warn("Salesperson mismatch - clearing stale data");
+              sessionStorage.removeItem("currentSalesperson");
+              return; // Don't set stale salesperson data
+            }
+          }
+
+          console.log(spData.store);
+          
+          setSelectedSP({
+            saleperson: spData.name,
+            email: spData.email,
+            phone: spData.phone,
+            store_name: spData.store,
+          });
+        } catch (e) {
+          console.error("Failed to parse salesperson data:", e);
+        }
       }
-
-      if (!cancelled) setSelectedSP(sp);
     })();
 
     return () => (cancelled = true);
