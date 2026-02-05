@@ -23,6 +23,7 @@ const FILTER_TABS = [
   { value: "urgent", label: "Urgent Orders" },
   { value: "unfulfilled", label: "Unfulfilled Orders" },
   { value: "completed", label: "Completed Orders" },
+  { value: "cancelled", label: "Cancelled Orders" },
   { value: "alteration", label: "Alteration" },
 ];
 
@@ -54,6 +55,10 @@ const getMeasurementLabel = (key) => {
 const WarehouseDashboard = () => {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
+
+  const isLxrtsOrder = (order) => {
+    return order.items?.[0]?.sync_enabled === true;
+  };
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -197,12 +202,6 @@ const WarehouseDashboard = () => {
   // Filter orders based on filter tab
   // Only show Warehouse alterations (not In-Store)
   const filteredByTab = useMemo(() => {
-    // Helper to check if order is LXRTS
-    const isLxrtsOrder = (o) => {
-      const productName = o.items?.[0]?.product_name || "";
-      return productName.includes("(LXRTS)");
-    };
-
     switch (filterTab) {
       case "normal":
         return orders.filter(o => {
@@ -215,12 +214,17 @@ const WarehouseDashboard = () => {
             status !== "delivered" &&
             status !== "cancelled";
         });
+
       case "urgent":
+        // ✅ FIX: Added cancelled exclusion to match tabCounts
         return orders.filter(o => {
           if (isLxrtsOrder(o)) return false;
+          const status = o.status?.toLowerCase();
           return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
+            status !== "cancelled" &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
         });
+
       case "unfulfilled":
         return orders.filter(o => {
           if (isLxrtsOrder(o)) return false;
@@ -230,6 +234,7 @@ const WarehouseDashboard = () => {
             status !== "cancelled" &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
         });
+
       case "completed":
         return orders.filter(o => {
           if (isLxrtsOrder(o)) return false;
@@ -237,10 +242,20 @@ const WarehouseDashboard = () => {
           return (status === "completed" || status === "delivered") &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
         });
+
+      case "cancelled":
+        return orders.filter(o => {
+          if (isLxrtsOrder(o)) return false;
+          const status = o.status?.toLowerCase();
+          return status === "cancelled" &&
+            (!o.is_alteration || o.alteration_location === "Warehouse");
+        });
+
       case "alteration":
         return orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse");
+
       default:
-        // "All" tab - exclude LXRTS
+        // "All" tab - show everything except LXRTS
         return orders.filter(o => {
           if (isLxrtsOrder(o)) return false;
           return !o.is_alteration || o.alteration_location === "Warehouse";
@@ -296,13 +311,12 @@ const WarehouseDashboard = () => {
 
   // Get counts for tabs
   const tabCounts = useMemo(() => {
-    const isLxrtsOrder = (o) => o.items?.[0]?.sync_enabled === true;
-
     return {
       all: orders.filter(o => {
         if (isLxrtsOrder(o)) return false;
         return !o.is_alteration || o.alteration_location === "Warehouse";
       }).length,
+
       normal: orders.filter(o => {
         if (isLxrtsOrder(o)) return false;
         const status = o.status?.toLowerCase();
@@ -313,11 +327,15 @@ const WarehouseDashboard = () => {
           status !== "delivered" &&
           status !== "cancelled";
       }).length,
+
       urgent: orders.filter(o => {
         if (isLxrtsOrder(o)) return false;
+        const status = o.status?.toLowerCase();
         return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
+          status !== "cancelled" &&
           (!o.is_alteration || o.alteration_location === "Warehouse");
       }).length,
+
       unfulfilled: orders.filter(o => {
         if (isLxrtsOrder(o)) return false;
         const status = o.status?.toLowerCase();
@@ -326,29 +344,40 @@ const WarehouseDashboard = () => {
           status !== "cancelled" &&
           (!o.is_alteration || o.alteration_location === "Warehouse");
       }).length,
+
       completed: orders.filter(o => {
         if (isLxrtsOrder(o)) return false;
         const status = o.status?.toLowerCase();
         return (status === "completed" || status === "delivered") &&
           (!o.is_alteration || o.alteration_location === "Warehouse");
       }).length,
+
+      cancelled: orders.filter(o => {
+        if (isLxrtsOrder(o)) return false;
+        const status = o.status?.toLowerCase();
+        return status === "cancelled" &&
+          (!o.is_alteration || o.alteration_location === "Warehouse");
+      }).length,
+
       alteration: orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
     };
   }, [orders]);
 
   // Memoize ordersByDate for calendar
   const ordersByDate = useMemo(() => {
-    return orders.reduce((acc, order) => {
-      if (!order.delivery_date) return acc;
+    return orders
+      .filter(o => !isLxrtsOrder(o)) // ✅ Exclude LXRTS from calendar
+      .reduce((acc, order) => {
+        if (!order.delivery_date) return acc;
 
-      // Use warehouse date (minus 2 days if gap allows)
-      const warehouseDate = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
-      const date = warehouseDate;
-      if (date) {
-        acc[date] = (acc[date] || 0) + 1;
-      }
-      return acc;
-    }, {});
+        // Use warehouse date (minus 2 days if gap allows)
+        const warehouseDate = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
+        const date = warehouseDate;
+        if (date) {
+          acc[date] = (acc[date] || 0) + 1;
+        }
+        return acc;
+      }, {});
   }, [orders]);
 
   const markAsCompleted = async (orderId) => {
@@ -827,11 +856,18 @@ const WarehouseDashboard = () => {
                             {/* Status Button - Different for alterations vs regular orders */}
                             {!isAlteration && (
                               <button
-                                className="wd-complete-btn"
-                                disabled={order.status === "completed" || order.status === "delivered"}
+                                className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""} `}
+                                disabled={
+                                  order.status === "completed" || 
+                                  order.status === "delivered" ||
+                                  order.status === "cancelled"
+                                }
                                 onClick={() => markAsCompleted(order.id)}
                               >
-                                {order.status === "completed" ? "Completed ✔" : order.status === "delivered" ? "Delivered ✔" : "Mark as Completed"}
+                                {order.status === "completed" ? "Completed ✔" : 
+                                 order.status === "delivered" ? "Delivered ✔" : 
+                                 order.status === "cancelled" ? "Cancelled" :
+                                 "Mark as Completed"}
                               </button>
                             )}
                           </div>

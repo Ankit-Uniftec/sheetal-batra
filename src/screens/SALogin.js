@@ -73,7 +73,9 @@ export default function SALogin() {
       navigate("/warehouseDashboard");
     } else if (userRecord.role === "inventory") {
       navigate("/inventoryDashboard");
-    } else {
+    } else if (userRecord.role === "accounts") {
+      navigate("/accounts")
+    }else {
       showPopup({
         title: "Unknown role",
         message: "Access is Denied.",

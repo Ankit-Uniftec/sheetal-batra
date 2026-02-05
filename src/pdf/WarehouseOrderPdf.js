@@ -758,7 +758,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             />
             <InfoRow
               label="DELIVERY DATE:"
-              value={getWarehouseDate(itemDeliveryDate)}
+              value={getWarehouseDate(itemDeliveryDate, order.created_at)}
               highlight={!isUrgent}
               urgent={isUrgent}
             />

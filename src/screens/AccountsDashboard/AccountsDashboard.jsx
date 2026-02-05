@@ -317,7 +317,7 @@ export default function AccountsDashboard() {
   };
 
   const handleBack = () => {
-    navigate("/AssociateDashboard", { replace: true });
+    navigate("/login", { replace: true });
   };
 
   const handleLogout = async () => {

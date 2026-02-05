@@ -1343,3 +1343,9 @@
 .wd-date-clear:hover {
   background: #d32f2f;
 }
+
+.wd-cancelled-btn {
+  background-color: #f44336 !important;
+  cursor: not-allowed !important;
+  opacity: 0.6;
+}
