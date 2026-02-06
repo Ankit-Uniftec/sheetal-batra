@@ -221,6 +221,8 @@ const WarehouseDashboard = () => {
           if (isLxrtsOrder(o)) return false;
           const status = o.status?.toLowerCase();
           return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
+            status !== "completed" &&
+            status !== "delivered" &&
             status !== "cancelled" &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
         });
@@ -332,6 +334,8 @@ const WarehouseDashboard = () => {
         if (isLxrtsOrder(o)) return false;
         const status = o.status?.toLowerCase();
         return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
+          status !== "completed" &&
+          status !== "delivered" &&
           status !== "cancelled" &&
           (!o.is_alteration || o.alteration_location === "Warehouse");
       }).length,
@@ -858,16 +862,16 @@ const WarehouseDashboard = () => {
                               <button
                                 className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""} `}
                                 disabled={
-                                  order.status === "completed" || 
+                                  order.status === "completed" ||
                                   order.status === "delivered" ||
                                   order.status === "cancelled"
                                 }
                                 onClick={() => markAsCompleted(order.id)}
                               >
-                                {order.status === "completed" ? "Completed ✔" : 
-                                 order.status === "delivered" ? "Delivered ✔" : 
-                                 order.status === "cancelled" ? "Cancelled" :
-                                 "Mark as Completed"}
+                                {order.status === "completed" ? "Completed ✔" :
+                                  order.status === "delivered" ? "Delivered ✔" :
+                                    order.status === "cancelled" ? "Cancelled" :
+                                      "Mark as Completed"}
                               </button>
                             )}
                           </div>
