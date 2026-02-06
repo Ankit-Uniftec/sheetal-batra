@@ -354,7 +354,7 @@ export default function OrderDetails() {
           }
 
           console.log(spData.store);
-          
+
           setSelectedSP({
             saleperson: spData.name,
             email: spData.email,
@@ -486,6 +486,17 @@ export default function OrderDetails() {
       paymentModeValue = paymentMode === "COD" ? "Cash" : paymentMode;
     }
 
+    // Fallback: read salesperson from sessionStorage if selectedSP is missing data
+    let spFallback = null;
+    if (!selectedSP?.store_name || !selectedSP?.email) {
+      try {
+        const savedSP = sessionStorage.getItem("currentSalesperson");
+        if (savedSP) spFallback = JSON.parse(savedSP);
+      } catch (e) {
+        console.warn("Failed to parse currentSalesperson from sessionStorage");
+      }
+    }
+
     const payload = {
       ...order,
       user_id: user.id,
@@ -520,10 +531,10 @@ export default function OrderDetails() {
       cod_charge: pricing.codCharge,
       shipping_charge: pricing.shippingCharge,
 
-      salesperson: selectedSP?.saleperson || null,
-      salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : null,
-      salesperson_email: selectedSP?.email || localStorage.getItem("sp_email") || null,
-      salesperson_store: selectedSP?.store_name || "Delhi Store",
+      salesperson: selectedSP?.saleperson || spFallback?.name || null,
+      salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : (spFallback?.phone ? formatPhoneNumber(spFallback.phone) : null),
+      salesperson_email: selectedSP?.email || spFallback?.email || null,
+      salesperson_store: selectedSP?.store_name || spFallback?.store || null,
     };
 
     navigate("/orderDetail", { state: { orderPayload: payload, draftId } });

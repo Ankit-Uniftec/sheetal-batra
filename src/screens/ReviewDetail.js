@@ -147,6 +147,22 @@ export default function ReviewDetail() {
       expected_delivery: toISODate(order.expected_delivery),
     };
 
+    // Ensure salesperson_store is never null - look up from salesperson table if needed
+    if (!normalizedOrder.salesperson_store && normalizedOrder.salesperson_email) {
+      try {
+        const { data: spData } = await supabase
+          .from("salesperson")
+          .select("store_name")
+          .eq("email", normalizedOrder.salesperson_email)
+          .single();
+        if (spData?.store_name) {
+          normalizedOrder.salesperson_store = spData.store_name;
+        }
+      } catch (e) {
+        console.warn("Could not look up salesperson store");
+      }
+    }
+
     // Remove measurement saving flags from order data
     const { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;
 
