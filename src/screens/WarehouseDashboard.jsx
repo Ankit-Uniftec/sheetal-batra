@@ -86,6 +86,8 @@ const WarehouseDashboard = () => {
   const [viewingImages, setViewingImages] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  const [attachmentLoading, setAttachmentLoading] = useState(null);
+
   // Get unique salespersons from orders
   const salespersons = useMemo(() => {
     const spSet = new Set();
@@ -226,9 +228,9 @@ const WarehouseDashboard = () => {
   const filteredByStatus = useMemo(() => {
     return orders.filter(o => {
       if (isLxrtsOrder(o)) return false;
-      
+
       const status = o.status?.toLowerCase();
-      
+
       switch (statusTab) {
         case "unfulfilled":
           // All orders that are still being worked on (not completed/delivered/cancelled)
@@ -372,7 +374,7 @@ const WarehouseDashboard = () => {
       chips.push({ type: "date", label });
     }
     if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-      chips.push({ type: "price", label: `Rs.${(filters.minPrice/1000).toFixed(0)}K - Rs.${(filters.maxPrice/1000).toFixed(0)}K` });
+      chips.push({ type: "price", label: `Rs.${(filters.minPrice / 1000).toFixed(0)}K - Rs.${(filters.maxPrice / 1000).toFixed(0)}K` });
     }
     filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
     filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
@@ -420,6 +422,44 @@ const WarehouseDashboard = () => {
         ? prev[category].filter(v => v !== value)
         : [...prev[category], value]
     }));
+  };
+
+  // Download all attachments
+  const handleDownloadAttachments = async (e, order) => {
+    e.stopPropagation();
+    if (!order.attachments || order.attachments.length === 0) return;
+
+    setAttachmentLoading(order.id);
+    try {
+      for (let i = 0; i < order.attachments.length; i++) {
+        const url = order.attachments[i];
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        const fileName = url.split("/").pop() || `attachment_${i + 1}`;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${order.order_no}_${fileName}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        if (i < order.attachments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+    } catch (err) {
+      console.error("Download failed:", err);
+      showPopup({
+        type: "error",
+        title: "Download Failed",
+        message: "Failed to download attachments",
+        confirmText: "OK",
+      });
+    } finally {
+      setAttachmentLoading(null);
+    }
   };
 
   // Calendar ordersByDate
@@ -539,7 +579,7 @@ const WarehouseDashboard = () => {
   return (
     <div className="wd-dashboard-wrapper">
       {PopupComponent}
-      
+
       {/* HEADER */}
       <div className="wd-top-header">
         <div className="wd-header-left">
@@ -626,7 +666,7 @@ const WarehouseDashboard = () => {
               <div className="wd-filter-dropdowns" ref={dropdownRef}>
                 {/* Date Filter */}
                 <div className="wd-filter-dropdown">
-                  <button 
+                  <button
                     className={`wd-filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}
                   >
@@ -656,7 +696,7 @@ const WarehouseDashboard = () => {
 
                 {/* Price Filter */}
                 <div className="wd-filter-dropdown">
-                  <button 
+                  <button
                     className={`wd-filter-btn ${(filters.minPrice > 0 || filters.maxPrice < 500000) ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")}
                   >
@@ -668,7 +708,7 @@ const WarehouseDashboard = () => {
                       <div className="wd-dropdown-title">Order Value</div>
                       <div className="wd-price-slider-container">
                         <div className="wd-price-track">
-                          <div 
+                          <div
                             className="wd-price-track-filled"
                             style={{
                               left: `${(filters.minPrice / 500000) * 100}%`,
@@ -725,7 +765,7 @@ const WarehouseDashboard = () => {
 
                 {/* Payment Filter */}
                 <div className="wd-filter-dropdown">
-                  <button 
+                  <button
                     className={`wd-filter-btn ${filters.payment.length > 0 ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}
                   >
@@ -752,7 +792,7 @@ const WarehouseDashboard = () => {
 
                 {/* Priority Filter */}
                 <div className="wd-filter-dropdown">
-                  <button 
+                  <button
                     className={`wd-filter-btn ${filters.priority.length > 0 ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}
                   >
@@ -779,7 +819,7 @@ const WarehouseDashboard = () => {
 
                 {/* Order Type Filter */}
                 <div className="wd-filter-dropdown">
-                  <button 
+                  <button
                     className={`wd-filter-btn ${filters.orderType.length > 0 ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "orderType" ? null : "orderType")}
                   >
@@ -806,7 +846,7 @@ const WarehouseDashboard = () => {
 
                 {/* Store Filter */}
                 <div className="wd-filter-dropdown">
-                  <button 
+                  <button
                     className={`wd-filter-btn ${filters.store.length > 0 ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "store" ? null : "store")}
                   >
@@ -833,7 +873,7 @@ const WarehouseDashboard = () => {
 
                 {/* Salesperson Filter */}
                 <div className="wd-filter-dropdown">
-                  <button 
+                  <button
                     className={`wd-filter-btn ${filters.salesperson ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "salesperson" ? null : "salesperson")}
                   >
@@ -924,6 +964,16 @@ const WarehouseDashboard = () => {
                             >
                               {pdfLoading === order.id ? "Generating..." : "Generate PDF"}
                             </button>
+                            {order.attachments && order.attachments.length > 0 && (
+                              <button
+                                className="ad-attachments-btn"
+                                onClick={(e) => handleDownloadAttachments(e, order)}
+                                disabled={attachmentLoading === order.id}
+                                title={`Download ${order.attachments.length} attachment(s)`}
+                              >
+                                {attachmentLoading === order.id ? "..." : `📎 Attachments`}
+                              </button>
+                            )}
                           </div>
                         </div>
 

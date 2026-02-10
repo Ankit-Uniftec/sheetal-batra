@@ -449,7 +449,13 @@ export default function ReviewDetail() {
       console.error("❌ Error message:", e.message);
       console.error("❌ Error stack:", e.stack);
       console.error("❌ Full error:", e);
-      alert(e.message || "Failed to place order");
+      showPopup({
+        title: "Failed",
+        message: "Failed to place order.",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert(e.message || "Failed to place order");
       setLoading(false);
       setShowSignature(false);
     }
@@ -468,7 +474,13 @@ export default function ReviewDetail() {
 
     } catch (e) {
       console.error("❌ Auto signature error:", e.message);
-      alert(e.message || "Failed to place order");
+      showPopup({
+        title: "Failed",
+        message: "Failed to place order.",
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert(e.message || "Failed to place order");
       setLoading(false);
       setShowSignature(false);
     }

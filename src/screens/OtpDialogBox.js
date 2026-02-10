@@ -73,7 +73,13 @@ export default function OtpDialogBox() {
     setLoading(false);
 
     if (error) {
-      alert(error.message);
+      showPopup({
+        title: "Error",
+        message: error.message,
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert(error.message);
       return;
     }
 
@@ -106,7 +112,13 @@ export default function OtpDialogBox() {
     setLoading(false);
 
     if (error) {
-      alert(error.message);
+      showPopup({
+        title: "Error",
+        message: error.message,
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert(error.message);
       return;
     }
 

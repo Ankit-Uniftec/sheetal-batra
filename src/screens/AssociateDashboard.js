@@ -254,33 +254,6 @@ export default function Dashboard() {
     loadAllData();
   }, []);
 
-  // Download all attachments
-  const downloadAttachments = async (attachments, orderNo) => {
-    if (!attachments || attachments.length === 0) return;
-
-    for (let i = 0; i < attachments.length; i++) {
-      const url = attachments[i];
-      try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-
-        const fileName = url.split("/").pop() || `attachment_${i + 1}`;
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `${orderNo}_${fileName}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-
-        if (i < attachments.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } catch (err) {
-        console.error("Download failed for:", url, err);
-      }
-    }
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

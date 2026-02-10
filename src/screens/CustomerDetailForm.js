@@ -114,7 +114,13 @@ export default function CustomerDetailForm() {
     setLoading(false);
 
     if (error) {
-      alert(error.message);
+      showPopup({
+        title: "Error",
+        message: error.message,
+        type: "error",
+        confirmText: "Ok",
+      })
+      // alert(error.message);
       return;
     }
 

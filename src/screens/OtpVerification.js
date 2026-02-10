@@ -151,7 +151,7 @@ export default function OtpVerification() {
       if (error) {
         setLoading(false);
         setStatusMessage("");
-        alert(error.message);
+        // alert(error.message);
         return;
       }
 

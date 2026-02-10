@@ -75,6 +75,8 @@ export default function SALogin() {
       navigate("/inventoryDashboard");
     } else if (userRecord.role === "accounts") {
       navigate("/accounts")
+    } else if (userRecord.role === "admin") {
+      navigate("/admin")
     }else {
       showPopup({
         title: "Unknown role",
