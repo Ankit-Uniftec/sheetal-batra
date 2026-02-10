@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import "./WarehouseDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -16,39 +16,22 @@ const ALTERATION_STATUS_OPTIONS = [
   { value: "delivered", label: "Delivered", color: "#388e3c" },
 ];
 
-// Filter tabs
-const FILTER_TABS = [
+// Status Tabs (Primary Filter - Mutually Exclusive by Order Lifecycle)
+const STATUS_TABS = [
   { value: "all", label: "All Orders" },
-  { value: "normal", label: "Normal Orders" },
-  { value: "urgent", label: "Urgent Orders" },
-  { value: "unfulfilled", label: "Unfulfilled Orders" },
-  { value: "completed", label: "Completed Orders" },
-  { value: "cancelled", label: "Cancelled Orders" },
-  { value: "alteration", label: "Alteration" },
+  { value: "unfulfilled", label: "Unfulfilled" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+  // { value: "alteration", label: "Alterations" },
 ];
 
 const getMeasurementLabel = (key) => {
   if (!key) return key;
-
-  // TOP garments
-  const topKeys = [
-    "KurtaChogaKaftan",
-    "Blouse",
-    "Anarkali"
-  ];
-
-  // BOTTOM garments
-  const bottomKeys = [
-    "SalwarDhoti",
-    "ChuridaarTrouserPantsPlazo",
-    "ShararaGharara"
-  ];
-
+  const topKeys = ["KurtaChogaKaftan", "Blouse", "Anarkali"];
+  const bottomKeys = ["SalwarDhoti", "ChuridaarTrouserPantsPlazo", "ShararaGharara"];
   if (topKeys.includes(key)) return "Top";
   if (bottomKeys.includes(key)) return "Bottom";
   if (key === "Lehenga") return "Lehenga";
-
-  // Return original key if not matched
   return key;
 };
 
@@ -65,9 +48,31 @@ const WarehouseDashboard = () => {
   const [activeTab, setActiveTab] = useState("orders");
   const [showSidebar, setShowSidebar] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterTab, setFilterTab] = useState("all");
   const [statusUpdating, setStatusUpdating] = useState(null);
+
+  // Search & Sort
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
+
+  // Status Tab (Primary Filter)
+  const [statusTab, setStatusTab] = useState("all");
+
+  // Secondary Filters
+  const [filters, setFilters] = useState({
+    dateFrom: "",
+    dateTo: "",
+    minPrice: 0,
+    maxPrice: 500000,
+    payment: [],
+    priority: [],
+    orderType: [],
+    store: [],
+    salesperson: "",
+  });
+
+  // Filter dropdown states
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const dropdownRef = useRef(null);
 
   // Calendar state
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -81,9 +86,25 @@ const WarehouseDashboard = () => {
   const [viewingImages, setViewingImages] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  // Date range filter state
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Get unique salespersons from orders
+  const salespersons = useMemo(() => {
+    const spSet = new Set();
+    orders.forEach(o => {
+      if (o.salesperson) spSet.add(o.salesperson);
+    });
+    return Array.from(spSet).sort();
+  }, [orders]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -91,22 +112,16 @@ const WarehouseDashboard = () => {
   };
 
   const getWarehouseDate = (dateStr, orderDateStr) => {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     const deliveryDate = new Date(dateStr);
-    if (isNaN(deliveryDate)) return "—";
-
-    // If order date provided, check the gap
+    if (isNaN(deliveryDate)) return "-";
     if (orderDateStr) {
       const orderDate = new Date(orderDateStr);
       const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
-
-      // Only subtract 2 days if there's enough gap
       if (daysDiff >= 2) {
         deliveryDate.setDate(deliveryDate.getDate() - 2);
       }
-      // If gap < 2 days, show delivery date as-is (no subtraction)
     }
-
     return deliveryDate.toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "2-digit",
@@ -114,12 +129,10 @@ const WarehouseDashboard = () => {
     }).replace(/\//g, "-");
   };
 
-
   const getWarehouseDateForCalendar = (dateStr, orderDateStr) => {
     if (!dateStr) return null;
     const deliveryDate = new Date(dateStr);
     if (isNaN(deliveryDate)) return null;
-
     if (orderDateStr) {
       const orderDate = new Date(orderDateStr);
       const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
@@ -127,30 +140,20 @@ const WarehouseDashboard = () => {
         deliveryDate.setDate(deliveryDate.getDate() - 2);
       }
     }
-
     return formatDate(deliveryDate);
   };
 
-
-  // Format measurements safely - FILTER OUT EMPTY VALUES
   const renderMeasurements = (m) => {
     if (!m || typeof m !== "object") {
       return <span className="wd-no-measurements">No measurements</span>;
     }
-
     return Object.entries(m).map(([key, value]) => {
       if (typeof value === "object" && value !== null) {
-        // Filter out empty values
         const nonEmptyFields = Object.entries(value).filter(
           ([_, v]) => v !== '' && v !== null && v !== undefined
         );
-
-        // Skip category if all fields are empty
         if (nonEmptyFields.length === 0) return null;
-
-        // Get simplified label (Top/Bottom) instead of raw key
         const displayLabel = getMeasurementLabel(key);
-
         return (
           <div key={key} className="wd-measurement-card">
             <div className="wd-measurement-card-title">{displayLabel}</div>
@@ -165,10 +168,7 @@ const WarehouseDashboard = () => {
           </div>
         );
       }
-
-      // Skip empty flat values
       if (value === '' || value === null || value === undefined) return null;
-
       return (
         <div key={key} className="wd-measurement-card wd-flat">
           <span className="wd-measurement-item">
@@ -185,7 +185,6 @@ const WarehouseDashboard = () => {
       .from("orders")
       .select("*")
       .order("created_at", { ascending: false });
-
     if (!error) {
       setOrders(data || []);
     }
@@ -196,80 +195,68 @@ const WarehouseDashboard = () => {
     fetchOrders();
   }, []);
 
-  // Calendar minimum date
-  const MIN_CALENDAR_DATE = new Date(2025, 11, 1); // December 2025
+  const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
 
-  // Filter orders based on filter tab
-  // Only show Warehouse alterations (not In-Store)
-  const filteredByTab = useMemo(() => {
-    switch (filterTab) {
-      case "normal":
-        return orders.filter(o => {
-          if (isLxrtsOrder(o)) return false;
-          const status = o.status?.toLowerCase();
-          return !o.is_alteration &&
-            !o.is_urgent &&
-            o.order_flag !== "Urgent" &&
-            status !== "completed" &&
-            status !== "delivered" &&
-            status !== "cancelled";
-        });
+  // Get payment status of an order
+  const getPaymentStatus = (order) => {
+    const total = order.grand_total || order.net_total || 0;
+    const advance = order.advance_payment || 0;
+    if (advance >= total) return "paid";
+    if (advance > 0) return "partial";
+    return "unpaid";
+  };
 
-      case "urgent":
-        // ✅ FIX: Added cancelled exclusion to match tabCounts
-        return orders.filter(o => {
-          if (isLxrtsOrder(o)) return false;
-          const status = o.status?.toLowerCase();
-          return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
-            status !== "completed" &&
-            status !== "delivered" &&
-            status !== "cancelled" &&
-            (!o.is_alteration || o.alteration_location === "Warehouse");
-        });
+  // Get priority of an order
+  const getPriority = (order) => {
+    if (order.is_urgent || order.order_flag === "Urgent" || order.alteration_status === "upcoming_occasion") {
+      return "urgent";
+    }
+    return "normal";
+  };
 
-      case "unfulfilled":
-        return orders.filter(o => {
-          if (isLxrtsOrder(o)) return false;
-          const status = o.status?.toLowerCase();
+  // Get order type
+  const getOrderType = (order) => {
+    if (order.is_alteration) return "alteration";
+    const item = order.items?.[0];
+    if (item?.order_type === "Custom" || item?.payment_order_type === "Custom") return "custom";
+    return "standard";
+  };
+
+  // Filter orders based on status tab
+  const filteredByStatus = useMemo(() => {
+    return orders.filter(o => {
+      if (isLxrtsOrder(o)) return false;
+      
+      const status = o.status?.toLowerCase();
+      
+      switch (statusTab) {
+        case "unfulfilled":
+          // All orders that are still being worked on (not completed/delivered/cancelled)
           return status !== "completed" &&
             status !== "delivered" &&
             status !== "cancelled" &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
-        });
-
-      case "completed":
-        return orders.filter(o => {
-          if (isLxrtsOrder(o)) return false;
-          const status = o.status?.toLowerCase();
+        case "completed":
+          // Finished orders
           return (status === "completed" || status === "delivered") &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
-        });
-
-      case "cancelled":
-        return orders.filter(o => {
-          if (isLxrtsOrder(o)) return false;
-          const status = o.status?.toLowerCase();
+        case "cancelled":
           return status === "cancelled" &&
             (!o.is_alteration || o.alteration_location === "Warehouse");
-        });
-
-      case "alteration":
-        return orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse");
-
-      default:
-        // "All" tab - show everything except LXRTS
-        return orders.filter(o => {
-          if (isLxrtsOrder(o)) return false;
+        case "alteration":
+          return o.is_alteration && o.alteration_location === "Warehouse";
+        default:
+          // "all" - show everything except in-store alterations
           return !o.is_alteration || o.alteration_location === "Warehouse";
-        });
-    }
-  }, [orders, filterTab]);
+      }
+    });
+  }, [orders, statusTab]);
 
-  // Filter orders based on search
+  // Apply secondary filters
   const filteredOrders = useMemo(() => {
-    let result = filteredByTab;
+    let result = filteredByStatus;
 
-    // Apply search filter
+    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((order) => {
@@ -278,107 +265,172 @@ const WarehouseDashboard = () => {
           order.order_no?.toLowerCase().includes(query) ||
           item.product_name?.toLowerCase().includes(query) ||
           order.delivery_name?.toLowerCase().includes(query) ||
-          order.status?.toLowerCase().includes(query) ||
-          order.alteration_type?.toLowerCase().includes(query)
+          order.delivery_phone?.includes(query) ||
+          order.salesperson?.toLowerCase().includes(query)
         );
       });
     }
 
-    // Apply date range filter (using warehouse date)
-    if (dateFrom || dateTo) {
+    // Date range filter
+    if (filters.dateFrom || filters.dateTo) {
       result = result.filter((order) => {
         const warehouseDate = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
         if (!warehouseDate) return false;
-
-        // Parse warehouse date (DD-MM-YYYY format from formatDate)
         const [day, month, year] = warehouseDate.split("-");
         const orderDate = new Date(year, month - 1, day);
-
-        if (dateFrom) {
-          const fromDate = new Date(dateFrom);
-          if (orderDate < fromDate) return false;
-        }
-
-        if (dateTo) {
-          const toDate = new Date(dateTo);
-          if (orderDate > toDate) return false;
-        }
-
+        if (filters.dateFrom && orderDate < new Date(filters.dateFrom)) return false;
+        if (filters.dateTo && orderDate > new Date(filters.dateTo)) return false;
         return true;
       });
     }
 
+    // Price range filter
+    if (filters.minPrice > 0 || filters.maxPrice < 500000) {
+      result = result.filter((order) => {
+        const total = order.grand_total || order.net_total || 0;
+        return total >= filters.minPrice && total <= filters.maxPrice;
+      });
+    }
+
+    // Payment status filter
+    if (filters.payment.length > 0) {
+      result = result.filter((order) => filters.payment.includes(getPaymentStatus(order)));
+    }
+
+    // Priority filter
+    if (filters.priority.length > 0) {
+      result = result.filter((order) => filters.priority.includes(getPriority(order)));
+    }
+
+    // Order type filter
+    if (filters.orderType.length > 0) {
+      result = result.filter((order) => filters.orderType.includes(getOrderType(order)));
+    }
+
+    // Store filter
+    if (filters.store.length > 0) {
+      result = result.filter((order) => filters.store.includes(order.salesperson_store));
+    }
+
+    // Salesperson filter
+    if (filters.salesperson) {
+      result = result.filter((order) => order.salesperson === filters.salesperson);
+    }
+
+    // Sorting
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case "oldest":
+          return new Date(a.created_at) - new Date(b.created_at);
+        case "delivery":
+          return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
+        case "amount_high":
+          return (b.grand_total || 0) - (a.grand_total || 0);
+        case "amount_low":
+          return (a.grand_total || 0) - (b.grand_total || 0);
+        default:
+          return new Date(b.created_at) - new Date(a.created_at);
+      }
+    });
+
     return result;
-  }, [filteredByTab, searchQuery, dateFrom, dateTo]);
+  }, [filteredByStatus, searchQuery, filters, sortBy]);
 
-  // Get counts for tabs
+  // Tab counts
   const tabCounts = useMemo(() => {
+    const validOrders = orders.filter(o => !isLxrtsOrder(o));
     return {
-      all: orders.filter(o => {
-        if (isLxrtsOrder(o)) return false;
-        return !o.is_alteration || o.alteration_location === "Warehouse";
-      }).length,
-
-      normal: orders.filter(o => {
-        if (isLxrtsOrder(o)) return false;
-        const status = o.status?.toLowerCase();
-        return !o.is_alteration &&
-          !o.is_urgent &&
-          o.order_flag !== "Urgent" &&
-          status !== "completed" &&
-          status !== "delivered" &&
-          status !== "cancelled";
-      }).length,
-
-      urgent: orders.filter(o => {
-        if (isLxrtsOrder(o)) return false;
-        const status = o.status?.toLowerCase();
-        return (o.is_urgent || o.order_flag === "Urgent" || o.alteration_status === "upcoming_occasion") &&
-          status !== "completed" &&
-          status !== "delivered" &&
-          status !== "cancelled" &&
-          (!o.is_alteration || o.alteration_location === "Warehouse");
-      }).length,
-
-      unfulfilled: orders.filter(o => {
-        if (isLxrtsOrder(o)) return false;
+      all: validOrders.filter(o => !o.is_alteration || o.alteration_location === "Warehouse").length,
+      unfulfilled: validOrders.filter(o => {
         const status = o.status?.toLowerCase();
         return status !== "completed" &&
           status !== "delivered" &&
           status !== "cancelled" &&
           (!o.is_alteration || o.alteration_location === "Warehouse");
       }).length,
-
-      completed: orders.filter(o => {
-        if (isLxrtsOrder(o)) return false;
+      completed: validOrders.filter(o => {
         const status = o.status?.toLowerCase();
         return (status === "completed" || status === "delivered") &&
           (!o.is_alteration || o.alteration_location === "Warehouse");
       }).length,
-
-      cancelled: orders.filter(o => {
-        if (isLxrtsOrder(o)) return false;
+      cancelled: validOrders.filter(o => {
         const status = o.status?.toLowerCase();
         return status === "cancelled" &&
           (!o.is_alteration || o.alteration_location === "Warehouse");
       }).length,
-
-      alteration: orders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
+      alteration: validOrders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
     };
   }, [orders]);
 
-  // Memoize ordersByDate for calendar
+  // Applied filters for chips
+  const appliedFilters = useMemo(() => {
+    const chips = [];
+    if (filters.dateFrom || filters.dateTo) {
+      const label = filters.dateFrom && filters.dateTo
+        ? `${filters.dateFrom} to ${filters.dateTo}`
+        : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
+      chips.push({ type: "date", label });
+    }
+    if (filters.minPrice > 0 || filters.maxPrice < 500000) {
+      chips.push({ type: "price", label: `Rs.${(filters.minPrice/1000).toFixed(0)}K - Rs.${(filters.maxPrice/1000).toFixed(0)}K` });
+    }
+    filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
+    filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
+    filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }));
+    filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
+    if (filters.salesperson) {
+      chips.push({ type: "salesperson", label: filters.salesperson });
+    }
+    return chips;
+  }, [filters]);
+
+  // Remove a filter
+  const removeFilter = (type, value) => {
+    if (type === "date") {
+      setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+    } else if (type === "price") {
+      setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
+    } else if (type === "salesperson") {
+      setFilters(prev => ({ ...prev, salesperson: "" }));
+    } else {
+      setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
+    }
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setFilters({
+      dateFrom: "",
+      dateTo: "",
+      minPrice: 0,
+      maxPrice: 500000,
+      payment: [],
+      priority: [],
+      orderType: [],
+      store: [],
+      salesperson: "",
+    });
+  };
+
+  // Toggle filter checkbox
+  const toggleFilter = (category, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [category]: prev[category].includes(value)
+        ? prev[category].filter(v => v !== value)
+        : [...prev[category], value]
+    }));
+  };
+
+  // Calendar ordersByDate
   const ordersByDate = useMemo(() => {
     return orders
-      .filter(o => !isLxrtsOrder(o)) // ✅ Exclude LXRTS from calendar
+      .filter(o => !isLxrtsOrder(o))
       .reduce((acc, order) => {
         if (!order.delivery_date) return acc;
-
-        // Use warehouse date (minus 2 days if gap allows)
         const warehouseDate = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
-        const date = warehouseDate;
-        if (date) {
-          acc[date] = (acc[date] || 0) + 1;
+        if (warehouseDate) {
+          acc[warehouseDate] = (acc[warehouseDate] || 0) + 1;
         }
         return acc;
       }, {});
@@ -389,37 +441,25 @@ const WarehouseDashboard = () => {
       .from("orders")
       .update({ status: "completed" })
       .eq("id", orderId);
-
     if (!error) fetchOrders();
   };
 
-  // Update alteration status
   const updateAlterationStatus = async (orderId, newStatus) => {
     setStatusUpdating(orderId);
     try {
       const updateData = { status: newStatus };
-
-      // If marking as delivered, set delivered_at
       if (newStatus === "delivered") {
         updateData.delivered_at = new Date().toISOString();
       }
-
       const { error } = await supabase
         .from("orders")
         .update(updateData)
         .eq("id", orderId);
-
       if (!error) {
         fetchOrders();
       } else {
         console.error("Status update failed:", error);
-        showPopup({
-          title: "Status update",
-          message: "Failed to update status",
-          type: "error",
-          confirmText: "Ok",
-        })
-        // alert("Failed to update status");
+        showPopup({ title: "Status update", message: "Failed to update status", type: "error", confirmText: "Ok" });
       }
     } catch (err) {
       console.error("Error updating status:", err);
@@ -428,7 +468,6 @@ const WarehouseDashboard = () => {
     }
   };
 
-  // Handle PDF generation on-demand
   const handleGeneratePdf = async (order) => {
     setPdfLoading(order.id);
     try {
@@ -441,80 +480,46 @@ const WarehouseDashboard = () => {
     }
   };
 
-  // Navigate to parent order
   const viewParentOrder = (parentOrderId) => {
     const parentOrder = orders.find(o => o.id === parentOrderId);
     if (parentOrder) {
-      // Scroll to that order or highlight it
       setSearchQuery(parentOrder.order_no);
-      setFilterTab("all");
+      setStatusTab("all");
     }
   };
 
-  // Pagination logic
+  // Pagination
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
-  const endIndex = startIndex + ordersPerPage;
-  const currentOrders = filteredOrders.slice(startIndex, endIndex);
+  const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
 
-  // Reset to page 1 when search or filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterTab]);
+  }, [searchQuery, statusTab, filters, sortBy]);
 
   const goToPage = (page) => setCurrentPage(page);
   const goToPrevious = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
   const goToNext = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
 
-  // Smart pagination - generate page numbers with ellipsis
   const getPageNumbers = () => {
     const pages = [];
     const maxVisible = 5;
-
     if (totalPages <= maxVisible + 2) {
-      // Show all pages if total is small (7 or fewer)
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
     } else {
-      // Always show first page
       pages.push(1);
-
-      // Calculate start and end of visible window
       let start = Math.max(2, currentPage - 1);
       let end = Math.min(totalPages - 1, currentPage + 1);
-
-      // Adjust window to show at least 3 middle pages
-      if (currentPage <= 3) {
-        end = Math.min(totalPages - 1, 4);
-      }
-      if (currentPage >= totalPages - 2) {
-        start = Math.max(2, totalPages - 3);
-      }
-
-      // Add ellipsis before middle pages if needed
-      if (start > 2) {
-        pages.push('...');
-      }
-
-      // Add middle pages
-      for (let i = start; i <= end; i++) {
-        pages.push(i);
-      }
-
-      // Add ellipsis after middle pages if needed
-      if (end < totalPages - 1) {
-        pages.push('...');
-      }
-
-      // Always show last page
+      if (currentPage <= 3) end = Math.min(totalPages - 1, 4);
+      if (currentPage >= totalPages - 2) start = Math.max(2, totalPages - 3);
+      if (start > 2) pages.push('...');
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (end < totalPages - 1) pages.push('...');
       pages.push(totalPages);
     }
-
     return pages;
   };
 
-  // Get alteration type display
   const getAlterationTypeLabel = (type) => {
     const types = {
       fitting_tightening: "Fitting Issue (Tightening)",
@@ -523,10 +528,9 @@ const WarehouseDashboard = () => {
       fabric_issue: "Fabric Issue",
       other: "Other",
     };
-    return types[type] || type || "—";
+    return types[type] || type || "-";
   };
 
-  // Get status color
   const getStatusColor = (status) => {
     const option = ALTERATION_STATUS_OPTIONS.find(o => o.value === status);
     return option?.color || "#666";
@@ -534,8 +538,8 @@ const WarehouseDashboard = () => {
 
   return (
     <div className="wd-dashboard-wrapper">
-      {/* Popup Component */}
       {PopupComponent}
+      
       {/* HEADER */}
       <div className="wd-top-header">
         <div className="wd-header-left">
@@ -544,9 +548,9 @@ const WarehouseDashboard = () => {
         <h1 className="wd-title">Warehouse Dashboard</h1>
       </div>
 
-      {/* MAIN LAYOUT WITH SIDEBAR */}
+      {/* MAIN LAYOUT */}
       <div className="wd-main-layout">
-        {/* Hamburger for mobile */}
+        {/* Hamburger */}
         <div className="wd-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
           <div className="wd-bar"></div>
           <div className="wd-bar"></div>
@@ -556,108 +560,320 @@ const WarehouseDashboard = () => {
         {/* SIDEBAR */}
         <aside className={`wd-sidebar ${showSidebar ? "wd-open" : ""}`}>
           <nav className="wd-menu">
-            <a
-              className={`wd-menu-item ${activeTab === "orders" ? "active" : ""}`}
-              onClick={() => {
-                setActiveTab("orders");
-                setShowSidebar(false);
-              }}
-            >
+            <a className={`wd-menu-item ${activeTab === "orders" ? "active" : ""}`}
+              onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>
               Order History
             </a>
-            <a
-              className={`wd-menu-item ${activeTab === "calendar" ? "active" : ""}`}
-              onClick={() => {
-                setActiveTab("calendar");
-                setShowSidebar(false);
-              }}
-            >
+            <a className={`wd-menu-item ${activeTab === "calendar" ? "active" : ""}`}
+              onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>
               Calendar
             </a>
-            <a className="wd-menu-item" onClick={handleLogout}>
-              Log Out
-            </a>
+            <a className="wd-menu-item" onClick={handleLogout}>Log Out</a>
           </nav>
         </aside>
 
         {/* CONTENT AREA */}
         <div className="wd-content-area">
-          {/* ORDERS TAB */}
           {activeTab === "orders" && (
             <div className="wd-orders-section">
-              {/* Header with count */}
+              {/* Header */}
               <div className="wd-orders-header">
                 <h2 className="wd-section-title">Order History</h2>
                 <span className="wd-orders-count">{filteredOrders.length} Orders</span>
               </div>
 
-              {/* Filter Tabs */}
-              <div className="wd-filter-tabs">
-                {FILTER_TABS.map((tab) => (
+              {/* Search & Sort Bar */}
+              <div className="wd-search-sort-bar">
+                <div className="wd-search-wrapper">
+                  <span className="wd-search-icon">&#128269;</span>
+                  <input
+                    type="text"
+                    placeholder="Search Order #, Customer, Product..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="wd-search-input"
+                  />
+                  {searchQuery && (
+                    <button className="wd-search-clear" onClick={() => setSearchQuery("")}>x</button>
+                  )}
+                </div>
+                <div className="wd-sort-export">
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="wd-sort-select">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="delivery">Delivery Date</option>
+                    <option value="amount_high">Amount: High to Low</option>
+                    <option value="amount_low">Amount: Low to High</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Status Tabs */}
+              <div className="wd-status-tabs">
+                {STATUS_TABS.map((tab) => (
                   <button
                     key={tab.value}
-                    className={`wd-filter-tab ${filterTab === tab.value ? "active" : ""}`}
-                    onClick={() => setFilterTab(tab.value)}
+                    className={`wd-status-tab ${statusTab === tab.value ? "active" : ""}`}
+                    onClick={() => setStatusTab(tab.value)}
                   >
                     {tab.label}
-                    <span className="wd-tab-count">({tabCounts[tab.value]})</span>
+                    <span className="wd-tab-count">{tabCounts[tab.value]}</span>
                   </button>
                 ))}
               </div>
 
-              {/* Search Bar */}
-              <div className="wd-search-bar">
-                <input
-                  type="text"
-                  placeholder="Search by Order ID, Product Name, Customer Name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="wd-search-input"
-                />
-                {searchQuery && (
-                  <button
-                    className="wd-search-clear"
-                    onClick={() => setSearchQuery("")}
+              {/* Horizontal Filter Dropdowns */}
+              <div className="wd-filter-dropdowns" ref={dropdownRef}>
+                {/* Date Filter */}
+                <div className="wd-filter-dropdown">
+                  <button 
+                    className={`wd-filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}
                   >
-                    ✕
+                    Date Range
+                    <span className="wd-dropdown-arrow">&#9662;</span>
                   </button>
-                )}
+                  {openDropdown === "date" && (
+                    <div className="wd-dropdown-panel">
+                      <div className="wd-dropdown-title">Select Date Range</div>
+                      <div className="wd-date-inputs">
+                        <input
+                          type="date"
+                          value={filters.dateFrom}
+                          onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                        />
+                        <span>to</span>
+                        <input
+                          type="date"
+                          value={filters.dateTo}
+                          onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                        />
+                      </div>
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Price Filter */}
+                <div className="wd-filter-dropdown">
+                  <button 
+                    className={`wd-filter-btn ${(filters.minPrice > 0 || filters.maxPrice < 500000) ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")}
+                  >
+                    Price
+                    <span className="wd-dropdown-arrow">&#9662;</span>
+                  </button>
+                  {openDropdown === "price" && (
+                    <div className="wd-dropdown-panel wd-price-panel">
+                      <div className="wd-dropdown-title">Order Value</div>
+                      <div className="wd-price-slider-container">
+                        <div className="wd-price-track">
+                          <div 
+                            className="wd-price-track-filled"
+                            style={{
+                              left: `${(filters.minPrice / 500000) * 100}%`,
+                              width: `${((filters.maxPrice - filters.minPrice) / 500000) * 100}%`
+                            }}
+                          />
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="500000"
+                          step="5000"
+                          value={filters.minPrice}
+                          onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 5000) }))}
+                          className="wd-price-slider wd-price-slider-min"
+                        />
+                        <input
+                          type="range"
+                          min="0"
+                          max="500000"
+                          step="5000"
+                          value={filters.maxPrice}
+                          onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 5000) }))}
+                          className="wd-price-slider wd-price-slider-max"
+                        />
+                      </div>
+                      <div className="wd-price-labels">
+                        <span>Rs.0</span>
+                        <span>Rs.5,00,000</span>
+                      </div>
+                      <div className="wd-price-inputs">
+                        <div className="wd-price-input-wrap">
+                          <span>Rs.</span>
+                          <input
+                            type="number"
+                            value={filters.minPrice}
+                            onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 5000) }))}
+                          />
+                        </div>
+                        <span>to</span>
+                        <div className="wd-price-input-wrap">
+                          <span>Rs.</span>
+                          <input
+                            type="number"
+                            value={filters.maxPrice}
+                            onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 5000) }))}
+                          />
+                        </div>
+                      </div>
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Filter */}
+                <div className="wd-filter-dropdown">
+                  <button 
+                    className={`wd-filter-btn ${filters.payment.length > 0 ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}
+                  >
+                    Payment
+                    <span className="wd-dropdown-arrow">&#9662;</span>
+                  </button>
+                  {openDropdown === "payment" && (
+                    <div className="wd-dropdown-panel">
+                      <div className="wd-dropdown-title">Payment Status</div>
+                      {["paid", "partial", "unpaid"].map(opt => (
+                        <label key={opt} className="wd-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={filters.payment.includes(opt)}
+                            onChange={() => toggleFilter("payment", opt)}
+                          />
+                          <span>{opt === "unpaid" ? "Unpaid (COD)" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                        </label>
+                      ))}
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Priority Filter */}
+                <div className="wd-filter-dropdown">
+                  <button 
+                    className={`wd-filter-btn ${filters.priority.length > 0 ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}
+                  >
+                    Priority
+                    <span className="wd-dropdown-arrow">&#9662;</span>
+                  </button>
+                  {openDropdown === "priority" && (
+                    <div className="wd-dropdown-panel">
+                      <div className="wd-dropdown-title">Priority</div>
+                      {["normal", "urgent"].map(opt => (
+                        <label key={opt} className="wd-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={filters.priority.includes(opt)}
+                            onChange={() => toggleFilter("priority", opt)}
+                          />
+                          <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                        </label>
+                      ))}
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Order Type Filter */}
+                <div className="wd-filter-dropdown">
+                  <button 
+                    className={`wd-filter-btn ${filters.orderType.length > 0 ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "orderType" ? null : "orderType")}
+                  >
+                    Order Type
+                    <span className="wd-dropdown-arrow">&#9662;</span>
+                  </button>
+                  {openDropdown === "orderType" && (
+                    <div className="wd-dropdown-panel">
+                      <div className="wd-dropdown-title">Order Type</div>
+                      {["standard", "custom", "alteration"].map(opt => (
+                        <label key={opt} className="wd-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={filters.orderType.includes(opt)}
+                            onChange={() => toggleFilter("orderType", opt)}
+                          />
+                          <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                        </label>
+                      ))}
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Store Filter */}
+                <div className="wd-filter-dropdown">
+                  <button 
+                    className={`wd-filter-btn ${filters.store.length > 0 ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "store" ? null : "store")}
+                  >
+                    Store
+                    <span className="wd-dropdown-arrow">&#9662;</span>
+                  </button>
+                  {openDropdown === "store" && (
+                    <div className="wd-dropdown-panel">
+                      <div className="wd-dropdown-title">Store</div>
+                      {["Delhi Store", "Ludhiana Store"].map(opt => (
+                        <label key={opt} className="wd-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={filters.store.includes(opt)}
+                            onChange={() => toggleFilter("store", opt)}
+                          />
+                          <span>{opt}</span>
+                        </label>
+                      ))}
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Salesperson Filter */}
+                <div className="wd-filter-dropdown">
+                  <button 
+                    className={`wd-filter-btn ${filters.salesperson ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "salesperson" ? null : "salesperson")}
+                  >
+                    Salesperson
+                    <span className="wd-dropdown-arrow">&#9662;</span>
+                  </button>
+                  {openDropdown === "salesperson" && (
+                    <div className="wd-dropdown-panel">
+                      <div className="wd-dropdown-title">Salesperson</div>
+                      <select
+                        value={filters.salesperson}
+                        onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}
+                        className="wd-sp-select"
+                      >
+                        <option value="">All Salespersons</option>
+                        {salespersons.map(sp => (
+                          <option key={sp} value={sp}>{sp}</option>
+                        ))}
+                      </select>
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Date Range Filter */}
-              <div className="wd-date-filter">
-                <div className="wd-date-field">
-                  <label>From:</label>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="wd-date-input"
-                  />
+              {/* Applied Filter Chips */}
+              {appliedFilters.length > 0 && (
+                <div className="wd-applied-filters">
+                  <span className="wd-applied-label">Applied:</span>
+                  {appliedFilters.map((chip, i) => (
+                    <span key={i} className="wd-filter-chip">
+                      {chip.label}
+                      <button onClick={() => removeFilter(chip.type, chip.value)}>x</button>
+                    </span>
+                  ))}
+                  <button className="wd-clear-all" onClick={clearAllFilters}>Clear All</button>
                 </div>
-                <div className="wd-date-field">
-                  <label>To:</label>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="wd-date-input"
-                  />
-                </div>
-                {(dateFrom || dateTo) && (
-                  <button
-                    className="wd-date-clear"
-                    onClick={() => {
-                      setDateFrom("");
-                      setDateTo("");
-                    }}
-                  >
-                    Clear Dates
-                  </button>
-                )}
-              </div>
+              )}
 
-              {/* Scrollable Orders Container */}
+              {/* Orders List - OLD DESIGN */}
               <div className="wd-orders-scroll-container">
                 {loading ? (
                   <p className="wd-loading-text">Loading orders...</p>
@@ -665,10 +881,7 @@ const WarehouseDashboard = () => {
                   <p className="wd-no-orders">No orders found.</p>
                 ) : (
                   currentOrders.map((order) => {
-                    const firstItem = Array.isArray(order.items)
-                      ? order.items[0] || {}
-                      : order.items || {};
-
+                    const firstItem = Array.isArray(order.items) ? order.items[0] || {} : order.items || {};
                     const isAlteration = order.is_alteration;
                     const isUrgent = order.alteration_status === "upcoming_occasion" || order.is_urgent;
 
@@ -681,24 +894,21 @@ const WarehouseDashboard = () => {
                         <div className="wd-order-header-row">
                           <div className="wd-order-badges">
                             <h3 className="wd-dropdown-title">
-                              {isAlteration ? "🔧 Alteration Order" : "Product Details"}
+                              {isAlteration ? "Alteration Order" : "Product Details"}
                             </h3>
 
-                            {/* Alteration Badge */}
                             {isAlteration && (
                               <span className="wd-badge wd-badge-alteration">
                                 ALTERATION
                               </span>
                             )}
 
-                            {/* Urgent Badge */}
                             {isUrgent && (
                               <span className="wd-badge wd-badge-urgent">
-                                🔥 URGENT
+                                URGENT
                               </span>
                             )}
 
-                            {/* Alteration Number */}
                             {isAlteration && order.alteration_number && (
                               <span className="wd-badge wd-badge-number">
                                 #{order.alteration_number}
@@ -725,7 +935,7 @@ const WarehouseDashboard = () => {
                               className="wd-link-btn"
                               onClick={() => viewParentOrder(order.parent_order_id)}
                             >
-                              View Parent Order →
+                              View Parent Order
                             </button>
                           </div>
                         )}
@@ -740,7 +950,7 @@ const WarehouseDashboard = () => {
                               </div>
                               <div className="wd-alteration-field">
                                 <span className="wd-alt-label">Location:</span>
-                                <span className="wd-alt-value">{order.alteration_location || "—"}</span>
+                                <span className="wd-alt-value">{order.alteration_location || "-"}</span>
                               </div>
                               <div className="wd-alteration-field">
                                 <span className="wd-alt-label">Status:</span>
@@ -760,7 +970,6 @@ const WarehouseDashboard = () => {
                               </div>
                             </div>
 
-                            {/* Alteration Notes */}
                             {order.alteration_notes && (
                               <div className="wd-alteration-notes">
                                 <span className="wd-alt-label">Notes:</span>
@@ -768,7 +977,6 @@ const WarehouseDashboard = () => {
                               </div>
                             )}
 
-                            {/* Alteration Attachments */}
                             {order.alteration_attachments && order.alteration_attachments.length > 0 && (
                               <div className="wd-alteration-attachments">
                                 <span className="wd-alt-label">Attachments:</span>
@@ -868,8 +1076,8 @@ const WarehouseDashboard = () => {
                                 }
                                 onClick={() => markAsCompleted(order.id)}
                               >
-                                {order.status === "completed" ? "Completed ✔" :
-                                  order.status === "delivered" ? "Delivered ✔" :
+                                {order.status === "completed" ? "Completed" :
+                                  order.status === "delivered" ? "Delivered" :
                                     order.status === "cancelled" ? "Cancelled" :
                                       "Mark as Completed"}
                               </button>
@@ -882,17 +1090,12 @@ const WarehouseDashboard = () => {
                 )}
               </div>
 
-              {/* Pagination Controls - SMART PAGINATION */}
+              {/* Pagination */}
               {!loading && filteredOrders.length > ordersPerPage && (
                 <div className="wd-pagination">
-                  <button
-                    className="wd-pagination-btn"
-                    onClick={goToPrevious}
-                    disabled={currentPage === 1}
-                  >
-                    ← Prev
+                  <button className="wd-pagination-btn" onClick={goToPrevious} disabled={currentPage === 1}>
+                    Prev
                   </button>
-
                   <div className="wd-pagination-pages">
                     {getPageNumbers().map((page, idx) => (
                       page === '...' ? (
@@ -908,24 +1111,18 @@ const WarehouseDashboard = () => {
                       )
                     ))}
                   </div>
-
-                  <button
-                    className="wd-pagination-btn"
-                    onClick={goToNext}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next →
+                  <button className="wd-pagination-btn" onClick={goToNext} disabled={currentPage === totalPages}>
+                    Next
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* CALENDAR TAB - ✅ INSIDE wd-content-area */}
+          {/* CALENDAR TAB */}
           {activeTab === "calendar" && (
             <div className="wd-calendar-wrapper">
               <h2 className="wd-section-title">Calendar</h2>
-
               <div className="wd-ios-calendar">
                 <div className="wd-ios-cal-header">
                   <button
@@ -938,7 +1135,7 @@ const WarehouseDashboard = () => {
                       return d;
                     })}
                   >
-                    ‹
+                    &#8249;
                   </button>
                   <span className="wd-ios-month-year">
                     {new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}
@@ -951,7 +1148,7 @@ const WarehouseDashboard = () => {
                       return d;
                     })}
                   >
-                    ›
+                    &#8250;
                   </button>
                 </div>
 
@@ -974,7 +1171,6 @@ const WarehouseDashboard = () => {
                       if (date <= 0 || date > daysInMonth) {
                         return <div key={i} className="wd-ios-date-cell wd-ios-empty" />;
                       }
-
                       const currentDay = new Date(year, month, date);
                       const fullDate = formatDate(currentDay);
                       const todayDate = formatDate(new Date());
@@ -989,9 +1185,7 @@ const WarehouseDashboard = () => {
                           onClick={() => setSelectedCalendarDate(fullDate)}
                         >
                           <span className="wd-ios-date-num">{date}</span>
-                          {orderCount > 0 && (
-                            <span className="wd-ios-order-count">{orderCount}</span>
-                          )}
+                          {orderCount > 0 && <span className="wd-ios-order-count">{orderCount}</span>}
                         </div>
                       );
                     });
@@ -1006,7 +1200,6 @@ const WarehouseDashboard = () => {
                       Orders for {selectedCalendarDate} ({orders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length})
                     </span>
                   </div>
-
                   <div className="wd-calendar-orders-list">
                     {orders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length === 0 ? (
                       <p className="wd-no-orders">No orders scheduled for this date</p>
@@ -1014,14 +1207,10 @@ const WarehouseDashboard = () => {
                       orders
                         .filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate)
                         .map((order) => (
-                          <div
-                            className="wd-calendar-order-item"
-                            key={order.id}
-                          >
+                          <div className="wd-calendar-order-item" key={order.id}>
                             <p><b>Order No:</b> {order.order_no}</p>
                             <p><b>Client Name:</b> {order.delivery_name}</p>
                             <p><b>Status:</b> {order.status || "Pending"}</p>
-                            {/* <p><b>Delivery Date:</b> {getWarehouseDate(order.delivery_date, order.created_at)}</p> */}
                           </div>
                         ))
                     )}
@@ -1033,24 +1222,20 @@ const WarehouseDashboard = () => {
         </div>
       </div>
 
-      {/* Image Viewer Modal - OUTSIDE main layout but inside dashboard wrapper */}
+      {/* Image Viewer Modal */}
       {viewingImages && (
         <div className="wd-image-modal" onClick={() => setViewingImages(null)}>
           <div className="wd-image-modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="wd-image-close" onClick={() => setViewingImages(null)}>✕</button>
+            <button className="wd-image-close" onClick={() => setViewingImages(null)}>x</button>
             <img src={viewingImages[currentImageIndex]} alt="Attachment" className="wd-image-full" />
             {viewingImages.length > 1 && (
               <div className="wd-image-nav">
-                <button
-                  onClick={() => setCurrentImageIndex((prev) => (prev - 1 + viewingImages.length) % viewingImages.length)}
-                >
-                  ←
+                <button onClick={() => setCurrentImageIndex((prev) => (prev - 1 + viewingImages.length) % viewingImages.length)}>
+                  &#8592;
                 </button>
                 <span>{currentImageIndex + 1} / {viewingImages.length}</span>
-                <button
-                  onClick={() => setCurrentImageIndex((prev) => (prev + 1) % viewingImages.length)}
-                >
-                  →
+                <button onClick={() => setCurrentImageIndex((prev) => (prev + 1) % viewingImages.length)}>
+                  &#8594;
                 </button>
               </div>
             )}
