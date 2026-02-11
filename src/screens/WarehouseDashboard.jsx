@@ -194,8 +194,19 @@ const WarehouseDashboard = () => {
   };
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    const checkAuthAndFetch = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      fetchOrders();
+    };
+
+    checkAuthAndFetch();
+  }, [navigate]);
 
   const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
 

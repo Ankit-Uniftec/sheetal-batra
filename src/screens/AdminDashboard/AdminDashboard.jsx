@@ -100,9 +100,21 @@ export default function AdminDashboard() {
     const [accountsPage, setAccountsPage] = useState(1);
 
     // ============ FETCH DATA ============
+
     useEffect(() => {
-        fetchAllData();
-    }, []);
+        const checkAuthAndFetch = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                navigate("/login", { replace: true });
+                return;
+            }
+
+            fetchAllData();
+        };
+
+        checkAuthAndFetch();
+    }, [navigate]);
 
     const fetchAllData = async () => {
         setLoading(true);

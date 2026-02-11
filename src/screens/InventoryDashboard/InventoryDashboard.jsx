@@ -33,8 +33,19 @@ export default function InventoryDashboard() {
 
   // ==================== FETCH PRODUCTS ====================
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const checkAuthAndFetch = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      fetchProducts();
+    };
+
+    checkAuthAndFetch();
+  }, [navigate]);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -592,7 +603,7 @@ export default function InventoryDashboard() {
                 </>
               ) : (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" /></svg>
                   Sync LXRTS
                 </>
               )}
@@ -652,7 +663,7 @@ export default function InventoryDashboard() {
                               title={isExpanded ? "Collapse variants" : "Show variants"}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="m9 18 6-6-6-6"/>
+                                <path d="m9 18 6-6-6-6" />
                               </svg>
                             </button>
                           ) : null}
@@ -911,9 +922,8 @@ export default function InventoryDashboard() {
                 ) : (
                   <button
                     key={page}
-                    className={`inv-page-btn ${
-                      currentPage === page ? "active" : ""
-                    }`}
+                    className={`inv-page-btn ${currentPage === page ? "active" : ""
+                      }`}
                     onClick={() => goToPage(page)}
                   >
                     {page}

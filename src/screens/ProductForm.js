@@ -283,8 +283,10 @@ const KIDS_DISCOUNT_PERCENT = {
 };
 
 const KIDS_MEASUREMENT_FIELDS = {
-  KurtaChogaKaftan: [
+  Height: [
     "Height",
+  ],
+  KurtaChogaKaftan: [
     "Shoulder",
     "Neck",
     "Upper Bust",
@@ -408,6 +410,7 @@ const CATEGORY_KEY_MAP = {
 };
 
 const CATEGORY_DISPLAY_NAMES = {
+  "Height": "Height",
   "KurtaChogaKaftan": "Kurta / Choga / Kaftan",
   "Blouse": "Blouse",
   "Anarkali": "Anarkali",
@@ -419,6 +422,7 @@ const CATEGORY_DISPLAY_NAMES = {
 
 
 const ALL_MEASUREMENT_CATEGORIES = [
+  "Height",
   "Kurta / Choga / Kaftan",
   "Blouse",
   "Anarkali",
@@ -431,8 +435,10 @@ const ALL_MEASUREMENT_CATEGORIES = [
 
 
 const measurementFields = {
-  KurtaChogaKaftan: [
+  Height: [
     "Height",
+  ],
+  KurtaChogaKaftan: [
     "Shoulder",
     "Neck",
     "Upper Bust",
@@ -718,6 +724,9 @@ export default function ProductForm() {
   const getRelevantMeasurementCategories = () => {
     const categoryKeys = new Set(); // Use Set to avoid duplicates
 
+    // Always include Height
+    categoryKeys.add("Height");
+
     // Get category key for selected top
     if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
       categoryKeys.add(CATEGORY_KEY_MAP[selectedTop]);
@@ -729,7 +738,7 @@ export default function ProductForm() {
     }
 
     // If no top/bottom selected, show all categories
-    if (categoryKeys.size === 0) {
+    if (categoryKeys.size === 1) {
       return ALL_MEASUREMENT_CATEGORIES;
     }
 
@@ -740,6 +749,9 @@ export default function ProductForm() {
 
   const getRelevantMeasurements = () => {
     const relevantKeys = new Set();
+
+    // Always include Height
+    relevantKeys.add("Height");
 
     if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
       relevantKeys.add(CATEGORY_KEY_MAP[selectedTop]);
@@ -1574,6 +1586,9 @@ export default function ProductForm() {
     // Get relevant category keys for current selection
     const relevantKeys = new Set();
 
+    // Always keep Height
+    relevantKeys.add("Height");
+
     if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
       relevantKeys.add(CATEGORY_KEY_MAP[selectedTop]);
     }
@@ -1582,7 +1597,7 @@ export default function ProductForm() {
     }
 
     // If no top/bottom selected yet, don't clean (user might be in process of selecting)
-    if (relevantKeys.size === 0) return;
+    if (relevantKeys.size === 1) return;
 
     // Remove measurements that are no longer relevant
     setMeasurements((prev) => {
