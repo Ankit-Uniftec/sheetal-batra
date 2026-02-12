@@ -820,36 +820,76 @@ export default function ProductForm() {
 
   // MANUAL AUTO-POPULATE FUNCTION
   const handleAutoPopulate = () => {
-    const categoryKey = getCategoryKeyFromDisplayName(activeCategory) || activeCategory;
-    if (!categoryKey) return;
+    if (!customerSavedMeasurements || Object.keys(customerSavedMeasurements).length === 0) {
+      showPopup({
+        title: "No Saved Profile",
+        message: "No saved measurements found for this customer.",
+        type: "info",
+      });
+      return;
+    }
 
-    // ONLY use customer saved measurements (this makes it Custom)
-    if (customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0) {
-      const savedCategoryData = customerSavedMeasurements[categoryKey];
-      if (savedCategoryData && Object.keys(savedCategoryData).length > 0) {
-        setMeasurements((prev) => ({
-          ...prev,
-          [categoryKey]: {
-            ...(prev[categoryKey] || {}),
-            ...savedCategoryData,
-          },
-        }));
-        showPopup({
-          title: "Measurements Populated",
-          message: "Customer's saved measurements have been applied.",
-          type: "success",
-        });
-        return;
+    // Get ALL relevant category keys (Height + Top + Bottom)
+    const relevantKeys = new Set();
+
+    // Always include Height
+    relevantKeys.add("Height");
+
+    // Add top category
+    if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedTop]);
+    }
+
+    // Add bottom category
+    if (selectedBottom && CATEGORY_KEY_MAP[selectedBottom]) {
+      relevantKeys.add(CATEGORY_KEY_MAP[selectedBottom]);
+    }
+
+    // If no top/bottom selected, use active category as fallback
+    if (relevantKeys.size === 1) {
+      const activeCategoryKey = getCategoryKeyFromDisplayName(activeCategory) || activeCategory;
+      if (activeCategoryKey) {
+        relevantKeys.add(activeCategoryKey);
       }
     }
 
-    showPopup({
-      title: "No Saved Profile",
-      message: "No saved measurements found for this customer.",
-      type: "info",
-    });
-  };
+    // Populate ALL relevant categories at once
+    let populatedCategories = [];
 
+    setMeasurements((prev) => {
+      const updated = { ...prev };
+
+      relevantKeys.forEach(categoryKey => {
+        const savedCategoryData = customerSavedMeasurements[categoryKey];
+
+        if (savedCategoryData && Object.keys(savedCategoryData).length > 0) {
+          updated[categoryKey] = {
+            ...(prev[categoryKey] || {}),
+            ...savedCategoryData,
+          };
+          populatedCategories.push(categoryKey);
+        }
+      });
+
+      return updated;
+    });
+
+    // Show appropriate message
+    if (populatedCategories.length > 0) {
+      const categoryNames = populatedCategories.map(key => CATEGORY_DISPLAY_NAMES[key] || key).join(", ");
+      showPopup({
+        title: "Measurements Populated",
+        message: `Customer's saved measurements applied for: ${categoryNames}`,
+        type: "success",
+      });
+    } else {
+      showPopup({
+        title: "No Matching Data",
+        message: `No saved measurements found for the selected categories. Available: ${Object.keys(customerSavedMeasurements).join(", ")}`,
+        type: "info",
+      });
+    }
+  };
   // Check if auto-populate data is available (only saved profile now)
   const hasAutoPopulateData = () => {
     return customerSavedMeasurements && Object.keys(customerSavedMeasurements).length > 0;
@@ -890,14 +930,14 @@ export default function ProductForm() {
     if (!extraName) return;
 
     // Check if color is selected
-    if (!extraColor || !extraColor.name) {
-      showPopup({
-        title: "Color Required",
-        message: "Please select a color for the extra before adding.",
-        type: "warning",
-      });
-      return;
-    }
+    // if (!extraColor || !extraColor.name) {
+    //   showPopup({
+    //     title: "Color Required",
+    //     message: "Please select a color for the extra before adding.",
+    //     type: "warning",
+    //   });
+    //   return;
+    // }
 
     const extraDetails = globalExtras.find((e) => e.name === extraName);
     setOrderItems((prev) =>
@@ -1222,11 +1262,9 @@ export default function ProductForm() {
         }
 
         if (data && data.measurements) {
-          // console.log("✅ Found saved measurements:", data.measurements);
           setCustomerSavedMeasurements(data.measurements);
-          // Directly set measurements from saved profile
         } else {
-          // console.log("ℹ️ No saved measurements found for customer");
+          console.log("No saved measurements found for customer");
           setCustomerSavedMeasurements(null);
         }
         setMeasurementsLoaded(true);
@@ -1378,7 +1416,10 @@ export default function ProductForm() {
   useEffect(() => {
     // Skip this effect if we just restored from sessionStorage
     if (isRestoredRef.current) {
-      isRestoredRef.current = false;
+      // Reset the flag after a short delay to allow other useEffects to check it
+      setTimeout(() => {
+        isRestoredRef.current = false;
+      }, 100);
       return;
     }
 
@@ -1517,6 +1558,11 @@ export default function ProductForm() {
 
   // ✅ AUTO-FILL SIZE CHART VALUES FOR ALL RELEVANT CATEGORIES
   useEffect(() => {
+    // Skip auto-fill if data was just restored from sessionStorage
+    if (isRestoredRef.current) {
+      console.log("Skipping auto-fill - data restored from session");
+      return;
+    }
     if (!selectedSize || !selectedProduct) return;
 
     const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
@@ -1560,15 +1606,23 @@ export default function ProductForm() {
       }
     });
 
-    // Update all categories at once
+    // Update all categories at once - BUT only if values don't already exist
     if (Object.keys(updatedMeasurements).length > 0) {
       setMeasurements((prev) => {
         const updated = { ...prev };
         Object.entries(updatedMeasurements).forEach(([categoryKey, values]) => {
-          updated[categoryKey] = {
-            ...(prev[categoryKey] || {}),
-            ...values,
-          };
+          const existingCategoryData = prev[categoryKey] || {};
+          const newCategoryData = { ...existingCategoryData };
+
+          // Only set size chart values if they don't already exist (preserve custom values)
+          Object.entries(values).forEach(([field, value]) => {
+            if (existingCategoryData[field] === undefined || existingCategoryData[field] === "" || existingCategoryData[field] === null) {
+              newCategoryData[field] = value;
+            }
+            // If value already exists, DON'T overwrite it (keep custom measurement)
+          });
+
+          updated[categoryKey] = newCategoryData;
         });
         return updated;
       });
@@ -1577,6 +1631,10 @@ export default function ProductForm() {
 
   // ✅ Clean up measurements when product/top/bottom changes
   useEffect(() => {
+    // Skip cleanup if data was just restored from sessionStorage
+    if (isRestoredRef.current) {
+      return;
+    }
     if (!selectedProduct) {
       // Clear all measurements when no product selected
       setMeasurements({});
@@ -2550,11 +2608,11 @@ export default function ProductForm() {
                                   onChange={(extraName) => {
                                     if (extraName) {
                                       // Show popup to select color first
-                                      showPopup({
-                                        title: "Select Color",
-                                        message: "Please select a color for the extra using the color dropdown below.",
-                                        type: "info",
-                                      });
+                                      // showPopup({
+                                      //   title: "Select Color",
+                                      //   message: "Please select a color for the extra using the color dropdown below.",
+                                      //   type: "info",
+                                      // });
                                       // For edit mode, we add with empty color and user can edit
                                       handleAddExtraToItem(item._id, extraName, { name: "", hex: "" });
                                     }
@@ -2650,6 +2708,9 @@ export default function ProductForm() {
                               {(() => {
                                 const categoryKeys = new Set();
 
+                                // Always include Height
+                                categoryKeys.add("Height");
+
                                 if (item.top && CATEGORY_KEY_MAP[item.top]) {
                                   categoryKeys.add(CATEGORY_KEY_MAP[item.top]);
                                 }
@@ -2657,7 +2718,7 @@ export default function ProductForm() {
                                   categoryKeys.add(CATEGORY_KEY_MAP[item.bottom]);
                                 }
 
-                                const displayNames = categoryKeys.size > 0
+                                const displayNames = categoryKeys.size > 1
                                   ? Array.from(categoryKeys).map(key => CATEGORY_DISPLAY_NAMES[key])
                                   : ALL_MEASUREMENT_CATEGORIES;
 
@@ -2779,17 +2840,14 @@ export default function ProductForm() {
 
                             <div className="field" style={{ maxWidth: 200 }}>
                               <label>Price (₹)</label>
-                              <input
-                                type="number"
-                                min={0}
-                                className="input-line"
-                                value={item.price ?? 0}
-                                onChange={(e) =>
-                                  updateItem(item._id, {
-                                    price: Number(e.target.value || 0),
-                                  })
-                                }
-                              />
+                              <span className="input-line" style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                // background: '#f5f5f5',
+                                cursor: 'not-allowed'
+                              }}>
+                                {formatIndianNumber(item.price ?? 0)}
+                              </span>
                             </div>
 
                             <div className="field" style={{ maxWidth: 200 }}>
