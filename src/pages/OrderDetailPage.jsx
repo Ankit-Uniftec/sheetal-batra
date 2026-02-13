@@ -174,14 +174,21 @@ export default function OrderDetailPage() {
   };
 
   // Check if alteration can be requested for this order
+  // Inverse of Edit button: Edit available when within 36hrs AND pending
+  // Alteration available when Edit is NOT available
   const canRequestAlteration = () => {
     if (!order) return false;
-    const status = order.status?.toLowerCase();
-    // Only delivered orders can have alterations
-    if (status !== "completed" && status !== "delivered") return false;
+    
     // Can't alter an alteration order
     if (order.is_alteration) return false;
-    return true;
+    
+    // Calculate if Edit would be available
+    const hoursSinceOrder = (new Date() - new Date(order.created_at)) / (1000 * 60 * 60);
+    const isPending = order.status?.toLowerCase() === "pending";
+    const editIsAvailable = hoursSinceOrder <= 36 && isPending;
+    
+    // Alteration is available when Edit is NOT available
+    return !editIsAvailable;
   };
 
   // Check if alteration can be requested for a specific item
@@ -374,7 +381,9 @@ export default function OrderDetailPage() {
   }
 
   const items = order.items || [];
-  const isDelivered = order.status?.toLowerCase() === "delivered";
+  
+  // Check if alteration section should be shown (inverse of Edit availability)
+  const canShowAlterationSection = canRequestAlteration();
 
   return (
     <div className="odp-page">
@@ -556,8 +565,8 @@ export default function OrderDetailPage() {
                     </div>
                   )}
 
-                  {/* Product Actions */}
-                  {isDelivered && !order.is_alteration && (
+                  {/* Product Actions - Show when Edit is NOT available */}
+                  {canShowAlterationSection && (
                     <div className="odp-product-actions">
                       <button
                         className={`odp-action-btn alteration ${!canAlter ? "disabled" : ""}`}
@@ -574,7 +583,7 @@ export default function OrderDetailPage() {
                   )}
 
                   {/* Max alterations notice */}
-                  {isDelivered && !canAlter && alterationCount >= 2 && (
+                  {canShowAlterationSection && !canAlter && alterationCount >= 2 && (
                     <div className="odp-max-alterations-notice">
                       ℹ️ Maximum alterations (2) reached for this product
                     </div>

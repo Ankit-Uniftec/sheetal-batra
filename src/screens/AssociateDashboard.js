@@ -183,8 +183,8 @@ export default function Dashboard() {
 
     const map = new Map();
     orders.forEach((order) => {
-      if (order.delivery_email) {
-        map.set(order.delivery_email, {
+      if (order.user_id) {  // Use user_id as key instead of email
+        map.set(order.user_id, {
           name: order.delivery_name,
           email: order.delivery_email,
           phone: order.delivery_phone,
