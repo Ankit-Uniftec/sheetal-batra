@@ -1606,20 +1606,38 @@ export default function ProductForm() {
       }
     });
 
-    // Update all categories at once - BUT only if values don't already exist
+    // Update all categories at once
     if (Object.keys(updatedMeasurements).length > 0) {
       setMeasurements((prev) => {
         const updated = { ...prev };
+
+        // Get ALL size chart values to check if current value is from a size chart
+        const allSizeChartValues = {};
+        Object.entries(currentSizeChart).forEach(([size, data]) => {
+          ['Bust', 'Waist', 'Hip', 'Length'].forEach(field => {
+            if (data[field] != null) {
+              if (!allSizeChartValues[field]) allSizeChartValues[field] = new Set();
+              allSizeChartValues[field].add(Number(data[field]));
+            }
+          });
+        });
+
         Object.entries(updatedMeasurements).forEach(([categoryKey, values]) => {
           const existingCategoryData = prev[categoryKey] || {};
           const newCategoryData = { ...existingCategoryData };
 
-          // Only set size chart values if they don't already exist (preserve custom values)
-          Object.entries(values).forEach(([field, value]) => {
-            if (existingCategoryData[field] === undefined || existingCategoryData[field] === "" || existingCategoryData[field] === null) {
-              newCategoryData[field] = value;
+          Object.entries(values).forEach(([field, newSizeValue]) => {
+            const existingValue = existingCategoryData[field];
+
+            // Check if existing value is empty OR matches any size chart value
+            const isEmpty = existingValue === undefined || existingValue === "" || existingValue === null;
+            const isFromSizeChart = allSizeChartValues[field]?.has(Number(existingValue));
+
+            // Update if empty OR if it's a size chart value (not custom)
+            if (isEmpty || isFromSizeChart) {
+              newCategoryData[field] = newSizeValue;
             }
-            // If value already exists, DON'T overwrite it (keep custom measurement)
+            // If value exists and is NOT from size chart = custom value, preserve it
           });
 
           updated[categoryKey] = newCategoryData;
