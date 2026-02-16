@@ -5,9 +5,8 @@ import { supabase } from "../lib/supabaseClient";
 import "./Screen4.css";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
-import Popup, { usePopup } from "../components/Popup"; // Import Popup component
+import { usePopup } from "../components/Popup"; // Import Popup component
 import config from "../config/config";
 
 /**
@@ -1962,7 +1961,7 @@ export default function ProductForm() {
   const gstRate = 0.18;
 
   // LIVE (single product)
-  const livePrice = getLivePrice();
+  // const livePrice = getLivePrice();
   const liveSubtotalInclTax = getBasePrice() * quantity + selectedExtrasWithColors.reduce((sum, e) => sum + Number(e.price || 0), 0);
 
   // CART vs LIVE inclusive subtotal
@@ -2427,7 +2426,7 @@ export default function ProductForm() {
       price: e.price,
     }));
 
-  const categoryKey = CATEGORY_KEY_MAP[activeCategory];
+  // const categoryKey = CATEGORY_KEY_MAP[activeCategory];
   // Get product's available tops/bottoms for edit mode
   const getProductOptions = (productId) => {
     const product = products.find((p) => p.id === productId);
@@ -2492,7 +2491,7 @@ export default function ProductForm() {
                 {orderItems.map((item, i) => {
                   const expanded = !!expandedRowIds[item._id];
                   const itemActiveCategory = expandedItemCategories[item._id] || "Kurta/Choga/Kaftan";
-                  const itemCategoryKey = CATEGORY_KEY_MAP[itemActiveCategory];
+                  // const itemCategoryKey = CATEGORY_KEY_MAP[itemActiveCategory];
                   const productOptions = getProductOptions(item.product_id);
                   const itemIsKids = item.isKids || false;
                   const itemSizes = itemIsKids ? KIDS_SIZE_OPTIONS : productOptions.sizes;
@@ -3142,14 +3141,42 @@ export default function ProductForm() {
                 <div className="measure-fields">
                   <div className="measure-header">
                     <h3 className="measure-title">Custom Measurements (in)</h3>
-                    <button
-                      className="auto-populate-btn"
-                      onClick={handleAutoPopulate}
-                      disabled={!hasAutoPopulateData()}
-                      title={hasAutoPopulateData() ? "Auto-fill from saved profile or size chart" : "No saved data available"}
-                    >
-                      Auto Populate
-                    </button>
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <button
+                        className="auto-populate-btn"
+                        onClick={handleAutoPopulate}
+                        disabled={!hasAutoPopulateData()}
+                        title={hasAutoPopulateData() ? "Auto-fill from saved profile or size chart" : "No saved data available"}
+                      >
+                        Auto Populate
+                      </button>
+                      {orderItems.length > 0 && (
+                        <button
+                          className="auto-populate-btn"
+                          style={{ background: "#1565c0" }}
+                          onClick={() => {
+                            const firstItem = orderItems[0];
+                            if (firstItem?.measurements && Object.keys(firstItem.measurements).length > 0) {
+                              setMeasurements(firstItem.measurements);
+                              showPopup({
+                                title: "Measurements Copied",
+                                message: `Measurements copied from "${firstItem.product_name}"`,
+                                type: "success",
+                              });
+                            } else {
+                              showPopup({
+                                title: "No Measurements",
+                                message: "First product has no measurements to copy.",
+                                type: "info",
+                              });
+                            }
+                          }}
+                          title="Copy measurements from first product"
+                        >
+                          Same as Before
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="measure-grid">

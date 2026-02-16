@@ -62,7 +62,7 @@ const GrowthIndicator = ({ value, inverse = false }) => {
     if (value === 0 || isNaN(value)) return null;
     const isPositive = inverse ? value < 0 : value > 0;
     const displayValue = Math.abs(value).toFixed(1);
-    
+
     return (
         <span className={`growth-indicator ${isPositive ? 'positive' : 'negative'}`}>
             <span className="growth-arrow">{isPositive ? '↑' : '↓'}</span>
@@ -210,7 +210,7 @@ export default function AdminDashboard() {
     const getDateRange = (timelineValue) => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        
+
         switch (timelineValue) {
             case "today": return { start: today, end: now };
             case "yesterday":
@@ -244,7 +244,7 @@ export default function AdminDashboard() {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const currentRange = getDateRange(timelineValue);
-        
+
         if (comparisonType === "previous_year") {
             // Same period last year
             const startLastYear = new Date(currentRange.start);
@@ -253,7 +253,7 @@ export default function AdminDashboard() {
             endLastYear.setFullYear(endLastYear.getFullYear() - 1);
             return { start: startLastYear, end: endLastYear };
         }
-        
+
         // previous_period - period immediately before current
         switch (timelineValue) {
             case "today":
@@ -323,7 +323,7 @@ export default function AdminDashboard() {
         const validOrders = orders.filter(o => !isLxrtsOrder(o));
         const dateRange = getDateRange(timeline);
         const comparisonRange = getComparisonDateRange(timeline, comparison);
-        
+
         const currentOrders = filterOrdersByDateRange(validOrders, dateRange);
         const previousOrders = comparisonRange ? filterOrdersByDateRange(validOrders, comparisonRange) : [];
 
@@ -378,7 +378,7 @@ export default function AdminDashboard() {
     const getAnalyticsDateRange = (timelineValue) => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        
+
         switch (timelineValue) {
             case "today": return { start: today, end: now };
             case "yesterday":
@@ -439,7 +439,7 @@ export default function AdminDashboard() {
                 const topColor = item.top_color?.name || item.color?.name || "Unknown";
                 const bottomColor = item.bottom_color?.name;
                 const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
-                
+
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
                     colorSales[topColor].sales += itemSales / (bottomColor ? 2 : 1);
@@ -878,8 +878,8 @@ export default function AdminDashboard() {
                                         </div>
                                         <div className="comparison-selector">
                                             <span className="comparison-label">Compare to:</span>
-                                            <select 
-                                                value={comparison} 
+                                            <select
+                                                value={comparison}
                                                 onChange={(e) => setComparison(e.target.value)}
                                                 className="comparison-select"
                                             >
@@ -937,19 +937,19 @@ export default function AdminDashboard() {
                             <h3 className="admin-subsection-title">Inventory Overview</h3>
                             <div className="admin-stats-grid">
                                 <div className="admin-stat-card">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v6"/><path d="M16.76 3a2 2 0 0 1 1.8 1.1l2.23 4.479a2 2 0 0 1 .21.891V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.472a2 2 0 0 1 .211-.894L5.45 4.1A2 2 0 0 1 7.24 3z"/><path d="M3.054 9.013h17.893"/></svg></div>
+                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v6" /><path d="M16.76 3a2 2 0 0 1 1.8 1.1l2.23 4.479a2 2 0 0 1 .21.891V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.472a2 2 0 0 1 .211-.894L5.45 4.1A2 2 0 0 1 7.24 3z" /><path d="M3.054 9.013h17.893" /></svg></div>
                                     <div className="stat-info"><span className="stat-label">Total Products</span><span className="stat-value">{inventoryStats.total}</span></div>
                                 </div>
                                 <div className="admin-stat-card">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg></div>
                                     <div className="stat-info"><span className="stat-label">On Shopify</span><span className="stat-value">{inventoryStats.onShopify}</span></div>
                                 </div>
                                 <div className="admin-stat-card warning">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
+                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg></div>
                                     <div className="stat-info"><span className="stat-label">Low Stock</span><span className="stat-value">{inventoryStats.lowStock}</span></div>
                                 </div>
                                 <div className="admin-stat-card danger">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4.929 4.929 19.07 19.071"/><circle cx="12" cy="12" r="10"/></svg></div>
+                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4.929 4.929 19.07 19.071" /><circle cx="12" cy="12" r="10" /></svg></div>
                                     <div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value">{inventoryStats.outOfStock}</span></div>
                                 </div>
                             </div>
@@ -1025,14 +1025,28 @@ export default function AdminDashboard() {
                                             <BarChart data={analyticsData.topProducts} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                                                 <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
-                                                <YAxis 
-                                                    type="category" 
-                                                    dataKey="name" 
-                                                    width={120} 
-                                                    tick={{ fontSize: 11 }} 
+                                                <YAxis
+                                                    type="category"
+                                                    dataKey="name"
+                                                    width={120}
+                                                    tick={{ fontSize: 11 }}
                                                     tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
                                                 />
-                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`, "Sales"]} />
+                                                <Tooltip
+                                                    content={({ active, payload, label }) => {
+                                                        if (active && payload && payload.length) {
+                                                            const item = analyticsData.topProducts.find(p => p.name === label);
+                                                            return (
+                                                                <div style={{ background: '#fff', border: '1px solid #ccc', padding: '10px', borderRadius: '4px' }}>
+                                                                    <p style={{ margin: 0, fontWeight: 'bold' }}>{label}</p>
+                                                                    <p style={{ margin: '5px 0 0' }}>Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                                    <p style={{ margin: '5px 0 0' }}>Orders: {item?.count || 0}</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
                                                 <Bar dataKey="sales" fill="#d5b85a" radius={[0, 4, 4, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
@@ -1048,17 +1062,28 @@ export default function AdminDashboard() {
                                         <ResponsiveContainer width="100%" height={350}>
                                             <BarChart data={analyticsData.topColors} margin={{ top: 10, right: 30, left: 10, bottom: 70 }}>
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis 
-                                                    dataKey="name" 
-                                                    angle={-45} 
-                                                    textAnchor="end" 
-                                                    interval={0} 
-                                                    tick={{ fontSize: 10 }} 
-                                                    height={70}
-                                                    tickFormatter={(v) => v.length > 12 ? v.substring(0, 12) + '...' : v}
+                                                <XAxis
+                                                    dataKey="name"
+                                                    interval={0}
+                                                    tick={{ fontSize: 11 }}
+                                                    tickFormatter={(v) => v.length > 10 ? v.substring(0, 10) + '...' : v}
                                                 />
                                                 <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
-                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`, "Sales"]} />
+                                                <Tooltip
+                                                    content={({ active, payload, label }) => {
+                                                        if (active && payload && payload.length) {
+                                                            const item = analyticsData.topColors.find(c => c.name === label);
+                                                            return (
+                                                                <div style={{ background: '#fff', border: '1px solid #ccc', padding: '10px', borderRadius: '4px' }}>
+                                                                    <p style={{ margin: 0, fontWeight: 'bold' }}>{label}</p>
+                                                                    <p style={{ margin: '5px 0 0' }}>Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                                    <p style={{ margin: '5px 0 0' }}>Orders: {item?.count || 0}</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
                                                 <Bar dataKey="sales" fill="#d5b85a" radius={[4, 4, 0, 0]}>
                                                     {analyticsData.topColors.map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -1108,12 +1133,11 @@ export default function AdminDashboard() {
                                         <ResponsiveContainer width="100%" height={350}>
                                             <BarChart data={analyticsData.salesBySalesperson} margin={{ top: 10, right: 30, left: 20, bottom: 70 }}>
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis 
-                                                    dataKey="name" 
-                                                    angle={-45} 
-                                                    textAnchor="end" 
-                                                    interval={0} 
-                                                    tick={{ fontSize: 11 }} 
+                                                <XAxis
+                                                    dataKey="name"
+                                                    textAnchor="end"
+                                                    interval={0}
+                                                    tick={{ fontSize: 11 }}
                                                     height={70}
                                                     tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
                                                 />
@@ -1138,10 +1162,10 @@ export default function AdminDashboard() {
                                             <BarChart data={analyticsData.alterationsByOutfit} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                                                 <XAxis type="number" allowDecimals={false} />
-                                                <YAxis 
-                                                    type="category" 
-                                                    dataKey="name" 
-                                                    width={120} 
+                                                <YAxis
+                                                    type="category"
+                                                    dataKey="name"
+                                                    width={120}
                                                     tick={{ fontSize: 11 }}
                                                     tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
                                                 />
@@ -1163,10 +1187,10 @@ export default function AdminDashboard() {
                                             <BarChart data={analyticsData.alterationsByCustomer} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                                                 <XAxis type="number" allowDecimals={false} />
-                                                <YAxis 
-                                                    type="category" 
-                                                    dataKey="name" 
-                                                    width={120} 
+                                                <YAxis
+                                                    type="category"
+                                                    dataKey="name"
+                                                    width={120}
                                                     tick={{ fontSize: 11 }}
                                                     tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
                                                 />
@@ -1195,7 +1219,7 @@ export default function AdminDashboard() {
 
                             <div className="admin-toolbar">
                                 <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg></span>
+                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
                                     <input type="text" placeholder="Search by name or SKU..." value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="admin-search-input" />
                                     {inventorySearch && <button className="search-clear" onClick={() => setInventorySearch("")}>×</button>}
                                 </div>
@@ -1223,7 +1247,7 @@ export default function AdminDashboard() {
                                                                     <span className="inventory-value lxrts">{lxrtsSyncLoading ? "..." : getLxrtsTotalInventory(product.id)}</span>
                                                                 ) : editingProductId === product.id ? (
                                                                     <div className="inventory-edit">
-                                                                        <input type="number" value={editInventoryValue} onChange={(e) => setEditInventoryValue(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Enter") handleInventoryUpdate(product.id); if (e.key === "Escape") { setEditingProductId(null); setEditInventoryValue(""); }}} />
+                                                                        <input type="number" value={editInventoryValue} onChange={(e) => setEditInventoryValue(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Enter") handleInventoryUpdate(product.id); if (e.key === "Escape") { setEditingProductId(null); setEditInventoryValue(""); } }} />
                                                                         <button onClick={() => handleInventoryUpdate(product.id)} disabled={savingInventory}>{savingInventory ? "..." : "Save"}</button>
                                                                         <button onClick={() => { setEditingProductId(null); setEditInventoryValue(""); }}>×</button>
                                                                     </div>
@@ -1252,7 +1276,7 @@ export default function AdminDashboard() {
                                                                                                 <span className="variant-size">{size}</span>
                                                                                                 {isEditingThis ? (
                                                                                                     <div className="variant-edit">
-                                                                                                        <input type="number" value={variantEditValue} onChange={(e) => setVariantEditValue(e.target.value)} autoFocus min="0" onKeyDown={(e) => { if (e.key === "Enter") handleVariantInventoryUpdate(product.id, size); if (e.key === "Escape") { setEditingVariant(null); setVariantEditValue(""); }}} />
+                                                                                                        <input type="number" value={variantEditValue} onChange={(e) => setVariantEditValue(e.target.value)} autoFocus min="0" onKeyDown={(e) => { if (e.key === "Enter") handleVariantInventoryUpdate(product.id, size); if (e.key === "Escape") { setEditingVariant(null); setVariantEditValue(""); } }} />
                                                                                                         <button onClick={() => handleVariantInventoryUpdate(product.id, size)} disabled={savingVariant}>{savingVariant ? "..." : "OK"}</button>
                                                                                                         <button onClick={() => { setEditingVariant(null); setVariantEditValue(""); }}>×</button>
                                                                                                     </div>
@@ -1289,7 +1313,7 @@ export default function AdminDashboard() {
                             <h2 className="admin-section-title">Order Management</h2>
                             <div className="admin-toolbar">
                                 <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg></span>
+                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
                                     <input type="text" placeholder="Search Order #, Customer, Phone..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="admin-search-input" />
                                     {orderSearch && <button className="search-clear" onClick={() => setOrderSearch("")}>×</button>}
                                 </div>
@@ -1453,7 +1477,7 @@ export default function AdminDashboard() {
 
                             <div className="admin-toolbar accounts-toolbar">
                                 <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg></span>
+                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
                                     <input type="text" placeholder="Search Order, Customer, Product..." value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} className="admin-search-input" />
                                 </div>
                                 <div className="accounts-filters">

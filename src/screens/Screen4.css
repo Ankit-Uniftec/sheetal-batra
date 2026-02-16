@@ -241,6 +241,26 @@ select,
   align-self: flex-end;
 }
 
+.measure-header-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.same-as-before-btn {
+  background: #1565c0;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.same-as-before-btn:hover {
+  background: #0d47a1;
+}
+
 /* Responsive row wrapping */
 @media (max-width: 1100px) {
   .row {
