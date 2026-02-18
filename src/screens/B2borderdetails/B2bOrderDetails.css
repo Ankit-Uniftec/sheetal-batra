@@ -1,637 +1,439 @@
-/* ===== B2B ORDER DETAILS STYLES ===== */
+/* ===================================
+   B2B ORDER DETAILS
+   Matches B2C Design Language
+   =================================== */
 
-/* ===== MAIN BACKGROUND ===== */
+* {
+  font-family: "Futura", sans-serif !important;
+  color: black;
+  box-sizing: border-box;
+}
+
 .b2b-od-bg {
-    background-image: url("../../images/Screen1bg.png");
-    background-repeat: repeat;
-    background-size: cover;
-    background-position: center;
-    min-height: 100vh;
-    width: 100%;
-    padding: 0 0 40px 0;
-    font-family: 'Jost', sans-serif;
+  min-height: 100vh;
+  background-image: url("../../images/Screen1bg.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  padding: 0 0 100px 0;
 }
 
 /* ===== HEADER ===== */
 .b2b-od-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 40px;
-    background: rgba(255, 255, 255, 0.95);
-    border-bottom: 1px solid #eee;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    width: 100%;
-    margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 40px;
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  margin-bottom: 20px;
 }
 
 .b2b-od-logo {
-    height: 50px;
-    cursor: pointer;
+  height: 50px;
+  cursor: pointer;
 }
 
 .b2b-od-title {
-    font-family: "Athleas", serif !important;
-    font-size: 24px;
-    color: #d5b85a !important;
-    margin: 0;
-    font-weight: 600;
+  font-family: "Athleas", serif !important;
+  font-size: 24px;
+  color: #d5b85a !important;
+  margin: 0;
+  font-weight: 600;
 }
 
-.b2b-od-vendor-info {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
+.b2b-od-vendor-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  padding: 6px 14px;
 }
 
-.b2b-od-vendor-info .vendor-name {
-    font-weight: 600;
-    color: #333;
-    font-size: 14px;
+.b2b-od-vendor-badge .vendor-name {
+  font-weight: 600;
+  font-size: 14px;
 }
 
-.b2b-od-vendor-info .vendor-code {
-    font-size: 12px;
-    color: #888;
+.b2b-od-vendor-badge .vendor-code {
+  font-size: 12px;
+  color: #888;
+  font-family: monospace !important;
 }
 
-/* ===== CARD ===== */
-.b2b-od-card {
-    width: 95%;
-    max-width: 1200px;
-    margin: 20px auto;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 20px;
-    padding: 30px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+/* ===== CONTAINER ===== */
+.b2b-od-container {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  width: 95%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-/* ===== LAYOUT ===== */
-.b2b-od-layout {
-    display: flex;
-    gap: 40px;
+.b2b-od-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.b2b-od-form {
-    flex: 2;
+/* ===== SUMMARY CARD ===== */
+.b2b-od-summary-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 24px;
 }
 
-.b2b-od-summary {
-    flex: 1;
-    background: #f9f7f0;
-    border-radius: 12px;
-    padding: 24px;
-    height: fit-content;
-    position: sticky;
-    top: 100px;
+.b2b-od-summary-card h3 {
+  font-family: "Athleas", serif !important;
+  font-size: 18px;
+  color: #d5b85a !important;
+  margin: 0 0 16px 0;
 }
 
-/* ===== SECTION TITLE ===== */
-.b2b-od-section-title {
-    font-family: "Athleas", serif !important;
-    font-size: 24px;
-    color: #d5b85a !important;
-    font-weight: 600;
-    margin-bottom: 24px;
+.b2b-od-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
-/* ===== PRODUCTS SUMMARY ===== */
-.b2b-od-products-summary {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 24px;
+.b2b-od-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.b2b-od-products-summary h5 {
-    font-size: 14px;
-    color: #666;
-    margin: 0 0 12px 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #eee;
+.b2b-od-summary-item .label {
+  font-size: 12px;
+  color: #888;
 }
 
-.products-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-height: 150px;
-    overflow-y: auto;
+.b2b-od-summary-item .value {
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.product-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px dashed #eee;
+.b2b-od-summary-item .badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
 }
 
-.product-item:last-child {
-    border-bottom: none;
+.badge-blue {
+  background: #e3f2fd;
+  color: #1565c0 !important;
 }
 
-.product-item .product-name {
-    font-weight: 500;
-    color: #333;
+.badge-purple {
+  background: #f3e5f5;
+  color: #7b1fa2 !important;
 }
 
-.product-item .product-details {
-    font-size: 13px;
-    color: #666;
+/* Products List */
+.b2b-od-products-list {
+  margin-top: 16px;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
 }
 
-.products-total {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #ddd;
-    font-weight: 600;
+.b2b-od-products-list h4 {
+  font-family: "Athleas", serif !important;
+  font-size: 14px;
+  color: #d5b85a !important;
+  margin: 0 0 10px 0;
 }
 
-/* ===== FORM ROWS ===== */
-.b2b-od-row {
-    display: flex;
-    gap: 24px;
-    margin-bottom: 24px;
+.b2b-od-product-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.b2b-od-product-item:last-child {
+  border-bottom: none;
+}
+
+.b2b-od-product-item .product-name {
+  font-weight: 500;
+  min-width: 150px;
+}
+
+.b2b-od-product-item .product-price {
+  font-weight: 600;
+  color: #d5b85a;
+  margin-left: auto;
+}
+
+/* ===== FORM CARD ===== */
+.b2b-od-form-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.b2b-od-form-card h3 {
+  font-family: "Athleas", serif !important;
+  font-size: 18px;
+  color: #d5b85a !important;
+  margin: 0 0 16px 0;
 }
 
 .b2b-od-field {
-    flex: 1;
-    min-width: 200px;
-}
-
-.b2b-od-field.full-width {
-    flex: 1 1 100%;
+  margin-bottom: 16px;
 }
 
 .b2b-od-field label {
-    display: block;
-    font-size: 14px;
-    font-weight: 500;
-    color: #333;
-    margin-bottom: 8px;
-}
-
-.b2b-od-input {
-    width: 100%;
-    height: 44px;
-    padding: 10px 14px;
-    border: 1px solid #d5b85a;
-    border-radius: 6px;
-    font-size: 15px;
-    outline: none;
-    background: #fff;
-}
-
-.b2b-od-input:focus {
-    border-color: #c4a84a;
-    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.2);
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: 6px;
 }
 
 .b2b-od-textarea {
-    width: 100%;
-    padding: 12px 14px;
-    border: 1px solid #d5b85a;
-    border-radius: 6px;
-    font-size: 15px;
-    outline: none;
-    background: #fff;
-    resize: vertical;
-    font-family: inherit;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 14px;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.2s;
 }
 
 .b2b-od-textarea:focus {
-    border-color: #c4a84a;
-    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.2);
-}
-
-/* ===== ORDER TYPE BUTTONS ===== */
-.order-type-buttons {
-    display: flex;
-    gap: 10px;
-}
-
-.order-type-btn {
-    flex: 1;
-    padding: 12px 20px;
-    border: 2px solid #d5b85a;
-    background: #fff;
-    border-radius: 6px;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #333;
-}
-
-.order-type-btn:hover {
-    background: #fff8e8;
-}
-
-.order-type-btn.active {
-    background: #d5b85a;
-    color: white;
-}
-
-/* ===== MARKDOWN SECTION ===== */
-.b2b-od-section {
-    background: #f9f7f0;
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 24px;
-}
-
-.section-subtitle {
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-    margin: 0 0 16px 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.required-badge {
-    font-size: 11px;
-    background: #e3f2fd;
-    color: #1565c0;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-weight: 500;
-}
-
-.markdown-type-buttons {
-    display: flex;
-    gap: 10px;
-}
-
-.markdown-type-btn {
-    flex: 1;
-    padding: 10px 16px;
-    border: 1px solid #ddd;
-    background: #fff;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #555;
-}
-
-.markdown-type-btn:hover {
-    border-color: #d5b85a;
-}
-
-.markdown-type-btn.active {
-    background: #d5b85a;
-    color: white;
-    border-color: #d5b85a;
-}
-
-.markdown-preview {
-    margin-top: 12px;
-    padding: 10px 14px;
-    background: #e8f5e9;
-    border-radius: 6px;
-    color: #2e7d32;
-    font-weight: 500;
+  border-color: #d5b85a;
 }
 
 /* ===== CREDIT WARNING ===== */
-.credit-warning {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 18px;
-    background: #fff3e0;
-    border: 1px solid #ffcc80;
-    border-radius: 8px;
-    margin-bottom: 24px;
-    color: #e65100;
-    font-weight: 500;
+.b2b-od-credit-warning {
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.warning-icon {
-    font-size: 20px;
+.b2b-od-credit-warning .warning-icon {
+  font-size: 24px;
 }
 
-/* ===== BUTTONS ===== */
-.b2b-od-buttons {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    margin-top: 30px;
+.b2b-od-credit-warning strong {
+  color: #e65100;
 }
 
-.b2b-od-back-btn {
-    padding: 14px 28px;
-    background: #fff;
-    border: 2px solid #d5b85a;
-    color: #d5b85a;
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
+.warning-details {
+  font-size: 12px;
+  color: #bf360c;
+  margin-top: 4px;
 }
 
-.b2b-od-back-btn:hover {
-    background: #d5b85a;
-    color: white;
+/* ===== SIDEBAR TOTALS ===== */
+.b2b-od-sidebar {
+  position: sticky;
+  top: 100px;
+  height: fit-content;
 }
 
-.b2b-od-continue-btn {
-    padding: 14px 28px;
-    background: #d5b85a;
-    border: none;
-    color: white;
-    font-size: 15px;
-    font-weight: 600;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
+.b2b-od-totals-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 24px;
 }
 
-.b2b-od-continue-btn:hover {
-    background: #c4a84a;
+.b2b-od-totals-card h3 {
+  font-family: "Athleas", serif !important;
+  font-size: 16px;
+  color: #d5b85a !important;
+  margin: 0 0 16px 0;
 }
 
-/* ===== FLOATING BACK BUTTON ===== */
-.b2b-floating-back {
-    position: fixed;
-    left: 25px;
-    bottom: 25px;
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    background: white;
-    border: 2px solid #d5b85a;
-    font-size: 20px;
-    cursor: pointer;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-    z-index: 100;
+.b2b-od-total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 14px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.b2b-floating-back:hover {
-    background: #d5b85a;
-    color: white;
+.b2b-od-total-row:last-child {
+  border-bottom: none;
 }
 
-/* ===== SUMMARY PANEL ===== */
-.b2b-od-summary h3 {
-    font-family: "Athleas", serif !important;
-    font-size: 20px;
-    color: #d5b85a !important;
-    margin: 0 0 20px 0;
+.b2b-od-total-gross {
+  font-weight: 500;
 }
 
-.summary-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    font-size: 14px;
+.b2b-od-markdown span:last-child {
+  color: #c62828;
 }
 
-.summary-row span:first-child {
-    color: #666;
+.b2b-od-final {
+  font-weight: 700;
+  font-size: 16px;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 2px solid #d5b85a;
+  border-bottom: none !important;
 }
 
-.summary-row span:last-child {
-    font-weight: 500;
-    color: #333;
+.b2b-od-final span:last-child {
+  color: #d5b85a;
 }
 
-.summary-row.discount span:last-child {
-    color: #2e7d32;
-}
-
-.summary-row.total {
-    font-size: 18px;
-    padding: 12px 0;
-}
-
-.summary-row.total span:last-child {
-    color: #d5b85a;
-    font-weight: 700;
-}
-
-.summary-divider {
-    height: 1px;
-    background: #ddd;
-    margin: 12px 0;
-}
-
-.type-badge {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.type-badge.buyout {
-    background: #e3f2fd;
-    color: #1565c0;
-}
-
-.type-badge.consignment {
-    background: #f3e5f5;
-    color: #7b1fa2;
-}
-
-/* ===== CREDIT INFO ===== */
-.credit-info {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px dashed #ddd;
+/* Credit Info */
+.b2b-od-credit-info {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
 }
 
 .credit-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-    font-size: 12px;
-    color: #666;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
 }
 
-/* ===== SEARCHABLE SELECT OVERRIDES ===== */
-.b2b-od-field .ss-root {
-    top: 0;
+.credit-positive {
+  color: #2e7d32 !important;
+  font-weight: 600;
 }
 
-.b2b-od-field .ss-control {
-    height: 44px;
-    border: 1px solid #d5b85a;
-    border-radius: 6px;
-    padding: 0 14px;
-    background: #fff;
+.credit-negative {
+  color: #c62828 !important;
+  font-weight: 600;
 }
 
-.b2b-od-field .ss-control:focus-within {
-    border-color: #c4a84a;
-    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.2);
+/* ===== ACTIONS ===== */
+.b2b-od-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 40px;
+  background: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid #eee;
+  z-index: 100;
 }
 
-/* ===== SEARCHABLE SELECT BASE ===== */
-.ss-root {
-    position: relative;
-    width: 100%;
-    color: #111;
+.b2b-od-btn {
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.ss-control {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-    cursor: text;
-    color: #111;
-    min-height: 38px;
+.b2b-od-btn-secondary {
+  background: white;
+  border: 1px solid #D4D4D4;
 }
 
-.ss-input {
-    border: none;
-    outline: none;
-    flex: 1;
-    font-size: 14px;
-    background: transparent;
-    color: #333;
-    width: 100%;
+.b2b-od-btn-secondary:hover {
+  border-color: #d5b85a;
 }
 
-.ss-input::placeholder {
-    color: #888;
+.b2b-od-btn-primary {
+  background: #d5b85a;
+  border: none;
+  color: white !important;
 }
 
-.ss-clear {
-    border: none;
-    background: #eee;
-    border-radius: 6px;
-    margin-left: 6px;
-    padding: 0 6px;
-    cursor: pointer;
-    color: #111;
+.b2b-od-btn-primary:hover {
+  background: #c9a94e;
 }
 
-.ss-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    z-index: 20;
-    background: #fff;
-    border: 1px solid #e5e5e5;
-    border-radius: 6px;
-    max-height: 200px;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+/* Floating back */
+.b2b-od-floating-back {
+  position: fixed;
+  bottom: 40px;
+  left: 30px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #d5b85a;
+  background: white;
+  color: #d5b85a !important;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  transition: all 0.2s;
 }
 
-.ss-list {
-    list-style: none;
-    margin: 0;
-    padding: 6px 0;
-    max-height: 200px;
-    overflow: auto;
+.b2b-od-floating-back:hover {
+  background: #d5b85a;
+  color: white !important;
 }
 
-.ss-option {
-    padding: 10px 14px;
-    cursor: pointer;
-}
-
-.ss-option:hover,
-.ss-option.is-focused {
-    background: #f5f5f8;
-}
-
-.ss-option.is-selected {
-    font-weight: 600;
-    background: #fff8e8;
-}
-
-.ss-empty {
-    padding: 10px 14px;
-    color: #888;
-}
-
-.ss-disabled {
-    opacity: 0.6;
-    pointer-events: none;
+.b2b-od-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-size: 16px;
+  color: #888;
 }
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
-    .b2b-od-layout {
-        flex-direction: column;
-    }
+  .b2b-od-container {
+    grid-template-columns: 1fr;
+  }
 
-    .b2b-od-summary {
-        position: relative;
-        top: 0;
-        order: -1;
-        margin-bottom: 24px;
-    }
+  .b2b-od-sidebar {
+    position: static;
+  }
 
-    .b2b-od-header {
-        padding: 12px 20px;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-
-    .b2b-od-title {
-        font-size: 18px;
-    }
-}
-
-@media (max-width: 768px) {
-    .b2b-od-row {
-        flex-direction: column;
-        gap: 16px;
-    }
-
-    .b2b-od-field {
-        min-width: 100%;
-    }
-
-    .order-type-buttons,
-    .markdown-type-buttons {
-        flex-direction: column;
-    }
-
-    .b2b-od-buttons {
-        flex-direction: column;
-    }
-
-    .b2b-od-back-btn,
-    .b2b-od-continue-btn {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .b2b-od-card {
-        padding: 20px;
-    }
+  .b2b-od-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 480px) {
-    .b2b-od-header {
-        padding: 10px 16px;
-    }
+  .b2b-od-header {
+    padding: 10px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 
-    .b2b-od-logo {
-        height: 40px;
-    }
+  .b2b-od-logo {
+    height: 35px;
+  }
 
-    .b2b-od-title {
-        font-size: 16px;
-    }
+  .b2b-od-title {
+    font-size: 16px;
+  }
 
-    .b2b-od-section-title {
-        font-size: 20px;
-    }
+  .b2b-od-summary-grid {
+    grid-template-columns: 1fr;
+  }
 }

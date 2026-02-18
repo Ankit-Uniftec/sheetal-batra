@@ -1,665 +1,288 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "./B2bOrderDetails.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
+import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 
 /**
- * Searchable Select Component
+ * Session Storage Keys
  */
-function SearchableSelect({
-    options,
-    value,
-    onChange,
-    placeholder = "Select…",
-    disabled = false,
-    className = "",
-}) {
-    const normalized = useMemo(() => {
-        return (options || []).map((o) =>
-            typeof o === "object" && o !== null && "label" in o && "value" in o
-                ? o
-                : { label: String(o), value: o }
-        );
-    }, [options]);
-
-    const current = useMemo(
-        () => normalized.find((o) => String(o.value) === String(value)) || null,
-        [normalized, value]
-    );
-
-    const [open, setOpen] = useState(false);
-    const [query, setQuery] = useState("");
-    const [focusIdx, setFocusIdx] = useState(-1);
-    const rootRef = useRef(null);
-    const inputRef = useRef(null);
-    const listRef = useRef(null);
-
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        if (!q) return normalized;
-        return normalized.filter((o) => o.label.toLowerCase().includes(q));
-    }, [normalized, query]);
-
-    useEffect(() => {
-        if (!open) {
-            if (!value) {
-                setQuery("");
-            } else if (current) {
-                setQuery(current.label);
-            }
-        }
-    }, [value, current, open]);
-
-    useEffect(() => {
-        const onDoc = (e) => {
-            if (!rootRef.current) return;
-            if (!rootRef.current.contains(e.target)) {
-                setOpen(false);
-                setFocusIdx(-1);
-                if (current) setQuery(current.label);
-            }
-        };
-        document.addEventListener("mousedown", onDoc);
-        return () => document.removeEventListener("mousedown", onDoc);
-    }, [current]);
-
-    useEffect(() => {
-        if (!open || !listRef.current || focusIdx < 0) return;
-        const el = listRef.current.querySelector(`[data-idx="${focusIdx}"]`);
-        if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
-    }, [focusIdx, open]);
-
-    const handleSelect = (opt) => {
-        onChange(opt?.value ?? "");
-        setOpen(false);
-        setQuery(opt?.label ?? "");
-        setFocusIdx(-1);
-        requestAnimationFrame(() => inputRef.current?.focus());
-    };
-
-    const handleKeyDown = (e) => {
-        if (!open && (e.key === "ArrowDown" || e.key === "Enter")) {
-            setOpen(true);
-            setFocusIdx(0);
-            if (current) setQuery("");
-            return;
-        }
-        if (!open) return;
-
-        if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setFocusIdx((i) => Math.min((filtered.length || 1) - 1, i + 1));
-        } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setFocusIdx((i) => Math.max(0, i - 1));
-        } else if (e.key === "Enter") {
-            e.preventDefault();
-            const opt = filtered[focusIdx];
-            if (opt) handleSelect(opt);
-        } else if (e.key === "Escape") {
-            e.preventDefault();
-            setOpen(false);
-            setFocusIdx(-1);
-            if (current) setQuery(current.label);
-        }
-    };
-
-    const clear = (e) => {
-        e.stopPropagation();
-        onChange("");
-        setQuery("");
-        inputRef.current?.focus();
-    };
-
-    return (
-        <div ref={rootRef} className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}>
-            <div
-                className={`ss-control ${open ? "ss-open" : ""}`}
-                onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (disabled) return;
-                    setOpen(true);
-                    setFocusIdx(-1);
-                    requestAnimationFrame(() => inputRef.current?.focus());
-                }}
-            >
-                <input
-                    ref={inputRef}
-                    className="ss-input"
-                    placeholder={placeholder}
-                    value={query}
-                    onChange={(e) => {
-                        setQuery(e.target.value);
-                        if (!open) setOpen(true);
-                        setFocusIdx(0);
-                    }}
-                    onFocus={() => {
-                        if (current && query === current.label) setQuery("");
-                        setOpen(true);
-                    }}
-                    onKeyDown={handleKeyDown}
-                    disabled={disabled}
-                />
-                {current && (
-                    <button className="ss-clear" title="Clear" onClick={clear}>×</button>
-                )}
-            </div>
-
-            {open && (
-                <div className="ss-menu" role="listbox">
-                    {filtered.length === 0 ? (
-                        <div className="ss-empty">No matches</div>
-                    ) : (
-                        <ul ref={listRef} className="ss-list">
-                            {filtered.map((opt, idx) => {
-                                const selected = String(opt.value) === String(value);
-                                const focused = idx === focusIdx;
-                                return (
-                                    <li
-                                        key={String(opt.value)}
-                                        data-idx={idx}
-                                        className={`ss-option ${selected ? "is-selected" : ""} ${focused ? "is-focused" : ""}`}
-                                        onMouseEnter={() => setFocusIdx(idx)}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => handleSelect(opt)}
-                                        role="option"
-                                        aria-selected={selected}
-                                    >
-                                        {opt.label}
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// Merchandiser options (from PDF)
-const MERCHANDISER_OPTIONS = [
-    { label: "Prastuti", value: "Prastuti" },
-    { label: "Sharia", value: "Sharia" },
-];
-
-// Order type options
-const ORDER_TYPE_OPTIONS = [
-    { label: "Buyout", value: "Buyout" },
-    { label: "Consignment", value: "Consignment" },
-];
-
-// Markdown type options
-const MARKDOWN_TYPE_OPTIONS = [
-    { label: "Percentage (%)", value: "percent" },
-    { label: "Fixed Amount (₹)", value: "amount" },
-];
+const VENDOR_SESSION_KEY = "b2bVendorData";
+const PRODUCT_SESSION_KEY = "b2bProductFormData";
+const DETAILS_SESSION_KEY = "b2bOrderDetailsData";
 
 export default function B2bOrderDetails() {
     const navigate = useNavigate();
-    const location = useLocation();
     const { showPopup, PopupComponent } = usePopup();
 
-    // Get data from previous step
-    const [vendor, setVendor] = useState(null);
-    const [items, setItems] = useState([]);
-    const [subtotal, setSubtotal] = useState(0);
-    const [taxes, setTaxes] = useState(0);
-    const [grandTotal, setGrandTotal] = useState(0);
-    const [totalQuantity, setTotalQuantity] = useState(0);
+    // Data from previous steps
+    const [vendorData, setVendorData] = useState(null);
+    const [productData, setProductData] = useState(null);
 
-    // B2B specific fields
-    const [poNumber, setPoNumber] = useState("");
-    const [b2bOrderType, setB2bOrderType] = useState("Buyout");
-    const [merchandiserName, setMerchandiserName] = useState("");
-    const [markdownType, setMarkdownType] = useState("percent");
-    const [markdownValue, setMarkdownValue] = useState("");
-    const [deliveryDate, setDeliveryDate] = useState("");
+    // Form fields (only delivery-specific)
     const [deliveryAddress, setDeliveryAddress] = useState("");
     const [orderNotes, setOrderNotes] = useState("");
 
-    // Calculated values
-    const [markdownAmount, setMarkdownAmount] = useState(0);
-    const [finalTotal, setFinalTotal] = useState(0);
-
-    // Credit limit check
-    const [creditLimit, setCreditLimit] = useState(0);
-    const [currentBalance, setCurrentBalance] = useState(0);
-    const [creditWarning, setCreditWarning] = useState("");
-
-    // ==================== LOAD DATA FROM LOCATION STATE ====================
+    // ==================== LOAD DATA FROM SESSION ====================
     useEffect(() => {
-        if (location.state) {
-            const { vendor, items, subtotal, taxes, grandTotal, totalQuantity } = location.state;
-            
-            if (!vendor || !items || items.length === 0) {
-                showPopup({
-                    title: "Missing Data",
-                    message: "Please select products first.",
-                    type: "warning",
-                });
-                setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
-                return;
+        // Load vendor data
+        const vendorSaved = sessionStorage.getItem(VENDOR_SESSION_KEY);
+        if (vendorSaved) {
+            try {
+                const data = JSON.parse(vendorSaved);
+                setVendorData(data);
+                // Pre-fill delivery address from vendor
+                if (data.vendor?.shipping_address) {
+                    setDeliveryAddress(data.vendor.shipping_address);
+                }
+            } catch (e) {
+                console.error("Error loading vendor data:", e);
             }
+        }
 
-            setVendor(vendor);
-            setItems(items);
-            setSubtotal(subtotal || 0);
-            setTaxes(taxes || 0);
-            setGrandTotal(grandTotal || 0);
-            setTotalQuantity(totalQuantity || 0);
-
-            // Set vendor's delivery address as default
-            if (vendor.delivery_address) {
-                setDeliveryAddress(vendor.delivery_address);
-            } else if (vendor.address) {
-                setDeliveryAddress(vendor.address);
+        // Load product data
+        const productSaved = sessionStorage.getItem(PRODUCT_SESSION_KEY);
+        if (productSaved) {
+            try {
+                const data = JSON.parse(productSaved);
+                setProductData(data);
+            } catch (e) {
+                console.error("Error loading product data:", e);
             }
+        }
 
-            // Set credit limit from vendor
-            setCreditLimit(vendor.credit_limit || 0);
-            setCurrentBalance(vendor.current_balance || 0);
-        } else {
-            showPopup({
-                title: "No Data",
-                message: "Please start from vendor selection.",
-                type: "warning",
-            });
+        // Load order details data (if going back and forth)
+        const detailsSaved = sessionStorage.getItem(DETAILS_SESSION_KEY);
+        if (detailsSaved) {
+            try {
+                const data = JSON.parse(detailsSaved);
+                if (data.deliveryAddress) setDeliveryAddress(data.deliveryAddress);
+                if (data.orderNotes) setOrderNotes(data.orderNotes);
+            } catch (e) {
+                console.error("Error loading details data:", e);
+            }
+        }
+
+        // Redirect if no data
+        if (!vendorSaved || !productSaved) {
+            showPopup({ title: "Missing Data", message: "Please complete previous steps first.", type: "warning" });
             setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
         }
-    }, [location.state, navigate]);
+    }, [navigate]);
 
-    // ==================== CALCULATE MARKDOWN & FINAL TOTAL ====================
+    // ==================== SAVE TO SESSION ====================
     useEffect(() => {
-        let discount = 0;
-        
-        if (markdownValue && Number(markdownValue) > 0) {
-            if (markdownType === "percent") {
-                discount = (grandTotal * Number(markdownValue)) / 100;
-            } else {
-                discount = Number(markdownValue);
-            }
-        }
+        const data = { deliveryAddress, orderNotes };
+        sessionStorage.setItem(DETAILS_SESSION_KEY, JSON.stringify(data));
+    }, [deliveryAddress, orderNotes]);
 
-        setMarkdownAmount(discount);
-        setFinalTotal(grandTotal - discount);
-    }, [markdownType, markdownValue, grandTotal]);
+    // ==================== CALCULATIONS ====================
+    const vendor = vendorData?.vendor;
+    const items = productData?.orderItems || [];
+    const subtotal = productData?.subtotal || 0;
+    const taxes = productData?.taxes || 0;
+    const grandTotal = productData?.grandTotal || 0;
+    const totalQuantity = productData?.totalQuantity || 0;
 
-    // ==================== CHECK CREDIT LIMIT ====================
-    useEffect(() => {
-        if (b2bOrderType === "Buyout" && creditLimit > 0) {
-            const projectedBalance = currentBalance + finalTotal;
-            if (projectedBalance > creditLimit) {
-                setCreditWarning(`Warning: This order exceeds credit limit. Available: ₹${formatIndianNumber(creditLimit - currentBalance)}`);
-            } else {
-                setCreditWarning("");
-            }
-        } else {
-            setCreditWarning("");
-        }
-    }, [b2bOrderType, finalTotal, creditLimit, currentBalance]);
+    // Calculate markdown from vendor selection step
+    const discountPercent = vendorData?.discountPercent || 0;
+    const markdownAmount = grandTotal * (discountPercent / 100);
+    const finalTotal = grandTotal - markdownAmount;
 
-    // ==================== HANDLERS ====================
-    const handleBack = () => {
-        navigate("/b2b-product-form", {
-            state: { vendor },
-        });
-    };
+    // Credit check
+    const availableCredit = vendorData?.availableCredit || 0;
+    const orderType = vendorData?.orderType || "Buyout";
+    const projectedCredit = (vendor?.current_credit_used || 0) + (orderType === "Buyout" ? finalTotal : 0);
+    const creditLimit = vendor?.credit_limit || 0;
+    const exceedsCredit = orderType === "Buyout" && projectedCredit > creditLimit;
 
+    // ==================== CONTINUE ====================
     const handleContinue = () => {
-        // Validation
-        if (!poNumber.trim()) {
-            showPopup({
-                title: "PO Number Required",
-                message: "Please enter a PO number.",
-                type: "warning",
-            });
+        if (!deliveryAddress.trim()) {
+            showPopup({ title: "Delivery Address Required", message: "Please enter a delivery address.", type: "warning" });
             return;
         }
 
-        if (!merchandiserName) {
-            showPopup({
-                title: "Merchandiser Required",
-                message: "Please select a merchandiser.",
-                type: "warning",
-            });
-            return;
-        }
+        // Save to session
+        const detailsData = { deliveryAddress, orderNotes };
+        sessionStorage.setItem(DETAILS_SESSION_KEY, JSON.stringify(detailsData));
 
-        if (!deliveryDate) {
-            showPopup({
-                title: "Delivery Date Required",
-                message: "Please select a delivery date.",
-                type: "warning",
-            });
-            return;
-        }
-
-        // For Consignment orders, markdown is required
-        if (b2bOrderType === "Consignment" && !markdownValue) {
-            showPopup({
-                title: "Markdown Required",
-                message: "Please enter markdown percentage or amount for consignment orders.",
-                type: "warning",
-            });
-            return;
-        }
-
-        // Prepare order payload
-        const orderPayload = {
-            // Vendor info
-            vendor_id: vendor.id,
-            vendor_name: vendor.store_brand_name,
-            vendor_code: vendor.vendor_code,
-
-            // Products
-            items: items,
-
-            // B2B specific fields
-            po_number: poNumber.trim(),
-            b2b_order_type: b2bOrderType,
-            merchandiser_name: merchandiserName,
-            markdown_type: markdownType,
-            markdown_value: Number(markdownValue) || 0,
-            markdown_amount: markdownAmount,
-
-            // Delivery
-            delivery_date: deliveryDate,
-            delivery_address: deliveryAddress,
-
-            // Notes
-            order_notes: orderNotes,
-
-            // Totals
-            subtotal: subtotal,
-            taxes: taxes,
-            grand_total: grandTotal,
-            final_total: finalTotal,
-            total_quantity: totalQuantity,
-
-            // Metadata
-            is_b2b: true,
-            approval_status: "pending",
-            created_at: new Date().toISOString(),
-        };
-
-        // Navigate to review page
-        navigate("/b2b-review-order", {
-            state: {
-                orderPayload,
-                vendor,
-            },
-        });
+        navigate("/b2b-review-order");
     };
 
-    // Get min date (today)
-    const getMinDate = () => {
-        const today = new Date();
-        return today.toISOString().split("T")[0];
-    };
+    const handleBack = () => navigate("/b2b-product-form");
+
+    if (!vendorData || !productData) {
+        return <div className="b2b-od-loading">Loading...</div>;
+    }
 
     return (
         <div className="b2b-od-bg">
             {PopupComponent}
 
-            {/* HEADER */}
+            {/* Header */}
             <header className="b2b-od-header">
-                <img src={Logo} alt="logo" className="b2b-od-logo" onClick={() => navigate("/b2b-vendor-selection")} />
-                <h1 className="b2b-od-title">B2B Order - Order Details</h1>
+                <img src={Logo} alt="logo" className="b2b-od-logo" onClick={handleBack} />
+                <h1 className="b2b-od-title">B2B Order - Delivery Details</h1>
                 {vendor && (
-                    <div className="b2b-od-vendor-info">
+                    <div className="b2b-od-vendor-badge">
                         <span className="vendor-name">{vendor.store_brand_name}</span>
                         <span className="vendor-code">{vendor.vendor_code}</span>
                     </div>
                 )}
             </header>
 
-            <div className="b2b-od-card">
-                <div className="b2b-od-layout">
-                    {/* LEFT - FORM */}
-                    <div className="b2b-od-form">
-                        <h4 className="b2b-od-section-title">Order Information</h4>
-
-                        {/* Order Summary */}
-                        <div className="b2b-od-products-summary">
-                            <h5>Products ({items.length})</h5>
-                            <div className="products-list">
-                                {items.map((item, i) => (
-                                    <div key={item._id || i} className="product-item">
-                                        <span className="product-name">{item.product_name}</span>
-                                        <span className="product-details">
-                                            Size: {item.size} | Qty: {item.quantity} | ₹{formatIndianNumber(item.price * item.quantity)}
-                                        </span>
-                                    </div>
-                                ))}
+            <div className="b2b-od-container">
+                <div className="b2b-od-main">
+                    {/* Order Summary from Previous Steps */}
+                    <div className="b2b-od-summary-card">
+                        <h3>Order Summary</h3>
+                        <div className="b2b-od-summary-grid">
+                            <div className="b2b-od-summary-item">
+                                <span className="label">Vendor</span>
+                                <span className="value">{vendor?.store_brand_name} ({vendor?.vendor_code})</span>
                             </div>
-                            <div className="products-total">
-                                <span>Total Items: {totalQuantity}</span>
-                                <span>Amount: ₹{formatIndianNumber(grandTotal)}</span>
+                            <div className="b2b-od-summary-item">
+                                <span className="label">PO Number</span>
+                                <span className="value">{vendorData?.poNumber}</span>
+                            </div>
+                            <div className="b2b-od-summary-item">
+                                <span className="label">Merchandiser</span>
+                                <span className="value">{vendorData?.merchandiser}</span>
+                            </div>
+                            <div className="b2b-od-summary-item">
+                                <span className="label">Order Type</span>
+                                <span className={`value badge ${orderType === "Consignment" ? "badge-purple" : "badge-blue"}`}>{orderType}</span>
+                            </div>
+                            <div className="b2b-od-summary-item">
+                                <span className="label">Products</span>
+                                <span className="value">{items.length} item(s), {totalQuantity} unit(s)</span>
+                            </div>
+                            <div className="b2b-od-summary-item">
+                                <span className="label">Markdown</span>
+                                <span className="value">{discountPercent}%</span>
                             </div>
                         </div>
 
-                        {/* PO Number & Order Type */}
-                        <div className="b2b-od-row">
-                            <div className="b2b-od-field">
-                                <label>PO Number *</label>
-                                <input
-                                    type="text"
-                                    className="b2b-od-input"
-                                    placeholder="Enter PO Number"
-                                    value={poNumber}
-                                    onChange={(e) => setPoNumber(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="b2b-od-field">
-                                <label>Order Type *</label>
-                                <div className="order-type-buttons">
-                                    {ORDER_TYPE_OPTIONS.map((opt) => (
-                                        <button
-                                            key={opt.value}
-                                            className={`order-type-btn ${b2bOrderType === opt.value ? "active" : ""}`}
-                                            onClick={() => setB2bOrderType(opt.value)}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
+                        {/* Products List */}
+                        <div className="b2b-od-products-list">
+                            <h4>Products</h4>
+                            {items.map((item, idx) => (
+                                <div key={item._id || idx} className="b2b-od-product-item">
+                                    <span className="product-name">{idx + 1}. {item.product_name}</span>
+                                    <span className="product-details">
+                                        {item.top}{item.top_color?.name && ` (${item.top_color.name})`} / {item.bottom}{item.bottom_color?.name && ` (${item.bottom_color.name})`}
+                                    </span>
+                                    <span className="product-size">Size: {item.size}</span>
+                                    <span className="product-qty">Qty: {item.quantity}</span>
+                                    <span className="product-price">₹{formatIndianNumber(item.price * item.quantity)}</span>
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* Merchandiser & Delivery Date */}
-                        <div className="b2b-od-row">
-                            <div className="b2b-od-field">
-                                <label>Merchandiser *</label>
-                                <SearchableSelect
-                                    options={MERCHANDISER_OPTIONS}
-                                    value={merchandiserName}
-                                    onChange={setMerchandiserName}
-                                    placeholder="Select Merchandiser"
-                                />
-                            </div>
-
-                            <div className="b2b-od-field">
-                                <label>Delivery Date *</label>
-                                <input
-                                    type="date"
-                                    className="b2b-od-input"
-                                    value={deliveryDate}
-                                    min={getMinDate()}
-                                    onChange={(e) => setDeliveryDate(e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Markdown Section */}
-                        <div className="b2b-od-section">
-                            <h5 className="section-subtitle">
-                                Markdown / Discount
-                                {b2bOrderType === "Consignment" && <span className="required-badge">Required for Consignment</span>}
-                            </h5>
-                            <div className="b2b-od-row">
-                                <div className="b2b-od-field">
-                                    <label>Markdown Type</label>
-                                    <div className="markdown-type-buttons">
-                                        {MARKDOWN_TYPE_OPTIONS.map((opt) => (
-                                            <button
-                                                key={opt.value}
-                                                className={`markdown-type-btn ${markdownType === opt.value ? "active" : ""}`}
-                                                onClick={() => setMarkdownType(opt.value)}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="b2b-od-field">
-                                    <label>
-                                        {markdownType === "percent" ? "Markdown %" : "Markdown Amount (₹)"}
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="b2b-od-input"
-                                        placeholder={markdownType === "percent" ? "e.g., 10" : "e.g., 5000"}
-                                        value={markdownValue}
-                                        min={0}
-                                        max={markdownType === "percent" ? 100 : grandTotal}
-                                        onChange={(e) => setMarkdownValue(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-
-                            {markdownAmount > 0 && (
-                                <div className="markdown-preview">
-                                    <span>Discount: -₹{formatIndianNumber(markdownAmount.toFixed(2))}</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Delivery Address */}
-                        <div className="b2b-od-row">
-                            <div className="b2b-od-field full-width">
-                                <label>Delivery Address</label>
-                                <textarea
-                                    className="b2b-od-textarea"
-                                    placeholder="Enter delivery address..."
-                                    value={deliveryAddress}
-                                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                                    rows={3}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Order Notes */}
-                        <div className="b2b-od-row">
-                            <div className="b2b-od-field full-width">
-                                <label>Order Notes</label>
-                                <textarea
-                                    className="b2b-od-textarea"
-                                    placeholder="Any special instructions or notes..."
-                                    value={orderNotes}
-                                    onChange={(e) => setOrderNotes(e.target.value)}
-                                    rows={3}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Credit Warning */}
-                        {creditWarning && (
-                            <div className="credit-warning">
-                                <span className="warning-icon">⚠️</span>
-                                <span>{creditWarning}</span>
-                            </div>
-                        )}
-
-                        {/* Buttons */}
-                        <div className="b2b-od-buttons">
-                            <button className="b2b-od-back-btn" onClick={handleBack}>
-                                ← Back to Products
-                            </button>
-                            <button className="b2b-od-continue-btn" onClick={handleContinue}>
-                                Review Order →
-                            </button>
+                            ))}
                         </div>
                     </div>
 
-                    {/* RIGHT - SUMMARY */}
-                    <div className="b2b-od-summary">
-                        <h3>Order Summary</h3>
+                    {/* Delivery Details Form */}
+                    <div className="b2b-od-form-card">
+                        <h3>Delivery Details</h3>
 
-                        <div className="summary-row">
-                            <span>Vendor:</span>
-                            <span>{vendor?.store_brand_name}</span>
+                        <div className="b2b-od-field">
+                            <label>Delivery Address *</label>
+                            <textarea
+                                className="b2b-od-textarea"
+                                placeholder="Enter complete delivery address..."
+                                value={deliveryAddress}
+                                onChange={(e) => setDeliveryAddress(e.target.value)}
+                                rows={3}
+                            />
                         </div>
 
-                        <div className="summary-row">
-                            <span>Order Type:</span>
-                            <span className={`type-badge ${b2bOrderType.toLowerCase()}`}>{b2bOrderType}</span>
+                        <div className="b2b-od-field">
+                            <label>Additional Notes (Optional)</label>
+                            <textarea
+                                className="b2b-od-textarea"
+                                placeholder="Any special delivery instructions..."
+                                value={orderNotes}
+                                onChange={(e) => setOrderNotes(e.target.value)}
+                                rows={2}
+                            />
                         </div>
+                    </div>
 
-                        <div className="summary-divider"></div>
-
-                        <div className="summary-row">
-                            <span>Items:</span>
-                            <span>{totalQuantity}</span>
+                    {/* Credit Warning */}
+                    {exceedsCredit && (
+                        <div className="b2b-od-credit-warning">
+                            <span className="warning-icon">⚠️</span>
+                            <div className="warning-content">
+                                <strong>Credit Limit Warning</strong>
+                                <p>This order will exceed the vendor's credit limit. Order will require approval.</p>
+                                <p className="warning-details">
+                                    Credit Limit: ₹{formatIndianNumber(creditLimit)} | 
+                                    Current Used: ₹{formatIndianNumber(vendor?.current_credit_used || 0)} | 
+                                    This Order: ₹{formatIndianNumber(finalTotal)} | 
+                                    Projected: ₹{formatIndianNumber(projectedCredit)}
+                                </p>
+                            </div>
                         </div>
+                    )}
+                </div>
 
-                        <div className="summary-row">
-                            <span>Subtotal:</span>
+                {/* Sidebar - Order Totals */}
+                <div className="b2b-od-sidebar">
+                    <div className="b2b-od-totals-card">
+                        <h3>Order Totals</h3>
+
+                        <div className="b2b-od-total-row">
+                            <span>Subtotal</span>
                             <span>₹{formatIndianNumber(subtotal.toFixed(2))}</span>
                         </div>
-
-                        <div className="summary-row">
-                            <span>GST (18%):</span>
+                        <div className="b2b-od-total-row">
+                            <span>GST (18%)</span>
                             <span>₹{formatIndianNumber(taxes.toFixed(2))}</span>
                         </div>
-
-                        <div className="summary-row">
-                            <span>Gross Total:</span>
+                        <div className="b2b-od-total-row b2b-od-total-gross">
+                            <span>Gross Total</span>
                             <span>₹{formatIndianNumber(grandTotal.toFixed(2))}</span>
                         </div>
 
-                        {markdownAmount > 0 && (
-                            <div className="summary-row discount">
-                                <span>Markdown:</span>
-                                <span>-₹{formatIndianNumber(markdownAmount.toFixed(2))}</span>
+                        {discountPercent > 0 && (
+                            <div className="b2b-od-total-row b2b-od-markdown">
+                                <span>Markdown ({discountPercent}%)</span>
+                                <span>- ₹{formatIndianNumber(markdownAmount.toFixed(2))}</span>
                             </div>
                         )}
 
-                        <div className="summary-divider"></div>
-
-                        <div className="summary-row total">
-                            <span>Final Total:</span>
+                        <div className="b2b-od-total-row b2b-od-final">
+                            <span>Final Total</span>
                             <span>₹{formatIndianNumber(finalTotal.toFixed(2))}</span>
                         </div>
 
-                        {b2bOrderType === "Buyout" && creditLimit > 0 && (
-                            <div className="credit-info">
-                                <div className="credit-row">
-                                    <span>Credit Limit:</span>
-                                    <span>₹{formatIndianNumber(creditLimit)}</span>
-                                </div>
-                                <div className="credit-row">
-                                    <span>Current Balance:</span>
-                                    <span>₹{formatIndianNumber(currentBalance)}</span>
-                                </div>
-                                <div className="credit-row">
-                                    <span>Available:</span>
-                                    <span>₹{formatIndianNumber(Math.max(0, creditLimit - currentBalance))}</span>
-                                </div>
+                        <div className="b2b-od-credit-info">
+                            <div className="credit-row">
+                                <span>Available Credit</span>
+                                <span className={availableCredit <= 0 ? "credit-negative" : "credit-positive"}>
+                                    ₹{formatIndianNumber(availableCredit)}
+                                </span>
                             </div>
-                        )}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* BACK BUTTON */}
-            <button className="b2b-floating-back" onClick={handleBack}>←</button>
+            {/* Actions */}
+            <div className="b2b-od-actions">
+                <button className="b2b-od-btn b2b-od-btn-secondary" onClick={handleBack}>
+                    ← Back to Products
+                </button>
+                <button className="b2b-od-btn b2b-od-btn-primary" onClick={handleContinue}>
+                    Review Order →
+                </button>
+            </div>
+
+            {/* Floating Back Button */}
+            <button className="b2b-od-floating-back" onClick={handleBack}>←</button>
         </div>
     );
 }

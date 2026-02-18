@@ -77,7 +77,9 @@ export default function SALogin() {
       navigate("/accounts")
     } else if (userRecord.role === "admin") {
       navigate("/admin")
-    }else {
+    }else if (userRecord.role === "executive"){
+      navigate("/b2b-executive-dashboard")
+    }else{
       showPopup({
         title: "Unknown role",
         message: "Access is Denied.",

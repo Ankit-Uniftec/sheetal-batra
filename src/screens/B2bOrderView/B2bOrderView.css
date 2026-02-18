@@ -1,0 +1,401 @@
+/* ===================================
+   B2B ORDER VIEW - Matching B2C ReviewDetail Style
+   =================================== */
+
+* {
+    box-sizing: border-box;
+    font-family: "Futura", sans-serif !important;
+}
+
+.b2bov-page {
+    min-height: 100vh;
+    background-image: url("../../images/Screen1bg.png");
+    background-repeat: repeat;
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    padding-bottom: 60px;
+}
+
+.loading {
+    text-align: center;
+    padding: 60px;
+    font-size: 18px;
+    color: #888;
+}
+
+/* ===== HEADER ===== */
+.b2bov-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 40px;
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.b2bov-logo {
+    height: 50px;
+    cursor: pointer;
+}
+
+.b2bov-title {
+    font-family: "Athleas", serif !important;
+    font-size: 24px;
+    color: #d5b85a !important;
+    margin: 0;
+    font-weight: 600;
+}
+
+.b2bov-back-btn {
+    background: #d5b85a;
+    color: white !important;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.b2bov-back-btn:hover {
+    background: #c9a94e;
+}
+
+/* ===== CONTAINER ===== */
+.b2bov-container {
+    width: 95%;
+    max-width: 1000px;
+    margin: 30px auto;
+}
+
+/* ===== STATUS BANNER ===== */
+.b2bov-status-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.b2bov-status-banner.status-pending {
+    background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
+    border: 1px solid #ffe082;
+}
+
+.b2bov-status-banner.status-approved {
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border: 1px solid #a5d6a7;
+}
+
+.b2bov-status-banner.status-rejected {
+    background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+    border: 1px solid #ef9a9a;
+}
+
+.b2bov-status-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.b2bov-order-no {
+    font-family: "Athleas", serif !important;
+    font-size: 22px;
+    font-weight: 700;
+    color: #333;
+}
+
+.b2bov-order-date {
+    font-size: 14px;
+    color: #666;
+}
+
+.b2bov-status-right {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.b2bov-status-badge {
+    padding: 8px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.b2bov-status-badge.status-pending {
+    background: #fff3e0;
+    color: #e65100;
+    border: 1px solid #ffcc80;
+}
+
+.b2bov-status-badge.status-approved {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #c8e6c9;
+}
+
+.b2bov-status-badge.status-rejected {
+    background: #ffebee;
+    color: #c62828;
+    border: 1px solid #ffcdd2;
+}
+
+.b2bov-type-badge {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.b2bov-type-badge.type-buyout {
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #bbdefb;
+}
+
+.b2bov-type-badge.type-consignment {
+    background: #f3e5f5;
+    color: #7b1fa2;
+    border: 1px solid #e1bee7;
+}
+
+/* ===== SECTION BOX (mirrors B2C section-box) ===== */
+.b2bov-section {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f0ece0;
+}
+
+.b2bov-section h3 {
+    font-family: "Athleas", serif !important;
+    font-size: 20px;
+    color: #d5b85a !important;
+    margin: 0 0 20px 0;
+    font-weight: 600;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0ece0;
+}
+
+/* ===== PRODUCT BOX (mirrors B2C product-box) ===== */
+.b2bov-product-box {
+    display: flex;
+    gap: 24px;
+    padding: 20px 0;
+    border-bottom: 1px solid #f5f0e5;
+    align-items: flex-start;
+}
+
+.b2bov-product-box:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.b2bov-prod-img {
+    width: 120px;
+    height: 160px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    flex-shrink: 0;
+}
+
+.b2bov-product-fields {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ===== FIELD (mirrors B2C field) ===== */
+.b2bov-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.b2bov-field label {
+    font-size: 12px;
+    color: #d5b85a !important;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.b2bov-field span {
+    font-size: 15px;
+    color: #333;
+    font-weight: 500;
+}
+
+.b2bov-field-wide {
+    width: 100%;
+}
+
+.b2bov-field-total label {
+    font-size: 14px !important;
+}
+
+.b2bov-field-total span {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    color: #d5b85a !important;
+}
+
+/* ===== ROW / GRID (mirrors B2C row3 and grid) ===== */
+.b2bov-row {
+    display: flex;
+    gap: 25px;
+    flex-wrap: wrap;
+}
+
+.b2bov-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 18px;
+}
+
+.b2bov-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+/* ===== EXTRAS DISPLAY ===== */
+.b2bov-extras-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.b2bov-extra-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #faf6e8;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    color: #555;
+    border: 1px solid #f0ece0;
+}
+
+/* ===== FLOATING BACK ===== */
+.b2bov-floating-back {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #d5b85a;
+    color: white !important;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(213, 184, 90, 0.4);
+    display: none;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+    .b2bov-header {
+        padding: 12px 20px;
+    }
+
+    .b2bov-title {
+        font-size: 18px;
+    }
+
+    .b2bov-container {
+        width: 100%;
+        padding: 0 16px;
+        margin: 16px auto;
+    }
+
+    .b2bov-status-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 16px 20px;
+    }
+
+    .b2bov-section {
+        padding: 20px;
+    }
+
+    .b2bov-product-box {
+        flex-direction: column;
+    }
+
+    .b2bov-prod-img {
+        width: 100px;
+        height: 130px;
+    }
+
+    .b2bov-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .b2bov-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .b2bov-floating-back {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .b2bov-back-btn {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .b2bov-header {
+        padding: 10px 16px;
+    }
+
+    .b2bov-logo {
+        height: 40px;
+    }
+
+    .b2bov-title {
+        font-size: 16px;
+    }
+
+    .b2bov-order-no {
+        font-size: 18px;
+    }
+
+    .b2bov-section {
+        padding: 16px;
+    }
+
+    .b2bov-section h3 {
+        font-size: 17px;
+    }
+
+    .b2bov-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .b2bov-field span {
+        font-size: 14px;
+    }
+}

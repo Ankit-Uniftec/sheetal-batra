@@ -20,7 +20,9 @@ import B2BVendorSelection from "./screens/B2bvendorSelection/B2bvendorselection"
 import B2bExecutiveDashboard from "./screens/B2bExecutiveDashboard/B2bexecutivedashboard";
 import B2bProductForm from "./screens/B2bproductform/B2bproductform";
 import B2bOrderDetails from "./screens/B2borderdetails/B2bOrderDetails";
-import B2bReviewOrder from "./screens/B2bvieworder/B2bViewOrder";
+import B2bReviewOrder from "./screens/B2bRevieworder/B2bReviewOrder";
+import B2bOrderView from "./screens/B2bOrderView/B2bOrderView";
+import B2bOrderHistory from "./screens/B2bOrderHistory/B2bOrderHistory";
 
 
 function App() {
@@ -49,6 +51,8 @@ function App() {
         <Route path="/b2b-product-form" element={<B2bProductForm />} />
         <Route path="/b2b-order-details" element={<B2bOrderDetails />} />
         <Route path="/b2b-review-order" element={<B2bReviewOrder />} />
+        <Route path="/b2b-order-view/:id" element={<B2bOrderView />} />
+        <Route path="/b2b-order-history" element={<B2bOrderHistory />} />
       </Routes>
     </BrowserRouter>
   );

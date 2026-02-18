@@ -1,0 +1,415 @@
+/* ===================================
+   B2B REVIEW ORDER
+   Matches B2C Design Language
+   =================================== */
+
+* {
+  font-family: "Futura", sans-serif !important;
+  color: black;
+  box-sizing: border-box;
+}
+
+.b2b-review-bg {
+  min-height: 100vh;
+  background-image: url("../../images/Screen1bg.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  padding: 0 0 100px 0;
+}
+
+/* ===== HEADER ===== */
+.b2b-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 40px;
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.b2b-review-header img {
+  height: 50px;
+  cursor: pointer;
+}
+
+.b2b-review-header h1 {
+  font-family: "Athleas", serif !important;
+  font-size: 24px;
+  color: #d5b85a !important;
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ===== CONTENT ===== */
+.b2b-review-content {
+  width: 95%;
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ===== SECTIONS ===== */
+.b2b-review-section {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.b2b-review-section h3 {
+  font-family: "Athleas", serif !important;
+  font-size: 18px;
+  color: #d5b85a !important;
+  margin: 0 0 16px 0;
+}
+
+/* Review Grid */
+.b2b-review-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.b2b-review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+}
+
+.b2b-review-item .label {
+  font-size: 12px;
+  color: #888;
+}
+
+.b2b-review-item .value {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.b2b-review-item .badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.badge-blue {
+  background: #e3f2fd;
+  color: #1565c0 !important;
+}
+
+.badge-purple {
+  background: #f3e5f5;
+  color: #7b1fa2 !important;
+}
+
+/* Address */
+.b2b-review-address {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.b2b-review-address .label {
+  font-size: 12px;
+  color: #888;
+}
+
+.b2b-review-address .value {
+  font-size: 14px;
+}
+
+/* ===== TABLE ===== */
+.b2b-review-table-wrapper {
+  overflow-x: auto;
+}
+
+.b2b-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.b2b-review-table th {
+  text-align: left;
+  padding: 10px 12px;
+  background: rgba(213, 184, 90, 0.08);
+  color: #555;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 2px solid #d5b85a;
+}
+
+.b2b-review-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+
+.b2b-review-table tr:last-child td {
+  border-bottom: none;
+}
+
+.b2b-review-table tr:hover td {
+  background: rgba(213, 184, 90, 0.03);
+}
+
+.b2b-review-table .product-name {
+  font-weight: 500;
+}
+
+.b2b-review-table .total-col {
+  font-weight: 600;
+  color: #d5b85a;
+}
+
+/* ===== SUMMARY ===== */
+.b2b-review-summary-section {
+  border-left: 4px solid #d5b85a;
+}
+
+.b2b-review-summary {
+  max-width: 400px;
+  margin-left: auto;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-row.gross {
+  font-weight: 500;
+}
+
+.summary-row.markdown span:last-child {
+  color: #c62828;
+}
+
+.summary-row.final {
+  font-weight: 700;
+  font-size: 16px;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 2px solid #d5b85a;
+  border-bottom: none;
+}
+
+.summary-row.final span:last-child {
+  color: #d5b85a;
+}
+
+/* ===== NOTES ===== */
+.b2b-review-notes {
+  padding: 10px 0;
+  font-size: 14px;
+}
+
+.b2b-review-notes strong {
+  font-size: 13px;
+  color: #555;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.b2b-review-notes p {
+  margin: 0;
+  color: #333;
+}
+
+/* ===== WARNING ===== */
+.b2b-review-warning {
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.b2b-review-warning .warning-icon {
+  font-size: 24px;
+}
+
+.b2b-review-warning strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #e65100;
+}
+
+.b2b-review-warning p {
+  margin: 0;
+  font-size: 13px;
+  color: #bf360c;
+}
+
+/* ===== APPROVAL NOTICE ===== */
+.b2b-review-approval-notice {
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.b2b-review-approval-notice .info-icon {
+  font-size: 24px;
+}
+
+.b2b-review-approval-notice strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #1565c0;
+}
+
+.b2b-review-approval-notice p {
+  margin: 0;
+  font-size: 13px;
+  color: #0d47a1;
+}
+
+/* ===== ACTIONS ===== */
+.b2b-review-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 40px;
+  background: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid #eee;
+  z-index: 100;
+}
+
+.b2b-review-btn {
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.b2b-review-btn-secondary {
+  background: white;
+  border: 1px solid #D4D4D4;
+}
+
+.b2b-review-btn-secondary:hover {
+  border-color: #d5b85a;
+}
+
+.b2b-review-btn-submit {
+  background: #d5b85a;
+  border: none;
+  color: white !important;
+}
+
+.b2b-review-btn-submit:hover:not(:disabled) {
+  background: #c9a94e;
+}
+
+.b2b-review-btn-submit:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Floating back */
+.b2b-review-floating-back {
+  position: fixed;
+  bottom: 40px;
+  left: 30px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #d5b85a;
+  background: white;
+  color: #d5b85a !important;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  transition: all 0.2s;
+}
+
+.b2b-review-floating-back:hover {
+  background: #d5b85a;
+  color: white !important;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .b2b-review-header {
+    padding: 12px 16px;
+  }
+
+  .b2b-review-header img {
+    height: 40px;
+  }
+
+  .b2b-review-header h1 {
+    font-size: 16px;
+  }
+
+  .b2b-review-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .b2b-review-summary {
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .b2b-review-header {
+    padding: 10px 12px;
+  }
+
+  .b2b-review-header img {
+    height: 35px;
+  }
+
+  .b2b-review-header h1 {
+    font-size: 14px;
+  }
+
+  .b2b-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .b2b-review-actions {
+    padding: 12px 16px;
+  }
+}
