@@ -590,6 +590,16 @@ export default function Dashboard() {
 
   // Navigate to Customer Orders
   const viewCustomerOrders = (order) => {
+    // ✅ Save salesperson data before navigating
+    if (salesperson) {
+      sessionStorage.setItem("currentSalesperson", JSON.stringify({
+        name: salesperson.saleperson,
+        email: salesperson.email,
+        phone: salesperson.phone,
+        store: salesperson.store_name,
+      }));
+    }
+
     navigate("/orderHistory", {
       state: {
         customer: {
@@ -605,6 +615,16 @@ export default function Dashboard() {
 
   // Navigate from Client Book
   const viewClientOrders = (client) => {
+    // ✅ Save salesperson data before navigating
+    if (salesperson) {
+      sessionStorage.setItem("currentSalesperson", JSON.stringify({
+        name: salesperson.saleperson,
+        email: salesperson.email,
+        phone: salesperson.phone,
+        store: salesperson.store_name,
+      }));
+    }
+
     navigate("/orderHistory", {
       state: {
         customer: {

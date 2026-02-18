@@ -1,0 +1,528 @@
+/* ===== B2B VENDOR SELECTION PAGE ===== */
+
+.b2b-vendor-bg {
+  background-image: url("../../images/Screen1bg.png");
+  background-repeat: repeat;
+  background-size: cover;
+  background-position: center;
+  min-height: 100vh;
+  width: 100%;
+  padding: 0 0 40px 0;
+  font-family: 'Jost', sans-serif;
+}
+
+/* ===== HEADER ===== */
+.b2b-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 40px;
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.b2b-header-logo {
+  height: 50px;
+  cursor: pointer;
+}
+
+.b2b-header-title {
+  font-family: "Athleas", serif !important;
+  font-size: 24px;
+  color: #d5b85a !important;
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ===== MAIN CARD ===== */
+.b2b-vendor-card {
+  width: 95%;
+  max-width: 1200px;
+  margin: 20px auto;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 30px 40px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.b2b-section-title {
+  font-family: "Athleas", serif !important;
+  font-size: 22px;
+  color: #d5b85a !important;
+  font-weight: 600;
+  margin: 0 0 20px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+/* ===== FORM SECTION ===== */
+.b2b-form-section {
+  margin-bottom: 30px;
+}
+
+.b2b-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.b2b-field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.b2b-field-large {
+  flex: 2;
+  min-width: 400px;
+}
+
+.b2b-field-full {
+  flex: 1 1 100%;
+  min-width: 100%;
+}
+
+.b2b-field label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.b2b-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.b2b-input:focus {
+  border-color: #d5b85a;
+}
+
+.b2b-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.b2b-textarea:focus {
+  border-color: #d5b85a;
+}
+
+/* ===== VENDOR DETAILS CARD ===== */
+.b2b-vendor-details-card {
+  background: #fafaf8;
+  border: 1px solid #e5e0d5;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 30px;
+}
+
+.b2b-vendor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.b2b-vendor-name h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 4px 0;
+}
+
+.b2b-vendor-location {
+  font-size: 14px;
+  color: #888;
+  background: #f0f0f0;
+  padding: 2px 10px;
+  border-radius: 20px;
+}
+
+.b2b-vendor-code {
+  background: #d5b85a;
+  color: white;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.b2b-vendor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.b2b-info-group {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid #eee;
+}
+
+.b2b-info-group h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #d5b85a;
+  margin: 0 0 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.b2b-info-row {
+  display: flex;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.b2b-info-row:last-child {
+  margin-bottom: 0;
+}
+
+.b2b-label {
+  color: #888;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.b2b-value {
+  color: #333;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.b2b-value.b2b-address {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.b2b-no-contact {
+  color: #999;
+  font-style: italic;
+  font-size: 13px;
+  margin: 0;
+}
+
+.b2b-more-contacts {
+  font-size: 12px;
+  color: #d5b85a;
+  margin: 8px 0 0 0;
+  cursor: pointer;
+}
+
+/* Credit Status Colors */
+.b2b-credit-ok {
+  color: #28a745 !important;
+}
+
+.b2b-credit-warning {
+  color: #dc3545 !important;
+  font-weight: 600 !important;
+}
+
+/* ===== CREDIT ALERT ===== */
+.b2b-credit-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.b2b-alert-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.b2b-alert-content strong {
+  display: block;
+  color: #856404;
+  margin-bottom: 4px;
+}
+
+.b2b-alert-content p {
+  color: #856404;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ===== ACTION BUTTONS ===== */
+.b2b-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.b2b-btn {
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.b2b-btn-primary {
+  background: #d5b85a;
+  color: white;
+}
+
+.b2b-btn-primary:hover:not(:disabled) {
+  background: #c4a84a;
+}
+
+.b2b-btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.b2b-btn-secondary {
+  background: transparent;
+  color: #666;
+  border: 1px solid #ddd;
+}
+
+.b2b-btn-secondary:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+/* ===== FLOATING BACK BUTTON ===== */
+.b2b-floating-back {
+  position: fixed;
+  left: 25px;
+  bottom: 25px;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #d5b85a;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.b2b-floating-back:hover {
+  background: #d5b85a;
+  color: white;
+}
+
+/* ===== SEARCHABLE SELECT STYLES (B2B Specific) ===== */
+.b2b-vendor-bg .ss-root {
+  position: relative;
+  width: 100%;
+}
+
+.b2b-vendor-bg .ss-control {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: text;
+  min-height: 48px;
+  transition: border-color 0.2s ease;
+}
+
+.b2b-vendor-bg .ss-control:hover,
+.b2b-vendor-bg .ss-control.ss-open {
+  border-color: #d5b85a;
+}
+
+.b2b-vendor-bg .ss-input {
+  border: none;
+  outline: none;
+  flex: 1;
+  font-size: 15px;
+  background: transparent;
+  color: #333;
+  padding: 0;
+}
+
+.b2b-vendor-bg .ss-input::placeholder {
+  color: #999;
+}
+
+.b2b-vendor-bg .ss-clear {
+  border: none;
+  background: #eee;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+}
+
+.b2b-vendor-bg .ss-clear:hover {
+  background: #ddd;
+}
+
+.b2b-vendor-bg .ss-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 300px;
+  overflow: hidden;
+}
+
+.b2b-vendor-bg .ss-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.b2b-vendor-bg .ss-option {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s ease;
+}
+
+.b2b-vendor-bg .ss-option:hover,
+.b2b-vendor-bg .ss-option.is-focused {
+  background: #f8f5ed;
+}
+
+.b2b-vendor-bg .ss-option.is-selected {
+  background: #f0ebe0;
+  font-weight: 600;
+}
+
+.b2b-vendor-bg .ss-empty {
+  padding: 16px;
+  color: #999;
+  text-align: center;
+  font-size: 14px;
+}
+
+.b2b-vendor-bg .ss-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1024px) {
+  .b2b-vendor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .b2b-header {
+    padding: 12px 20px;
+  }
+
+  .b2b-header-title {
+    font-size: 18px;
+  }
+
+  .b2b-vendor-card {
+    padding: 20px;
+    margin: 10px;
+    width: calc(100% - 20px);
+  }
+
+  .b2b-row {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .b2b-field,
+  .b2b-field-large {
+    min-width: 100%;
+  }
+
+  .b2b-vendor-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .b2b-vendor-code {
+    align-self: flex-start;
+  }
+
+  .b2b-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .b2b-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .b2b-info-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .b2b-label {
+    min-width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .b2b-header-logo {
+    height: 40px;
+  }
+
+  .b2b-header-title {
+    font-size: 16px;
+  }
+
+  .b2b-section-title {
+    font-size: 18px;
+  }
+
+  .b2b-vendor-details-card {
+    padding: 16px;
+  }
+
+  .b2b-info-group {
+    padding: 12px;
+  }
+}

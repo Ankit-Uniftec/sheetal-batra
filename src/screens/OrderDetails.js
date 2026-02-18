@@ -533,7 +533,7 @@ export default function OrderDetails() {
 
       salesperson: selectedSP?.saleperson || spFallback?.name || null,
       salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : (spFallback?.phone ? formatPhoneNumber(spFallback.phone) : null),
-      salesperson_email: selectedSP?.email || spFallback?.email || null,
+      salesperson_email: (selectedSP?.email || spFallback?.email || '').toLowerCase() || null,
       salesperson_store: selectedSP?.store_name || spFallback?.store || null,
     };
 

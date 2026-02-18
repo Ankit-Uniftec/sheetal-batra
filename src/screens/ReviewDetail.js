@@ -129,7 +129,7 @@ export default function ReviewDetail() {
       console.log("⚠️ Found empty fields that might cause PDF issues:");
     }
 
-    setLoadingMessage("Saving order...");
+    setLoadingMessage("Validating order data...");
 
     // 2️⃣ PREPARE ORDER DATA
     const normalizedOrder = {
@@ -147,21 +147,93 @@ export default function ReviewDetail() {
       expected_delivery: toISODate(order.expected_delivery),
     };
 
-    // Ensure salesperson_store is never null - look up from salesperson table if needed
-    if (!normalizedOrder.salesperson_store && normalizedOrder.salesperson_email) {
+
+    // ✅ SALESPERSON VALIDATION & AUTO-FILL
+    // Check if salesperson data is missing and try to recover it
+    const missingSalesperson = !normalizedOrder.salesperson || !normalizedOrder.salesperson_email;
+    const missingStore = !normalizedOrder.salesperson_store;
+
+    if (missingSalesperson || missingStore) {
+      setLoadingMessage("Fetching salesperson data...");
+
       try {
-        const { data: spData } = await supabase
-          .from("salesperson")
-          .select("store_name")
-          .eq("email", normalizedOrder.salesperson_email)
-          .single();
-        if (spData?.store_name) {
-          normalizedOrder.salesperson_store = spData.store_name;
+        // Try 1: Get from sessionStorage (currentSalesperson)
+        const savedSP = sessionStorage.getItem("currentSalesperson");
+        if (savedSP) {
+          const spData = JSON.parse(savedSP);
+          if (!normalizedOrder.salesperson && spData.name) {
+            normalizedOrder.salesperson = spData.name;
+          }
+          if (!normalizedOrder.salesperson_email && spData.email) {
+            normalizedOrder.salesperson_email = spData.email.toLowerCase();
+          }
+          if (!normalizedOrder.salesperson_phone && spData.phone) {
+            normalizedOrder.salesperson_phone = spData.phone;
+          }
+          if (!normalizedOrder.salesperson_store && spData.store) {
+            normalizedOrder.salesperson_store = spData.store;
+          }
         }
+
+        // Try 2: Get from associateSession and fetch from database
+        if (!normalizedOrder.salesperson_email) {
+          const associateSession = sessionStorage.getItem("associateSession");
+          if (associateSession) {
+            const session = JSON.parse(associateSession);
+            const associateEmail = session?.user?.email;
+            if (associateEmail) {
+              const { data: spData } = await supabase
+                .from("salesperson")
+                .select("saleperson, email, phone, store_name")
+                .eq("email", associateEmail.toLowerCase())
+                .single();
+
+              if (spData) {
+                normalizedOrder.salesperson = spData.saleperson;
+                normalizedOrder.salesperson_email = spData.email.toLowerCase();
+                normalizedOrder.salesperson_phone = spData.phone;
+                normalizedOrder.salesperson_store = spData.store_name;
+              }
+            }
+          }
+        }
+
+        // Try 3: If we have email but missing other data, fetch from salesperson table
+        if (normalizedOrder.salesperson_email && (!normalizedOrder.salesperson || !normalizedOrder.salesperson_store)) {
+          const { data: spData } = await supabase
+            .from("salesperson")
+            .select("saleperson, email, phone, store_name")
+            .eq("email", normalizedOrder.salesperson_email.toLowerCase())
+            .single();
+
+          if (spData) {
+            if (!normalizedOrder.salesperson) normalizedOrder.salesperson = spData.saleperson;
+            if (!normalizedOrder.salesperson_store) normalizedOrder.salesperson_store = spData.store_name;
+            if (!normalizedOrder.salesperson_phone) normalizedOrder.salesperson_phone = spData.phone;
+          }
+        }
+
+        // Normalize email to lowercase
+        if (normalizedOrder.salesperson_email) {
+          normalizedOrder.salesperson_email = normalizedOrder.salesperson_email.toLowerCase();
+        }
+
       } catch (e) {
-        console.warn("Could not look up salesperson store");
+        console.warn("Could not recover salesperson data:", e);
+      }
+    } else {
+      // Even if we have salesperson data, normalize email to lowercase
+      if (normalizedOrder.salesperson_email) {
+        normalizedOrder.salesperson_email = normalizedOrder.salesperson_email.toLowerCase();
       }
     }
+
+    // Final fallback for store
+    if (!normalizedOrder.salesperson_store) {
+      normalizedOrder.salesperson_store = "Delhi Store";
+    }
+
+    setLoadingMessage("Saving order...");
 
     // Remove measurement saving flags from order data
     const { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;

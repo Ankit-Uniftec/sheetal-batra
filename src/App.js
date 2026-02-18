@@ -3,19 +3,24 @@ import OtpVerification from "./screens/OtpVerification";
 import OtpDialogBox from "./screens/OtpDialogBox";
 import CustomerDetailForm from "./screens/CustomerDetailForm";
 import ProductForm from "./screens/ProductForm";
-import OrderDetails  from "./screens/OrderDetails";
+import OrderDetails from "./screens/OrderDetails";
 import ReviewDetail from "./screens/ReviewDetail";
 import SALogin from "./screens/SALogin";
 import AssociateDashboard from "./screens/AssociateDashboard";
 import WarehouseDashboard from "./screens/WarehouseDashboard";
 import OrderHistory from "./screens/OrderHistory";
-import {  Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced"
 import EditOrder from "./screens/EditOrder/EditOrder";
 import InventoryDashboard from "./screens/InventoryDashboard/InventoryDashboard";
 import AccountsDashboard from "./screens/AccountsDashboard/AccountsDashboard";
 import OrderDetailPage from "./pages/OrderDetailPage";
 import AdminDashboard from "./screens/AdminDashboard/AdminDashboard";
+import B2BVendorSelection from "./screens/B2bvendorSelection/B2bvendorselection";
+import B2bExecutiveDashboard from "./screens/B2bExecutiveDashboard/B2bexecutivedashboard";
+import B2bProductForm from "./screens/B2bproductform/B2bproductform";
+import B2bOrderDetails from "./screens/B2borderdetails/B2bOrderDetails";
+import B2bReviewOrder from "./screens/B2bvieworder/B2bViewOrder";
 
 
 function App() {
@@ -26,22 +31,27 @@ function App() {
         <Route path="/login" element={<SALogin />} />
         <Route path="/buyerVerification" element={<OtpVerification />} />
         <Route path="/otp" element={<OtpDialogBox />} />
-        <Route path="/userinfo" element={<CustomerDetailForm />} /> 
+        <Route path="/userinfo" element={<CustomerDetailForm />} />
         <Route path="/product" element={<ProductForm />} />
-        <Route path="/confirmDetail" element={<OrderDetails/>}/>
-        <Route path="/orderDetail" element={<ReviewDetail/>}/>
+        <Route path="/confirmDetail" element={<OrderDetails />} />
+        <Route path="/orderDetail" element={<ReviewDetail />} />
         <Route path="/AssociateDashboard" element={<AssociateDashboard />} />
         <Route path="/warehouseDashboard" element={<WarehouseDashboard />} />
         <Route path="/orderHistory" element={<OrderHistory />} />
-        <Route path="order-placed" element={<OrderPlaced />}/>
-        <Route path="/edit-order" element={<EditOrder/>}/>
-        <Route path="/inventoryDashboard" element={<InventoryDashboard/>} />
-        <Route path="/accounts" element={<AccountsDashboard/>}/>
-        <Route path="/order/:orderId" element={<OrderDetailPage/>}/>
-        <Route path="/admin" element={<AdminDashboard/>}/>
+        <Route path="order-placed" element={<OrderPlaced />} />
+        <Route path="/edit-order" element={<EditOrder />} />
+        <Route path="/inventoryDashboard" element={<InventoryDashboard />} />
+        <Route path="/accounts" element={<AccountsDashboard />} />
+        <Route path="/order/:orderId" element={<OrderDetailPage />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/b2b-executive-dashboard" element={<B2bExecutiveDashboard />} />
+        <Route path="/b2b-vendor-selection" element={<B2BVendorSelection />} />
+        <Route path="/b2b-product-form" element={<B2bProductForm />} />
+        <Route path="/b2b-order-details" element={<B2bOrderDetails />} />
+        <Route path="/b2b-review-order" element={<B2bReviewOrder />} />
       </Routes>
     </BrowserRouter>
   );
 }
 
-export default App;
+export default App;
