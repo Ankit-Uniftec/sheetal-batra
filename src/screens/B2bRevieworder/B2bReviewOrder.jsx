@@ -1,42 +1,85 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import "../Screen4.css";
 import "./B2bReviewOrder.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 
-/**
- * Session Storage Keys
- */
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
 const DETAILS_SESSION_KEY = "b2bOrderDetailsData";
+
+function ColorDotDisplay({ colorObject }) {
+    if (!colorObject) return null;
+    let displayColorName = "";
+    let displayColorHex = "#000000";
+    if (typeof colorObject === "string") {
+        displayColorName = colorObject;
+        displayColorHex = colorObject.startsWith("#") ? colorObject : "gray";
+    } else if (typeof colorObject === "object" && colorObject !== null) {
+        displayColorName = colorObject.name || "";
+        displayColorHex = colorObject.hex || "";
+    }
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ background: displayColorHex, height: "14px", width: "28px", borderRadius: "8px", border: "1px solid #ccc" }} />
+            <span>{displayColorName}</span>
+        </div>
+    );
+}
 
 export default function B2bReviewOrder() {
     const navigate = useNavigate();
     const { showPopup, PopupComponent } = usePopup();
 
-    // User from supabase
     const [user, setUser] = useState(null);
-
-    // Data from all steps
+    const [salespersonStore, setSalespersonStore] = useState("Delhi Store");
     const [vendorData, setVendorData] = useState(null);
     const [productData, setProductData] = useState(null);
     const [detailsData, setDetailsData] = useState(null);
-
-    // Loading state
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Get current user
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => {
-            setUser(data?.user || null);
-        });
+        const fetchUser = async () => {
+            const { data } = await supabase.auth.getUser();
+            const currentUser = data?.user || null;
+            setUser(currentUser);
+
+            if (currentUser) {
+                // Try 1: Get store from currentSalesperson session (same as B2C)
+                const savedSP = sessionStorage.getItem("currentSalesperson");
+                if (savedSP) {
+                    try {
+                        const spData = JSON.parse(savedSP);
+                        if (spData.store) { setSalespersonStore(spData.store); return; }
+                    } catch (e) {}
+                }
+
+                // Try 2: Fetch from salesperson table by email
+                if (currentUser.email) {
+                    const { data: spData } = await supabase
+                        .from("salesperson")
+                        .select("store_name")
+                        .eq("email", currentUser.email.toLowerCase())
+                        .single();
+                    if (spData?.store_name) { setSalespersonStore(spData.store_name); return; }
+                }
+
+                // Try 3: Fetch from profiles table
+                const { data: profileData } = await supabase
+                    .from("profiles")
+                    .select("store")
+                    .eq("id", currentUser.id)
+                    .single();
+                if (profileData?.store) setSalespersonStore(profileData.store);
+            }
+        };
+        fetchUser();
     }, []);
 
-    // ==================== LOAD ALL DATA FROM SESSION ====================
     useEffect(() => {
         const vendorSaved = sessionStorage.getItem(VENDOR_SESSION_KEY);
         const productSaved = sessionStorage.getItem(PRODUCT_SESSION_KEY);
@@ -58,7 +101,7 @@ export default function B2bReviewOrder() {
         }
     }, [navigate]);
 
-    // ==================== DERIVED DATA ====================
+    // Derived data
     const vendor = vendorData?.vendor;
     const items = productData?.orderItems || [];
     const subtotal = productData?.subtotal || 0;
@@ -66,7 +109,6 @@ export default function B2bReviewOrder() {
     const grandTotal = productData?.grandTotal || 0;
     const totalQuantity = productData?.totalQuantity || 0;
 
-    // From vendor selection
     const poNumber = vendorData?.poNumber || "";
     const merchandiser = vendorData?.merchandiser || "";
     const orderType = vendorData?.orderType || "Buyout";
@@ -74,48 +116,33 @@ export default function B2bReviewOrder() {
     const remarks = vendorData?.remarks || "";
     const availableCredit = vendorData?.availableCredit || 0;
 
-    // From delivery details
     const deliveryAddress = detailsData?.deliveryAddress || "";
     const orderNotes = detailsData?.orderNotes || "";
 
-    // Calculations
     const markdownAmount = grandTotal * (discountPercent / 100);
     const finalTotal = grandTotal - markdownAmount;
 
-    // Credit check
     const projectedCredit = (vendor?.current_credit_used || 0) + (orderType === "Buyout" ? finalTotal : 0);
     const creditLimit = vendor?.credit_limit || 0;
     const exceedsCredit = orderType === "Buyout" && projectedCredit > creditLimit;
 
-    // ==================== SUBMIT ORDER ====================
+    // Submit Order
     const handleSubmit = async () => {
         if (isSubmitting) return;
         setIsSubmitting(true);
 
         try {
-            // Generate order number using RPC (same as B2C)
+            // Generate order number using salesperson store (same as B2C)
             const { data: orderNo, error: orderNoError } = await supabase.rpc(
                 "generate_order_no",
-                { p_store: productData?.modeOfDelivery || "Delhi Store" }
+                { p_store: salespersonStore || "Delhi Store" }
             );
+            if (orderNoError) throw orderNoError;
+            if (!orderNo) throw new Error("Failed to generate order number.");
 
-            if (orderNoError) {
-                console.error("Order number generation error:", orderNoError);
-                throw orderNoError;
-            }
-
-            if (!orderNo) {
-                throw new Error("Failed to generate order number. Please try again.");
-            }
-
-            // Get earliest delivery date from items for order-level delivery_date
-            const deliveryDates = items
-                .map(item => item.delivery_date)
-                .filter(Boolean)
-                .sort();
+            const deliveryDates = items.map(item => item.delivery_date).filter(Boolean).sort();
             const earliestDeliveryDate = deliveryDates[0] || null;
 
-            // Prepare order payload
             const orderPayload = {
                 order_no: orderNo,
                 user_id: user?.id,
@@ -124,11 +151,12 @@ export default function B2bReviewOrder() {
                 po_number: poNumber,
                 b2b_order_type: orderType,
                 merchandiser_name: merchandiser,
+                salesperson_store: salespersonStore || "Delhi Store",
                 markdown_percent: discountPercent,
                 markdown_amount: markdownAmount,
-                delivery_date: earliestDeliveryDate, // Order-level: earliest from items
+                delivery_date: earliestDeliveryDate,
                 delivery_address: deliveryAddress,
-                items: items, // Each item also has its own delivery_date
+                items: items,
                 comments: [remarks, orderNotes].filter(Boolean).join("\n\n"),
                 subtotal: subtotal,
                 taxes: taxes,
@@ -142,16 +170,13 @@ export default function B2bReviewOrder() {
                 attachments: productData?.attachments || [],
             };
 
-            // Insert order
             const { data: orderData, error: orderError } = await supabase
                 .from("orders")
                 .insert([orderPayload])
                 .select()
                 .single();
-
             if (orderError) throw orderError;
 
-            // Create approval record
             const { error: approvalError } = await supabase
                 .from("b2b_approvals")
                 .insert([{
@@ -160,34 +185,21 @@ export default function B2bReviewOrder() {
                     submitted_by: user?.email || "unknown",
                     submitted_at: new Date().toISOString(),
                 }]);
+            if (approvalError) console.warn("Failed to create approval record:", approvalError);
 
-            if (approvalError) {
-                console.warn("Failed to create approval record:", approvalError);
-            }
-
-            // Clear session storage
             sessionStorage.removeItem(VENDOR_SESSION_KEY);
             sessionStorage.removeItem(PRODUCT_SESSION_KEY);
             sessionStorage.removeItem(DETAILS_SESSION_KEY);
 
-            // Success
             showPopup({
-                title: "Order Submitted",
-                message: `Order ${orderNo} has been submitted for approval.`,
+                title: "Order Submitted!",
+                message: `Order #${orderNo} has been submitted for approval.`,
                 type: "success",
+                onConfirm: () => navigate("/b2b-executive-dashboard"),
             });
-
-            setTimeout(() => {
-                navigate("/b2b-executive-dashboard");
-            }, 2000);
-
-        } catch (error) {
-            console.error("Error submitting order:", error);
-            showPopup({
-                title: "Submission Failed",
-                message: error.message || "Failed to submit order. Please try again.",
-                type: "error",
-            });
+        } catch (err) {
+            console.error("Order submission error:", err);
+            showPopup({ title: "Submission Failed", message: err.message || "Failed to submit order.", type: "error" });
         } finally {
             setIsSubmitting(false);
         }
@@ -196,162 +208,156 @@ export default function B2bReviewOrder() {
     const handleBack = () => navigate("/b2b-order-details");
 
     if (!vendorData || !productData || !detailsData) {
-        return <div className="b2b-review-loading">Loading...</div>;
+        return <div className="b2b-ro-loading">Loading...</div>;
     }
 
     return (
-        <div className="b2b-review-bg">
+        <div className="screen4-bg">
             {PopupComponent}
 
-            {/* Header */}
-            <header className="b2b-review-header">
-                <img src={Logo} alt="logo" className="b2b-review-logo" onClick={handleBack} />
-                <h1 className="b2b-review-title">B2B Order - Review & Submit</h1>
+            {isSubmitting && (
+                <div className="b2b-ro-loader">
+                    <img src={Logo} alt="Loading" className="b2b-ro-loader-logo" />
+                    <p>Submitting order...</p>
+                </div>
+            )}
+
+            <header className="pf-header">
+                <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
+                <h1 className="pf-header-title">Review Order</h1>
+                {vendor && (
+                    <div className="b2b-vendor-badge">
+                        <span className="vendor-name">{vendor.store_brand_name}</span>
+                        <span className="vendor-code">{vendor.vendor_code}</span>
+                    </div>
+                )}
             </header>
 
-            <div className="b2b-review-container">
-                {/* Vendor Information */}
-                <div className="b2b-review-section">
-                    <h3>Vendor Information</h3>
-                    <div className="b2b-review-grid">
-                        <div className="b2b-review-item">
-                            <span className="label">Vendor Name</span>
-                            <span className="value">{vendor?.store_brand_name}</span>
-                        </div>
-                        <div className="b2b-review-item">
-                            <span className="label">Vendor Code</span>
-                            <span className="value">{vendor?.vendor_code}</span>
-                        </div>
-                        <div className="b2b-review-item">
-                            <span className="label">Location</span>
-                            <span className="value">{vendor?.location || "N/A"}</span>
-                        </div>
-                        <div className="b2b-review-item">
-                            <span className="label">GST Number</span>
-                            <span className="value">{vendor?.gst_number || "N/A"}</span>
-                        </div>
+            <div className="b2b-ro-container">
+                {/* Vendor Details */}
+                <div className="b2b-ro-section">
+                    <h3>Vendor Details</h3>
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field"><label>Vendor:</label><span>{vendor?.store_brand_name}</span></div>
+                        <div className="b2b-ro-field"><label>Vendor Code:</label><span>{vendor?.vendor_code}</span></div>
+                        <div className="b2b-ro-field"><label>Location:</label><span>{vendor?.location || "N/A"}</span></div>
+                    </div>
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field"><label>GST Number:</label><span>{vendor?.gst_number || "N/A"}</span></div>
+                        <div className="b2b-ro-field"><label>Payment Terms:</label><span>{vendor?.payment_terms || "N/A"}</span></div>
                     </div>
                 </div>
 
                 {/* Order Information */}
-                <div className="b2b-review-section">
+                <div className="b2b-ro-section">
                     <h3>Order Information</h3>
-                    <div className="b2b-review-grid">
-                        <div className="b2b-review-item">
-                            <span className="label">PO Number</span>
-                            <span className="value">{poNumber}</span>
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field"><label>PO Number:</label><span>{poNumber}</span></div>
+                        <div className="b2b-ro-field">
+                            <label>Order Type:</label>
+                            <span className={`b2b-ro-badge ${orderType === "Consignment" ? "badge-purple" : "badge-blue"}`}>{orderType}</span>
                         </div>
-                        <div className="b2b-review-item">
-                            <span className="label">Order Type</span>
-                            <span className={`value badge ${orderType === "Consignment" ? "badge-purple" : "badge-blue"}`}>
-                                {orderType}
-                            </span>
-                        </div>
-                        <div className="b2b-review-item">
-                            <span className="label">Merchandiser</span>
-                            <span className="value">{merchandiser}</span>
-                        </div>
-                        <div className="b2b-review-item">
-                            <span className="label">Markdown</span>
-                            <span className="value">{discountPercent}%</span>
-                        </div>
-                        <div className="b2b-review-item">
-                            <span className="label">Mode of Delivery</span>
-                            <span className="value">{productData?.modeOfDelivery || "Delhi Store"}</span>
-                        </div>
+                        <div className="b2b-ro-field"><label>Merchandiser:</label><span>{merchandiser}</span></div>
                     </div>
-                    <div className="b2b-review-address">
-                        <span className="label">Delivery Address</span>
-                        <span className="value">{deliveryAddress || "N/A"}</span>
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field"><label>Markdown:</label><span>{discountPercent}%</span></div>
+                        <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "Delhi Store"}</span></div>
                     </div>
+                    {deliveryAddress && (
+                        <div className="b2b-ro-field b2b-ro-field-wide" style={{ marginTop: 12 }}>
+                            <label>Delivery Address:</label>
+                            <span>{deliveryAddress}</span>
+                        </div>
+                    )}
                 </div>
 
-                {/* Products Table */}
-                <div className="b2b-review-section">
-                    <h3>Products ({items.length} items, {totalQuantity} units)</h3>
-                    <div className="b2b-review-table-wrapper">
-                        <table className="b2b-review-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Product</th>
-                                    <th>Top / Bottom</th>
-                                    <th>Size</th>
-                                    <th>Qty</th>
-                                    <th>Delivery</th>
-                                    <th>Unit Price</th>
-                                    <th>Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.map((item, idx) => (
-                                    <tr key={item._id || idx}>
-                                        <td>{idx + 1}</td>
-                                        <td className="product-name">{item.product_name}</td>
-                                        <td>
-                                            {item.top}{item.top_color?.name && ` (${item.top_color.name})`}
-                                            {" / "}
-                                            {item.bottom}{item.bottom_color?.name && ` (${item.bottom_color.name})`}
-                                        </td>
-                                        <td>{item.size}</td>
-                                        <td>{item.quantity}</td>
-                                        <td>{item.delivery_date ? formatDate(item.delivery_date) : "N/A"}</td>
-                                        <td>₹{formatIndianNumber(item.price)}</td>
-                                        <td className="total-col">₹{formatIndianNumber(item.price * item.quantity)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* Order Summary */}
-                <div className="b2b-review-section b2b-review-summary-section">
-                    <h3>Order Summary</h3>
-                    <div className="b2b-review-summary">
-                        <div className="summary-row">
-                            <span>Total Items</span>
-                            <span>{totalQuantity}</span>
-                        </div>
-                        <div className="summary-row">
-                            <span>Subtotal</span>
-                            <span>₹{formatIndianNumber(subtotal.toFixed(2))}</span>
-                        </div>
-                        <div className="summary-row">
-                            <span>GST (18%)</span>
-                            <span>₹{formatIndianNumber(taxes.toFixed(2))}</span>
-                        </div>
-                        <div className="summary-row gross">
-                            <span>Gross Total</span>
-                            <span>₹{formatIndianNumber(grandTotal.toFixed(2))}</span>
-                        </div>
-                        {discountPercent > 0 && (
-                            <div className="summary-row markdown">
-                                <span>Markdown ({discountPercent}%)</span>
-                                <span>- ₹{formatIndianNumber(markdownAmount.toFixed(2))}</span>
+                {/* Product Details */}
+                <div className="b2b-ro-section">
+                    <h3>Product Details ({items.length} items, {totalQuantity} units)</h3>
+                    {items.map((item, i) => (
+                        <div key={item._id || i} className="b2b-ro-product-box">
+                            {item.image_url && <img src={item.image_url} className="b2b-ro-prod-img" alt="" />}
+                            <div className="b2b-ro-product-fields">
+                                <div className="b2b-ro-field b2b-ro-field-wide">
+                                    <label>Product Name:</label>
+                                    <span>{item.product_name}</span>
+                                </div>
+                                <div className="b2b-ro-product-grid">
+                                    <div className="b2b-ro-field">
+                                        <label>Top:</label>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                            <span>{item.top || "—"}</span>
+                                            {item.top_color && <ColorDotDisplay colorObject={item.top_color} />}
+                                        </div>
+                                    </div>
+                                    <div className="b2b-ro-field">
+                                        <label>Bottom:</label>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                            <span>{item.bottom || "—"}</span>
+                                            {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
+                                        </div>
+                                    </div>
+                                    <div className="b2b-ro-field"><label>Size:</label><span>{item.size}</span></div>
+                                    <div className="b2b-ro-field"><label>Qty:</label><span>{item.quantity || 1}</span></div>
+                                    <div className="b2b-ro-field"><label>Unit Price:</label><span>₹{formatIndianNumber(item.price)}</span></div>
+                                    <div className="b2b-ro-field"><label>Total:</label><span style={{ fontWeight: 600 }}>₹{formatIndianNumber(item.price * (item.quantity || 1))}</span></div>
+                                    {item.delivery_date && (
+                                        <div className="b2b-ro-field"><label>Delivery:</label><span>{formatDate(item.delivery_date)}</span></div>
+                                    )}
+                                </div>
+                                {item.extras && item.extras.length > 0 && (
+                                    <div className="b2b-ro-field b2b-ro-field-wide">
+                                        <label>Extras:</label>
+                                        <div className="b2b-ro-extras">
+                                            {item.extras.map((extra, idx) => (
+                                                <div key={idx} className="b2b-ro-extra-item">
+                                                    <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
+                                                    {extra.color && <ColorDotDisplay colorObject={extra.color} />}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                        <div className="summary-row final">
-                            <span>Final Total</span>
-                            <span>₹{formatIndianNumber(finalTotal.toFixed(2))}</span>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Payment Details */}
+                <div className="b2b-ro-section">
+                    <h3>Payment Details</h3>
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field"><label>Subtotal:</label><span>₹{formatIndianNumber(Math.round(subtotal))}</span></div>
+                        <div className="b2b-ro-field"><label>GST (18%):</label><span>₹{formatIndianNumber(Math.round(taxes))}</span></div>
+                        <div className="b2b-ro-field"><label>Gross Total:</label><span style={{ fontWeight: 600 }}>₹{formatIndianNumber(Math.round(grandTotal))}</span></div>
+                    </div>
+                    {discountPercent > 0 && (
+                        <div className="b2b-ro-row3">
+                            <div className="b2b-ro-field"><label>Markdown ({discountPercent}%):</label><span style={{ color: "#4caf50" }}>- ₹{formatIndianNumber(Math.round(markdownAmount))}</span></div>
+                        </div>
+                    )}
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field b2b-ro-final-total">
+                            <label>Final Total:</label>
+                            <span>₹{formatIndianNumber(Math.round(finalTotal))}</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Notes */}
                 {(remarks || orderNotes) && (
-                    <div className="b2b-review-section">
+                    <div className="b2b-ro-section">
                         <h3>Notes & Remarks</h3>
                         {remarks && (
-                            <div className="b2b-review-notes">
-                                <strong>Order Remarks:</strong>
-                                <p>{remarks}</p>
+                            <div className="b2b-ro-field b2b-ro-field-wide" style={{ marginBottom: 12 }}>
+                                <label>Order Remarks:</label>
+                                <span>{remarks}</span>
                             </div>
                         )}
                         {orderNotes && (
-                            <div className="b2b-review-notes">
-                                <strong>Delivery Notes:</strong>
-                                <p>{orderNotes}</p>
+                            <div className="b2b-ro-field b2b-ro-field-wide">
+                                <label>Delivery Notes:</label>
+                                <span>{orderNotes}</span>
                             </div>
                         )}
                     </div>
@@ -359,8 +365,8 @@ export default function B2bReviewOrder() {
 
                 {/* Credit Warning */}
                 {exceedsCredit && (
-                    <div className="b2b-review-warning">
-                        <span className="warning-icon">⚠️</span>
+                    <div className="b2b-ro-warning">
+                        <span>⚠️</span>
                         <div>
                             <strong>Credit Limit Warning</strong>
                             <p>This order exceeds the vendor's available credit and will require approval.</p>
@@ -369,27 +375,24 @@ export default function B2bReviewOrder() {
                 )}
 
                 {/* Approval Notice */}
-                <div className="b2b-review-approval-notice">
-                    <span className="info-icon">ℹ️</span>
+                <div className="b2b-ro-approval-notice">
+                    <span>ℹ️</span>
                     <div>
                         <strong>Approval Required</strong>
                         <p>This order will be submitted for approval. You will be notified once it's approved.</p>
                     </div>
                 </div>
+
+                {/* Action Buttons */}
+                <div className="footer-btns">
+                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>← Back to Edit</button>
+                    <button className="continueBtn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: isSubmitting ? "#ccc" : "#4caf50" }}>
+                        {isSubmitting ? "Submitting..." : "Submit for Approval"}
+                    </button>
+                </div>
             </div>
 
-            {/* Actions */}
-            <div className="b2b-review-actions">
-                <button className="b2b-review-btn b2b-review-btn-secondary" onClick={handleBack} disabled={isSubmitting}>
-                    ← Back to Edit
-                </button>
-                <button className="b2b-review-btn b2b-review-btn-submit" onClick={handleSubmit} disabled={isSubmitting}>
-                    {isSubmitting ? "Submitting..." : "Submit for Approval"}
-                </button>
-            </div>
-
-            {/* Floating Back */}
-            <button className="b2b-review-floating-back" onClick={handleBack} disabled={isSubmitting}>←</button>
+            <button className="back-btn" onClick={handleBack} disabled={isSubmitting}>←</button>
         </div>
     );
 }

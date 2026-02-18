@@ -1,415 +1,302 @@
-/* ===================================
-   B2B REVIEW ORDER
-   Matches B2C Design Language
-   =================================== */
+/* B2B Review Order - Matching B2C ReviewDetail style */
+/* Base styles (screen4-bg, pf-header, footer-btns, draftBtn, continueBtn, back-btn) from Screen4.css */
 
-* {
-  font-family: "Futura", sans-serif !important;
-  color: black;
-  box-sizing: border-box;
+.b2b-ro-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-size: 18px;
+    color: #888;
 }
 
-.b2b-review-bg {
-  min-height: 100vh;
-  background-image: url("../../images/Screen1bg.png");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  padding: 0 0 100px 0;
+/* Loader overlay */
+.b2b-ro-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
 }
 
-/* ===== HEADER ===== */
-.b2b-review-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 40px;
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom: 1px solid #eee;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  width: 100%;
-  margin-bottom: 20px;
+.b2b-ro-loader-logo {
+    width: 80px;
+    animation: pulse 1.2s infinite;
 }
 
-.b2b-review-header img {
-  height: 50px;
-  cursor: pointer;
+.b2b-ro-loader p {
+    margin-top: 16px;
+    font-size: 16px;
+    color: #666;
 }
 
-.b2b-review-header h1 {
-  font-family: "Athleas", serif !important;
-  font-size: 24px;
-  color: #d5b85a !important;
-  margin: 0;
-  font-weight: 600;
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.95); }
 }
 
-/* ===== CONTENT ===== */
-.b2b-review-content {
-  width: 95%;
-  max-width: 1000px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+/* Container - matches screen6-container */
+.b2b-ro-container {
+    width: 95%;
+    max-width: 1000px;
+    margin: 30px auto;
+    padding-bottom: 40px;
 }
 
-/* ===== SECTIONS ===== */
-.b2b-review-section {
-  background: #FFFFFFB0;
-  border: 1px solid #D4D4D4;
-  border-radius: 12px;
-  padding: 24px;
+/* Section Box - matches B2C section-box */
+.b2b-ro-section {
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
-.b2b-review-section h3 {
-  font-family: "Athleas", serif !important;
-  font-size: 18px;
-  color: #d5b85a !important;
-  margin: 0 0 16px 0;
+.b2b-ro-section h3 {
+    font-family: "Athleas", serif !important;
+    font-size: 20px;
+    color: #d5b85a !important;
+    margin: 0 0 20px 0;
+    font-weight: 600;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f0ece0;
 }
 
-/* Review Grid */
-.b2b-review-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
+/* Row3 - matches B2C row3 */
+.b2b-ro-row3 {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
 }
 
-.b2b-review-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 0;
+.b2b-ro-row3:last-child {
+    margin-bottom: 0;
 }
 
-.b2b-review-item .label {
-  font-size: 12px;
-  color: #888;
+/* Field - matches B2C field */
+.b2b-ro-field {
+    flex: 1;
+    min-width: 150px;
 }
 
-.b2b-review-item .value {
-  font-size: 14px;
-  font-weight: 500;
+.b2b-ro-field label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
-.b2b-review-item .badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  width: fit-content;
+.b2b-ro-field span {
+    font-size: 15px;
+    color: #333;
+    font-weight: 500;
 }
 
-.badge-blue {
-  background: #e3f2fd;
-  color: #1565c0 !important;
+.b2b-ro-field-wide {
+    flex: 1 1 100%;
+    min-width: 100%;
 }
 
-.badge-purple {
-  background: #f3e5f5;
-  color: #7b1fa2 !important;
+/* Final total */
+.b2b-ro-final-total label {
+    font-size: 14px !important;
+    color: #d5b85a !important;
+    font-weight: 600 !important;
 }
 
-/* Address */
-.b2b-review-address {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #eee;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.b2b-ro-final-total span {
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: #d5b85a !important;
 }
 
-.b2b-review-address .label {
-  font-size: 12px;
-  color: #888;
+/* Badge */
+.b2b-ro-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 13px !important;
+    font-weight: 600 !important;
 }
 
-.b2b-review-address .value {
-  font-size: 14px;
+.b2b-ro-badge.badge-blue {
+    background: #e3f2fd;
+    color: #1565c0 !important;
 }
 
-/* ===== TABLE ===== */
-.b2b-review-table-wrapper {
-  overflow-x: auto;
+.b2b-ro-badge.badge-purple {
+    background: #f3e5f5;
+    color: #7b1fa2 !important;
 }
 
-.b2b-review-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+/* Product Box - matches B2C product-box */
+.b2b-ro-product-box {
+    display: flex;
+    gap: 20px;
+    padding: 18px 0;
+    border-bottom: 1px solid #f0ece0;
+    align-items: flex-start;
 }
 
-.b2b-review-table th {
-  text-align: left;
-  padding: 10px 12px;
-  background: rgba(213, 184, 90, 0.08);
-  color: #555;
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  border-bottom: 2px solid #d5b85a;
+.b2b-ro-product-box:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
 }
 
-.b2b-review-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f0f0f0;
-  vertical-align: top;
+.b2b-ro-prod-img {
+    width: 100px;
+    height: 130px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #eee;
+    flex-shrink: 0;
 }
 
-.b2b-review-table tr:last-child td {
-  border-bottom: none;
+.b2b-ro-product-fields {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
-.b2b-review-table tr:hover td {
-  background: rgba(213, 184, 90, 0.03);
+/* Product Grid */
+.b2b-ro-product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px 20px;
 }
 
-.b2b-review-table .product-name {
-  font-weight: 500;
+/* Extras */
+.b2b-ro-extras {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
 }
 
-.b2b-review-table .total-col {
-  font-weight: 600;
-  color: #d5b85a;
+.b2b-ro-extra-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff5d9;
+    border: 1px solid #d5b85a;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
 }
 
-/* ===== SUMMARY ===== */
-.b2b-review-summary-section {
-  border-left: 4px solid #d5b85a;
+/* Warning */
+.b2b-ro-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #fff3e0;
+    border: 1px solid #ffcc80;
+    border-radius: 10px;
+    margin-bottom: 20px;
 }
 
-.b2b-review-summary {
-  max-width: 400px;
-  margin-left: auto;
+.b2b-ro-warning span:first-child { font-size: 20px; }
+.b2b-ro-warning strong { display: block; color: #e65100; margin-bottom: 4px; font-size: 14px; }
+.b2b-ro-warning p { margin: 0; font-size: 13px; color: #bf360c; }
+
+/* Approval Notice */
+.b2b-ro-approval-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    border-radius: 10px;
+    margin-bottom: 20px;
 }
 
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  font-size: 14px;
-  border-bottom: 1px solid #f0f0f0;
+.b2b-ro-approval-notice span:first-child { font-size: 20px; }
+.b2b-ro-approval-notice strong { display: block; color: #1565c0; margin-bottom: 4px; font-size: 14px; }
+.b2b-ro-approval-notice p { margin: 0; font-size: 13px; color: #0d47a1; }
+
+/* Vendor Badge in header */
+.b2b-vendor-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
 }
 
-.summary-row:last-child {
-  border-bottom: none;
+.b2b-vendor-badge .vendor-name {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
 }
 
-.summary-row.gross {
-  font-weight: 500;
-}
-
-.summary-row.markdown span:last-child {
-  color: #c62828;
-}
-
-.summary-row.final {
-  font-weight: 700;
-  font-size: 16px;
-  padding-top: 12px;
-  margin-top: 4px;
-  border-top: 2px solid #d5b85a;
-  border-bottom: none;
-}
-
-.summary-row.final span:last-child {
-  color: #d5b85a;
-}
-
-/* ===== NOTES ===== */
-.b2b-review-notes {
-  padding: 10px 0;
-  font-size: 14px;
-}
-
-.b2b-review-notes strong {
-  font-size: 13px;
-  color: #555;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.b2b-review-notes p {
-  margin: 0;
-  color: #333;
-}
-
-/* ===== WARNING ===== */
-.b2b-review-warning {
-  background: #fff3e0;
-  border: 1px solid #ffcc80;
-  border-radius: 12px;
-  padding: 16px 20px;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.b2b-review-warning .warning-icon {
-  font-size: 24px;
-}
-
-.b2b-review-warning strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #e65100;
-}
-
-.b2b-review-warning p {
-  margin: 0;
-  font-size: 13px;
-  color: #bf360c;
-}
-
-/* ===== APPROVAL NOTICE ===== */
-.b2b-review-approval-notice {
-  background: #e3f2fd;
-  border: 1px solid #90caf9;
-  border-radius: 12px;
-  padding: 16px 20px;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.b2b-review-approval-notice .info-icon {
-  font-size: 24px;
-}
-
-.b2b-review-approval-notice strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #1565c0;
-}
-
-.b2b-review-approval-notice p {
-  margin: 0;
-  font-size: 13px;
-  color: #0d47a1;
-}
-
-/* ===== ACTIONS ===== */
-.b2b-review-actions {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding: 16px 40px;
-  background: rgba(255, 255, 255, 0.95);
-  border-top: 1px solid #eee;
-  z-index: 100;
-}
-
-.b2b-review-btn {
-  padding: 12px 28px;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.b2b-review-btn-secondary {
-  background: white;
-  border: 1px solid #D4D4D4;
-}
-
-.b2b-review-btn-secondary:hover {
-  border-color: #d5b85a;
-}
-
-.b2b-review-btn-submit {
-  background: #d5b85a;
-  border: none;
-  color: white !important;
-}
-
-.b2b-review-btn-submit:hover:not(:disabled) {
-  background: #c9a94e;
-}
-
-.b2b-review-btn-submit:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-/* Floating back */
-.b2b-review-floating-back {
-  position: fixed;
-  bottom: 40px;
-  left: 30px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 2px solid #d5b85a;
-  background: white;
-  color: #d5b85a !important;
-  font-size: 20px;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-  transition: all 0.2s;
-}
-
-.b2b-review-floating-back:hover {
-  background: #d5b85a;
-  color: white !important;
+.b2b-vendor-badge .vendor-code {
+    font-size: 12px;
+    color: #888;
+    font-family: monospace;
 }
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
-  .b2b-review-header {
-    padding: 12px 16px;
-  }
+    .b2b-ro-container {
+        width: 100%;
+        padding: 0 16px;
+        margin: 16px auto;
+    }
 
-  .b2b-review-header img {
-    height: 40px;
-  }
+    .b2b-ro-section {
+        padding: 20px;
+    }
 
-  .b2b-review-header h1 {
-    font-size: 16px;
-  }
+    .b2b-ro-row3 {
+        gap: 16px;
+    }
 
-  .b2b-review-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+    .b2b-ro-field {
+        min-width: 120px;
+    }
 
-  .b2b-review-summary {
-    max-width: none;
-  }
+    .b2b-ro-product-box {
+        flex-direction: column;
+    }
+
+    .b2b-ro-prod-img {
+        width: 80px;
+        height: 100px;
+    }
+
+    .b2b-ro-product-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 @media (max-width: 480px) {
-  .b2b-review-header {
-    padding: 10px 12px;
-  }
+    .b2b-ro-section h3 {
+        font-size: 17px;
+    }
 
-  .b2b-review-header img {
-    height: 35px;
-  }
+    .b2b-ro-row3 {
+        flex-direction: column;
+        gap: 12px;
+    }
 
-  .b2b-review-header h1 {
-    font-size: 14px;
-  }
+    .b2b-ro-product-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
 
-  .b2b-review-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .b2b-review-actions {
-    padding: 12px 16px;
-  }
+    .b2b-ro-field span {
+        font-size: 14px;
+    }
 }

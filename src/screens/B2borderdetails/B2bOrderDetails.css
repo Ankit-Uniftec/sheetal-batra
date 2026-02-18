@@ -1,439 +1,132 @@
-/* ===================================
-   B2B ORDER DETAILS
-   Matches B2C Design Language
-   =================================== */
+/* B2B Order Details - Screen4 base */
 
-* {
-  font-family: "Futura", sans-serif !important;
-  color: black;
-  box-sizing: border-box;
+.b2b-od-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-size: 18px;
+    color: #888;
 }
 
-.b2b-od-bg {
-  min-height: 100vh;
-  background-image: url("../../images/Screen1bg.png");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  padding: 0 0 100px 0;
-}
-
-/* ===== HEADER ===== */
-.b2b-od-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 40px;
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom: 1px solid #eee;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  width: 100%;
-  margin-bottom: 20px;
-}
-
-.b2b-od-logo {
-  height: 50px;
-  cursor: pointer;
-}
-
-.b2b-od-title {
-  font-family: "Athleas", serif !important;
-  font-size: 24px;
-  color: #d5b85a !important;
-  margin: 0;
-  font-weight: 600;
-}
-
-.b2b-od-vendor-badge {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #FFFFFFB0;
-  border: 1px solid #D4D4D4;
-  border-radius: 8px;
-  padding: 6px 14px;
-}
-
-.b2b-od-vendor-badge .vendor-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.b2b-od-vendor-badge .vendor-code {
-  font-size: 12px;
-  color: #888;
-  font-family: monospace !important;
-}
-
-/* ===== CONTAINER ===== */
 .b2b-od-container {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
-  width: 95%;
-  max-width: 1200px;
-  margin: 0 auto;
+    width: 95%;
+    max-width: 1000px;
+    margin: 30px auto;
+    padding-bottom: 40px;
 }
 
-.b2b-od-main {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+.b2b-od-section {
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
-/* ===== SUMMARY CARD ===== */
-.b2b-od-summary-card {
-  background: #FFFFFFB0;
-  border: 1px solid #D4D4D4;
-  border-radius: 12px;
-  padding: 24px;
+.b2b-od-section h3 {
+    font-family: "Athleas", serif !important;
+    font-size: 20px;
+    color: #d5b85a !important;
+    margin: 0 0 20px 0;
+    font-weight: 600;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f0ece0;
 }
 
-.b2b-od-summary-card h3 {
-  font-family: "Athleas", serif !important;
-  font-size: 18px;
-  color: #d5b85a !important;
-  margin: 0 0 16px 0;
+.b2b-od-row3 {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
 }
 
-.b2b-od-summary-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.b2b-od-summary-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.b2b-od-summary-item .label {
-  font-size: 12px;
-  color: #888;
-}
-
-.b2b-od-summary-item .value {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.b2b-od-summary-item .badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  width: fit-content;
-}
-
-.badge-blue {
-  background: #e3f2fd;
-  color: #1565c0 !important;
-}
-
-.badge-purple {
-  background: #f3e5f5;
-  color: #7b1fa2 !important;
-}
-
-/* Products List */
-.b2b-od-products-list {
-  margin-top: 16px;
-  border-top: 1px solid #eee;
-  padding-top: 12px;
-}
-
-.b2b-od-products-list h4 {
-  font-family: "Athleas", serif !important;
-  font-size: 14px;
-  color: #d5b85a !important;
-  margin: 0 0 10px 0;
-}
-
-.b2b-od-product-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
-  font-size: 13px;
-  flex-wrap: wrap;
-}
-
-.b2b-od-product-item:last-child {
-  border-bottom: none;
-}
-
-.b2b-od-product-item .product-name {
-  font-weight: 500;
-  min-width: 150px;
-}
-
-.b2b-od-product-item .product-price {
-  font-weight: 600;
-  color: #d5b85a;
-  margin-left: auto;
-}
-
-/* ===== FORM CARD ===== */
-.b2b-od-form-card {
-  background: #FFFFFFB0;
-  border: 1px solid #D4D4D4;
-  border-radius: 12px;
-  padding: 24px;
-}
-
-.b2b-od-form-card h3 {
-  font-family: "Athleas", serif !important;
-  font-size: 18px;
-  color: #d5b85a !important;
-  margin: 0 0 16px 0;
-}
+.b2b-od-row3:last-child { margin-bottom: 0; }
 
 .b2b-od-field {
-  margin-bottom: 16px;
+    flex: 1;
+    min-width: 150px;
 }
 
 .b2b-od-field label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: #555;
-  margin-bottom: 6px;
+    display: block;
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
-.b2b-od-textarea {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid #D4D4D4;
-  border-radius: 8px;
-  background: transparent;
-  font-size: 14px;
-  outline: none;
-  resize: vertical;
-  transition: border-color 0.2s;
+.b2b-od-field span {
+    font-size: 15px;
+    color: #333;
+    font-weight: 500;
 }
 
-.b2b-od-textarea:focus {
-  border-color: #d5b85a;
+.b2b-od-final-total label { font-size: 14px !important; color: #d5b85a !important; font-weight: 600 !important; }
+.b2b-od-final-total span { font-size: 22px !important; font-weight: 700 !important; color: #d5b85a !important; }
+
+.b2b-od-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 13px !important;
+    font-weight: 600 !important;
 }
 
-/* ===== CREDIT WARNING ===== */
-.b2b-od-credit-warning {
-  background: #fff3e0;
-  border: 1px solid #ffcc80;
-  border-radius: 12px;
-  padding: 16px 20px;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+.b2b-od-badge.badge-blue { background: #e3f2fd; color: #1565c0 !important; }
+.b2b-od-badge.badge-purple { background: #f3e5f5; color: #7b1fa2 !important; }
+
+.b2b-od-product-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0ece0;
 }
 
-.b2b-od-credit-warning .warning-icon {
-  font-size: 24px;
+.b2b-od-product-item:last-child { border-bottom: none; }
+.b2b-od-product-num { font-weight: 600; color: #d5b85a; font-size: 14px; min-width: 24px; }
+
+.b2b-od-product-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.b2b-od-credit-warning strong {
-  color: #e65100;
+.b2b-od-product-name { font-weight: 600; color: #333; font-size: 14px; }
+.b2b-od-product-detail { font-size: 12px; color: #888; }
+.b2b-od-product-price { font-weight: 600; color: #333; font-size: 14px; white-space: nowrap; }
+
+.b2b-od-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #fff3e0;
+    border: 1px solid #ffcc80;
+    border-radius: 10px;
+    margin-bottom: 20px;
 }
 
-.warning-details {
-  font-size: 12px;
-  color: #bf360c;
-  margin-top: 4px;
-}
+.b2b-od-warning span:first-child { font-size: 20px; }
+.b2b-od-warning strong { display: block; color: #e65100; margin-bottom: 4px; font-size: 14px; }
+.b2b-od-warning p { margin: 0; font-size: 13px; color: #bf360c; }
 
-/* ===== SIDEBAR TOTALS ===== */
-.b2b-od-sidebar {
-  position: sticky;
-  top: 100px;
-  height: fit-content;
-}
+.b2b-vendor-badge { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.b2b-vendor-badge .vendor-name { font-weight: 600; color: #333; font-size: 14px; }
+.b2b-vendor-badge .vendor-code { font-size: 12px; color: #888; font-family: monospace; }
 
-.b2b-od-totals-card {
-  background: #FFFFFFB0;
-  border: 1px solid #D4D4D4;
-  border-radius: 12px;
-  padding: 24px;
-}
-
-.b2b-od-totals-card h3 {
-  font-family: "Athleas", serif !important;
-  font-size: 16px;
-  color: #d5b85a !important;
-  margin: 0 0 16px 0;
-}
-
-.b2b-od-total-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  font-size: 14px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.b2b-od-total-row:last-child {
-  border-bottom: none;
-}
-
-.b2b-od-total-gross {
-  font-weight: 500;
-}
-
-.b2b-od-markdown span:last-child {
-  color: #c62828;
-}
-
-.b2b-od-final {
-  font-weight: 700;
-  font-size: 16px;
-  padding-top: 12px;
-  margin-top: 4px;
-  border-top: 2px solid #d5b85a;
-  border-bottom: none !important;
-}
-
-.b2b-od-final span:last-child {
-  color: #d5b85a;
-}
-
-/* Credit Info */
-.b2b-od-credit-info {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #eee;
-}
-
-.credit-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
-
-.credit-positive {
-  color: #2e7d32 !important;
-  font-weight: 600;
-}
-
-.credit-negative {
-  color: #c62828 !important;
-  font-weight: 600;
-}
-
-/* ===== ACTIONS ===== */
-.b2b-od-actions {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding: 16px 40px;
-  background: rgba(255, 255, 255, 0.95);
-  border-top: 1px solid #eee;
-  z-index: 100;
-}
-
-.b2b-od-btn {
-  padding: 12px 28px;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.b2b-od-btn-secondary {
-  background: white;
-  border: 1px solid #D4D4D4;
-}
-
-.b2b-od-btn-secondary:hover {
-  border-color: #d5b85a;
-}
-
-.b2b-od-btn-primary {
-  background: #d5b85a;
-  border: none;
-  color: white !important;
-}
-
-.b2b-od-btn-primary:hover {
-  background: #c9a94e;
-}
-
-/* Floating back */
-.b2b-od-floating-back {
-  position: fixed;
-  bottom: 40px;
-  left: 30px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 2px solid #d5b85a;
-  background: white;
-  color: #d5b85a !important;
-  font-size: 20px;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-  transition: all 0.2s;
-}
-
-.b2b-od-floating-back:hover {
-  background: #d5b85a;
-  color: white !important;
-}
-
-.b2b-od-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  font-size: 16px;
-  color: #888;
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 900px) {
-  .b2b-od-container {
-    grid-template-columns: 1fr;
-  }
-
-  .b2b-od-sidebar {
-    position: static;
-  }
-
-  .b2b-od-summary-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+@media (max-width: 768px) {
+    .b2b-od-container { width: 100%; padding: 0 16px; margin: 16px auto; }
+    .b2b-od-section { padding: 20px; }
+    .b2b-od-row3 { gap: 16px; }
+    .b2b-od-product-item { flex-wrap: wrap; }
 }
 
 @media (max-width: 480px) {
-  .b2b-od-header {
-    padding: 10px 16px;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .b2b-od-logo {
-    height: 35px;
-  }
-
-  .b2b-od-title {
-    font-size: 16px;
-  }
-
-  .b2b-od-summary-grid {
-    grid-template-columns: 1fr;
-  }
+    .b2b-od-row3 { flex-direction: column; gap: 12px; }
+    .b2b-od-section h3 { font-size: 17px; }
 }

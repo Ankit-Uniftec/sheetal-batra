@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import "../Screen4.css";
 import "./B2bVendorSelection.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -8,9 +9,6 @@ import { usePopup } from "../../components/Popup";
 
 const SESSION_KEY = "b2bVendorData";
 
-/**
- * Searchable Select Component
- */
 function SearchableSelect({ options, value, onChange, placeholder = "Select…", disabled = false, className = "" }) {
     const normalized = useMemo(() => (options || []).map((o) => typeof o === "object" && o !== null && "label" in o && "value" in o ? o : { label: String(o), value: o }), [options]);
     const current = useMemo(() => normalized.find((o) => String(o.value) === String(value)) || null, [normalized, value]);
@@ -120,7 +118,7 @@ export default function B2bVendorSelection() {
         fetchVendors();
     }, []);
 
-    // Vendor change
+    // Vendor change — includes default orderType/markdown from vendor
     useEffect(() => {
         if (!selectedVendorId) { setSelectedVendor(null); setVendorContacts([]); return; }
         const vendor = vendors.find((v) => v.id === selectedVendorId);
@@ -132,9 +130,18 @@ export default function B2bVendorSelection() {
         }
     }, [selectedVendorId, vendors]);
 
-    const vendorOptions = useMemo(() => vendors.map((v) => ({ label: `${v.store_brand_name}${v.location ? ` - ${v.location}` : ""} (${v.vendor_code})`, value: v.id })), [vendors]);
-    const availableCredit = useMemo(() => selectedVendor ? (selectedVendor.credit_limit || 0) - (selectedVendor.current_credit_used || 0) : 0, [selectedVendor]);
-    const primaryContact = useMemo(() => vendorContacts.find((c) => c.is_primary) || vendorContacts[0] || null, [vendorContacts]);
+    const vendorOptions = useMemo(() => vendors.map((v) => ({
+        label: `${v.store_brand_name}${v.location ? ` - ${v.location}` : ""} (${v.vendor_code})`,
+        value: v.id,
+    })), [vendors]);
+
+    const availableCredit = useMemo(() =>
+        selectedVendor ? (selectedVendor.credit_limit || 0) - (selectedVendor.current_credit_used || 0) : 0,
+    [selectedVendor]);
+
+    const primaryContact = useMemo(() =>
+        vendorContacts.find((c) => c.is_primary) || vendorContacts[0] || null,
+    [vendorContacts]);
 
     const handleContinue = () => {
         if (!selectedVendor) { showPopup({ title: "Vendor Required", message: "Please select a vendor to continue.", type: "warning" }); return; }
@@ -142,7 +149,10 @@ export default function B2bVendorSelection() {
         if (!merchandiser) { showPopup({ title: "Merchandiser Required", message: "Please select a merchandiser for this order.", type: "warning" }); return; }
         if (!orderType) { showPopup({ title: "Order Type Required", message: "Please select an order type (Buyout/Consignment).", type: "warning" }); return; }
 
-        const b2bData = { selectedVendorId, vendor: selectedVendor, vendorContacts, primaryContact, poNumber: poNumber.trim(), merchandiser, orderType, discountPercent, remarks, availableCredit };
+        const b2bData = {
+            selectedVendorId, vendor: selectedVendor, vendorContacts, primaryContact,
+            poNumber: poNumber.trim(), merchandiser, orderType, discountPercent, remarks, availableCredit,
+        };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(b2bData));
         navigate("/b2b-product-form");
     };
@@ -150,167 +160,115 @@ export default function B2bVendorSelection() {
     const handleBack = () => navigate("/b2b-executive-dashboard");
 
     return (
-        <div className="b2b-vs-container">
+        <div className="screen4-bg">
             {PopupComponent}
 
-            {/* Header */}
-            <header className="b2b-vs-header">
-                <div className="header-left">
-                    <button className="back-btn" onClick={handleBack}>←</button>
-                    <img src={Logo} alt="logo" className="header-logo" />
-                    <h1>New B2B Order</h1>
-                </div>
-                <div className="header-steps">
-                    <div className="step active">
-                        <span className="step-num">1</span>
-                        <span className="step-label">Vendor</span>
-                    </div>
-                    <div className="step-line"></div>
-                    <div className="step">
-                        <span className="step-num">2</span>
-                        <span className="step-label">Products</span>
-                    </div>
-                    <div className="step-line"></div>
-                    <div className="step">
-                        <span className="step-num">3</span>
-                        <span className="step-label">Details</span>
-                    </div>
-                    <div className="step-line"></div>
-                    <div className="step">
-                        <span className="step-num">4</span>
-                        <span className="step-label">Review</span>
-                    </div>
-                </div>
+            <header className="pf-header">
+                <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
+                <h1 className="pf-header-title">B2B Vendor Selection</h1>
+                <div></div>
             </header>
 
-            <div className="b2b-vs-content">
-                <div className="b2b-vs-main">
-                    {/* Vendor Selection Card */}
-                    <div className="form-card">
-                        <h2>Select Vendor</h2>
-                        <p className="form-subtitle">Search and select a vendor for this B2B order</p>
-                        
-                        <div className="form-field vendor-search">
-                            <label>Vendor *</label>
-                            <SearchableSelect
-                                options={vendorOptions}
-                                value={selectedVendorId}
-                                onChange={setSelectedVendorId}
-                                placeholder={vendorsLoading ? "Loading vendors..." : "Search vendor by name, location or code..."}
-                                disabled={vendorsLoading}
-                            />
+            <div className="screen4-card">
+                <div className="screen4-layout">
+                    <div className="screen4-form">
+
+                        <h4 className="product-title">Select Vendor</h4>
+
+                        <div className="row">
+                            <div className="flex items-center gap-2 pt-2 min-h-10 flex-1" style={{ borderBottom: "2px solid #D5B85A", margin: 0 }}>
+                                <SearchableSelect
+                                    options={vendorOptions}
+                                    value={selectedVendorId}
+                                    onChange={setSelectedVendorId}
+                                    placeholder={vendorsLoading ? "Loading vendors..." : "Search vendor by name, location or code..."}
+                                    disabled={vendorsLoading}
+                                    className="product-select"
+                                />
+                            </div>
                         </div>
+
+                        {/* Vendor Info Card */}
+                        {selectedVendor && (
+                            <div className="vs-vendor-card">
+                                <div className="vs-vendor-top">
+                                    <div className="vs-avatar">{selectedVendor.store_brand_name?.charAt(0) || "V"}</div>
+                                    <div>
+                                        <h3 className="vs-name">{selectedVendor.store_brand_name}</h3>
+                                        <span className="vs-code">{selectedVendor.vendor_code}</span>
+                                        {selectedVendor.location && <span className="vs-loc">📍 {selectedVendor.location}</span>}
+                                    </div>
+                                </div>
+
+                                <div className="vs-grid">
+                                    <div className="vs-col">
+                                        <h5>Legal Information</h5>
+                                        <div className="vs-row"><span>Legal Name</span><span>{selectedVendor.legal_name || "N/A"}</span></div>
+                                        <div className="vs-row"><span>GST Number</span><span>{selectedVendor.gst_number || "N/A"}</span></div>
+                                        <div className="vs-row"><span>Payment Terms</span><span>{selectedVendor.payment_terms || "N/A"}</span></div>
+                                    </div>
+                                    <div className="vs-col">
+                                        <h5>Primary Contact</h5>
+                                        {primaryContact ? (
+                                            <>
+                                                <div className="vs-row"><span>Name</span><span>{primaryContact.contact_name || "N/A"}</span></div>
+                                                <div className="vs-row"><span>Email</span><span>{primaryContact.contact_email || "N/A"}</span></div>
+                                                <div className="vs-row"><span>Phone</span><span>{primaryContact.contact_phone || "N/A"}</span></div>
+                                            </>
+                                        ) : <p style={{ color: "#aaa", fontStyle: "italic", fontSize: 13 }}>No contact info</p>}
+                                    </div>
+                                    <div className="vs-col vs-credit-box">
+                                        <h5>Credit Information</h5>
+                                        <div className="vs-credits">
+                                            <div className="vs-credit-item"><span className="vs-credit-val">₹{formatIndianNumber(selectedVendor.credit_limit || 0)}</span><span className="vs-credit-lbl">Limit</span></div>
+                                            <div className="vs-credit-item"><span className="vs-credit-val">₹{formatIndianNumber(selectedVendor.current_credit_used || 0)}</span><span className="vs-credit-lbl">Used</span></div>
+                                            <div className="vs-credit-item"><span className={`vs-credit-val ${availableCredit <= 0 ? "negative" : "positive"}`}>₹{formatIndianNumber(availableCredit)}</span><span className="vs-credit-lbl">Available</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Order Details */}
+                        {selectedVendor && (
+                            <>
+                                <h4 className="product-title" style={{ marginTop: 30 }}>Order Details</h4>
+
+                                <div className="row">
+                                    <div className="field"><label>PO Number *</label><input type="text" className="input-line" placeholder="Enter Purchase Order Number" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} /></div>
+                                    <div className="field"><label>Merchandiser *</label><SearchableSelect options={merchandisers} value={merchandiser} onChange={setMerchandiser} placeholder="Select Merchandiser" /></div>
+                                </div>
+
+                                <div className="row">
+                                    <div className="field">
+                                        <label>Order Type *</label>
+                                        <div className="vs-type-btns">
+                                            <button className={`vs-type-btn ${orderType === "Buyout" ? "active" : ""}`} onClick={() => setOrderType("Buyout")}>Buyout</button>
+                                            <button className={`vs-type-btn ${orderType === "Consignment" ? "active" : ""}`} onClick={() => setOrderType("Consignment")}>Consignment</button>
+                                        </div>
+                                    </div>
+                                    <div className="field"><label>Markdown %</label><input type="number" className="input-line" placeholder="0" min={0} max={100} value={discountPercent} onChange={(e) => setDiscountPercent(Number(e.target.value) || 0)} /></div>
+                                </div>
+
+                                <div className="row">
+                                    <div className="field"><label>Remarks (Optional)</label><input type="text" className="input-line" placeholder="Any special instructions or notes..." value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
+                                </div>
+
+                                {availableCredit <= 0 && (
+                                    <div className="vs-warning"><span>⚠️</span><div><strong>Credit Limit Exceeded</strong><p>This vendor has no available credit. Order will require approval.</p></div></div>
+                                )}
+
+                                <div className="footer-btns">
+                                    <button className="draftBtn" onClick={handleBack}>← Cancel</button>
+                                    <button className="continueBtn" onClick={handleContinue}>Continue to Products →</button>
+                                </div>
+                            </>
+                        )}
                     </div>
-
-                    {/* Vendor Details Card */}
-                    {selectedVendor && (
-                        <div className="form-card vendor-details-card">
-                            <div className="vendor-header">
-                                <div className="vendor-avatar">
-                                    {selectedVendor.store_brand_name?.charAt(0) || "V"}
-                                </div>
-                                <div className="vendor-info">
-                                    <h3>{selectedVendor.store_brand_name}</h3>
-                                    <span className="vendor-code">{selectedVendor.vendor_code}</span>
-                                    {selectedVendor.location && <span className="vendor-location">📍 {selectedVendor.location}</span>}
-                                </div>
-                            </div>
-
-                            <div className="vendor-details-grid">
-                                <div className="detail-group">
-                                    <h4>Legal Information</h4>
-                                    <div className="detail-row"><span>Legal Name</span><span>{selectedVendor.legal_name || "N/A"}</span></div>
-                                    <div className="detail-row"><span>GST Number</span><span>{selectedVendor.gst_number || "N/A"}</span></div>
-                                    <div className="detail-row"><span>Payment Terms</span><span>{selectedVendor.payment_terms || "N/A"}</span></div>
-                                </div>
-                                <div className="detail-group">
-                                    <h4>Primary Contact</h4>
-                                    {primaryContact ? (
-                                        <>
-                                            <div className="detail-row"><span>Name</span><span>{primaryContact.contact_name || "N/A"}</span></div>
-                                            <div className="detail-row"><span>Email</span><span>{primaryContact.contact_email || "N/A"}</span></div>
-                                            <div className="detail-row"><span>Phone</span><span>{primaryContact.contact_phone || "N/A"}</span></div>
-                                        </>
-                                    ) : (
-                                        <p className="no-data">No contact information</p>
-                                    )}
-                                </div>
-                                <div className="detail-group credit-group">
-                                    <h4>Credit Information</h4>
-                                    <div className="credit-stats">
-                                        <div className="credit-stat">
-                                            <span className="credit-value">₹{formatIndianNumber(selectedVendor.credit_limit || 0)}</span>
-                                            <span className="credit-label">Credit Limit</span>
-                                        </div>
-                                        <div className="credit-stat">
-                                            <span className="credit-value">₹{formatIndianNumber(selectedVendor.current_credit_used || 0)}</span>
-                                            <span className="credit-label">Used</span>
-                                        </div>
-                                        <div className="credit-stat">
-                                            <span className={`credit-value ${availableCredit <= 0 ? "negative" : "positive"}`}>₹{formatIndianNumber(availableCredit)}</span>
-                                            <span className="credit-label">Available</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Order Details Card */}
-                    {selectedVendor && (
-                        <div className="form-card">
-                            <h2>Order Details</h2>
-                            <p className="form-subtitle">Enter the order information</p>
-
-                            <div className="form-grid">
-                                <div className="form-field">
-                                    <label>PO Number *</label>
-                                    <input type="text" className="form-input" placeholder="Enter Purchase Order Number" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} />
-                                </div>
-                                <div className="form-field">
-                                    <label>Merchandiser *</label>
-                                    <SearchableSelect options={merchandisers} value={merchandiser} onChange={setMerchandiser} placeholder="Select Merchandiser" />
-                                </div>
-                                <div className="form-field">
-                                    <label>Order Type *</label>
-                                    <div className="toggle-btns">
-                                        <button className={`toggle-btn ${orderType === "Buyout" ? "active" : ""}`} onClick={() => setOrderType("Buyout")}>Buyout</button>
-                                        <button className={`toggle-btn ${orderType === "Consignment" ? "active" : ""}`} onClick={() => setOrderType("Consignment")}>Consignment</button>
-                                    </div>
-                                </div>
-                                <div className="form-field">
-                                    <label>Markdown %</label>
-                                    <input type="number" className="form-input" placeholder="0" min={0} max={100} value={discountPercent} onChange={(e) => setDiscountPercent(Number(e.target.value) || 0)} />
-                                </div>
-                            </div>
-
-                            <div className="form-field full-width">
-                                <label>Remarks (Optional)</label>
-                                <textarea className="form-textarea" placeholder="Any special instructions or notes for this order..." value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Credit Warning */}
-                    {selectedVendor && availableCredit <= 0 && (
-                        <div className="warning-card">
-                            <span className="warning-icon">⚠️</span>
-                            <div>
-                                <strong>Credit Limit Exceeded</strong>
-                                <p>This vendor has no available credit. Order will require approval.</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Action Footer */}
-                <div className="b2b-vs-footer">
-                    <button className="btn btn-secondary" onClick={handleBack}>← Cancel</button>
-                    <button className="btn btn-primary" onClick={handleContinue} disabled={!selectedVendor}>
-                        Continue to Products →
-                    </button>
                 </div>
             </div>
+
+            <button className="back-btn" onClick={handleBack}>←</button>
         </div>
     );
 }

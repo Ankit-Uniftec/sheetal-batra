@@ -100,6 +100,50 @@ const measurementFields = {
     Lehenga: ["Waist", "Hip", "Length"],
 };
 
+// ===== KIDS CONSTANTS (matching B2C ProductForm) =====
+const KIDS_SIZE_OPTIONS = [
+    "1-2 yrs", "2-3 yrs", "3-4 yrs", "4-5 yrs", "5-6 yrs",
+    "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
+    "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
+];
+
+const KIDS_SIZE_CHART = {
+    "1-2 yrs": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
+    "2-3 yrs": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
+    "3-4 yrs": { Bust: 22, Waist: 21, Hip: 23, Length: 22 },
+    "4-5 yrs": { Bust: 23, Waist: 21.5, Hip: 24, Length: 24 },
+    "5-6 yrs": { Bust: 24, Waist: 22, Hip: 25, Length: 26 },
+    "6-7 yrs": { Bust: 25, Waist: 22.5, Hip: 26, Length: 28 },
+    "7-8 yrs": { Bust: 26, Waist: 23, Hip: 27, Length: 30 },
+    "8-9 yrs": { Bust: 27, Waist: 23.5, Hip: 28, Length: 32 },
+    "9-10 yrs": { Bust: 28, Waist: 24, Hip: 29, Length: 34 },
+    "10-11 yrs": { Bust: 29, Waist: 24.5, Hip: 30, Length: 36 },
+    "11-12 yrs": { Bust: 30, Waist: 25, Hip: 31, Length: 38 },
+    "12-13 yrs": { Bust: 31, Waist: 25.5, Hip: 32, Length: 40 },
+    "13-14 yrs": { Bust: 32, Waist: 26, Hip: 33, Length: 42 },
+    "14-15 yrs": { Bust: 33, Waist: 26.5, Hip: 34, Length: 44 },
+    "15-16 yrs": { Bust: 34, Waist: 27, Hip: 35, Length: 46 },
+};
+
+const KIDS_DISCOUNT_PERCENT = {
+    "1-2 yrs": 65, "2-3 yrs": 60, "3-4 yrs": 60,
+    "4-5 yrs": 55, "5-6 yrs": 55, "6-7 yrs": 50,
+    "7-8 yrs": 42, "8-9 yrs": 42, "9-10 yrs": 34,
+    "10-11 yrs": 34, "11-12 yrs": 34, "12-13 yrs": 20,
+    "13-14 yrs": 20, "14-15 yrs": 20, "15-16 yrs": 8,
+};
+
+const KIDS_MEASUREMENT_FIELDS = {
+    Height: ["Height"],
+    KurtaChogaKaftan: ["Shoulder", "Neck", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Mori", "Bicep", "Arm Hole", "Waist", "Hip", "Length", "Front Cross", "Back Cross", "Front Neck", "Back Neck"],
+    Blouse: ["Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Mori", "Arm Hole", "Waist", "Length", "Front Cross", "Back Cross", "Front Neck", "Back Neck"],
+    Anarkali: ["Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Mori", "Bicep", "Arm Hole", "Length", "Front Neck", "Back Neck"],
+    SalwarDhoti: ["Waist", "Hip", "Length"],
+    ChuridaarTrouserPantsPlazo: ["Waist", "Hip", "Length", "Thigh", "Calf", "Ankle", "Knee", "Yoke Length"],
+    ShararaGharara: ["Waist", "Hip", "Length"],
+    Lehenga: ["Waist", "Hip", "Length"],
+};
+
 export default function B2bProductForm() {
     const navigate = useNavigate();
     const { showPopup, PopupComponent } = usePopup();
@@ -131,6 +175,8 @@ export default function B2bProductForm() {
     const [selectedSize, setSelectedSize] = useState("M");
     const [quantity, setQuantity] = useState(1);
     const [availableSizes, setAvailableSizes] = useState(SIZE_OPTIONS);
+
+    const [isKidsProduct, setIsKidsProduct] = useState(false);
 
     // Measurements
     const [measurements, setMeasurements] = useState({});
@@ -231,7 +277,7 @@ export default function B2bProductForm() {
         }
         setTops(selectedProduct.top_options || []);
         setBottoms([...(selectedProduct.bottom_options || [])].sort((a, b) => String(a).localeCompare(String(b))));
-        const sizes = selectedProduct.available_size?.length > 0 ? selectedProduct.available_size : SIZE_OPTIONS;
+        const sizes = isKidsProduct ? KIDS_SIZE_OPTIONS : (selectedProduct.available_size?.length > 0 ? selectedProduct.available_size : SIZE_OPTIONS);
         setAvailableSizes(sizes);
         const defaultTop = selectedProduct.default_top || selectedProduct.top_options?.[0] || "";
         const defaultBottom = selectedProduct.default_bottom || selectedProduct.bottom_options?.[0] || "";
@@ -241,18 +287,19 @@ export default function B2bProductForm() {
         setSelectedTopColor(defaultTop ? defaultColor : { name: "", hex: "" });
         setSelectedBottom(defaultBottom);
         setSelectedBottomColor(defaultBottom ? defaultColor : { name: "", hex: "" });
-        if (!sizes.includes(selectedSize)) setSelectedSize(sizes[0] || "M");
+        if (!sizes.includes(selectedSize)) setSelectedSize(isKidsProduct ? KIDS_SIZE_OPTIONS[0] : (sizes[0] || "M"));
         if (selectedProduct.default_extra) {
             const extra = globalExtras.find(e => e.name === selectedProduct.default_extra);
             if (extra) setSelectedExtrasWithColors([{ name: selectedProduct.default_extra, color: defaultColor, price: extra.price || 0 }]);
         } else setSelectedExtrasWithColors([]);
         setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" });
-    }, [selectedProduct, colors, globalExtras]);
+    }, [selectedProduct, isKidsProduct, colors, globalExtras]);
 
     // Auto-fill size chart
     useEffect(() => {
         if (isRestoredRef.current || !selectedSize || !selectedProduct) return;
-        const sizeData = SIZE_CHART_US[selectedSize];
+        const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+        const sizeData = currentSizeChart[selectedSize];
         if (!sizeData) return;
         const relevantKeys = new Set();
         if (selectedTop && CATEGORY_KEY_MAP[selectedTop]) relevantKeys.add(CATEGORY_KEY_MAP[selectedTop]);
@@ -263,11 +310,12 @@ export default function B2bProductForm() {
         }
         const updated = {};
         relevantKeys.forEach(categoryKey => {
-            const fields = measurementFields[categoryKey] || [];
+            const fields = isKidsProduct ? (KIDS_MEASUREMENT_FIELDS[categoryKey] || []) : (measurementFields[categoryKey] || []);
             const vals = {};
             if (fields.includes("Bust") && sizeData.Bust) vals.Bust = sizeData.Bust;
             if (fields.includes("Waist") && sizeData.Waist) vals.Waist = sizeData.Waist;
             if (fields.includes("Hip") && sizeData.Hip) vals.Hip = sizeData.Hip;
+            if (fields.includes("Length") && sizeData.Length) vals.Length = sizeData.Length;
             if (Object.keys(vals).length > 0) updated[categoryKey] = vals;
         });
         if (Object.keys(updated).length > 0) {
@@ -277,7 +325,7 @@ export default function B2bProductForm() {
                 return newM;
             });
         }
-    }, [selectedSize, selectedProduct, selectedTop, selectedBottom]);
+    }, [selectedSize, isKidsProduct, selectedProduct, selectedTop, selectedBottom]);
 
     // Helpers
     const toOptions = (arr = []) => arr.map(x => ({ label: String(x), value: x }));
@@ -301,12 +349,18 @@ export default function B2bProductForm() {
     const getBasePrice = () => {
         if (!selectedProduct) return 0;
         let price = Number(selectedProduct.base_price || 0);
+        // Kids discount
+        if (isKidsProduct && selectedSize && KIDS_DISCOUNT_PERCENT[selectedSize]) {
+            const discountPercent = KIDS_DISCOUNT_PERCENT[selectedSize];
+            price = price - (price * discountPercent / 100);
+        }
         selectedAdditionals.forEach(a => { price += Number(a.price || 0); });
         return Math.round(price);
     };
     const toggleExpand = (id) => setExpandedRowIds(e => ({ ...e, [id]: !e[id] }));
     const handleDelete = (id) => setOrderItems(prev => prev.filter(it => it._id !== id));
     const updateItem = (id, patch) => setOrderItems(prev => prev.map(it => it._id !== id ? it : { ...it, ...patch }));
+
     const handleAddExtra = () => {
         if (!selectedExtra) return;
         if (!selectedExtraColor.name) { showPopup({ title: "Color Required", message: "Please select a color for the extra.", type: "warning" }); return; }
@@ -348,6 +402,7 @@ export default function B2bProductForm() {
             top: selectedTop, top_color: selectedTopColor, bottom: selectedBottom, bottom_color: selectedBottomColor,
             extras: finalExtras, additionals: selectedAdditionals.filter(a => a.name?.trim()), size: selectedSize, quantity,
             price: getBasePrice(), measurements: getRelevantMeasurements(), image_url: selectedProduct.image_url, notes: comments, delivery_date: deliveryDate,
+            isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
         }]);
         setSelectedProduct(null); setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" });
         setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" }); setSelectedExtrasWithColors([]); setSelectedAdditionals([]);
@@ -385,6 +440,7 @@ export default function B2bProductForm() {
                 top: selectedTop, top_color: selectedTopColor, bottom: selectedBottom, bottom_color: selectedBottomColor,
                 extras: finalExtras, additionals: selectedAdditionals.filter(a => a.name?.trim()), size: selectedSize, quantity,
                 price: getBasePrice(), measurements: getRelevantMeasurements(), image_url: selectedProduct.image_url, notes: comments, delivery_date: deliveryDate,
+            isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
             });
         }
         if (finalItems.length === 0) { showPopup({ title: "No Products", message: "Please add at least one product.", type: "warning" }); return; }
@@ -428,7 +484,7 @@ export default function B2bProductForm() {
                         <h4 className="product-title">Product</h4>
 
                         <div className="category-dropdown-container">
-                            <select className="category-select" value="women" disabled><option value="women">Women</option></select>
+                            <select className="category-select" value={isKidsProduct ? "kids" : "women"} onChange={(e) => setIsKidsProduct(e.target.value === "kids")}><option value="women">Women</option><option value="kids">Kids</option></select>
                         </div>
 
                         {selectedProduct?.image_url && <div className="screen4-image-inline"><img src={selectedProduct.image_url} alt={selectedProduct.name} /></div>}
@@ -440,8 +496,8 @@ export default function B2bProductForm() {
                                     const opts = getProductOptions(item.product_id);
                                     return (
                                         <div className="added-product-row" key={item._id}>
-                                            <span className="product-info">{i + 1}. {item.product_name} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}</span>
-                                            <div className="product-buttons"><button className="expand" onClick={() => toggleExpand(item._id)}>{expanded ? "−" : "✚"}</button><button className="delete" onClick={() => handleDelete(item._id)}>🗑</button></div>
+                                            <span className="product-info">{i + 1}. {item.product_name} | {item.category || (item.isKids ? "Kids" : "Women")} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}</span>
+                                            <div className="product-buttons"><button className="expand" onClick={() => toggleExpand(item._id)}>{expanded ? "−" : "✎"}</button><button className="delete" onClick={() => handleDelete(item._id)}>🗑</button></div>
                                             {expanded && (
                                                 <div className="expand-panel full-edit">
                                                     <div className="row">
@@ -450,8 +506,70 @@ export default function B2bProductForm() {
                                                         <div className="field"><label>Bottom</label><SearchableSelect options={toOptions(opts.bottoms)} value={item.bottom || ""} onChange={(v) => updateItem(item._id, { bottom: v })} placeholder="Select Bottom" /></div>
                                                         {item.bottom && <div className="field"><label>Bottom Color</label><SearchableSelect options={toColorOptions(colors)} value={item.bottom_color?.name || ""} onChange={(n) => updateItem(item._id, { bottom_color: colors.find(c => c.name === n) || { name: "", hex: "" } })} placeholder="Select Color" /></div>}
                                                     </div>
-                                                    <div className="size-box edit-size-box"><span className="size-label">Size:</span><div className="sizes">{opts.sizes.map((s, idx) => <button key={idx} className={item.size === s ? "size-btn active" : "size-btn"} onClick={() => updateItem(item._id, { size: s })}>{s}</button>)}</div></div>
+                                                    {/* Extras */}
+                                                    <div className="row">
+                                                        <div className="field"><label>Extra</label><SearchableSelect options={toExtraOptions(globalExtras)} value={expandedRowIds[`${item._id}_extra`] || ""} onChange={(v) => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_extra`]: v }))} placeholder="Select Extra" /></div>
+                                                        {expandedRowIds[`${item._id}_extra`] && <div className="field"><label>Extra Color</label><SearchableSelect options={toColorOptions(colors)} value={expandedRowIds[`${item._id}_extraColor`] || ""} onChange={(n) => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_extraColor`]: n }))} placeholder="Select Color" /></div>}
+                                                        <button className="add-extra-btn" style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: "3px", padding: "6px 14px", cursor: "pointer" }} disabled={!expandedRowIds[`${item._id}_extra`]} onClick={() => {
+                                                            const extraName = expandedRowIds[`${item._id}_extra`];
+                                                            const extraColorName = expandedRowIds[`${item._id}_extraColor`];
+                                                            if (!extraName) return;
+                                                            const extra = globalExtras.find(e => e.name === extraName);
+                                                            const color = colors.find(c => c.name === extraColorName) || { name: "", hex: "" };
+                                                            const newExtras = [...(item.extras || []), { name: extraName, color, price: extra?.price || 0 }];
+                                                            updateItem(item._id, { extras: newExtras });
+                                                            setExpandedRowIds(prev => ({ ...prev, [`${item._id}_extra`]: "", [`${item._id}_extraColor`]: "" }));
+                                                        }}>Add Extra</button>
+                                                    </div>
+                                                    {item.extras?.length > 0 && item.extras.map((extra, eidx) => (
+                                                        <div key={eidx} className="selected-extra-item"><span>{extra.name} (\u20b9{formatIndianNumber(extra.price)}){extra.color?.name && ` (${extra.color.name})`}</span><button onClick={() => updateItem(item._id, { extras: item.extras.filter((_, ei) => ei !== eidx) })}>x</button></div>
+                                                    ))}
+                                                    <div className="size-box edit-size-box"><span className="size-label">Size:</span><div className="sizes">{(item.isKids ? KIDS_SIZE_OPTIONS : opts.sizes).map((s, idx) => <button key={idx} className={item.size === s ? "size-btn active" : "size-btn"} onClick={() => updateItem(item._id, { size: s })}>{s}</button>)}</div></div>
                                                     <div className="row"><div className="qty-field"><label>Qty</label><div className="qty-controls"><button onClick={() => updateItem(item._id, { quantity: Math.max(1, (item.quantity || 1) - 1) })}>−</button><span>{item.quantity || 1}</span><button onClick={() => updateItem(item._id, { quantity: (item.quantity || 1) + 1 })}>+</button></div></div><div className="field"><label>Delivery Date</label><input type="date" className="input-line" value={item.delivery_date || ""} min={new Date().toISOString().split("T")[0]} onChange={(e) => updateItem(item._id, { delivery_date: e.target.value })} /></div></div>
+                                                    {/* Custom Measurements */}
+                                                    <div className="measure-bar" onClick={() => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_m`]: !prev[`${item._id}_m`] }))}><span>Custom Measurements</span><button className="plus-btn" type="button">{expandedRowIds[`${item._id}_m`] ? "\u2212" : "+"}</button></div>
+                                                    {expandedRowIds[`${item._id}_m`] && (() => {
+                                                        const ik = new Set(["Height"]);
+                                                        if (item.top && CATEGORY_KEY_MAP[item.top]) ik.add(CATEGORY_KEY_MAP[item.top]);
+                                                        if (item.bottom && CATEGORY_KEY_MAP[item.bottom]) ik.add(CATEGORY_KEY_MAP[item.bottom]);
+                                                        const cats = ik.size === 1 ? ALL_MEASUREMENT_CATEGORIES : Array.from(ik).map(k => CATEGORY_DISPLAY_NAMES[k]);
+                                                        const activeDn = expandedRowIds[`${item._id}_ac`] || cats[0];
+                                                        const catKey = getCategoryKeyFromDisplayName(activeDn) || "Height";
+                                                        const itemIsKids = item.isKids || false;
+                                                        const mFields = itemIsKids ? (KIDS_MEASUREMENT_FIELDS[catKey] || []) : (measurementFields[catKey] || []);
+                                                        return (
+                                                            <div className="measure-container">
+                                                                <div className="measure-menu">
+                                                                    {cats.map(dn => <div key={dn} className={`measure-item break-words ${activeDn === dn ? "active" : ""}`} onClick={() => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_ac`]: dn }))}>{dn}</div>)}
+                                                                </div>
+                                                                <div className="measure-fields">
+                                                                    <h3 className="measure-title">Custom Measurements (in)</h3>
+                                                                    <div className="measure-grid">
+                                                                        {mFields.map(field => (
+                                                                            <div className="measure-field" key={field}>
+                                                                                <label>{field}</label>
+                                                                                <input type="number" className="input-line" value={item.measurements?.[catKey]?.[field] || ""} onChange={(e) => {
+                                                                                    const newM = { ...(item.measurements || {}) };
+                                                                                    newM[catKey] = { ...(newM[catKey] || {}), [field]: e.target.value };
+                                                                                    updateItem(item._id, { measurements: newM });
+                                                                                }} />
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                    {/* Additional Customization */}
+                                                    <div className="measure-bar" onClick={() => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_add`]: !prev[`${item._id}_add`] }))}><span>Additional Customization</span><button className="plus-btn" type="button">{expandedRowIds[`${item._id}_add`] ? "\u2212" : "+"}</button></div>
+                                                    {expandedRowIds[`${item._id}_add`] && (
+                                                        <div className="additionals-container">
+                                                            <div className="additionals-list">{(item.additionals || []).map((add, aidx) => <div key={aidx} className="additional-row"><input type="text" className="input-line additional-name" placeholder="Item name" value={add.name} onChange={(e) => { const n = [...(item.additionals || [])]; n[aidx] = { ...n[aidx], name: e.target.value }; updateItem(item._id, { additionals: n }); }} /><input type="number" className="input-line additional-price" placeholder="Price" min={0} value={add.price} onChange={(e) => { const n = [...(item.additionals || [])]; n[aidx] = { ...n[aidx], price: Number(e.target.value) || 0 }; updateItem(item._id, { additionals: n }); }} /><button className="remove-additional-btn" onClick={() => updateItem(item._id, { additionals: (item.additionals || []).filter((_, ai) => ai !== aidx) })}>\u00d7</button></div>)}</div>
+                                                            <button className="add-additional-btn" onClick={() => updateItem(item._id, { additionals: [...(item.additionals || []), { name: "", price: "" }] })}>+ Add More</button>
+                                                        </div>
+                                                    )}
+                                                    {/* Notes */}
+                                                    <div className="row"><div className="field"><label>Notes</label><input type="text" className="input-line" placeholder="Product notes..." value={item.notes || ""} onChange={(e) => updateItem(item._id, { notes: e.target.value })} /></div></div>
                                                 </div>
                                             )}
                                         </div>
@@ -486,7 +604,7 @@ export default function B2bProductForm() {
                         {showMeasurements && (
                             <div className="measure-container">
                                 <div className="measure-menu">{getRelevantMeasurementCategories().map(dn => <div key={dn} className={getCategoryKeyFromDisplayName(activeCategory) === getCategoryKeyFromDisplayName(dn) || activeCategory === dn ? "measure-item active break-words" : "measure-item break-words"} onClick={() => setActiveCategory(dn)}>{dn}</div>)}</div>
-                                <div className="measure-fields"><h3 className="measure-title">Custom Measurements (in)</h3><div className="measure-grid">{(measurementFields[getCategoryKeyFromDisplayName(activeCategory)] || []).map(field => <div className="measure-field" key={field}><label>{field}</label><input type="number" className="input-line" value={measurements[getCategoryKeyFromDisplayName(activeCategory)]?.[field] || ""} onChange={(e) => setMeasurements(prev => ({ ...prev, [getCategoryKeyFromDisplayName(activeCategory)]: { ...(prev[getCategoryKeyFromDisplayName(activeCategory)] || {}), [field]: e.target.value } }))} /></div>)}</div></div>
+                                <div className="measure-fields"><h3 className="measure-title">Custom Measurements (in)</h3><div className="measure-grid">{((isKidsProduct ? KIDS_MEASUREMENT_FIELDS : measurementFields)[getCategoryKeyFromDisplayName(activeCategory)] || []).map(field => <div className="measure-field" key={field}><label>{field}</label><input type="number" className="input-line" value={measurements[getCategoryKeyFromDisplayName(activeCategory)]?.[field] || ""} onChange={(e) => setMeasurements(prev => ({ ...prev, [getCategoryKeyFromDisplayName(activeCategory)]: { ...(prev[getCategoryKeyFromDisplayName(activeCategory)] || {}), [field]: e.target.value } }))} /></div>)}</div></div>
                             </div>
                         )}
 

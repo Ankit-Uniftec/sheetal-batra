@@ -13,6 +13,7 @@ export default function B2bExecutiveDashboard() {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
+    const [vendors, setVendors] = useState({});
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
 
@@ -39,7 +40,20 @@ export default function B2bExecutiveDashboard() {
                 ]);
 
                 if (profileResult.data) setProfile(profileResult.data);
-                if (ordersResult.data) setOrders(ordersResult.data);
+                if (ordersResult.data) {
+                    setOrders(ordersResult.data);
+                    // Fetch vendor details
+                    const vendorIds = [...new Set((ordersResult.data || []).map(o => o.vendor_id).filter(Boolean))];
+                    if (vendorIds.length > 0) {
+                        const { data: vendorsData } = await supabase
+                            .from("vendors")
+                            .select("id, store_brand_name, vendor_code, location")
+                            .in("id", vendorIds);
+                        const vendorMap = {};
+                        (vendorsData || []).forEach(v => { vendorMap[v.id] = v; });
+                        setVendors(vendorMap);
+                    }
+                }
                 setLoading(false);
             } catch (err) {
                 console.error("Load error:", err);
@@ -78,11 +92,11 @@ export default function B2bExecutiveDashboard() {
         return orders.filter((order) => {
             const orderNo = order.order_no?.toLowerCase() || "";
             const poNumber = order.po_number?.toLowerCase() || "";
-            const vendorName = order.vendor_name?.toLowerCase() || "";
+            const vendorName = vendors[order.vendor_id]?.store_brand_name?.toLowerCase() || "";
             const itemName = order.items?.[0]?.product_name?.toLowerCase() || "";
             return orderNo.includes(q) || poNumber.includes(q) || vendorName.includes(q) || itemName.includes(q);
         });
-    }, [orders, orderSearch]);
+    }, [orders, orderSearch, vendors]);
 
     const paginatedOrders = useMemo(() => {
         const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -165,8 +179,8 @@ export default function B2bExecutiveDashboard() {
                                 </div>
                                 <div className="b2b-quick-btns">
                                     <button className="b2b-quick-btn primary" onClick={handleNewOrder}>+ New B2B Order</button>
-                                    <button className="b2b-quick-btn" onClick={() => navigate("/b2b-order-history")}>📋 Order History</button>
-                                    <button className="b2b-quick-btn" onClick={() => setActiveTab("calendar")}>📅 Calendar</button>
+                                    <button className="b2b-quick-btn" onClick={() => navigate("/b2b-order-history")}>Order History</button>
+                                    <button className="b2b-quick-btn" onClick={() => setActiveTab("calendar")}>Calendar</button>
                                 </div>
                             </div>
                         </div>
@@ -287,11 +301,11 @@ export default function B2bExecutiveDashboard() {
                                                 </div>
                                                 <div className="b2b-product-name">
                                                     <span className="b2b-order-label">Vendor:</span>
-                                                    <span className="b2b-field-value">{order.vendor_name || "—"}</span>
+                                                    <span className="b2b-field-value">{vendors[order.vendor_id]?.store_brand_name || "—"}</span>
                                                 </div>
                                                 <div className="b2b-product-name">
                                                     <span className="b2b-order-label">Merchandiser:</span>
-                                                    <span className="b2b-field-value">{order.merchandiser || "—"}</span>
+                                                    <span className="b2b-field-value">{order.merchandiser_name || order.merchandiser || "—"}</span>
                                                 </div>
                                                 <div className="b2b-details-grid">
                                                     <div className="b2b-detail-item">
