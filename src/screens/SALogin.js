@@ -79,6 +79,8 @@ export default function SALogin() {
       navigate("/admin")
     }else if (userRecord.role === "executive"){
       navigate("/b2b-executive-dashboard")
+    }else if (userRecord.role === "merchandiser"){
+      navigate("/b2b-merchandiser-dashboard")
     }else{
       showPopup({
         title: "Unknown role",
