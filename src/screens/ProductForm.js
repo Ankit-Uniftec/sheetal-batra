@@ -1766,7 +1766,7 @@ export default function ProductForm() {
       price: getBasePrice(), // CHANGE #1: Use base price without extras
       measurements: getRelevantMeasurements(),
       image_url: selectedProduct.image_url || selectedProduct.image || null,
-      notes: "", // Initialize notes as empty for new products
+      notes: comments, // Initialize notes as empty for new products
       isKids: isKidsProduct,
       category: isKidsProduct ? "Kids" : "Women", // Store category string
       order_type: getOrderType(),
@@ -1803,6 +1803,7 @@ export default function ProductForm() {
     setQuantity(1);
     setMeasurements({});
     setDeliveryDate(""); // Reset delivery date for next product
+    setComments("");
     setIsSyncProduct(false);
     setProductVariants([]);
     setLocalInventory({});
