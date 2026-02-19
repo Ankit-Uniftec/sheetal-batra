@@ -1110,7 +1110,9 @@ const WarehouseDashboard = () => {
                             </div>
 
                             <div style={{ display: "flex", alignItems: 'center', gap: 50 }}>
-                              <p><strong className="wd-label">Extras:</strong> {firstItem.extra || "-"}</p>
+                              {firstItem.extras && firstItem.extras.length > 0 && (
+                                <p><strong className="wd-label">Extras:</strong> {firstItem.extras.map(e => e.name).join(", ")}</p>
+                              )}
                               <p><strong className="wd-label">Size:</strong> {firstItem.size || "-"}</p>
                             </div>
 
