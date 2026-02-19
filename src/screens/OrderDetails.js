@@ -169,8 +169,8 @@ export default function OrderDetails() {
   const sanitizedAdvance = useMemo(() => {
     const amount = parseFloat(advancePayment);
     if (isNaN(amount) || amount < 0) return 0;
-    return Math.min(amount, totalAmount);
-  }, [advancePayment, totalAmount]);
+    return amount; // Don't cap here - let pricing.netAfterStoreCredit handle it
+  }, [advancePayment]);
 
   const remainingAmount = useMemo(
     () => Math.max(0, totalAmount - sanitizedAdvance),
@@ -1425,8 +1425,8 @@ export default function OrderDetails() {
                 type="number"
                 value={advancePayment}
                 onChange={(e) => {
-                  const val = parseFloat(e.target.value) || '';
-                  const maxAmount = storeCreditApplied ? pricing.netAfterStoreCredit : totalAmount;
+                  const val = parseFloat(e.target.value) || 0;
+                  const maxAmount = pricing.netAfterStoreCredit || pricing.netPayable || totalAmount;
                   if (val > maxAmount) {
                     setAdvancePayment(maxAmount);
                   } else {
