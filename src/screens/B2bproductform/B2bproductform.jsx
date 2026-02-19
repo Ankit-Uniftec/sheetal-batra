@@ -629,7 +629,7 @@ export default function B2bProductForm() {
 
                         <div className="summary-box-fixed"><h3>Order Summary</h3><p>Total Quantity: <strong>{formatIndianNumber(totalQty)}</strong></p><p>Subtotal: <strong>₹{formatIndianNumber(subtotal.toFixed(2))}</strong></p><p>Taxes (18%): <strong>₹{formatIndianNumber(taxes.toFixed(2))}</strong></p><p className="grand-total">Total: <strong>₹{formatIndianNumber(totalOrder.toFixed(2))}</strong></p></div>
 
-                        <div className="footer-btns"><button className="productBtn" onClick={handleAddProduct}>Add Product</button><button className="draftBtn">Save as Draft</button><button className="continueBtn" onClick={handleContinue}>Continue</button></div>
+                        <div className="footer-btns"><button className="productBtn" onClick={handleAddProduct}>Add Product</button><button className="continueBtn" onClick={handleContinue}>Continue</button></div>
                     </div>
 
                     {selectedProduct?.image_url && <div className="screen4-image-fixed"><img src={selectedProduct.image_url} alt={selectedProduct.name} /></div>}

@@ -35,7 +35,7 @@ export default function B2bExecutiveDashboard() {
                 setUser(user);
 
                 const [profileResult, ordersResult] = await Promise.all([
-                    supabase.from("profiles").select("*").eq("id", user.id).single(),
+                    supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
                     supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false })
                 ]);
 
@@ -111,6 +111,57 @@ export default function B2bExecutiveDashboard() {
 
     const handleNewOrder = () => navigate("/b2b-vendor-selection");
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
+
+    const handleEditOrder = async (order) => {
+        try {
+            // Fetch full vendor data
+            let vendorFull = null;
+            if (order.vendor_id) {
+                const { data } = await supabase.from("vendors").select("*").eq("id", order.vendor_id).single();
+                vendorFull = data;
+            }
+
+            sessionStorage.setItem("b2bEditingOrderId", order.id);
+
+            sessionStorage.setItem("b2bVendorData", JSON.stringify({
+                selectedVendorId: order.vendor_id,
+                vendor: vendorFull,
+                vendorContacts: [],
+                primaryContact: null,
+                poNumber: order.po_number || "",
+                merchandiser: order.merchandiser_name || "",
+                orderType: order.b2b_order_type || "Buyout",
+                discountPercent: order.markdown_percent || 0,
+                remarks: order.comments || "",
+                availableCredit: vendorFull ? (vendorFull.credit_limit || 0) - (vendorFull.current_credit_used || 0) : 0,
+            }));
+
+            sessionStorage.setItem("b2bProductFormData", JSON.stringify({
+                orderItems: order.items || [],
+                deliveryDate: order.delivery_date || "",
+                modeOfDelivery: order.mode_of_delivery || "Delhi Store",
+                orderFlag: order.order_flag || "Normal",
+                comments: order.comments || "",
+                attachments: order.attachments || [],
+                urgentReason: order.urgent_reason || "",
+                subtotal: order.subtotal || 0,
+                taxes: order.taxes || 0,
+                grandTotal: order.grand_total || 0,
+                totalQuantity: order.total_quantity || 0,
+            }));
+
+            sessionStorage.setItem("b2bOrderDetailsData", JSON.stringify({
+                deliveryAddress: order.delivery_address || "",
+                orderNotes: order.delivery_notes || order.comments || "",
+            }));
+
+            navigate("/b2b-vendor-selection");
+        } catch (err) {
+            console.error("Error preparing edit:", err);
+            alert("Failed to load order for editing.");
+        }
+    };
+
 
     const getStatusBadgeClass = (status) => {
         switch (status?.toLowerCase()) {
@@ -196,9 +247,18 @@ export default function B2bExecutiveDashboard() {
                                     <p className="b2b-muted">No alerts right now.</p>
                                 ) : (
                                     orders.filter(o => o.approval_status === "rejected").slice(0, 8).map(order => (
-                                        <div key={order.id} className="b2b-alert-item" onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
-                                            <p><b className="b2b-gold-text">{order.order_no}</b> — <span className="b2b-rejected-text">Rejected</span></p>
-                                            <p style={{ fontSize: 12, color: "#999" }}>{formatDate(order.created_at)}</p>
+                                        <div key={order.id} className="b2b-alert-item">
+                                            <div className="b2b-alert-top">
+                                                <b className="b2b-gold-text">{order.order_no}</b>
+                                                <span className="b2b-rejected-badge">Rejected</span>
+                                            </div>
+                                            {order.rejection_reason && (
+                                                <p className="b2b-alert-reason">{order.rejection_reason}</p>
+                                            )}
+                                            <div className="b2b-alert-actions">
+                                                <button className="b2b-alert-edit-btn" onClick={() => handleEditOrder(order)}>Edit & Resubmit</button>
+                                                <button className="b2b-alert-view-btn" onClick={() => handleViewOrder(order.id)}>View</button>
+                                            </div>
                                         </div>
                                     ))
                                 )}
@@ -377,7 +437,7 @@ export default function B2bExecutiveDashboard() {
                             {/* Pagination */}
                             {filteredOrders.length > ORDERS_PER_PAGE && (
                                 <div className="b2b-pagination">
-                                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="b2b-pagination-btn">← Previous</button>
+                                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="b2b-pagination-btn">← Previous</button>
                                     <span className="b2b-pagination-info">Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}</span>
                                     <button disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)} className="b2b-pagination-btn">Next →</button>
                                 </div>
@@ -468,7 +528,7 @@ export default function B2bExecutiveDashboard() {
                     <div className="b2b-order-details-wrapper b2b-profile-wrapper">
                         <h2 className="b2b-profile-title">My Profile</h2>
                         <div className="b2b-profile-card">
-                            <div className="b2b-profile-row"><span className="b2b-label">Name</span><span className="b2b-value">{profile?.full_name || "User"}</span></div>
+                            <div className="b2b-profile-row"><span className="b2b-label">Name</span><span className="b2b-value">{profile?.saleperson || "User"}</span></div>
                             <div className="b2b-profile-row"><span className="b2b-label">Email</span><span className="b2b-value">{user?.email}</span></div>
                             <div className="b2b-profile-row"><span className="b2b-label">Role</span><span className="b2b-value">B2B Executive</span></div>
                             <div className="b2b-profile-row"><span className="b2b-label">Store</span><span className="b2b-value">{profile?.store_name || "N/A"}</span></div>

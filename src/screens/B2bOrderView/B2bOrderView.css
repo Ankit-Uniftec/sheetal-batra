@@ -399,3 +399,24 @@
         font-size: 14px;
     }
 }
+/* ==================== EDIT & REJECTION STYLES ==================== */
+.b2bov-header-actions { display: flex; gap: 10px; align-items: center; }
+.b2bov-edit-btn { background: #d5b85a; color: white !important; border: none; padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.b2bov-edit-btn:hover { background: #c9a94e; transform: translateY(-1px); }
+
+.b2bov-rejection-banner { background: #fff3f3; border: 1px solid #ffcdd2; border-left: 4px solid #c62828; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; display: flex; gap: 14px; align-items: flex-start; }
+.b2bov-rejection-icon { font-size: 24px; flex-shrink: 0; }
+.b2bov-rejection-content { flex: 1; }
+.b2bov-rejection-content strong { font-size: 16px; color: #c62828; }
+.b2bov-rejection-reason { margin: 8px 0; font-size: 14px; color: #555; background: white; padding: 10px 14px; border-radius: 6px; border: 1px solid #ffcdd2; }
+.b2bov-rejection-by { font-size: 12px; color: #999; margin: 4px 0; }
+.b2bov-edit-inline-btn { margin-top: 10px; background: #c62828; color: white !important; border: none; padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.b2bov-edit-inline-btn:hover { background: #b71c1c; }
+
+.b2bov-edit-notice { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-size: 13px; color: #f57f17; font-weight: 500; text-align: center; }
+
+@media (max-width: 768px) {
+  .b2bov-header-actions { gap: 6px; }
+  .b2bov-edit-btn { padding: 6px 12px; font-size: 12px; }
+  .b2bov-rejection-banner { flex-direction: column; gap: 8px; padding: 12px; }
+}

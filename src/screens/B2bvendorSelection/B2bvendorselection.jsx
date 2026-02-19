@@ -9,7 +9,7 @@ import { usePopup } from "../../components/Popup";
 
 const SESSION_KEY = "b2bVendorData";
 
-function SearchableSelect({ options, value, onChange, placeholder = "Select…", disabled = false, className = "" }) {
+function SearchableSelect({ options, value, onChange, placeholder = "Select\u2026", disabled = false, className = "" }) {
     const normalized = useMemo(() => (options || []).map((o) => typeof o === "object" && o !== null && "label" in o && "value" in o ? o : { label: String(o), value: o }), [options]);
     const current = useMemo(() => normalized.find((o) => String(o.value) === String(value)) || null, [normalized, value]);
     const [open, setOpen] = useState(false);
@@ -32,7 +32,7 @@ function SearchableSelect({ options, value, onChange, placeholder = "Select…",
         <div ref={rootRef} className={`ss-root ${disabled ? "ss-disabled" : ""} ${className}`}>
             <div className={`ss-control ${open ? "ss-open" : ""}`} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); if (disabled) return; setOpen(true); setFocusIdx(-1); requestAnimationFrame(() => inputRef.current?.focus()); }}>
                 <input ref={inputRef} className="ss-input" placeholder={placeholder} value={query} onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); setFocusIdx(0); }} onFocus={() => { if (current && query === current.label) setQuery(""); setOpen(true); }} onKeyDown={handleKeyDown} disabled={disabled} />
-                {current && <button className="ss-clear" title="Clear" onClick={clear}>×</button>}
+                {current && <button className="ss-clear" title="Clear" onClick={clear}>{"\u00D7"}</button>}
             </div>
             {open && (
                 <div className="ss-menu" role="listbox">
@@ -60,6 +60,7 @@ export default function B2bVendorSelection() {
     const [selectedVendorId, setSelectedVendorId] = useState("");
     const [selectedVendor, setSelectedVendor] = useState(null);
     const [vendorContacts, setVendorContacts] = useState([]);
+    const [userRole, setUserRole] = useState(null);
 
     const [poNumber, setPoNumber] = useState("");
     const [merchandiser, setMerchandiser] = useState("");
@@ -71,6 +72,19 @@ export default function B2bVendorSelection() {
         { label: "Prastuti", value: "Prastuti" },
         { label: "Sharia", value: "Sharia" },
     ];
+
+    // Fetch user role
+    useEffect(() => {
+        const fetchRole = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
+                if (sp?.role) setUserRole(sp.role);
+                console.log(sp.role);
+            }
+        };
+        fetchRole();
+    }, []);
 
     // Restore from session
     useEffect(() => {
@@ -118,7 +132,7 @@ export default function B2bVendorSelection() {
         fetchVendors();
     }, []);
 
-    // Vendor change — includes default orderType/markdown from vendor
+    // Vendor change - includes default orderType/markdown from vendor
     useEffect(() => {
         if (!selectedVendorId) { setSelectedVendor(null); setVendorContacts([]); return; }
         const vendor = vendors.find((v) => v.id === selectedVendorId);
@@ -157,7 +171,11 @@ export default function B2bVendorSelection() {
         navigate("/b2b-product-form");
     };
 
-    const handleBack = () => navigate("/b2b-executive-dashboard");
+    const handleBack = () => {
+        const r = userRole?.toLowerCase() || "";
+        const dash = r.includes("merchandiser") ? "/b2b-merchandiser-dashboard" : r.includes("production") ? "/b2b-production-dashboard" : "/b2b-executive-dashboard";
+        navigate(dash);
+    };
 
     return (
         <div className="screen4-bg">
@@ -196,7 +214,7 @@ export default function B2bVendorSelection() {
                                     <div>
                                         <h3 className="vs-name">{selectedVendor.store_brand_name}</h3>
                                         <span className="vs-code">{selectedVendor.vendor_code}</span>
-                                        {selectedVendor.location && <span className="vs-loc">📍 {selectedVendor.location}</span>}
+                                        {selectedVendor.location && <span className="vs-loc">{"\uD83D\uDCCD"} {selectedVendor.location}</span>}
                                     </div>
                                 </div>
 
@@ -220,9 +238,9 @@ export default function B2bVendorSelection() {
                                     <div className="vs-col vs-credit-box">
                                         <h5>Credit Information</h5>
                                         <div className="vs-credits">
-                                            <div className="vs-credit-item"><span className="vs-credit-val">₹{formatIndianNumber(selectedVendor.credit_limit || 0)}</span><span className="vs-credit-lbl">Limit</span></div>
-                                            <div className="vs-credit-item"><span className="vs-credit-val">₹{formatIndianNumber(selectedVendor.current_credit_used || 0)}</span><span className="vs-credit-lbl">Used</span></div>
-                                            <div className="vs-credit-item"><span className={`vs-credit-val ${availableCredit <= 0 ? "negative" : "positive"}`}>₹{formatIndianNumber(availableCredit)}</span><span className="vs-credit-lbl">Available</span></div>
+                                            <div className="vs-credit-item"><span className="vs-credit-val">{"\u20B9"}{formatIndianNumber(selectedVendor.credit_limit || 0)}</span><span className="vs-credit-lbl">Limit</span></div>
+                                            <div className="vs-credit-item"><span className="vs-credit-val">{"\u20B9"}{formatIndianNumber(selectedVendor.current_credit_used || 0)}</span><span className="vs-credit-lbl">Used</span></div>
+                                            <div className="vs-credit-item"><span className={`vs-credit-val ${availableCredit <= 0 ? "negative" : "positive"}`}>{"\u20B9"}{formatIndianNumber(availableCredit)}</span><span className="vs-credit-lbl">Available</span></div>
                                         </div>
                                     </div>
                                 </div>
@@ -255,12 +273,12 @@ export default function B2bVendorSelection() {
                                 </div>
 
                                 {availableCredit <= 0 && (
-                                    <div className="vs-warning"><span>⚠️</span><div><strong>Credit Limit Exceeded</strong><p>This vendor has no available credit. Order will require approval.</p></div></div>
+                                    <div className="vs-warning"><span>{"\u26A0\uFE0F"}</span><div><strong>Credit Limit Exceeded</strong><p>This vendor has no available credit. Order will require approval.</p></div></div>
                                 )}
 
                                 <div className="footer-btns">
-                                    <button className="draftBtn" onClick={handleBack}>← Cancel</button>
-                                    <button className="continueBtn" onClick={handleContinue}>Continue to Products →</button>
+                                    <button className="draftBtn" onClick={handleBack}>{"\u2190"} Cancel</button>
+                                    <button className="continueBtn" onClick={handleContinue}>Continue to Products {"\u2192"}</button>
                                 </div>
                             </>
                         )}
@@ -268,7 +286,7 @@ export default function B2bVendorSelection() {
                 </div>
             </div>
 
-            <button className="back-btn" onClick={handleBack}>←</button>
+            <button className="back-btn" onClick={handleBack}>{"\u2190"}</button>
         </div>
     );
 }

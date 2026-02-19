@@ -36,11 +36,13 @@ export default function B2bReviewOrder() {
     const { showPopup, PopupComponent } = usePopup();
 
     const [user, setUser] = useState(null);
+    const [userRole, setUserRole] = useState(null);
     const [salespersonStore, setSalespersonStore] = useState("Delhi Store");
     const [vendorData, setVendorData] = useState(null);
     const [productData, setProductData] = useState(null);
     const [detailsData, setDetailsData] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingOrderId] = useState(() => sessionStorage.getItem("b2bEditingOrderId") || null);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -49,7 +51,24 @@ export default function B2bReviewOrder() {
             setUser(currentUser);
 
             if (currentUser) {
-                // Try 1: Get store from currentSalesperson session (same as B2C)
+                // Fetch user role
+                const { data: spData2 } = await supabase
+                    .from("salesperson")
+                    .select("role, store_name")
+                    .eq("email", currentUser.email?.toLowerCase())
+                    .maybeSingle();
+                if (spData2?.role) setUserRole(spData2.role);
+
+                const isB2B = spData2?.role?.includes("executive") || spData2?.role?.includes("merchandiser") || spData2?.role?.includes("production");
+
+                // For B2B users, use profile store directly
+                if (isB2B) {
+                    const store = spData2?.store_name || "B2B";
+                    setSalespersonStore(store);
+                    return;
+                }
+
+                // Try 1: Get store from currentSalesperson session (B2C only)
                 const savedSP = sessionStorage.getItem("currentSalesperson");
                 if (savedSP) {
                     try {
@@ -69,12 +88,12 @@ export default function B2bReviewOrder() {
                 }
 
                 // Try 3: Fetch from profiles table
-                const { data: profileData } = await supabase
-                    .from("profiles")
-                    .select("store")
-                    .eq("id", currentUser.id)
-                    .single();
-                if (profileData?.store) setSalespersonStore(profileData.store);
+                const { data: storeData } = await supabase
+                    .from("salesperson")
+                    .select("store_name")
+                    .eq("email", currentUser.email?.toLowerCase())
+                    .maybeSingle();
+                if (storeData?.store_name) setSalespersonStore(storeData.store_name);
             }
         };
         fetchUser();
@@ -126,27 +145,18 @@ export default function B2bReviewOrder() {
     const creditLimit = vendor?.credit_limit || 0;
     const exceedsCredit = orderType === "Buyout" && projectedCredit > creditLimit;
 
-    // Submit Order
+    // Submit Order (INSERT for new, UPDATE for edit)
     const handleSubmit = async () => {
         if (isSubmitting) return;
         setIsSubmitting(true);
 
         try {
-            // Generate order number using salesperson store (same as B2C)
-            const { data: orderNo, error: orderNoError } = await supabase.rpc(
-                "generate_order_no",
-                { p_store: salespersonStore || "Delhi Store" }
-            );
-            if (orderNoError) throw orderNoError;
-            if (!orderNo) throw new Error("Failed to generate order number.");
-
             const deliveryDates = items.map(item => item.delivery_date).filter(Boolean).sort();
             const earliestDeliveryDate = deliveryDates[0] || null;
 
+            const isMerchandiser = userRole?.toLowerCase().includes("merchandiser");
+
             const orderPayload = {
-                order_no: orderNo,
-                user_id: user?.id,
-                is_b2b: true,
                 vendor_id: vendor?.id,
                 po_number: poNumber,
                 b2b_order_type: orderType,
@@ -162,40 +172,111 @@ export default function B2bReviewOrder() {
                 taxes: taxes,
                 grand_total: grandTotal,
                 total_quantity: totalQuantity,
-                approval_status: "pending",
-                submitted_for_approval_at: new Date().toISOString(),
                 mode_of_delivery: productData?.modeOfDelivery || "Delhi Store",
                 order_flag: productData?.orderFlag || "Normal",
                 urgent_reason: productData?.urgentReason || null,
                 attachments: productData?.attachments || [],
+                updated_at: new Date().toISOString(),
             };
 
-            const { data: orderData, error: orderError } = await supabase
-                .from("orders")
-                .insert([orderPayload])
-                .select()
-                .single();
-            if (orderError) throw orderError;
+            let resultOrderNo;
 
-            const { error: approvalError } = await supabase
-                .from("b2b_approvals")
-                .insert([{
-                    order_id: orderData.id,
-                    status: "pending",
-                    submitted_by: user?.email || "unknown",
-                    submitted_at: new Date().toISOString(),
-                }]);
-            if (approvalError) console.warn("Failed to create approval record:", approvalError);
+            if (editingOrderId) {
+                // ===== EDIT MODE: UPDATE existing order =====
+                if (isMerchandiser) {
+                    // Merchandiser edits skip re-approval
+                    orderPayload.approval_status = "approved";
+                } else {
+                    // Executive edits require re-approval
+                    orderPayload.approval_status = "pending";
+                    orderPayload.submitted_for_approval_at = new Date().toISOString();
+                    orderPayload.rejection_reason = null;
+                }
 
+                const { data: updatedOrder, error: updateError } = await supabase
+                    .from("orders")
+                    .update(orderPayload)
+                    .eq("id", editingOrderId)
+                    .select("order_no")
+                    .single();
+                if (updateError) throw updateError;
+
+                resultOrderNo = updatedOrder.order_no;
+
+                // Update approval record if executive re-submits
+                if (!isMerchandiser) {
+                    await supabase.from("b2b_approvals").upsert([{
+                        order_id: editingOrderId,
+                        status: "pending",
+                        submitted_by: user?.email || "unknown",
+                        submitted_at: new Date().toISOString(),
+                    }], { onConflict: "order_id" }).then(({ error }) => {
+                        if (error) console.warn("Failed to update approval record:", error);
+                    });
+                }
+            } else {
+                // ===== NEW ORDER: INSERT =====
+                const { data: orderNo, error: orderNoError } = await supabase.rpc(
+                    "generate_order_no",
+                    { p_store: salespersonStore || "Delhi Store" }
+                );
+                if (orderNoError) throw orderNoError;
+                if (!orderNo) throw new Error("Failed to generate order number.");
+
+                orderPayload.order_no = orderNo.replace("DLC", "B2B");
+                orderPayload.user_id = user?.id;
+                orderPayload.is_b2b = true;
+                orderPayload.submitted_for_approval_at = new Date().toISOString();
+
+                // If merchandiser creates order, skip approval
+                if (isMerchandiser) {
+                    orderPayload.approval_status = "approved";
+                    orderPayload.approved_by = user?.email || "unknown";
+                    orderPayload.approved_at = new Date().toISOString();
+                } else {
+                    orderPayload.approval_status = "pending";
+                }
+
+                const { data: orderData, error: orderError } = await supabase
+                    .from("orders")
+                    .insert([orderPayload])
+                    .select()
+                    .single();
+                if (orderError) throw orderError;
+
+                resultOrderNo = orderNo.replace("DLC", "B2B");
+
+                if (!isMerchandiser) {
+                    const { error: approvalError } = await supabase
+                        .from("b2b_approvals")
+                        .insert([{
+                            order_id: orderData.id,
+                            status: "pending",
+                            submitted_by: user?.email || "unknown",
+                            submitted_at: new Date().toISOString(),
+                        }]);
+                    if (approvalError) console.warn("Failed to create approval record:", approvalError);
+                }
+            }
+
+            // Clear all session data
             sessionStorage.removeItem(VENDOR_SESSION_KEY);
             sessionStorage.removeItem(PRODUCT_SESSION_KEY);
             sessionStorage.removeItem(DETAILS_SESSION_KEY);
+            sessionStorage.removeItem("b2bEditingOrderId");
+
+            const isEdit = !!editingOrderId;
+            const dashboardPath = isMerchandiser ? "/b2b-merchandiser-dashboard" : userRole?.toLowerCase().includes("production") ? "/b2b-production-dashboard" : "/b2b-executive-dashboard";
 
             showPopup({
-                title: "Order Submitted!",
-                message: `Order #${orderNo} has been submitted for approval.`,
+                title: isEdit ? "Order Updated!" : "Order Submitted!",
+                message: isEdit
+                    ? `Order #${resultOrderNo} has been updated${isMerchandiser ? "." : " and resubmitted for approval."}`
+                    : isMerchandiser
+                        ? `Order #${resultOrderNo} has been created and auto-approved.`
+                        : `Order #${resultOrderNo} has been submitted for approval.`,
                 type: "success",
-                onConfirm: () => navigate("/b2b-executive-dashboard"),
+                onConfirm: () => navigate(dashboardPath),
             });
         } catch (err) {
             console.error("Order submission error:", err);
@@ -234,6 +315,13 @@ export default function B2bReviewOrder() {
             </header>
 
             <div className="b2b-ro-container">
+                {/* Editing Banner */}
+                {editingOrderId && (
+                    <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 8, padding: "10px 16px", marginBottom: 16, textAlign: "center", fontSize: 14, color: "#f57f17", fontWeight: 500 }}>
+                        {"\u270E"} Editing existing order {!userRole?.toLowerCase().includes("merchandiser") ? "\u2014 will be resubmitted for approval" : ""}
+                    </div>
+                )}
+
                 {/* Vendor Details */}
                 <div className="b2b-ro-section">
                     <h3>Vendor Details</h3>
@@ -366,7 +454,7 @@ export default function B2bReviewOrder() {
                 {/* Credit Warning */}
                 {exceedsCredit && (
                     <div className="b2b-ro-warning">
-                        <span>⚠️</span>
+                        <span>⚠ï¸</span>
                         <div>
                             <strong>Credit Limit Warning</strong>
                             <p>This order exceeds the vendor's available credit and will require approval.</p>
@@ -385,14 +473,14 @@ export default function B2bReviewOrder() {
 
                 {/* Action Buttons */}
                 <div className="footer-btns">
-                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>← Back to Edit</button>
+                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>← Back to Edit</button>
                     <button className="continueBtn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: isSubmitting ? "#ccc" : "#4caf50" }}>
-                        {isSubmitting ? "Submitting..." : "Submit for Approval"}
+                        {isSubmitting ? "Submitting..." : editingOrderId ? (userRole?.toLowerCase().includes("merchandiser") ? "Update Order" : "Resubmit for Approval") : (userRole?.toLowerCase().includes("merchandiser") ? "Create Order (Auto-Approved)" : "Submit for Approval")}
                     </button>
                 </div>
             </div>
 
-            <button className="back-btn" onClick={handleBack} disabled={isSubmitting}>←</button>
+            <button className="back-btn" onClick={handleBack} disabled={isSubmitting}>←</button>
         </div>
     );
 }

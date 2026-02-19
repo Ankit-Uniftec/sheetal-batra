@@ -59,7 +59,7 @@ export default function B2bProductionDashboard() {
             setUser(user);
 
             const [profileResult, ordersResult] = await Promise.all([
-                supabase.from("profiles").select("*").eq("id", user.id).single(),
+                supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
                 supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false })
             ]);
 
@@ -539,7 +539,7 @@ export default function B2bProductionDashboard() {
                     <div className="prod-tab-wrapper prod-profile-wrap">
                         <h2 className="prod-profile-title">My Profile</h2>
                         <div className="prod-profile-card">
-                            <div className="prod-profile-row"><span className="prod-plabel">Name</span><span className="prod-pvalue">{profile?.full_name || "User"}</span></div>
+                            <div className="prod-profile-row"><span className="prod-plabel">Name</span><span className="prod-pvalue">{profile?.saleperson || "User"}</span></div>
                             <div className="prod-profile-row"><span className="prod-plabel">Email</span><span className="prod-pvalue">{user?.email}</span></div>
                             <div className="prod-profile-row"><span className="prod-plabel">Role</span><span className="prod-pvalue">B2B Production Head</span></div>
                             <div className="prod-profile-row"><span className="prod-plabel">Store</span><span className="prod-pvalue">{profile?.store_name || "N/A"}</span></div>

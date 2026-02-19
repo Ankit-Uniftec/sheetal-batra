@@ -43,7 +43,7 @@ export default function B2bMerchandiserDashboard() {
             setUser(user);
 
             const [profileResult, ordersResult, vendorsResult] = await Promise.all([
-                supabase.from("profiles").select("*").eq("id", user.id).single(),
+                supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
                 supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false }),
                 supabase.from("vendors").select("*").eq("is_active", true).order("store_brand_name", { ascending: true })
             ]);
@@ -489,7 +489,7 @@ export default function B2bMerchandiserDashboard() {
                     <div className="merch-tab-wrapper merch-profile-wrap">
                         <h2 className="merch-profile-title">My Profile</h2>
                         <div className="merch-profile-card">
-                            <div className="merch-profile-row"><span className="merch-plabel">Name</span><span className="merch-pvalue">{profile?.full_name || "User"}</span></div>
+                            <div className="merch-profile-row"><span className="merch-plabel">Name</span><span className="merch-pvalue">{profile?.saleperson || "User"}</span></div>
                             <div className="merch-profile-row"><span className="merch-plabel">Email</span><span className="merch-pvalue">{user?.email}</span></div>
                             <div className="merch-profile-row"><span className="merch-plabel">Role</span><span className="merch-pvalue">B2B Merchandiser</span></div>
                             <div className="merch-profile-row"><span className="merch-plabel">Store</span><span className="merch-pvalue">{profile?.store_name || "N/A"}</span></div>

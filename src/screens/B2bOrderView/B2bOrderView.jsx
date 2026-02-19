@@ -31,10 +31,18 @@ export default function B2bOrderView() {
     const [order, setOrder] = useState(null);
     const [vendor, setVendor] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [userRole, setUserRole] = useState(null);
 
     useEffect(() => {
         const fetchOrder = async () => {
             try {
+                // Fetch user role
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: profile } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
+                    if (profile?.role) setUserRole(profile.role);
+                }
+
                 const { data, error } = await supabase
                     .from("orders")
                     .select("*")
@@ -63,6 +71,75 @@ export default function B2bOrderView() {
 
     const handleBack = () => navigate(-1);
 
+    // ==================== EDIT LOGIC ====================
+    const getHoursSinceSubmission = () => {
+        if (!order?.submitted_for_approval_at && !order?.created_at) return Infinity;
+        const submittedAt = new Date(order.submitted_for_approval_at || order.created_at);
+        return (Date.now() - submittedAt.getTime()) / (1000 * 60 * 60);
+    };
+
+    const canEdit = () => {
+        if (!order) return false;
+        const status = order.approval_status?.toLowerCase();
+        // Rejected orders — always editable
+        if (status === "rejected") return true;
+        // Already dispatched — not editable
+        if (order.production_status === "dispatched") return false;
+        // Within 30-hour edit window for pending orders
+        if (status === "pending" && getHoursSinceSubmission() <= 30) return true;
+        // Merchandiser can edit approved orders too
+        if (userRole?.toLowerCase().includes("merchandiser") && status === "approved") return true;
+        return false;
+    };
+
+    const handleEdit = () => {
+        if (!order || !vendor) return;
+
+        // Store editing order ID
+        sessionStorage.setItem("b2bEditingOrderId", order.id);
+
+        // Populate vendor session data
+        const vendorSessionData = {
+            selectedVendorId: vendor.id,
+            vendor: vendor,
+            vendorContacts: [],
+            primaryContact: null,
+            poNumber: order.po_number || "",
+            merchandiser: order.merchandiser_name || "",
+            orderType: order.b2b_order_type || "Buyout",
+            discountPercent: order.markdown_percent || 0,
+            remarks: order.comments || "",
+            availableCredit: (vendor.credit_limit || 0) - (vendor.current_credit_used || 0),
+        };
+        sessionStorage.setItem("b2bVendorData", JSON.stringify(vendorSessionData));
+
+        // Populate product session data
+        const productSessionData = {
+            orderItems: order.items || [],
+            deliveryDate: order.delivery_date || "",
+            modeOfDelivery: order.mode_of_delivery || "Delhi Store",
+            orderFlag: order.order_flag || "Normal",
+            comments: order.comments || "",
+            attachments: order.attachments || [],
+            urgentReason: order.urgent_reason || "",
+            subtotal: order.subtotal || 0,
+            taxes: order.taxes || 0,
+            grandTotal: order.grand_total || 0,
+            totalQuantity: order.total_quantity || 0,
+        };
+        sessionStorage.setItem("b2bProductFormData", JSON.stringify(productSessionData));
+
+        // Populate details session data
+        const detailsSessionData = {
+            deliveryAddress: order.delivery_address || "",
+            orderNotes: order.delivery_notes || order.comments || "",
+        };
+        sessionStorage.setItem("b2bOrderDetailsData", JSON.stringify(detailsSessionData));
+
+        // Navigate to vendor selection to allow full editing
+        navigate("/b2b-vendor-selection");
+    };
+
     const getStatusClass = (status) => {
         switch (status?.toLowerCase()) {
             case "approved": return "status-approved";
@@ -79,14 +156,41 @@ export default function B2bOrderView() {
 
     return (
         <div className="b2bov-page">
-            {/* Header */}
+                        {/* Header */}
             <header className="b2bov-header">
                 <img src={Logo} alt="logo" className="b2bov-logo" onClick={handleBack} />
                 <h1 className="b2bov-title">Order Details</h1>
-                <button className="b2bov-back-btn" onClick={handleBack}>← Back</button>
+                <div className="b2bov-header-actions">
+                    {canEdit() && (
+                        <button className="b2bov-edit-btn" onClick={handleEdit}>
+                            {"\u270E"} Edit Order
+                        </button>
+                    )}
+                    <button className="b2bov-back-btn" onClick={handleBack}>{"\u2190"} Back</button>
+                </div>
             </header>
 
             <div className="b2bov-container">
+                {/* Rejection Reason Banner */}
+                {order.approval_status?.toLowerCase() === "rejected" && (
+                    <div className="b2bov-rejection-banner">
+                        <div className="b2bov-rejection-icon">{"\u26A0\uFE0F"}</div>
+                        <div className="b2bov-rejection-content">
+                            <strong>Order Rejected</strong>
+                            {order.rejection_reason && <p className="b2bov-rejection-reason">{order.rejection_reason}</p>}
+                            {order.approved_by && <p className="b2bov-rejection-by">Rejected by: {order.approved_by} {order.approved_at ? `on ${formatDate(order.approved_at)}` : ""}</p>}
+                            <button className="b2bov-edit-inline-btn" onClick={handleEdit}>{"\u270E"} Edit & Resubmit</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Edit Window Notice */}
+                {order.approval_status?.toLowerCase() === "pending" && getHoursSinceSubmission() <= 30 && (
+                    <div className="b2bov-edit-notice">
+                        Edit window: {Math.max(0, Math.ceil(30 - getHoursSinceSubmission()))} hours remaining
+                    </div>
+                )}
+
                 {/* Order Status Banner */}
                 <div className={`b2bov-status-banner ${getStatusClass(order.approval_status)}`}>
                     <div className="b2bov-status-left">
@@ -238,7 +342,7 @@ export default function B2bOrderView() {
             </div>
 
             {/* Floating Back */}
-            <button className="b2bov-floating-back" onClick={handleBack}>←</button>
+            <button className="b2bov-floating-back" onClick={handleBack}>←</button>
         </div>
     );
 }

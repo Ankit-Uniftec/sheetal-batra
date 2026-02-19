@@ -24,7 +24,6 @@ export default function SALogin() {
         type: "warning",
         confirmText: "Ok",
       })
-      // alert("Please enter email and password.");
       return;
     }
 
@@ -45,7 +44,6 @@ export default function SALogin() {
         type: "warning",
         confirmText: "Ok",
       })
-      // alert("Invalid email or password");
       return;
     }
 
@@ -62,7 +60,6 @@ export default function SALogin() {
         type: "error",
         confirmText: "Ok",
       })
-      // alert("Role not found!");
       return;
     }
 
@@ -77,20 +74,37 @@ export default function SALogin() {
       navigate("/accounts")
     } else if (userRecord.role === "admin") {
       navigate("/admin")
-    }else if (userRecord.role === "executive"){
+    } else if (userRecord.role === "executive") {
+      const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
+      sessionStorage.setItem("currentSalesperson", JSON.stringify({
+        store: prof?.store || prof?.store_name || "B2B",
+        name: prof?.full_name || "",
+        email: email.trim(),
+      }));
       navigate("/b2b-executive-dashboard")
-    }else if (userRecord.role === "merchandiser"){
+    } else if (userRecord.role === "merchandiser") {
+      const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
+      sessionStorage.setItem("currentSalesperson", JSON.stringify({
+        store: prof?.store || prof?.store_name || "B2B",
+        name: prof?.full_name || "",
+        email: email.trim(),
+      }));
       navigate("/b2b-merchandiser-dashboard")
-    }else if (userRecord.role === "production"){
+    } else if (userRecord.role === "production") {
+      const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
+      sessionStorage.setItem("currentSalesperson", JSON.stringify({
+        store: prof?.store || prof?.store_name || "B2B",
+        name: prof?.full_name || "",
+        email: email.trim(),
+      }));
       navigate("/b2b-production-dashboard")
-    }else{
+    } else {
       showPopup({
         title: "Unknown role",
         message: "Access is Denied.",
         type: "warning",
         confirmText: "Ok",
       })
-      // alert("Unknown role. Access denied.");
     }
   };
 
@@ -122,14 +136,6 @@ export default function SALogin() {
               style={{ marginTop: "24px" }}
             />
 
-            {/* <span
-              className="eye-icon"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? {eye} : ""}
-            </span> */}
-
-
             <span className="eye-icon" onClick={() => setShowPassword(!showPassword)}>
               <img src={showPassword ? eyeOff : eye} alt="toggle visibility" width={20} />
             </span>
@@ -147,4 +153,3 @@ export default function SALogin() {
     </div>
   );
 }
-
