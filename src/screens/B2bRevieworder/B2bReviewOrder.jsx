@@ -48,53 +48,65 @@ export default function B2bReviewOrder() {
         const fetchUser = async () => {
             const { data } = await supabase.auth.getUser();
             const currentUser = data?.user || null;
+
+            if (!currentUser) {
+                navigate("/login", { replace: true });
+                return;
+            }
+            // Fetch user role
+            const { data: spData2 } = await supabase
+                .from("salesperson")
+                .select("role, store_name")
+                .eq("email", currentUser.email?.toLowerCase())
+                .maybeSingle();
+
+            // ✅ Block non-B2B users from B2B review
+            const allowedRoles = ["executive", "merchandiser", "production"];
+            if (!spData2?.role || !allowedRoles.includes(spData2.role)) {
+                console.log("❌ Access denied - not a B2B user");
+                await supabase.auth.signOut();
+                navigate("/login", { replace: true });
+                return;
+            }
+
             setUser(currentUser);
+            setUserRole(spData2.role);
 
-            if (currentUser) {
-                // Fetch user role
-                const { data: spData2 } = await supabase
-                    .from("salesperson")
-                    .select("role, store_name")
-                    .eq("email", currentUser.email?.toLowerCase())
-                    .maybeSingle();
-                if (spData2?.role) setUserRole(spData2.role);
+            const isB2B = spData2?.role?.includes("executive") || spData2?.role?.includes("merchandiser") || spData2?.role?.includes("production");
 
-                const isB2B = spData2?.role?.includes("executive") || spData2?.role?.includes("merchandiser") || spData2?.role?.includes("production");
+            // For B2B users, use profile store directly
+            if (isB2B) {
+                const store = spData2?.store_name || "B2B";
+                setSalespersonStore(store);
+                return;
+            }
 
-                // For B2B users, use profile store directly
-                if (isB2B) {
-                    const store = spData2?.store_name || "B2B";
-                    setSalespersonStore(store);
-                    return;
-                }
+            // Try 1: Get store from currentSalesperson session (B2C only)
+            const savedSP = sessionStorage.getItem("currentSalesperson");
+            if (savedSP) {
+                try {
+                    const spData = JSON.parse(savedSP);
+                    if (spData.store) { setSalespersonStore(spData.store); return; }
+                } catch (e) { }
+            }
 
-                // Try 1: Get store from currentSalesperson session (B2C only)
-                const savedSP = sessionStorage.getItem("currentSalesperson");
-                if (savedSP) {
-                    try {
-                        const spData = JSON.parse(savedSP);
-                        if (spData.store) { setSalespersonStore(spData.store); return; }
-                    } catch (e) {}
-                }
-
-                // Try 2: Fetch from salesperson table by email
-                if (currentUser.email) {
-                    const { data: spData } = await supabase
-                        .from("salesperson")
-                        .select("store_name")
-                        .eq("email", currentUser.email.toLowerCase())
-                        .single();
-                    if (spData?.store_name) { setSalespersonStore(spData.store_name); return; }
-                }
-
-                // Try 3: Fetch from profiles table
-                const { data: storeData } = await supabase
+            // Try 2: Fetch from salesperson table by email
+            if (currentUser.email) {
+                const { data: spData } = await supabase
                     .from("salesperson")
                     .select("store_name")
-                    .eq("email", currentUser.email?.toLowerCase())
-                    .maybeSingle();
-                if (storeData?.store_name) setSalespersonStore(storeData.store_name);
+                    .eq("email", currentUser.email.toLowerCase())
+                    .single();
+                if (spData?.store_name) { setSalespersonStore(spData.store_name); return; }
             }
+
+            // Try 3: Fetch from profiles table
+            const { data: storeData } = await supabase
+                .from("salesperson")
+                .select("store_name")
+                .eq("email", currentUser.email?.toLowerCase())
+                .maybeSingle();
+            if (storeData?.store_name) setSalespersonStore(storeData.store_name);
         };
         fetchUser();
     }, []);

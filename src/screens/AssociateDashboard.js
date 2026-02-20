@@ -228,14 +228,20 @@ export default function Dashboard() {
         }
         // ✅ Fetch salesperson and orders in PARALLEL
         const [salespersonResult, ordersResult] = await Promise.all([
-          supabase.from("salesperson").select("*").eq("email", user.email).single(),
-          supabase.from("orders").select("*").eq("salesperson_email", user.email).order("created_at", { ascending: false })
+          supabase.from("salesperson").select("*").eq("email", user.email.toLowerCase()).single(),
+          supabase.from("orders").select("*").eq("salesperson_email", user.email.toLowerCase()).order("created_at", { ascending: false })
         ]);
 
-        if (salespersonResult.data) {
-          setSalesperson(salespersonResult.data);
-          localStorage.setItem("sp_email", user.email);
+        // ✅ Role check - only salesperson users allowed
+        if (!salespersonResult.data || salespersonResult.data.role !== "salesperson") {
+          console.log("❌ Access denied - not a salesperson");
+          await supabase.auth.signOut();
+          navigate("/login", { replace: true });
+          return;
         }
+
+        setSalesperson(salespersonResult.data);
+        localStorage.setItem("sp_email", user.email);
 
         if (ordersResult.data) {
           setOrders(ordersResult.data);
@@ -1409,20 +1415,29 @@ export default function Dashboard() {
         <button
           className="ad-add-btn"
           onClick={async () => {
+            // ✅ Block if no salesperson data
+            if (!salesperson) {
+              showPopup({
+                title: "Access Denied",
+                message: "Salesperson data not found. Please login again.",
+                type: "error",
+                confirmText: "Ok",
+              });
+              return;
+            }
+
             const { data: { session } } = await supabase.auth.getSession();
             if (session) sessionStorage.setItem("associateSession", JSON.stringify(session));
             sessionStorage.setItem("returnToAssociate", "true");
             sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
 
             // ✅ Save salesperson data for the entire order flow
-            if (salesperson) {
-              sessionStorage.setItem("currentSalesperson", JSON.stringify({
-                name: salesperson.saleperson,
-                email: salesperson.email,
-                phone: salesperson.phone,
-                store: salesperson.store_name,
-              }));
-            }
+            sessionStorage.setItem("currentSalesperson", JSON.stringify({
+              name: salesperson.saleperson,
+              email: salesperson.email,
+              phone: salesperson.phone,
+              store: salesperson.store_name,
+            }));
 
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}

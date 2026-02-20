@@ -36,12 +36,24 @@ export default function B2bOrderView() {
     useEffect(() => {
         const fetchOrder = async () => {
             try {
-                // Fetch user role
+                // ✅ Auth check - only B2B users allowed
                 const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    const { data: profile } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
-                    if (profile?.role) setUserRole(profile.role);
+                if (!user) {
+                    navigate("/login", { replace: true });
+                    return;
                 }
+
+                const { data: profile } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
+
+                const allowedRoles = ["executive", "merchandiser", "production"];
+                if (!profile?.role || !allowedRoles.includes(profile.role)) {
+                    console.log("❌ Access denied - not a B2B user");
+                    await supabase.auth.signOut();
+                    navigate("/login", { replace: true });
+                    return;
+                }
+
+                setUserRole(profile.role);
 
                 const { data, error } = await supabase
                     .from("orders")
@@ -156,7 +168,7 @@ export default function B2bOrderView() {
 
     return (
         <div className="b2bov-page">
-                        {/* Header */}
+            {/* Header */}
             <header className="b2bov-header">
                 <img src={Logo} alt="logo" className="b2bov-logo" onClick={handleBack} />
                 <h1 className="b2bov-title">Order Details</h1>

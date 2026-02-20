@@ -39,7 +39,25 @@ export default function B2bMerchandiserDashboard() {
     const loadAllData = useCallback(async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { setLoading(false); return; }
+            if (!user) {
+                navigate("/login", { replace: true });
+                return;
+            }
+
+            // ✅ Role check - only merchandiser users allowed
+            const { data: roleCheck } = await supabase
+                .from("salesperson")
+                .select("role")
+                .eq("email", user.email?.toLowerCase())
+                .single();
+
+            if (!roleCheck || roleCheck.role !== "merchandiser") {
+                console.log("❌ Access denied - not a merchandiser");
+                await supabase.auth.signOut();
+                navigate("/login", { replace: true });
+                return;
+            }
+
             setUser(user);
 
             const [profileResult, ordersResult, vendorsResult] = await Promise.all([

@@ -47,6 +47,20 @@ export default function AccountsDashboard() {
         return;
       }
 
+      // ✅ Role check - only accounts users allowed
+      const { data: userRecord } = await supabase
+        .from("salesperson")
+        .select("role")
+        .eq("email", session.user.email?.toLowerCase())
+        .single();
+
+      if (!userRecord || userRecord.role !== "accounts") {
+        console.log("❌ Access denied - not an accounts user");
+        await supabase.auth.signOut();
+        navigate("/login", { replace: true });
+        return;
+      }
+
       fetchOrders();
     };
 

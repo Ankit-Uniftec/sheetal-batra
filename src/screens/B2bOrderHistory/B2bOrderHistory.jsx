@@ -47,6 +47,22 @@ export default function B2bOrderHistory() {
         const fetchData = async () => {
             setLoading(true);
             try {
+                // ✅ Auth check - only B2B users allowed
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    navigate("/login", { replace: true });
+                    return;
+                }
+
+                const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
+                const allowedRoles = ["executive", "merchandiser", "production"];
+                if (!sp?.role || !allowedRoles.includes(sp.role)) {
+                    console.log("❌ Access denied - not a B2B user");
+                    await supabase.auth.signOut();
+                    navigate("/login", { replace: true });
+                    return;
+                }
+
                 let query = supabase
                     .from("orders")
                     .select("*")

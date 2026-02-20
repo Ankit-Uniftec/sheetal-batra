@@ -124,6 +124,19 @@ export default function ReviewDetail() {
   // SHARED: Process order after signature URL is obtained
   // ============================================================
   const processOrderWithSignature = async (signatureUrl) => {
+    // ✅ BLOCK if no salesperson data
+    if (!order.salesperson && !order.salesperson_email) {
+      const spSession = sessionStorage.getItem("currentSalesperson");
+      if (!spSession) {
+        showPopup({
+          title: "Error",
+          message: "Salesperson data is missing. Please login again from Associate Dashboard.",
+          type: "error",
+          confirmText: "Ok",
+        });
+        return;
+      }
+    }
     const emptyFields = checkEmptyFields(order);
     if (emptyFields.length > 0) {
       console.log("⚠️ Found empty fields that might cause PDF issues:");

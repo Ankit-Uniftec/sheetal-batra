@@ -202,6 +202,20 @@ const WarehouseDashboard = () => {
         return;
       }
 
+      // ✅ Role check - only warehouse users allowed
+      const { data: userRecord } = await supabase
+        .from("salesperson")
+        .select("role")
+        .eq("email", session.user.email?.toLowerCase())
+        .single();
+
+      if (!userRecord || userRecord.role !== "warehouse") {
+        console.log("❌ Access denied - not a warehouse user");
+        await supabase.auth.signOut();
+        navigate("/login", { replace: true });
+        return;
+      }
+
       fetchOrders();
     };
 

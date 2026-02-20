@@ -204,21 +204,42 @@ export default function B2bProductForm() {
 
     // ==================== LOAD VENDOR DATA FROM SESSION ====================
     useEffect(() => {
-        const saved = sessionStorage.getItem(VENDOR_SESSION_KEY);
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                setVendorData(data);
-                setVendor(data.vendor);
-            } catch (e) {
-                console.error("Error loading vendor data:", e);
+        const checkAuthAndLoad = async () => {
+            // ✅ Auth check - only B2B users allowed
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                navigate("/login", { replace: true });
+                return;
             }
-        }
-        
-        if (!saved) {
-            showPopup({ title: "No Vendor Selected", message: "Please select a vendor first.", type: "warning" });
-            setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
-        }
+
+            const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
+            const allowedRoles = ["executive", "merchandiser", "production"];
+            if (!sp?.role || !allowedRoles.includes(sp.role)) {
+                console.log("❌ Access denied - not a B2B user");
+                await supabase.auth.signOut();
+                navigate("/login", { replace: true });
+                return;
+            }
+
+            // Load vendor data
+            const saved = sessionStorage.getItem(VENDOR_SESSION_KEY);
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    setVendorData(data);
+                    setVendor(data.vendor);
+                } catch (e) {
+                    console.error("Error loading vendor data:", e);
+                }
+            }
+
+            if (!saved) {
+                showPopup({ title: "No Vendor Selected", message: "Please select a vendor first.", type: "warning" });
+                setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
+            }
+        };
+
+        checkAuthAndLoad();
     }, [navigate]);
 
     // ==================== RESTORE PRODUCT FORM DATA FROM SESSION ====================
@@ -440,7 +461,7 @@ export default function B2bProductForm() {
                 top: selectedTop, top_color: selectedTopColor, bottom: selectedBottom, bottom_color: selectedBottomColor,
                 extras: finalExtras, additionals: selectedAdditionals.filter(a => a.name?.trim()), size: selectedSize, quantity,
                 price: getBasePrice(), measurements: getRelevantMeasurements(), image_url: selectedProduct.image_url, notes: comments, delivery_date: deliveryDate,
-            isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
+                isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
             });
         }
         if (finalItems.length === 0) { showPopup({ title: "No Products", message: "Please add at least one product.", type: "warning" }); return; }

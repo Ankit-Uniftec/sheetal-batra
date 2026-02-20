@@ -22,28 +22,49 @@ export default function B2bOrderDetails() {
 
     // Load data from session
     useEffect(() => {
-        const vendorSaved = sessionStorage.getItem(VENDOR_SESSION_KEY);
-        if (vendorSaved) {
-            try { setVendorData(JSON.parse(vendorSaved)); } catch (e) { console.error("Error loading vendor data:", e); }
-        }
+        const checkAuthAndLoad = async () => {
+            // ✅ Auth check - only B2B users allowed
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                navigate("/login", { replace: true });
+                return;
+            }
 
-        const productSaved = sessionStorage.getItem(PRODUCT_SESSION_KEY);
-        if (productSaved) {
-            try { setProductData(JSON.parse(productSaved)); } catch (e) { console.error("Error loading product data:", e); }
-        }
+            const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
+            const allowedRoles = ["executive", "merchandiser", "production"];
+            if (!sp?.role || !allowedRoles.includes(sp.role)) {
+                console.log("❌ Access denied - not a B2B user");
+                await supabase.auth.signOut();
+                navigate("/login", { replace: true });
+                return;
+            }
 
-        const detailsSaved = sessionStorage.getItem(DETAILS_SESSION_KEY);
-        if (detailsSaved) {
-            try {
-                const data = JSON.parse(detailsSaved);
-                if (data.orderNotes) setOrderNotes(data.orderNotes);
-            } catch (e) { console.error("Error loading details data:", e); }
-        }
+            // Load session data
+            const vendorSaved = sessionStorage.getItem(VENDOR_SESSION_KEY);
+            if (vendorSaved) {
+                try { setVendorData(JSON.parse(vendorSaved)); } catch (e) { console.error("Error loading vendor data:", e); }
+            }
 
-        if (!vendorSaved || !productSaved) {
-            showPopup({ title: "Missing Data", message: "Please complete previous steps first.", type: "warning" });
-            setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
-        }
+            const productSaved = sessionStorage.getItem(PRODUCT_SESSION_KEY);
+            if (productSaved) {
+                try { setProductData(JSON.parse(productSaved)); } catch (e) { console.error("Error loading product data:", e); }
+            }
+
+            const detailsSaved = sessionStorage.getItem(DETAILS_SESSION_KEY);
+            if (detailsSaved) {
+                try {
+                    const data = JSON.parse(detailsSaved);
+                    if (data.orderNotes) setOrderNotes(data.orderNotes);
+                } catch (e) { console.error("Error loading details data:", e); }
+            }
+
+            if (!vendorSaved || !productSaved) {
+                showPopup({ title: "Missing Data", message: "Please complete previous steps first.", type: "warning" });
+                setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
+            }
+        };
+
+        checkAuthAndLoad();
     }, [navigate]);
 
     // Save to session

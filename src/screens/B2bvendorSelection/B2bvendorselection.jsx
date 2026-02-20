@@ -77,14 +77,26 @@ export default function B2bVendorSelection() {
     useEffect(() => {
         const fetchRole = async () => {
             const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
-                if (sp?.role) setUserRole(sp.role);
-                console.log(sp.role);
+            if (!user) {
+                navigate("/login", { replace: true });
+                return;
             }
+
+            const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
+
+            // ✅ Only allow B2B roles (executive, merchandiser, production)
+            const allowedRoles = ["executive", "merchandiser", "production"];
+            if (!sp?.role || !allowedRoles.includes(sp.role)) {
+                console.log("❌ Access denied - not a B2B user");
+                await supabase.auth.signOut();
+                navigate("/login", { replace: true });
+                return;
+            }
+
+            setUserRole(sp.role);
         };
         fetchRole();
-    }, []);
+    }, [navigate]);
 
     // Restore from session
     useEffect(() => {
@@ -151,11 +163,11 @@ export default function B2bVendorSelection() {
 
     const availableCredit = useMemo(() =>
         selectedVendor ? (selectedVendor.credit_limit || 0) - (selectedVendor.current_credit_used || 0) : 0,
-    [selectedVendor]);
+        [selectedVendor]);
 
     const primaryContact = useMemo(() =>
         vendorContacts.find((c) => c.is_primary) || vendorContacts[0] || null,
-    [vendorContacts]);
+        [vendorContacts]);
 
     const handleContinue = () => {
         if (!selectedVendor) { showPopup({ title: "Vendor Required", message: "Please select a vendor to continue.", type: "warning" }); return; }

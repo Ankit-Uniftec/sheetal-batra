@@ -134,6 +134,21 @@ export default function AdminDashboard() {
         const checkAuthAndFetch = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) { navigate("/login", { replace: true }); return; }
+
+            // ✅ Role check - only admin users allowed
+            const { data: userRecord } = await supabase
+                .from("salesperson")
+                .select("role")
+                .eq("email", session.user.email?.toLowerCase())
+                .single();
+
+            if (!userRecord || userRecord.role !== "admin") {
+                console.log("❌ Access denied - not an admin");
+                await supabase.auth.signOut();
+                navigate("/login", { replace: true });
+                return;
+            }
+
             fetchAllData();
         };
         checkAuthAndFetch();
