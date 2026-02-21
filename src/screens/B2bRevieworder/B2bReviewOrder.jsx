@@ -195,6 +195,7 @@ export default function B2bReviewOrder() {
                 order_flag: productData?.orderFlag || "Normal",
                 urgent_reason: productData?.urgentReason || null,
                 attachments: productData?.attachments || [],
+                credit_exceeded: exceedsCredit || false,
                 updated_at: new Date().toISOString(),
             };
 
@@ -492,7 +493,7 @@ export default function B2bReviewOrder() {
 
                 {/* Action Buttons */}
                 <div className="footer-btns">
-                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>←Back to Edit</button>
+                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>← Back to Edit</button>
                     <button className="continueBtn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: isSubmitting ? "#ccc" : "#4caf50" }}>
                         {isSubmitting ? "Submitting..." : editingOrderId ? (userRole?.toLowerCase().includes("merchandiser") ? "Update Order" : "Resubmit for Approval") : (userRole?.toLowerCase().includes("merchandiser") ? "Create Order (Auto-Approved)" : "Submit for Approval")}
                     </button>

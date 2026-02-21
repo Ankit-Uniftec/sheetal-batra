@@ -621,6 +621,7 @@ function OrderCard({ order, vendorMap, onView, onAction, actionLabel, actionClas
                     <div className={`prod-order-status-badge ${getProdStatusClass(ps)}`}>{getProdStatusLabel(ps)}</div>
                     {order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
                     {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"⚠"} Urgent</div>)}
+                    {order.credit_exceeded && (<div className="prod-credit-badge">Credit Exceeded</div>)}
                 </div>
             </div>
             <div className="prod-ocard-content">

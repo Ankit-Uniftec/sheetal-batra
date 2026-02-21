@@ -221,6 +221,9 @@ export default function B2bOrderView() {
                         {order.order_flag === "Urgent" && (
                             <span className="b2bov-urgent-badge">{"\u26A0"} Urgent</span>
                         )}
+                        {order.credit_exceeded && (
+                            <span className="b2bov-credit-badge">Credit Exceeded</span>
+                        )}
                     </div>
                 </div>
 
@@ -229,6 +232,14 @@ export default function B2bOrderView() {
                     <div className="b2bov-urgent-banner">
                         <strong>{"\u26A0"} Urgent Order</strong>
                         <p>Reason: {order.urgent_reason}</p>
+                    </div>
+                )}
+
+                {/* Credit Exceeded Banner */}
+                {order.credit_exceeded && (
+                    <div className="b2bov-credit-banner">
+                        <strong>{"\u26A0"} Credit Limit Exceeded</strong>
+                        <p>This order exceeds the vendor's available credit and requires merchandiser approval.</p>
                     </div>
                 )}
 

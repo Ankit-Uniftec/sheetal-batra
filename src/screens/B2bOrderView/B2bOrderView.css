@@ -425,3 +425,9 @@
 .b2bov-urgent-banner { background: #fff3e0; border: 1px solid #ff9800; border-left: 4px solid #e53935; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
 .b2bov-urgent-banner strong { color: #e53935; font-size: 14px; }
 .b2bov-urgent-banner p { margin: 4px 0 0; font-size: 13px; color: #555; }
+
+/* Credit Exceeded Badge & Banner */
+.b2bov-credit-badge { background: #fce4ec; color: #c62828; border: 1px solid #c62828; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.b2bov-credit-banner { background: #fce4ec; border: 1px solid #ef9a9a; border-left: 4px solid #c62828; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+.b2bov-credit-banner strong { color: #c62828; font-size: 14px; }
+.b2bov-credit-banner p { margin: 4px 0 0; font-size: 13px; color: #555; }

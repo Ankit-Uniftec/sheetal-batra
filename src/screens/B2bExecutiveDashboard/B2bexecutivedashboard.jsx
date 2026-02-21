@@ -365,7 +365,10 @@ export default function B2bExecutiveDashboard() {
                                                     </div>
                                                 )}
                                                 {order.order_flag === "Urgent" && (
-                                                    <div className="b2b-urgent-badge">Urgent</div>
+                                                    <div className="b2b-urgent-badge">{"\u26A0"} Urgent</div>
+                                                )}
+                                                {order.credit_exceeded && (
+                                                    <div className="b2b-credit-badge">Credit Exceeded</div>
                                                 )}
                                             </div>
                                         </div>

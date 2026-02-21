@@ -683,3 +683,6 @@
 }
 /* Urgent Badge */
 .b2boh-urgent-badge { background: #fbe9e7 !important; color: #e53935 !important; border: 1px solid #e53935 !important; }
+
+/* Credit Exceeded Badge */
+.b2boh-credit-badge { background: #fce4ec !important; color: #c62828 !important; border: 1px solid #c62828 !important; }

@@ -292,6 +292,9 @@ export default function B2bOrderHistory() {
                                             {order.order_flag === "Urgent" && (
                                                 <span className="b2boh-badge b2boh-urgent-badge">{"\u26A0"} Urgent</span>
                                             )}
+                                            {order.credit_exceeded && (
+                                                <span className="b2boh-badge b2boh-credit-badge">Credit Exceeded</span>
+                                            )}
                                         </div>
                                     </div>
 

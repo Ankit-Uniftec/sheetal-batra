@@ -323,7 +323,8 @@ export default function B2bMerchandiserDashboard() {
                                                 <div className="merch-appr-badges">
                                                     <div className="merch-order-status-badge merch-status-pending">Pending</div>
                                                     {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
-                                                    {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"⚠"} Urgent</div>)}
+                                                    {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"\u26A0"} Urgent</div>)}
+                                                    {order.credit_exceeded && (<div className="merch-credit-badge">Credit Exceeded</div>)}
                                                 </div>
                                             </div>
                                             <div className="merch-appr-content">
@@ -379,7 +380,8 @@ export default function B2bMerchandiserDashboard() {
                                             <div className="merch-ocard-badges">
                                                 <div className={`merch-order-status-badge ${getStatusBadgeClass(order.approval_status)}`}>{order.approval_status || "Pending"}</div>
                                                 {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
-                                                    {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"⚠"} Urgent</div>)}
+                                                {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"\u26A0"} Urgent</div>)}
+                                                {order.credit_exceeded && (<div className="merch-credit-badge">Credit Exceeded</div>)}
                                             </div>
                                         </div>
                                         <div className="merch-ocard-content">
@@ -533,6 +535,17 @@ export default function B2bMerchandiserDashboard() {
                                 <p><b>Type:</b> {approvalModal.order.b2b_order_type || "N/A"}</p>
                                 <p><b>Total:</b> <span className="merch-gold-text">{`\u20B9${formatIndianNumber(approvalModal.order.grand_total || 0)}`}</span></p>
                             </div>
+                            {approvalModal.order.credit_exceeded && (
+                                <div className="merch-modal-credit-warning">
+                                    <strong>{"\u26A0"} Credit Limit Exceeded</strong>
+                                    <p>This order exceeds the vendor's available credit. Approving will allow the order to proceed beyond the credit limit.</p>
+                                    <div className="merch-modal-credit-info">
+                                        <span>Credit Limit: {"\u20B9"}{formatIndianNumber(vendorMap[approvalModal.order.vendor_id]?.credit_limit || 0)}</span>
+                                        <span>Currently Used: {"\u20B9"}{formatIndianNumber(vendorMap[approvalModal.order.vendor_id]?.current_credit_used || 0)}</span>
+                                        <span>Order Value: {"\u20B9"}{formatIndianNumber(approvalModal.order.grand_total || 0)}</span>
+                                    </div>
+                                </div>
+                            )}
                             <div className="merch-modal-field">
                                 <label>{approvalModal.action === "approve" ? "Notes (Optional)" : "Reason for Rejection *"}</label>
                                 <textarea placeholder={approvalModal.action === "approve" ? "Any notes..." : "Please provide a reason..."} value={approvalReason} onChange={(e) => setApprovalReason(e.target.value)} rows={4} />
