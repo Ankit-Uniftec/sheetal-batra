@@ -364,6 +364,9 @@ export default function B2bExecutiveDashboard() {
                                                         {order.b2b_order_type}
                                                     </div>
                                                 )}
+                                                {order.order_flag === "Urgent" && (
+                                                    <div className="b2b-urgent-badge">Urgent</div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -531,6 +534,7 @@ export default function B2bExecutiveDashboard() {
                                                 <p><b>Order No:</b> {order.order_no}</p>
                                                 <p><b>PO:</b> {order.po_number || "—"}</p>
                                                 <p><b>Status:</b> {order.approval_status || "Pending"}</p>
+                                                {order.order_flag === "Urgent" && <p><b style={{color: "#e53935"}}>{"\u26A0"} Urgent</b></p>}
                                                 <p><b>Delivery:</b> {formatDate(order.delivery_date)}</p>
                                             </div>
                                         ))

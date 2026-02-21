@@ -323,6 +323,7 @@ export default function B2bMerchandiserDashboard() {
                                                 <div className="merch-appr-badges">
                                                     <div className="merch-order-status-badge merch-status-pending">Pending</div>
                                                     {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
+                                                    {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"⚠"} Urgent</div>)}
                                                 </div>
                                             </div>
                                             <div className="merch-appr-content">
@@ -378,6 +379,7 @@ export default function B2bMerchandiserDashboard() {
                                             <div className="merch-ocard-badges">
                                                 <div className={`merch-order-status-badge ${getStatusBadgeClass(order.approval_status)}`}>{order.approval_status || "Pending"}</div>
                                                 {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
+                                                    {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"⚠"} Urgent</div>)}
                                             </div>
                                         </div>
                                         <div className="merch-ocard-content">

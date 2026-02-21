@@ -55,7 +55,25 @@ export default function B2bProductionDashboard() {
     const loadAllData = useCallback(async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { setLoading(false); return; }
+            if (!user) {
+                navigate("/login", { replace: true });
+                return;
+            }
+
+            // ✅ Role check - only production users allowed
+            const { data: roleCheck } = await supabase
+                .from("salesperson")
+                .select("role")
+                .eq("email", user.email?.toLowerCase())
+                .single();
+
+            if (!roleCheck || roleCheck.role !== "production") {
+                console.log("❌ Access denied - not a production user");
+                await supabase.auth.signOut();
+                navigate("/login", { replace: true });
+                return;
+            }
+
             setUser(user);
 
             const [profileResult, ordersResult] = await Promise.all([
@@ -602,6 +620,7 @@ function OrderCard({ order, vendorMap, onView, onAction, actionLabel, actionClas
                 <div className="prod-ocard-badges">
                     <div className={`prod-order-status-badge ${getProdStatusClass(ps)}`}>{getProdStatusLabel(ps)}</div>
                     {order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
+                    {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"⚠"} Urgent</div>)}
                 </div>
             </div>
             <div className="prod-ocard-content">

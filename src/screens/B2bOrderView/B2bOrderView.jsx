@@ -218,8 +218,19 @@ export default function B2bOrderView() {
                                 {order.b2b_order_type}
                             </span>
                         )}
+                        {order.order_flag === "Urgent" && (
+                            <span className="b2bov-urgent-badge">{"\u26A0"} Urgent</span>
+                        )}
                     </div>
                 </div>
+
+                {/* Urgent Reason Banner */}
+                {order.order_flag === "Urgent" && order.urgent_reason && (
+                    <div className="b2bov-urgent-banner">
+                        <strong>{"\u26A0"} Urgent Order</strong>
+                        <p>Reason: {order.urgent_reason}</p>
+                    </div>
+                )}
 
                 {/* Product Details */}
                 <div className="b2bov-section">

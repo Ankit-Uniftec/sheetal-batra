@@ -185,7 +185,7 @@ export default function B2bOrderHistory() {
                         <h4>Recent Orders</h4>
                         {recent.length === 0 ? <p className="muted">No orders yet</p> : recent.map(o => (
                             <div key={o.id} className="b2boh-recent-item" onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
-                                <span>#{o.order_no}</span>
+                                <span>{o.order_flag === "Urgent" ? "\u26A0 " : ""}#{o.order_no}</span>
                                 <span className={`b2boh-mini-badge ${getStatusClass(o.approval_status)}`}>{getStatusText(o.approval_status)}</span>
                             </div>
                         ))}
@@ -288,6 +288,9 @@ export default function B2bOrderHistory() {
                                                 <span className={`b2boh-badge type-${order.b2b_order_type?.toLowerCase()}`}>
                                                     {order.b2b_order_type}
                                                 </span>
+                                            )}
+                                            {order.order_flag === "Urgent" && (
+                                                <span className="b2boh-badge b2boh-urgent-badge">{"\u26A0"} Urgent</span>
                                             )}
                                         </div>
                                     </div>

@@ -278,3 +278,5 @@
   .prod-ios-day-label { font-size: 10px; }
   .prod-ios-date-grid { gap: 4px; }
 }
+/* Urgent Badge */
+.prod-urgent-badge { font-weight: bold; background: #fbe9e7; color: #e53935; border: 1px solid #e53835a8; padding: 4px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }

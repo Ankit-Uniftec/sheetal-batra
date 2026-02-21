@@ -38,6 +38,8 @@ export default function B2bReviewOrder() {
     const [user, setUser] = useState(null);
     const [userRole, setUserRole] = useState(null);
     const [salespersonStore, setSalespersonStore] = useState("Delhi Store");
+    const [salespersonName, setSalespersonName] = useState("");
+    const [salespersonPhone, setSalespersonPhone] = useState("");
     const [vendorData, setVendorData] = useState(null);
     const [productData, setProductData] = useState(null);
     const [detailsData, setDetailsData] = useState(null);
@@ -56,7 +58,7 @@ export default function B2bReviewOrder() {
             // Fetch user role
             const { data: spData2 } = await supabase
                 .from("salesperson")
-                .select("role, store_name")
+                .select("role, store_name, saleperson, phone")
                 .eq("email", currentUser.email?.toLowerCase())
                 .maybeSingle();
 
@@ -71,6 +73,8 @@ export default function B2bReviewOrder() {
 
             setUser(currentUser);
             setUserRole(spData2.role);
+            if (spData2?.saleperson) setSalespersonName(spData2.saleperson);
+            if (spData2?.phone) setSalespersonPhone(spData2.phone);
 
             const isB2B = spData2?.role?.includes("executive") || spData2?.role?.includes("merchandiser") || spData2?.role?.includes("production");
 
@@ -174,6 +178,9 @@ export default function B2bReviewOrder() {
                 b2b_order_type: orderType,
                 merchandiser_name: merchandiser,
                 salesperson_store: salespersonStore || "Delhi Store",
+                salesperson: salespersonName || "",
+                salesperson_email: user?.email || "",
+                salesperson_phone: salespersonPhone || "",
                 markdown_percent: discountPercent,
                 markdown_amount: markdownAmount,
                 delivery_date: earliestDeliveryDate,
@@ -485,14 +492,14 @@ export default function B2bReviewOrder() {
 
                 {/* Action Buttons */}
                 <div className="footer-btns">
-                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>← Back to Edit</button>
+                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>←Back to Edit</button>
                     <button className="continueBtn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: isSubmitting ? "#ccc" : "#4caf50" }}>
                         {isSubmitting ? "Submitting..." : editingOrderId ? (userRole?.toLowerCase().includes("merchandiser") ? "Update Order" : "Resubmit for Approval") : (userRole?.toLowerCase().includes("merchandiser") ? "Create Order (Auto-Approved)" : "Submit for Approval")}
                     </button>
                 </div>
             </div>
 
-            <button className="back-btn" onClick={handleBack} disabled={isSubmitting}>←</button>
+            <button className="back-btn" onClick={handleBack} disabled={isSubmitting}>←</button>
         </div>
     );
 }

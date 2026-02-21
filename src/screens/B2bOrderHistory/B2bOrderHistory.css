@@ -681,3 +681,5 @@
     font-size: 13px;
   }
 }
+/* Urgent Badge */
+.b2boh-urgent-badge { background: #fbe9e7 !important; color: #e53935 !important; border: 1px solid #e53935 !important; }

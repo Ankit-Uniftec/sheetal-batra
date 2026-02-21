@@ -302,3 +302,5 @@
   .merch-pagination { flex-direction: column; gap: 10px; }
   .merch-pagination-btn { width: 100%; max-width: 200px; }
 }
+/* Urgent Badge */
+.merch-urgent-badge { font-weight: bold; background: #fbe9e7; color: #e53935; border: 1px solid #e53835a8; padding: 4px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
