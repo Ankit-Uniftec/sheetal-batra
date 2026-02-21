@@ -110,6 +110,11 @@ export default function OrderDetails() {
   const [deliveryPincode, setDeliveryPincode] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [paymentMode, setPaymentMode] = useState("UPI");
+
+  // Gifting recipient details
+  const [giftRecipientName, setGiftRecipientName] = useState("");
+  const [giftRecipientContact, setGiftRecipientContact] = useState("");
+
   const COD_CHARGE = 250;
   const SHIPPING_CHARGE_AMOUNT = 2500;
   const SHIPPING_THRESHOLD = 30000;
@@ -336,6 +341,18 @@ export default function OrderDetails() {
       const savedSP = sessionStorage.getItem("currentSalesperson");
       const associateSession = sessionStorage.getItem("associateSession");
 
+      // ✅ BLOCK if no salesperson data in session
+      if (!savedSP) {
+        showPopup({
+          title: "Session Expired",
+          message: "Salesperson data not found. Please start over from Associate Dashboard.",
+          type: "error",
+          confirmText: "Ok",
+        });
+        navigate("/AssociateDashboard", { replace: true });
+        return;
+      }
+
       if (savedSP && !cancelled) {
         try {
           const spData = JSON.parse(savedSP);
@@ -398,6 +415,9 @@ export default function OrderDetails() {
         if (data.billingPincode) setBillingPincode(data.billingPincode);
         if (data.billingCompany) setBillingCompany(data.billingCompany);
         if (data.billingGST) setBillingGST(data.billingGST);
+        // Gifting recipient
+        if (data.giftRecipientName) setGiftRecipientName(data.giftRecipientName);
+        if (data.giftRecipientContact) setGiftRecipientContact(data.giftRecipientContact);
 
         if (data.deliveryAddress) setDeliveryAddress(data.deliveryAddress);
         if (data.deliveryCountry) setDeliveryCountry(data.deliveryCountry);
@@ -535,6 +555,10 @@ export default function OrderDetails() {
       salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : (spFallback?.phone ? formatPhoneNumber(spFallback.phone) : null),
       salesperson_email: (selectedSP?.email || spFallback?.email || '').toLowerCase() || null,
       salesperson_store: selectedSP?.store_name || spFallback?.store || null,
+
+      // Gifting recipient details
+      gift_recipient_name: order.is_gifting ? giftRecipientName || null : null,
+      gift_recipient_contact: order.is_gifting ? giftRecipientContact || null : null,
     };
 
     navigate("/orderDetail", { state: { orderPayload: payload, draftId } });
@@ -1004,6 +1028,36 @@ export default function OrderDetails() {
                   className="input-line"
                   value={deliveryNotes}
                   onChange={(e) => setDeliveryNotes(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* GIFT RECIPIENT DETAILS - Only show for gifting orders */}
+        {order.is_gifting && (
+          <div className="section-box">
+            <h3>🎁 Gift Recipient Details</h3>
+            <p style={{ fontSize: '12px', color: '#888', marginBottom: '12px' }}>
+              Optional — Provide details of the person receiving the gift
+            </p>
+            <div className="row3">
+              <div className="field">
+                <label>Recipient Name:</label>
+                <input
+                  className="input-line"
+                  value={giftRecipientName}
+                  onChange={(e) => setGiftRecipientName(e.target.value)}
+                  placeholder="Gift recipient's name"
+                />
+              </div>
+              <div className="field">
+                <label>Recipient Contact:</label>
+                <input
+                  className="input-line"
+                  value={giftRecipientContact}
+                  onChange={(e) => setGiftRecipientContact(e.target.value)}
+                  placeholder="Phone number or email"
                 />
               </div>
             </div>

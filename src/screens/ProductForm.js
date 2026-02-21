@@ -592,6 +592,7 @@ export default function ProductForm() {
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
+  const [isGiftingOrder, setIsGiftingOrder] = useState(false); // Gifting order toggle
 
   // URGENT POPUP
   const [showUrgentModal, setShowUrgentModal] = useState(false);
@@ -1016,6 +1017,9 @@ export default function ProductForm() {
         // Kids Product
         if (draftData.isKidsProduct !== undefined) setIsKidsProduct(draftData.isKidsProduct);
 
+        // Gifting Order
+        if (draftData.isGiftingOrder !== undefined) setIsGiftingOrder(draftData.isGiftingOrder);
+
         // Urgent
         if (draftData.urgentReason) setUrgentReason(draftData.urgentReason);
         if (draftData.otherUrgentReason) setOtherUrgentReason(draftData.otherUrgentReason);
@@ -1097,6 +1101,9 @@ export default function ProductForm() {
         // Kids Product
         if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
 
+        // Gifting Order
+        if (data.isGiftingOrder !== undefined) setIsGiftingOrder(data.isGiftingOrder);
+
         // Urgent
         if (data.urgentReason) setUrgentReason(data.urgentReason);
         if (data.otherUrgentReason) setOtherUrgentReason(data.otherUrgentReason);
@@ -1142,6 +1149,7 @@ export default function ProductForm() {
       comments,
       attachments,
       isKidsProduct,
+      isGiftingOrder,
       urgentReason,
       otherUrgentReason,
       availableSizes,
@@ -1180,6 +1188,7 @@ export default function ProductForm() {
     comments,
     attachments,
     isKidsProduct,
+    isGiftingOrder,
     urgentReason,
     otherUrgentReason,
     availableSizes,
@@ -1749,6 +1758,19 @@ export default function ProductForm() {
       });
     }
 
+    // Gifting order restriction: prevent mixing Regular and Gifting items
+    if (orderItems.length > 0) {
+      const existingIsGifting = orderItems[0].is_gifting || false;
+      if (existingIsGifting !== isGiftingOrder) {
+        showPopup({
+          title: "Cannot Mix Order Types",
+          message: "Regular and Gifting items cannot be part of the same order. Please place them as separate orders.",
+          type: "warning",
+        });
+        return;
+      }
+    }
+
     const newProduct = {
       _id: makeId(),
       product_id: selectedProduct.id,
@@ -1769,6 +1791,7 @@ export default function ProductForm() {
       notes: comments, // Initialize notes as empty for new products
       isKids: isKidsProduct,
       category: isKidsProduct ? "Kids" : "Women", // Store category string
+      is_gifting: isGiftingOrder,
       order_type: getOrderType(),
       payment_order_type: getPaymentOrderType(),
       delivery_date: deliveryDate, // Add delivery date per product
@@ -2096,6 +2119,7 @@ export default function ProductForm() {
         comments,
         attachments,
         isKidsProduct,
+        isGiftingOrder,
         urgentReason,
         otherUrgentReason,
         availableSizes,
@@ -2249,6 +2273,7 @@ export default function ProductForm() {
         image_url: selectedProduct.image_url || selectedProduct.image || null,
         notes: comments, // Initialize notes as empty for auto-added products
         isKids: isKidsProduct,
+        is_gifting: isGiftingOrder,
         order_type: getOrderType(),
         payment_order_type: getPaymentOrderType(),
         delivery_date: deliveryDate, // Add delivery date per product
@@ -2345,6 +2370,7 @@ export default function ProductForm() {
       total_quantity: finalTotalQuantity,
       order_type: overallOrderType,
       payment_order_type: overallPaymentOrderType,
+      is_gifting: isGiftingOrder,
 
       // Measurements for customer profile
       save_measurements: measurementsChanged && Object.keys(allMeasurements).length > 0,
@@ -2465,19 +2491,51 @@ export default function ProductForm() {
           <div className="screen4-form">
             <h4 className="product-title">Product</h4>
 
-            {/* Category Dropdown - Women/Kids */}
-            <div className="category-dropdown-container">
-              <select
-                className="category-select"
-                value={isKidsProduct ? "kids" : "women"}
-                onChange={(e) => setIsKidsProduct(e.target.value === "kids")}
-                disabled={isSyncProduct}
-              >
-                <option value="women">Women</option>
-                <option value="kids">Kids</option>
-              </select>
-              {isSyncProduct && <span className="sync-badge">LXRTS</span>}
-            </div>
+            {/* Category Dropdowns Row */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
+
+              {/* Category Dropdown - Women/Kids */}
+              <div className="category-dropdown-container">
+                <select
+                  className="category-select"
+                  value={isKidsProduct ? "kids" : "women"}
+                  onChange={(e) => setIsKidsProduct(e.target.value === "kids")}
+                  disabled={isSyncProduct}
+                >
+                  <option value="women">Women</option>
+                  <option value="kids">Kids</option>
+                </select>
+                {isSyncProduct && <span className="sync-badge">LXRTS</span>}
+              </div>
+
+              {/* Gifting Order Dropdown */}
+              <div className="category-dropdown-container" style={{ marginLeft: '10px' }}>
+                <select
+                  className="category-select"
+                  value={isGiftingOrder ? "gifting" : "regular"}
+                  onChange={(e) => {
+                    const newVal = e.target.value === "gifting";
+                    // Prevent switching if cart already has items of the other type
+                    if (orderItems.length > 0) {
+                      const existingIsGifting = orderItems[0].is_gifting || false;
+                      if (existingIsGifting !== newVal) {
+                        showPopup({
+                          title: "Cannot Mix Order Types",
+                          message: "Cart already has " + (existingIsGifting ? "Gifting" : "Regular") + " items. Clear the cart first or place a separate order.",
+                          type: "warning",
+                        });
+                        return;
+                      }
+                    }
+                    setIsGiftingOrder(newVal);
+                  }}
+                >
+                  <option value="regular">Regular Order</option>
+                  <option value="gifting">Gifting Order</option>
+                </select>
+                {isGiftingOrder && <span className="sync-badge" style={{ background: '#e91e63', color: '#fff' }}>GIFT</span>}
+              </div>
+            </div> {/* End of dropdowns row */}
 
             {/* Product Image - Inline for tablet/mobile */}
             {selectedProduct?.image_url && (

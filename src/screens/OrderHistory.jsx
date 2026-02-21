@@ -77,6 +77,14 @@ const getHoursSinceDelivery = (deliveredAt) => {
   return (now - deliveryDate) / (1000 * 60 * 60);
 };
 
+// Get days since purchase for gifting orders (30-day return window)
+const getDaysSincePurchase = (createdAt) => {
+  if (!createdAt) return Infinity;
+  const orderDate = new Date(createdAt);
+  const now = new Date();
+  return (now - orderDate) / (1000 * 60 * 60 * 24);
+};
+
 // Check if order is non-returnable/non-exchangeable
 // Refund is still applicable for brand-fault cases
 const checkNonReturnable = (order) => {
@@ -97,13 +105,13 @@ const checkNonReturnable = (order) => {
     Number(order.discount_amount) > 0;
   if (isDiscounted) reasons.push("Discounted/sale item");
 
-  // 4. Orders paid with store credits
+  // 4. Orders paid with store credits (skip for gifting orders — they have separate rules)
   const paidWithStoreCredit = Number(order.store_credit_used) > 0;
-  if (paidWithStoreCredit) reasons.push("Store credit order");
+  if (paidWithStoreCredit && !order.is_gifting) reasons.push("Store credit order");
 
-  // 5. Gift certificate orders
+  // 5. Gift certificate orders (different from gifting orders)
   const isGiftCertificate = order.is_gift_certificate || item.is_gift_certificate;
-  if (isGiftCertificate) reasons.push("Gift certificate");
+  if (isGiftCertificate && !order.is_gifting) reasons.push("Gift certificate");
 
   // 6. Orders with extras (customized items)
   const hasExtras = item.extras && item.extras.length > 0;
@@ -213,6 +221,12 @@ export default function OrderHistory() {
   const [actionOtherReason, setActionOtherReason] = useState("");
   const [exchangeType, setExchangeType] = useState("");
   const [exchangeReason, setExchangeReason] = useState("");
+
+  // Gifting exchange value tracking
+  const [exchangeNewValue, setExchangeNewValue] = useState("");
+
+  // Multi-item partial return/exchange
+  const [selectedReturnItems, setSelectedReturnItems] = useState([]);
 
   // Draft orders state
   const [draftOrders, setDraftOrders] = useState([]);
@@ -464,16 +478,22 @@ export default function OrderHistory() {
     return hoursSinceDelivery <= 72;
   };
 
-  // 5. Exchange - within 72 hrs post delivery, NOT for non-returnable items
+  // 5. Exchange - within 72 hrs post delivery (or 30 days for gifting), NOT for non-returnable items
   const canExchange = (order) => {
-    if (!isWithin72HrsPostDelivery(order)) return false;
+    const withinWindow = order.is_gifting
+      ? isGiftingWithinReturnWindow(order)
+      : isWithin72HrsPostDelivery(order);
+    if (!withinWindow) return false;
     const { isNonReturnable } = checkNonReturnable(order);
     return !isNonReturnable;
   };
 
-  // 6. Return for Store Credit - within 72 hrs post delivery, NOT for non-returnable items
+  // 6. Return for Store Credit - within 72 hrs post delivery (or 30 days for gifting), NOT for non-returnable items
   const canReturn = (order) => {
-    if (!isWithin72HrsPostDelivery(order)) return false;
+    const withinWindow = order.is_gifting
+      ? isGiftingWithinReturnWindow(order)
+      : isWithin72HrsPostDelivery(order);
+    if (!withinWindow) return false;
     const { isNonReturnable } = checkNonReturnable(order);
     return !isNonReturnable;
   };
@@ -481,6 +501,14 @@ export default function OrderHistory() {
   // 7. Refund - within 72 hrs post delivery, available for ALL items (brand-fault only)
   const canRefund = (order) => {
     return isWithin72HrsPostDelivery(order);
+  };
+
+  // Gifting-specific: 30-day return/exchange window from purchase date
+  const isGiftingWithinReturnWindow = (order) => {
+    if (!order.is_gifting) return false;
+    if (order.status?.toLowerCase() !== "delivered" || !order.delivered_at) return false;
+    const daysSincePurchase = getDaysSincePurchase(order.created_at);
+    return daysSincePurchase <= 30;
   };
 
   // ==================== ACTION HANDLERS ====================
@@ -493,6 +521,14 @@ export default function OrderHistory() {
     setActionOtherReason("");
     setExchangeType("");
     setExchangeReason("");
+    setExchangeNewValue("");
+    // For multi-item orders, default to all items selected
+    const items = order.items || [];
+    if (items.length > 1) {
+      setSelectedReturnItems(items.map((_, idx) => idx));
+    } else {
+      setSelectedReturnItems([0]);
+    }
   };
 
   // Close action modal
@@ -502,6 +538,8 @@ export default function OrderHistory() {
     setActionOtherReason("");
     setExchangeType("");
     setExchangeReason("");
+    setExchangeNewValue("");
+    setSelectedReturnItems([]);
   };
 
   // Handle Cancel Order
@@ -563,6 +601,50 @@ export default function OrderHistory() {
     }
   };
 
+  // Helper: calculate total value of selected items (for partial returns)
+  const getSelectedItemsValue = (order, selectedIndices) => {
+    const items = order.items || [];
+    if (!items.length || selectedIndices.length === 0) return 0;
+
+    // If all items selected, use order total
+    if (selectedIndices.length === items.length) {
+      return Number(order.grand_total_after_discount || order.grand_total) || 0;
+    }
+
+    // Calculate proportional value based on item prices
+    const totalItemsPrice = items.reduce((sum, item) => {
+      let itemTotal = (Number(item.price) || 0) * (item.quantity || 1);
+      // Add extras
+      if (item.extras?.length) {
+        item.extras.forEach(ex => { itemTotal += Number(ex.price || 0); });
+      }
+      // Add additionals
+      if (item.additionals?.length) {
+        item.additionals.forEach(a => { itemTotal += Number(a.price || 0); });
+      }
+      return sum + itemTotal;
+    }, 0);
+
+    if (totalItemsPrice === 0) return 0;
+
+    const selectedItemsPrice = selectedIndices.reduce((sum, idx) => {
+      const item = items[idx];
+      if (!item) return sum;
+      let itemTotal = (Number(item.price) || 0) * (item.quantity || 1);
+      if (item.extras?.length) {
+        item.extras.forEach(ex => { itemTotal += Number(ex.price || 0); });
+      }
+      if (item.additionals?.length) {
+        item.additionals.forEach(a => { itemTotal += Number(a.price || 0); });
+      }
+      return sum + itemTotal;
+    }, 0);
+
+    // Proportional share of the actual paid amount
+    const orderTotal = Number(order.grand_total_after_discount || order.grand_total) || 0;
+    return Math.round((selectedItemsPrice / totalItemsPrice) * orderTotal);
+  };
+
   // Handle Exchange
   const handleExchange = async () => {
     if (!actionModal?.order) return;
@@ -583,24 +665,94 @@ export default function OrderHistory() {
       }
     }
 
+    // Multi-item validation
     const order = actionModal.order;
+    const items = order.items || [];
+    if (items.length > 1 && selectedReturnItems.length === 0) {
+      showPopup({ type: "warning", title: "Selection Required", message: "Please select at least one item to exchange", confirmText: "OK" });
+      return;
+    }
+
+    // Gifting exchange: validate new item value is entered for product exchange
+    if (order.is_gifting && exchangeType === "product_exchange" && !exchangeNewValue) {
+      showPopup({ type: "warning", title: "Value Required", message: "Please enter the new product value for gifting exchange", confirmText: "OK" });
+      return;
+    }
+
     let finalReason = exchangeType === "size_exchange"
       ? "Size Exchange"
       : exchangeReason === "other"
         ? `Product Exchange - Other: ${actionOtherReason}`
         : `Product Exchange - ${exchangeReason}`;
 
+    // Calculate values for gifting exchange
+    const selectedValue = getSelectedItemsValue(order, selectedReturnItems);
+    const newValue = Number(exchangeNewValue) || 0;
+    const valueDifference = order.is_gifting && exchangeType === "product_exchange" ? newValue - selectedValue : 0;
+
     setActionLoading(order.id);
     try {
-      await supabase.from("orders").update({
+      const updateData = {
         status: "exchange_return",
         exchange_reason: finalReason,
         exchange_requested_at: new Date().toISOString(),
-      }).eq("id", order.id);
+        returned_items: items.length > 1 ? selectedReturnItems.map(idx => items[idx]) : null,
+      };
+
+      // Gifting exchange value tracking
+      if (order.is_gifting && exchangeType === "product_exchange") {
+        updateData.exchange_new_value = newValue;
+        updateData.exchange_value_difference = valueDifference;
+      }
+
+      await supabase.from("orders").update(updateData).eq("id", order.id);
+
+      // Gifting: Lower value exchange → issue store credit for difference to original purchaser
+      let creditMessage = "";
+      if (order.is_gifting && valueDifference < 0) {
+        const creditAmount = Math.abs(valueDifference);
+        const expiryDate = new Date();
+        expiryDate.setMonth(expiryDate.getMonth() + 12);
+
+        const currentCredit = Number(profile?.store_credit) || 0;
+        const newCredit = currentCredit + creditAmount;
+
+        await supabase.from("profiles").update({
+          store_credit: newCredit,
+          store_credit_expiry: expiryDate.toISOString().split('T')[0],
+        }).eq("id", order.user_id);
+
+        await supabase.from("orders").update({
+          exchange_credit_issued: creditAmount,
+        }).eq("id", order.id);
+
+        setProfile(prev => ({
+          ...prev,
+          store_credit: newCredit,
+          store_credit_expiry: expiryDate.toISOString().split('T')[0],
+        }));
+
+        creditMessage = `\n\n💳 ₹${formatIndianNumber(creditAmount)} store credit issued to original purchaser (balance from lower value exchange). Valid for 12 months.`;
+      }
+
+      // Gifting: Higher value exchange → note the amount to collect
+      let payMessage = "";
+      if (order.is_gifting && valueDifference > 0) {
+        payMessage = `\n\n💰 Client must pay ₹${formatIndianNumber(valueDifference)} difference for higher value item.`;
+      }
+
+      const partialNote = items.length > 1 && selectedReturnItems.length < items.length
+        ? `\n📦 Partial exchange: ${selectedReturnItems.length} of ${items.length} items`
+        : "";
 
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "exchange_return", exchange_reason: finalReason } : o));
       closeActionModal();
-      showPopup({ type: "success", title: "Exchange Processed", message: "Exchange request has been processed successfully!", confirmText: "OK" });
+      showPopup({
+        type: "success",
+        title: "Exchange Processed",
+        message: `Exchange request has been processed successfully!${partialNote}${creditMessage}${payMessage}`,
+        confirmText: "OK"
+      });
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
@@ -623,23 +775,34 @@ export default function OrderHistory() {
     }
 
     const order = actionModal.order;
+    const items = order.items || [];
+
+    // Multi-item validation
+    if (items.length > 1 && selectedReturnItems.length === 0) {
+      showPopup({ type: "warning", title: "Selection Required", message: "Please select at least one item to return", confirmText: "OK" });
+      return;
+    }
+
     const finalReason = actionReason === "other" ? `Other: ${actionOtherReason}` : actionReason;
+    const isPartialReturn = items.length > 1 && selectedReturnItems.length < items.length;
 
     setActionLoading(order.id);
     try {
+      // Calculate credit based on selected items only
+      const creditAmount = getSelectedItemsValue(order, selectedReturnItems);
+
       // Update order status
       await supabase.from("orders").update({
-        status: "return_store_credit",
+        status: isPartialReturn ? "partial_return" : "return_store_credit",
         return_reason: finalReason,
         exchange_requested_at: new Date().toISOString(),
+        returned_items: isPartialReturn ? selectedReturnItems.map(idx => items[idx]) : null,
       }).eq("id", order.id);
 
-      // Add store credit to user profile
-      const creditAmount = Number(order.grand_total) || 0;
+      // Add store credit to original purchaser's profile
       const expiryDate = new Date();
       expiryDate.setMonth(expiryDate.getMonth() + 12); // 12 months validity
 
-      // Get current store credit
       const currentCredit = Number(profile?.store_credit) || 0;
       const newCredit = currentCredit + creditAmount;
 
@@ -655,9 +818,21 @@ export default function OrderHistory() {
         store_credit_expiry: expiryDate.toISOString().split('T')[0],
       }));
 
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "return_store_credit", return_reason: finalReason } : o));
+      const newStatus = isPartialReturn ? "partial_return" : "return_store_credit";
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus, return_reason: finalReason } : o));
       closeActionModal();
-      showPopup({ type: "success", title: "Return Processed", message: `₹${formatIndianNumber(creditAmount)} store credits added to your account. Valid for 12 months.`, confirmText: "OK" });
+
+      const partialNote = isPartialReturn
+        ? ` (Partial return: ${selectedReturnItems.length} of ${items.length} items)`
+        : "";
+      const giftingNote = order.is_gifting ? "\n🎁 Credited to original purchaser's profile." : "";
+
+      showPopup({
+        type: "success",
+        title: "Return Processed",
+        message: `₹${formatIndianNumber(creditAmount)} store credits added to account. Valid for 12 months.${partialNote}${giftingNote}`,
+        confirmText: "OK"
+      });
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
@@ -1031,6 +1206,7 @@ export default function OrderHistory() {
       case "revoked": return "cancelled";
       case "exchange_return": return "exchange";
       case "return_store_credit": return "exchange";
+      case "partial_return": return "exchange";
       case "refund_requested": return "exchange";
       default: return "active";
     }
@@ -1043,6 +1219,7 @@ export default function OrderHistory() {
       case "revoked": return "Revoked";
       case "exchange_return": return "Exchange/Return";
       case "return_store_credit": return "Return (Store Credit)";
+      case "partial_return": return "Partial Return";
       case "refund_requested": return "Refund Requested";
       default: return "Active";
     }
@@ -1280,11 +1457,44 @@ export default function OrderHistory() {
               {/* Exchange Form */}
               {actionModal.type === "exchange" && (
                 <>
+                  {/* Multi-item selection */}
+                  {(actionModal.order?.items?.length > 1) && (
+                    <div className="oh-modal-field">
+                      <label>Select items to exchange *</label>
+                      <div style={{ border: '1px solid #e0e0e0', borderRadius: '6px', padding: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                        {actionModal.order.items.map((item, idx) => {
+                          const itemPrice = (Number(item.price) || 0) * (item.quantity || 1);
+                          return (
+                            <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 4px', cursor: 'pointer', borderBottom: idx < actionModal.order.items.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedReturnItems.includes(idx)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedReturnItems(prev => [...prev, idx]);
+                                  } else {
+                                    setSelectedReturnItems(prev => prev.filter(i => i !== idx));
+                                  }
+                                }}
+                              />
+                              <span style={{ flex: 1, fontSize: '13px' }}>
+                                {item.product_name} — {item.top || ''} — Size {item.size} — ₹{formatIndianNumber(itemPrice)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                        Selected value: ₹{formatIndianNumber(getSelectedItemsValue(actionModal.order, selectedReturnItems))}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="oh-modal-field">
                     <label>Exchange Type *</label>
                     <select
                       value={exchangeType}
-                      onChange={(e) => { setExchangeType(e.target.value); setExchangeReason(""); }}
+                      onChange={(e) => { setExchangeType(e.target.value); setExchangeReason(""); setExchangeNewValue(""); }}
                       className="oh-select-full"
                     >
                       <option value="">Select Type</option>
@@ -1319,6 +1529,50 @@ export default function OrderHistory() {
                           />
                         </div>
                       )}
+
+                      {/* Gifting: New item value for exchange difference calculation */}
+                      {actionModal.order?.is_gifting && (
+                        <div style={{ marginTop: '12px', padding: '12px', background: '#fce4ec', borderRadius: '8px' }}>
+                          <div className="oh-modal-field" style={{ marginBottom: '8px' }}>
+                            <label>🎁 New Product Value (₹) *</label>
+                            <input
+                              type="number"
+                              value={exchangeNewValue}
+                              onChange={(e) => setExchangeNewValue(e.target.value)}
+                              placeholder="Enter new item's price"
+                              min="0"
+                              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                            />
+                          </div>
+                          {exchangeNewValue && (() => {
+                            const selectedVal = getSelectedItemsValue(actionModal.order, selectedReturnItems);
+                            const newVal = Number(exchangeNewValue) || 0;
+                            const diff = newVal - selectedVal;
+                            if (diff < 0) {
+                              return (
+                                <div style={{ padding: '8px', background: '#e8f5e9', borderRadius: '6px', fontSize: '13px' }}>
+                                  <strong>💳 Lower Value Exchange</strong>
+                                  <p style={{ margin: '4px 0 0' }}>₹{formatIndianNumber(Math.abs(diff))} will be issued as Store Credit to original purchaser (valid 12 months)</p>
+                                </div>
+                              );
+                            } else if (diff > 0) {
+                              return (
+                                <div style={{ padding: '8px', background: '#fff3e0', borderRadius: '6px', fontSize: '13px' }}>
+                                  <strong>💰 Higher Value Exchange</strong>
+                                  <p style={{ margin: '4px 0 0' }}>Client must pay ₹{formatIndianNumber(diff)} difference at the time of exchange</p>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div style={{ padding: '8px', background: '#e3f2fd', borderRadius: '6px', fontSize: '13px' }}>
+                                  <strong>✅ Equal Value Exchange</strong>
+                                  <p style={{ margin: '4px 0 0' }}>No additional payment or credit needed</p>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </div>
+                      )}
                     </>
                   )}
                 </>
@@ -1327,6 +1581,36 @@ export default function OrderHistory() {
               {/* Return Form */}
               {actionModal.type === "return" && (
                 <>
+                  {/* Multi-item selection */}
+                  {(actionModal.order?.items?.length > 1) && (
+                    <div className="oh-modal-field">
+                      <label>Select items to return *</label>
+                      <div style={{ border: '1px solid #e0e0e0', borderRadius: '6px', padding: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                        {actionModal.order.items.map((item, idx) => {
+                          const itemPrice = (Number(item.price) || 0) * (item.quantity || 1);
+                          return (
+                            <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 4px', cursor: 'pointer', borderBottom: idx < actionModal.order.items.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedReturnItems.includes(idx)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedReturnItems(prev => [...prev, idx]);
+                                  } else {
+                                    setSelectedReturnItems(prev => prev.filter(i => i !== idx));
+                                  }
+                                }}
+                              />
+                              <span style={{ flex: 1, fontSize: '13px' }}>
+                                {item.product_name} — {item.top || ''} — Size {item.size} — ₹{formatIndianNumber(itemPrice)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="oh-modal-field">
                     <label>Reason for Return *</label>
                     <select
@@ -1352,8 +1636,14 @@ export default function OrderHistory() {
                     </div>
                   )}
                   <div className="oh-credit-notice">
-                    <p>💳 Store Credit: ₹{formatIndianNumber(actionModal.order?.grand_total)} will be added to customer's account</p>
+                    <p>💳 Store Credit: ₹{formatIndianNumber(getSelectedItemsValue(actionModal.order, selectedReturnItems))} will be added to {actionModal.order?.is_gifting ? "original purchaser's" : "customer's"} account</p>
+                    {actionModal.order?.items?.length > 1 && selectedReturnItems.length < actionModal.order.items.length && (
+                      <p>📦 Partial return: {selectedReturnItems.length} of {actionModal.order.items.length} items — remaining items unaffected</p>
+                    )}
                     <p>📅 Validity: 12 months from today</p>
+                    {actionModal.order?.is_gifting && (
+                      <p>🎁 Gifting order — all refunds as Store Credit only, no cash refund</p>
+                    )}
                   </div>
                 </>
               )}
@@ -1530,6 +1820,7 @@ export default function OrderHistory() {
                       </div>
                       <div className="oh-card-badges">
                         <span className={`oh-badge ${getStatusClass(order.status)}`}>{getStatusText(order.status)}</span>
+                        {order.is_gifting && <span className="oh-badge" style={{ background: '#e91e63', color: '#fff' }}>🎁 Gift</span>}
                         {editOk && <span className="oh-badge editable">Editable ({Math.floor(36 - hrs)}h)</span>}
                         <button
                           className="ad-print-pdf-btn active"
@@ -1674,15 +1965,22 @@ export default function OrderHistory() {
                       {/* Exchange - NOT for non-returnable items */}
                       {exchangeOk && (
                         <button className="oh-btn primary" onClick={(e) => openActionModal(e, "exchange", order)}>
-                          Exchange
+                          Exchange {order.is_gifting ? "(Gift)" : ""}
                         </button>
                       )}
 
                       {/* Return for Store Credit - NOT for non-returnable items */}
                       {returnOk && (
                         <button className="oh-btn secondary" onClick={(e) => openActionModal(e, "return", order)}>
-                          Return (Store Credit)
+                          Return (Store Credit) {order.is_gifting ? "— to Purchaser" : ""}
                         </button>
+                      )}
+
+                      {/* Gifting return window info */}
+                      {order.is_gifting && order.status?.toLowerCase() === "delivered" && isGiftingWithinReturnWindow(order) && (
+                        <div style={{ fontSize: '11px', color: '#e91e63', marginTop: '4px' }}>
+                          🎁 Gifting order — 30-day return/exchange window ({Math.ceil(30 - getDaysSincePurchase(order.created_at))} days remaining)
+                        </div>
                       )}
 
                       {/* Refund - available for ALL items (brand-fault only) */}
@@ -1693,7 +1991,7 @@ export default function OrderHistory() {
                       )}
 
                       {/* Non-returnable notice */}
-                      {isWithin72HrsPostDelivery(order) && isNonReturnable && (
+                      {(isWithin72HrsPostDelivery(order) || isGiftingWithinReturnWindow(order)) && isNonReturnable && (
                         <div className="oh-non-returnable-notice">
                           <span className="oh-notice-icon">ℹ️</span>
                           <span>Exchange/Return not available: {nonReturnableReasons.join(", ")}</span>

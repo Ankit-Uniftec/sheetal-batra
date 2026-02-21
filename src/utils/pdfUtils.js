@@ -11,8 +11,8 @@ import Logo from "../images/logo.png";
  */
 export const downloadCustomerPdf = async (order, setLoading = null) => {
   try {
-    // If PDF already exists in DB, just open it
-    if (order.customer_url) {
+    // If PDF already exists in DB, just open it (skip for gifting orders to ensure latest data)
+    if (order.customer_url && !order._forceRegenerate) {
       // Add cache buster to avoid browser cache
       const urlWithCacheBust = `${order.customer_url}?t=${Date.now()}`;
       window.open(urlWithCacheBust, "_blank");

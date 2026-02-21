@@ -450,6 +450,27 @@ const warehouseStyles = StyleSheet.create({
     color: "#F57C00",
     marginLeft: 4,
   },
+  // Gifting Order Banner
+  giftingBanner: {
+    backgroundColor: "#E91E63",
+    padding: 6,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    borderRadius: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  giftingBannerText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+  },
+  giftingRecipientText: {
+    color: "#FFFFFF",
+    fontSize: 8,
+    opacity: 0.9,
+  },
 });
 
 // Section Header Component
@@ -719,16 +740,27 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             </View>
           </View>
         </View>
-
         {/* Title Row with Product Indicator */}
         <View style={warehouseStyles.titleRow}>
           <Text style={isAlteration ? warehouseStyles.titleAlteration : warehouseStyles.title}>
-            {isAlteration ? "Alteration Order Copy" : "Warehouse Order Copy"}
+            {isAlteration ? "Alteration Order Copy" : order.is_gifting ? "Gift - Warehouse Order Copy" : "Warehouse Order Copy"}
           </Text>
           <Text style={warehouseStyles.productIndicator}>
             Product {itemIndex + 1} of {totalItems}
           </Text>
         </View>
+
+        {/* Gifting Order Banner */}
+        {order.is_gifting && (
+          <View style={warehouseStyles.giftingBanner}>
+            <Text style={warehouseStyles.giftingBannerText}>🎁 GIFTING ORDER</Text>
+            {order.gift_recipient_name && (
+              <Text style={warehouseStyles.giftingRecipientText}>
+                Gift For: {order.gift_recipient_name}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Parent Order Reference (for alterations) */}
         {isAlteration && order.parent_order_no && (
@@ -774,6 +806,12 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
               label="ORDER DATE:"
               value={formatDate(order.created_at)}
             />
+            {order.is_gifting && order.gift_recipient_name && (
+              <InfoRow
+                label="GIFT RECIPIENT:"
+                value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`}
+              />
+            )}
             <InfoRow
               label="SALES ASSOCIATE:"
               value={order.salesperson}

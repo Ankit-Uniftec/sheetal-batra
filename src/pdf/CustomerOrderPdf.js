@@ -58,21 +58,21 @@ const formatDateTime = (dateStr) => {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
-  
+
   return d.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     timeZone: "Asia/Kolkata"
   }).replace(/\//g, ".");
-  
+
   // const time = d.toLocaleTimeString("en-GB", {
   //   hour: "2-digit",
   //   minute: "2-digit",
   //   second: "2-digit",
   //   timeZone: "Asia/Kolkata"
   // });
-  
+
   // return `${date}  ${time}`;
 };
 
@@ -195,6 +195,41 @@ const pdfStyles = StyleSheet.create({
   inrText: {
     fontFamily: "NotoSans",
   },
+  // Gifting Order Banner
+  giftingBanner: {
+    backgroundColor: "#E91E63",
+    padding: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  giftingBannerText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontFamily: "Helvetica-Bold",
+  },
+  giftingRecipientText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    opacity: 0.9,
+  },
+  // Gifting notice for policy section
+  giftingPolicyNotice: {
+    backgroundColor: "#FCE4EC",
+    borderWidth: 1,
+    borderColor: "#E91E63",
+    borderRadius: 4,
+    padding: 10,
+    marginBottom: 10,
+  },
+  giftingPolicyText: {
+    fontSize: 8,
+    color: "#C2185B",
+    lineHeight: 1.4,
+  },
 });
 
 // Section Header Component
@@ -203,6 +238,22 @@ const SectionBar = ({ title }) => (
     <Text style={styles.sectionTitle}>{title}</Text>
   </View>
 );
+
+// Gifting Banner Component
+const GiftingBanner = ({ order }) => {
+  if (!order.is_gifting) return null;
+  return (
+    <View style={pdfStyles.giftingBanner}>
+      <Text style={pdfStyles.giftingBannerText}>🎁  GIFTING ORDER</Text>
+      {order.gift_recipient_name && (
+        <Text style={pdfStyles.giftingRecipientText}>
+          Gift For: {order.gift_recipient_name}
+          {order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}
+        </Text>
+      )}
+    </View>
+  );
+};
 
 // Field Component
 const Field = ({ label, value, style }) => (
@@ -471,12 +522,15 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
 
         {/* Title Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Order Copy</Text>
+          <Text style={styles.title}>{order.is_gifting ? "Gift Order Copy" : "Order Copy"}</Text>
           <View style={styles.orderInfo}>
             <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
+
+        {/* Gifting Order Banner */}
+        <GiftingBanner order={order} />
 
         {/* Personal Details */}
         <SectionBar title="Personal Details" />
@@ -558,12 +612,14 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
 
         {/* Title Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>Order Copy</Text>
+          <Text style={styles.title}>{order.is_gifting ? "Gift Order Copy" : "Order Copy"}</Text>
           <View style={styles.orderInfo}>
             <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
+        {/* Gifting Order Banner */}
+        <GiftingBanner order={order} />
 
         {/* Billing Details */}
         <SectionBar title="Billing Details" />

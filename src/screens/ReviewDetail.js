@@ -625,6 +625,29 @@ export default function ReviewDetail() {
       </header>
 
       <div className="screen6-container">
+        {/* Gifting Order Badge */}
+        {order.is_gifting && (
+          <div style={{
+            background: 'linear-gradient(135deg, #e91e63, #c2185b)',
+            color: '#fff',
+            padding: '10px 18px',
+            borderRadius: '8px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+          }}>
+            Gifting Order
+            {order.gift_recipient_name && (
+              <span style={{ fontWeight: '400', opacity: 0.9 }}>
+                — For: {order.gift_recipient_name}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="section-box">
           <h3>Product Details</h3>
           {order.items?.map((item, i) => (
@@ -696,6 +719,22 @@ export default function ReviewDetail() {
             {order.delivery_notes && (
               <div className="field field-wide" style={{ marginTop: "12px" }}>
                 <label>Delivery Notes:</label><span>{order.delivery_notes}</span>
+              </div>
+            )}
+            {order.is_gifting && (order.gift_recipient_name || order.gift_recipient_contact) && (
+              <div className="row3" style={{ marginTop: "12px" }}>
+                {order.gift_recipient_name && (
+                  <div className="field">
+                    <label>Gift Recipient:</label>
+                    <span>{order.gift_recipient_name}</span>
+                  </div>
+                )}
+                {order.gift_recipient_contact && (
+                  <div className="field">
+                    <label>Recipient Contact:</label>
+                    <span>{order.gift_recipient_contact}</span>
+                  </div>
+                )}
               </div>
             )}
             {order.comments && (
