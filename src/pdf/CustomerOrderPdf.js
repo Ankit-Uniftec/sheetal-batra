@@ -394,6 +394,15 @@ const ProductItem = ({ item, order, showPricing = true }) => {
               <Text style={styles.label}>Product Value</Text>
               <Text style={[styles.value, { fontFamily: "NotoSans", fontWeight: 700 }]}>{formatINR(item?.price)}</Text>
             </View>
+            {/* Extras Price - only show if extras exist */}
+            {item?.extras && item.extras.length > 0 && (
+              <View style={[styles.pricingField, { marginLeft: 20 }]}>
+                <Text style={styles.label}>Extras Value</Text>
+                <Text style={[styles.value, { fontFamily: "NotoSans", fontWeight: 700 }]}>
+                  {formatINR(item.extras.reduce((sum, extra) => sum + (Number(extra.price) || 0), 0))}
+                </Text>
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -463,9 +472,9 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
   const netTotal = grandTotal - discountAmount - collectorsCode;
   const remaining = netTotal - advancePayment - storeCreditUsed;
 
-  // GST Calculation (flat 18% deduction)
-  const gstAmount = Math.round(grandTotal * 0.18);
-  const baseAmount = grandTotal - gstAmount;
+  // GST Calculation (reverse calculation - grandTotal includes GST)
+  const baseAmount = Math.round(grandTotal / 1.18);
+  const gstAmount = grandTotal - baseAmount;
 
   // Helper to get billing address
   const getBillingAddress = () => {
