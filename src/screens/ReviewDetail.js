@@ -10,6 +10,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import config from "../config/config";
 import { generateAllPdfs } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
+import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 
 // Auto Signature Logo URL
 const AUTO_SIGNATURE_URL = "https://qlqvchcvuwjnfranqcmx.supabase.co/storage/v1/object/public/signature/logo.png";
@@ -338,6 +339,38 @@ export default function ReviewDetail() {
     } catch (pdfError) {
       console.error("❌ PDF generation failed:", pdfError);
       // Continue anyway - order is already placed
+    }
+
+    // 5️⃣.05 SEND NOTIFICATION — Order Placed (#13)
+    try {
+      const items = normalizedOrder.items || order.items || [];
+      const source = items.some(i => i.sync_enabled) ? "Shopify" :
+        order.is_b2b ? "B2B" : "Offline";
+
+      // Get PDF attachments from the inserted order (saved by generateAllPdfs)
+      const notifAttachments = [];
+      if (insertedOrder.customer_url) {
+        notifAttachments.push({ type: "order_pdf", url: insertedOrder.customer_url });
+      }
+      if (insertedOrder.warehouse_urls?.length) {
+        insertedOrder.warehouse_urls.forEach(url => {
+          notifAttachments.push({ type: "order_pdf", url });
+        });
+      }
+
+      await sendNotification(NOTIFICATION_TYPES.ORDER_PLACED, {
+        orderId: insertedOrder.id,
+        orderNo: insertedOrder.order_no,
+        metadata: {
+          client_name: normalizedOrder.delivery_name,
+          is_urgent: normalizedOrder.is_urgent || false,
+          source,
+          store: normalizedOrder.salesperson_store,
+        },
+        attachments: notifAttachments,
+      });
+    } catch (notifErr) {
+      console.error("❌ Notification error (non-blocking):", notifErr);
     }
 
     // 5️⃣.1 SAVE CUSTOMER MEASUREMENTS
@@ -680,7 +713,7 @@ export default function ReviewDetail() {
             Gifting Order For:
             {order.gift_recipient_name && (
               <span style={{ fontWeight: '400', opacity: 0.9 }}>
-                 {order.gift_recipient_name}
+                {order.gift_recipient_name}
               </span>
             )}
           </div>

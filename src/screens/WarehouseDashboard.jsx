@@ -6,6 +6,7 @@ import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
+import NotificationBell from "../components/NotificationBell";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -49,6 +50,7 @@ const WarehouseDashboard = () => {
   const [showSidebar, setShowSidebar] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
@@ -216,6 +218,7 @@ const WarehouseDashboard = () => {
         return;
       }
 
+      setCurrentUserEmail(session.user.email?.toLowerCase() || "");
       fetchOrders();
     };
 
@@ -607,20 +610,31 @@ const WarehouseDashboard = () => {
 
       {/* HEADER */}
       <div className="wd-top-header">
-        <div className="wd-header-left">
-          <img src={Logo} className="logo" alt="logo" />
-        </div>
-        <h1 className="wd-title">Warehouse Dashboard</h1>
-      </div>
-
-      {/* MAIN LAYOUT */}
-      <div className="wd-main-layout">
-        {/* Hamburger */}
         <div className="wd-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
           <div className="wd-bar"></div>
           <div className="wd-bar"></div>
           <div className="wd-bar"></div>
         </div>
+        <div className="wd-header-left">
+          <img src={Logo} className="logo" alt="logo" />
+        </div>
+        <h1 className="wd-title">Warehouse Dashboard</h1>
+        <div className="wd-header-right">
+          <NotificationBell
+            userEmail={currentUserEmail}
+            onOrderClick={(orderId, orderNo) => {
+              const el = document.querySelector(`[data-order-id="${orderId}"]`);
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          />
+        </div>
+      </div>
+
+      {/* MAIN LAYOUT */}
+      <div className="wd-main-layout">
+
+        {/* Sidebar Overlay — click outside to close on mobile/tablet */}
+        {showSidebar && <div className="wd-sidebar-overlay" onClick={() => setShowSidebar(false)} />}
 
         {/* SIDEBAR */}
         <aside className={`wd-sidebar ${showSidebar ? "wd-open" : ""}`}>
@@ -1097,33 +1111,36 @@ const WarehouseDashboard = () => {
                             <p><strong className="wd-label">Order Id:</strong> {order.order_no}</p>
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
 
-                            <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
+                            {/* Client & SA Name — responsive row */}
+                            <div className="wd-info-row">
                               <p><strong className="wd-label">Client Name:</strong> {order.delivery_name || "-"}</p>
                               <p><strong className="wd-label">SA Name:</strong> {order.salesperson_name || order.salesperson || "-"}</p>
                             </div>
 
-                            <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
-                              <div style={{ display: "flex", alignItems: 'center', gap: 10 }}>
-                                <p><strong className="wd-label">Top:</strong> {firstItem.top || "-"} </p>
+                            {/* Top & Bottom colors — responsive row */}
+                            <div className="wd-info-row">
+                              <div className="wd-color-info">
+                                <p><strong className="wd-label">Top:</strong> {firstItem.top || "-"}</p>
                                 {firstItem.top_color?.hex && (
                                   <>
-                                    <p style={{ backgroundColor: firstItem.top_color.hex, width: 20, height: 20 }}></p>
+                                    <span className="wd-color-swatch" style={{ backgroundColor: firstItem.top_color.hex }}></span>
                                     <p>{firstItem.top_color?.name}</p>
                                   </>
                                 )}
                               </div>
-                              <div style={{ display: "flex", alignItems: 'center', gap: 10 }}>
+                              <div className="wd-color-info">
                                 <p><strong className="wd-label">Bottom:</strong> {firstItem.bottom || "-"}</p>
                                 {firstItem.bottom_color?.hex && (
                                   <>
-                                    <p style={{ backgroundColor: firstItem.bottom_color.hex, width: 20, height: 20 }}></p>
+                                    <span className="wd-color-swatch" style={{ backgroundColor: firstItem.bottom_color.hex }}></span>
                                     <p>{firstItem.bottom_color?.name}</p>
                                   </>
                                 )}
                               </div>
                             </div>
 
-                            <div style={{ display: "flex", alignItems: 'center', gap: 50 }}>
+                            {/* Extras & Size — responsive row */}
+                            <div className="wd-info-row">
                               {firstItem.extras && firstItem.extras.length > 0 && (
                                 <p><strong className="wd-label">Extras:</strong> {firstItem.extras.map(e => e.name).join(", ")}</p>
                               )}
@@ -1137,7 +1154,8 @@ const WarehouseDashboard = () => {
                               </div>
                             </div>
 
-                            <div style={{ display: "flex", alignItems: 'center', gap: 70 }}>
+                            {/* Order Date & Delivery Date — responsive row */}
+                            <div className="wd-info-row">
                               <p><strong className="wd-label">Order Date:</strong> {formatDate(order.created_at)}</p>
                               <p><strong className="wd-label">Delivery Date:</strong> {getWarehouseDate(order.delivery_date, order.created_at)}</p>
                             </div>

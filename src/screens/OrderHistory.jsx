@@ -10,6 +10,7 @@ import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import config from "../config/config";
+import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 
 // Measurement categories and fields (same as Screen4)
 const CATEGORY_KEY_MAP = {
@@ -570,6 +571,14 @@ export default function OrderHistory() {
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: finalReason } : o));
       closeActionModal();
       showPopup({ type: "success", title: "Order Cancelled", message: "Order has been cancelled successfully!", confirmText: "OK" });
+
+      // Notify warehouse — Order Cancelled (#21)
+      sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
+        orderId: order.id,
+        orderNo: order.order_no,
+        metadata: { client_name: order.delivery_name },
+        attachments: order.customer_url ? [{ type: "order_pdf", url: order.customer_url }] : [],
+      }).catch(err => console.error("Notification error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
@@ -594,6 +603,14 @@ export default function OrderHistory() {
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "revoked" } : o));
       closeActionModal();
       showPopup({ type: "success", title: "Order Revoked", message: "Order revoked successfully! Full refund will be initiated.", confirmText: "OK" });
+
+      // Notify warehouse — Order Cancelled (#21) — revoke is also a cancellation
+      sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
+        orderId: order.id,
+        orderNo: order.order_no,
+        metadata: { client_name: order.delivery_name, reason: "Brand-Initiated Revoke" },
+        attachments: order.customer_url ? [{ type: "order_pdf", url: order.customer_url }] : [],
+      }).catch(err => console.error("Notification error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
