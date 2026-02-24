@@ -115,8 +115,10 @@ export default function ReviewDetail() {
   const netPayable = Number(order?.net_total) || 0;
   const remaining = Number(order?.remaining_payment) || 0;
   const storeCreditUsed = Number(order?.store_credit_used) || 0;
+  const loyaltyPointsRedeemed = Number(order?.loyalty_points_redeemed) || 0;
+  const loyaltyDiscount = Number(order?.loyalty_discount) || 0;
 
-  const pricing = { discountPercent, discountAmount, netPayable, remaining, storeCreditUsed };
+  const pricing = { discountPercent, discountAmount, netPayable, remaining, storeCreditUsed, loyaltyPointsRedeemed, loyaltyDiscount };
 
   const handlePlaceOrder = () => setShowSignature(true);
 
@@ -386,6 +388,42 @@ export default function ReviewDetail() {
       console.log("ℹ️ No store credit used in this order");
     }
 
+    // 5️⃣.3 LOYALTY POINTS: Award + Deduct
+    try {
+      // Calculate points earned: 5 pts per ₹10 spent = 0.5 per ₹1
+      // Base it on net amount actually paid (after all discounts, credits, loyalty discount)
+      const amountForPoints = Math.max(0, (Number(order.net_total) || 0) - loyaltyDiscount);
+      const pointsEarned = Math.floor(amountForPoints * 0.5);
+
+      // Get current loyalty points
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("loyalty_points")
+        .eq("id", order.user_id)
+        .single();
+
+      const currentPoints = Number(currentProfile?.loyalty_points) || 0;
+      const pointsAfterRedeem = currentPoints - loyaltyPointsRedeemed;
+      const newPoints = Math.max(0, pointsAfterRedeem) + pointsEarned;
+
+      // Update profile with new points
+      await supabase
+        .from("profiles")
+        .update({ loyalty_points: newPoints })
+        .eq("id", order.user_id);
+
+      // Update order with points earned
+      await supabase
+        .from("orders")
+        .update({ loyalty_points_earned: pointsEarned })
+        .eq("id", insertedOrder.id);
+
+      console.log(`✅ Loyalty: Earned ${pointsEarned} pts, Redeemed ${loyaltyPointsRedeemed} pts, New balance: ${newPoints} pts`);
+    } catch (loyaltyErr) {
+      console.error("❌ Loyalty points error:", loyaltyErr);
+      // Non-blocking — order is already placed
+    }
+
     // 6️⃣ REDUCE INVENTORY
     try {
       const items = normalizedOrder.items || order.items || [];
@@ -628,7 +666,7 @@ export default function ReviewDetail() {
         {/* Gifting Order Badge */}
         {order.is_gifting && (
           <div style={{
-            background: 'linear-gradient(135deg, #e91e63, #c2185b)',
+            background: '#d5b85a',
             color: '#fff',
             padding: '10px 18px',
             borderRadius: '8px',
@@ -639,10 +677,10 @@ export default function ReviewDetail() {
             fontSize: '14px',
             fontWeight: '600',
           }}>
-            Gifting Order
+            Gifting Order For:
             {order.gift_recipient_name && (
               <span style={{ fontWeight: '400', opacity: 0.9 }}>
-                — For: {order.gift_recipient_name}
+                 {order.gift_recipient_name}
               </span>
             )}
           </div>
@@ -799,6 +837,18 @@ export default function ReviewDetail() {
               <div className="field">
                 <label>Store Credit Applied:</label>
                 <span style={{ color: "#7b1fa2", fontWeight: "600" }}>- ₹{formatIndianNumber(pricing.storeCreditUsed)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Loyalty Points Row */}
+          {pricing.loyaltyDiscount > 0 && (
+            <div className="row3">
+              <div className="field">
+                <label>Loyalty Points Redeemed:</label>
+                <span style={{ color: "#e65100", fontWeight: "600" }}>
+                  {pricing.loyaltyPointsRedeemed} pts = - ₹{formatIndianNumber(pricing.loyaltyDiscount)}
+                </span>
               </div>
             </div>
           )}
