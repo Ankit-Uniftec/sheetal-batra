@@ -195,41 +195,6 @@ const pdfStyles = StyleSheet.create({
   inrText: {
     fontFamily: "NotoSans",
   },
-  // Gifting Order Banner
-  giftingBanner: {
-    backgroundColor: "#E91E63",
-    padding: 8,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    borderRadius: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  giftingBannerText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontFamily: "Helvetica-Bold",
-  },
-  giftingRecipientText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    opacity: 0.9,
-  },
-  // Gifting notice for policy section
-  giftingPolicyNotice: {
-    backgroundColor: "#FCE4EC",
-    borderWidth: 1,
-    borderColor: "#E91E63",
-    borderRadius: 4,
-    padding: 10,
-    marginBottom: 10,
-  },
-  giftingPolicyText: {
-    fontSize: 8,
-    color: "#C2185B",
-    lineHeight: 1.4,
-  },
 });
 
 // Section Header Component
@@ -239,21 +204,6 @@ const SectionBar = ({ title }) => (
   </View>
 );
 
-// Gifting Banner Component
-const GiftingBanner = ({ order }) => {
-  if (!order.is_gifting) return null;
-  return (
-    <View style={pdfStyles.giftingBanner}>
-      <Text style={pdfStyles.giftingBannerText}>🎁  GIFTING ORDER</Text>
-      {order.gift_recipient_name && (
-        <Text style={pdfStyles.giftingRecipientText}>
-          Gift For: {order.gift_recipient_name}
-          {order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}
-        </Text>
-      )}
-    </View>
-  );
-};
 
 // Field Component
 const Field = ({ label, value, style }) => (
@@ -538,8 +488,6 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
           </View>
         </View>
 
-        {/* Gifting Order Banner */}
-        <GiftingBanner order={order} />
 
         {/* Personal Details */}
         <SectionBar title="Personal Details" />
@@ -627,8 +575,6 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
           </View>
         </View>
-        {/* Gifting Order Banner */}
-        <GiftingBanner order={order} />
 
         {/* Billing Details */}
         <SectionBar title="Billing Details" />

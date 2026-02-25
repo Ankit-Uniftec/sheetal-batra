@@ -87,6 +87,11 @@ export default function OrderDetails() {
   const [availableStoreCredit, setAvailableStoreCredit] = useState(0);
   const [storeCreditExpiry, setStoreCreditExpiry] = useState(null);
 
+  // Loyalty Points
+  const [availableLoyaltyPoints, setAvailableLoyaltyPoints] = useState(0);
+  const [loyaltyPointsApplied, setLoyaltyPointsApplied] = useState(false);
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
+
   // Split Payment
   const [isSplitPayment, setIsSplitPayment] = useState(false);
   const [splitPayments, setSplitPayments] = useState([]);
@@ -239,6 +244,12 @@ export default function OrderDetails() {
       netAfterStoreCredit = Math.max(0, netPayable - storeCreditUsed);
     }
 
+    // Loyalty points discount (applied after store credit)
+    let loyaltyDiscount = 0;
+    if (loyaltyPointsApplied && loyaltyPointsToRedeem > 0) {
+      loyaltyDiscount = Math.min(loyaltyPointsToRedeem * 0.10, netAfterStoreCredit); // 100 pts = ₹10
+      netAfterStoreCredit = Math.max(0, netAfterStoreCredit - loyaltyDiscount);
+    }
     // Calculate min advance: on netAfterStoreCredit if store credit applied, 
     // on netPayable if discount applied, otherwise on totalAmount
     const minAdvanceBase = storeCreditApplied ? netAfterStoreCredit : (hasDiscount ? netPayable : totalAmount);
@@ -260,6 +271,8 @@ export default function OrderDetails() {
       codCharge: appliedCodCharge,
       storeCreditUsed,
       remainingStoreCredit: availableStoreCredit - storeCreditUsed,
+      loyaltyDiscount,
+      loyaltyPointsUsed: loyaltyDiscount > 0 ? Math.ceil(loyaltyDiscount / 0.10) : 0,
     };
   }, [
     totalDiscount,
@@ -278,6 +291,8 @@ export default function OrderDetails() {
     isSplitPayment,
     splitPayments,
     storeCreditApplied,
+    loyaltyPointsApplied,
+    loyaltyPointsToRedeem,
     availableStoreCredit,
     isStoreCreditValid
   ]);
@@ -333,6 +348,7 @@ export default function OrderDetails() {
           if (prof) {
             setAvailableStoreCredit(Number(prof.store_credit) || 0);
             setStoreCreditExpiry(prof.store_credit_expiry || null);
+            setAvailableLoyaltyPoints(Number(prof.loyalty_points) || 0);
           }
         }
       }
@@ -404,6 +420,9 @@ export default function OrderDetails() {
         if (data.codWaiverApplied !== undefined) setCodWaiverApplied(data.codWaiverApplied);
         if (data.storeCreditApplied !== undefined) setStoreCreditApplied(data.storeCreditApplied);
 
+        if (data.loyaltyPointsApplied !== undefined) setLoyaltyPointsApplied(data.loyaltyPointsApplied);
+        if (data.loyaltyPointsToRedeem) setLoyaltyPointsToRedeem(Number(data.loyaltyPointsToRedeem) || 0);
+
         if (data.isSplitPayment !== undefined) setIsSplitPayment(data.isSplitPayment);
         if (data.splitPayments) setSplitPayments(data.splitPayments);
 
@@ -458,6 +477,10 @@ export default function OrderDetails() {
       deliveryNotes,
       codWaiverApplied,
       storeCreditApplied,
+      giftRecipientName,
+      giftRecipientContact,
+      loyaltyPointsApplied,
+      loyaltyPointsToRedeem,
       isSplitPayment,
       splitPayments,
     };
@@ -486,6 +509,10 @@ export default function OrderDetails() {
     deliveryNotes,
     codWaiverApplied,
     storeCreditApplied,
+    giftRecipientName,
+    giftRecipientContact,
+    loyaltyPointsApplied,
+    loyaltyPointsToRedeem,
     isSplitPayment,
     splitPayments,
   ]);
@@ -530,6 +557,10 @@ export default function OrderDetails() {
       // Store credit info
       store_credit_used: pricing.storeCreditUsed,
       store_credit_remaining: pricing.remainingStoreCredit,
+
+      // Loyalty points info
+      loyalty_points_redeemed: pricing.loyaltyPointsUsed,
+      loyalty_discount: pricing.loyaltyDiscount,
 
       delivery_name: profile.full_name,
       delivery_email: profile.email,
@@ -792,7 +823,7 @@ export default function OrderDetails() {
       onConfirm: () => {
         setStoreCreditApplied(true);
         showPopup({
-          title: "Store Credit Applied! 💳",
+          title: "Store Credit Applied!",
           message: `₹${formatIndianNumber(creditToUse)} store credit applied to your order!`,
           type: "success",
           confirmText: "OK",
@@ -803,6 +834,58 @@ export default function OrderDetails() {
 
   const removeStoreCredit = () => {
     setStoreCreditApplied(false);
+  };
+
+  // Loyalty Points handlers
+  const handleApplyLoyaltyPoints = () => {
+    if (availableLoyaltyPoints < 100) {
+      showPopup({
+        title: "Not Enough Points",
+        message: `You need at least 100 points to redeem. Current balance: ${availableLoyaltyPoints} pts`,
+        type: "warning",
+        confirmText: "OK",
+      });
+      return;
+    }
+
+    if (loyaltyPointsApplied) {
+      showPopup({
+        title: "Already Applied",
+        message: "Loyalty points are already applied to this order.",
+        type: "warning",
+        confirmText: "OK",
+      });
+      return;
+    }
+
+    // Calculate max redeemable: cap at available points AND order value
+    const maxDiscount = pricing.netAfterStoreCredit || pricing.netPayable;
+    const maxPointsByValue = Math.ceil(maxDiscount / 0.10); // How many points to cover full order
+    const pointsToUse = Math.min(availableLoyaltyPoints, maxPointsByValue);
+    const discountValue = pointsToUse * 0.10;
+
+    showPopup({
+      title: "Redeem Loyalty Points?",
+      message: `Available: ${availableLoyaltyPoints} pts\nRedeeming: ${pointsToUse} pts = ₹${formatIndianNumber(discountValue)} off`,
+      type: "confirm",
+      confirmText: "Redeem",
+      cancelText: "Cancel",
+      onConfirm: () => {
+        setLoyaltyPointsToRedeem(pointsToUse);
+        setLoyaltyPointsApplied(true);
+        showPopup({
+          title: "Points Redeemed!",
+          message: `${pointsToUse} points applied — ₹${formatIndianNumber(discountValue)} off!`,
+          type: "success",
+          confirmText: "OK",
+        });
+      },
+    });
+  };
+
+  const removeLoyaltyPoints = () => {
+    setLoyaltyPointsApplied(false);
+    setLoyaltyPointsToRedeem(0);
   };
 
   const handleSplitPaymentSave = (payments, totalAmount) => {
@@ -1037,7 +1120,7 @@ export default function OrderDetails() {
         {/* GIFT RECIPIENT DETAILS - Only show for gifting orders */}
         {order.is_gifting && (
           <div className="section-box">
-            <h3>🎁 Gift Recipient Details</h3>
+            <h3>Gift Recipient Details</h3>
             <p style={{ fontSize: '12px', color: '#888', marginBottom: '12px' }}>
               Optional — Provide details of the person receiving the gift
             </p>
@@ -1192,7 +1275,26 @@ export default function OrderDetails() {
                   }}
                   disabled={!isStoreCreditValid}
                 >
-                  💳 Store Credit
+                  Store Credit
+                </button>
+              )}
+
+              {/* Loyalty Points Button - Only show if user has 100+ points */}
+              {availableLoyaltyPoints >= 100 && (
+                <button
+                  onClick={handleApplyLoyaltyPoints}
+                  style={{
+                    background: loyaltyPointsApplied ? '#4caf50' : '#ff9800',
+                    border: "none",
+                    height: "30px",
+                    color: 'white',
+                    borderRadius: 5,
+                    padding: '0 12px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                  }}
+                >
+                  Loyalty Points ({availableLoyaltyPoints})
                 </button>
               )}
             </div>
@@ -1214,7 +1316,7 @@ export default function OrderDetails() {
             >
               <div>
                 <span style={{ fontWeight: "600", color: isStoreCreditValid ? "#7b1fa2" : "#c62828" }}>
-                  💳 Store Credit Available: ₹{formatIndianNumber(availableStoreCredit)}
+                  Store Credit Available: ₹{formatIndianNumber(availableStoreCredit)}
                 </span>
                 <span style={{
                   fontSize: "12px",
@@ -1240,6 +1342,47 @@ export default function OrderDetails() {
                   }}
                 >
                   Apply
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Loyalty Points Info Banner */}
+          {availableLoyaltyPoints > 0 && (
+            <div
+              style={{
+                background: "#fff3e0",
+                border: "1px solid #ffcc80",
+                borderRadius: "8px",
+                padding: "12px 16px",
+                marginBottom: "16px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <span style={{ fontWeight: "600", color: "#e65100" }}>
+                  Loyalty Points: {availableLoyaltyPoints} pts
+                </span>
+                <span style={{ fontSize: "12px", color: "#666", marginLeft: "12px" }}>
+                  (Worth ₹{formatIndianNumber(availableLoyaltyPoints * 0.10)} • Min 100 pts to redeem)
+                </span>
+              </div>
+              {!loyaltyPointsApplied && availableLoyaltyPoints >= 100 && (
+                <button
+                  onClick={handleApplyLoyaltyPoints}
+                  style={{
+                    background: "#ff9800",
+                    color: "white",
+                    border: "none",
+                    padding: "6px 16px",
+                    borderRadius: "20px",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                  }}
+                >
+                  Redeem Points
                 </button>
               )}
             </div>
@@ -1367,9 +1510,35 @@ export default function OrderDetails() {
                     fontSize: "14px",
                   }}
                 >
-                  <span>💳 Store Credit (₹{formatIndianNumber(pricing.storeCreditUsed)})</span>
+                  <span>Store Credit (₹{formatIndianNumber(pricing.storeCreditUsed)})</span>
                   <button
                     onClick={removeStoreCredit}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
+              {loyaltyPointsApplied && (
+                <div
+                  style={{
+                    background: "#fff3e0",
+                    color: "#e65100",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>Loyalty Points ({pricing.loyaltyPointsUsed} pts = ₹{formatIndianNumber(pricing.loyaltyDiscount)})</span>
+                  <button
+                    onClick={removeLoyaltyPoints}
                     style={{
                       background: "none",
                       border: "none",
@@ -1468,6 +1637,22 @@ export default function OrderDetails() {
                   <span style={{ color: "#666" }}>₹{formatIndianNumber(pricing.remainingStoreCredit)}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Loyalty Points Applied Row */}
+          {loyaltyPointsApplied && pricing.loyaltyDiscount > 0 && (
+            <div className="row3">
+              <div className="field">
+                <label>Loyalty Points Redeemed:</label>
+                <span style={{ color: "#e65100", fontWeight: "600" }}>
+                  {pricing.loyaltyPointsUsed} pts = - ₹{formatIndianNumber(pricing.loyaltyDiscount)}
+                </span>
+              </div>
+              <div className="field">
+                <label>Remaining Points:</label>
+                <span style={{ color: "#666" }}>{availableLoyaltyPoints - pricing.loyaltyPointsUsed} pts</span>
+              </div>
             </div>
           )}
 

@@ -62,9 +62,9 @@ export default function Popup({
         <div className="popup-header">
           <span className={`popup-icon popup-icon-${type}`}>{getIcon()}</span>
           <h3 className="popup-title">{title}</h3>
-          <button className="popup-close" onClick={onClose}>
+          {/* <button className="popup-close" onClick={onClose}>
             ×
-          </button>
+          </button> */}
         </div>
 
         <div className="popup-body">
@@ -104,7 +104,7 @@ export function usePopup() {
     type: "info",
     onConfirm: null,
     confirmText: "OK",
-    cancelText: "Cancel",
+    cancelText: "",
     showCancel: false,
   });
 

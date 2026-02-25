@@ -7,6 +7,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
+import NotificationBell from "../../components/NotificationBell";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -128,7 +129,7 @@ export default function AdminDashboard() {
     const [analyticsCustomFrom, setAnalyticsCustomFrom] = useState("");
     const [analyticsCustomTo, setAnalyticsCustomTo] = useState("");
     const [showAnalyticsCustomPicker, setShowAnalyticsCustomPicker] = useState(false);
-
+    const [currentUserEmail, setCurrentUserEmail] = useState("");
     // Fetch data on mount
     useEffect(() => {
         const checkAuthAndFetch = async () => {
@@ -149,6 +150,7 @@ export default function AdminDashboard() {
                 return;
             }
 
+            setCurrentUserEmail(session.user.email?.toLowerCase() || "");
             fetchAllData();
         };
         checkAuthAndFetch();
@@ -857,6 +859,12 @@ export default function AdminDashboard() {
                 </div>
                 <h1 className="admin-title">Admin Dashboard</h1>
                 <div className="admin-header-right">
+                    <NotificationBell
+                        userEmail={currentUserEmail}
+                        onOrderClick={(orderId) => {
+                            // Could filter or highlight order in future
+                        }}
+                    />
                     <button className="admin-logout-btn" onClick={handleLogout}>Logout</button>
                 </div>
             </header>

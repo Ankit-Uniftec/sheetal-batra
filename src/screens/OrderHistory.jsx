@@ -10,6 +10,7 @@ import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import config from "../config/config";
+import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 
 // Measurement categories and fields (same as Screen4)
 const CATEGORY_KEY_MAP = {
@@ -570,6 +571,14 @@ export default function OrderHistory() {
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: finalReason } : o));
       closeActionModal();
       showPopup({ type: "success", title: "Order Cancelled", message: "Order has been cancelled successfully!", confirmText: "OK" });
+
+      // Notify warehouse — Order Cancelled (#21)
+      sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
+        orderId: order.id,
+        orderNo: order.order_no,
+        metadata: { client_name: order.delivery_name },
+        attachments: order.customer_url ? [{ type: "order_pdf", url: order.customer_url }] : [],
+      }).catch(err => console.error("Notification error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
@@ -594,6 +603,14 @@ export default function OrderHistory() {
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "revoked" } : o));
       closeActionModal();
       showPopup({ type: "success", title: "Order Revoked", message: "Order revoked successfully! Full refund will be initiated.", confirmText: "OK" });
+
+      // Notify warehouse — Order Cancelled (#21) — revoke is also a cancellation
+      sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
+        orderId: order.id,
+        orderNo: order.order_no,
+        metadata: { client_name: order.delivery_name, reason: "Brand-Initiated Revoke" },
+        attachments: order.customer_url ? [{ type: "order_pdf", url: order.customer_url }] : [],
+      }).catch(err => console.error("Notification error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
@@ -825,7 +842,7 @@ export default function OrderHistory() {
       const partialNote = isPartialReturn
         ? ` (Partial return: ${selectedReturnItems.length} of ${items.length} items)`
         : "";
-      const giftingNote = order.is_gifting ? "\n🎁 Credited to original purchaser's profile." : "";
+      const giftingNote = order.is_gifting ? "\n Credited to original purchaser's profile." : "";
 
       showPopup({
         type: "success",
@@ -1534,7 +1551,7 @@ export default function OrderHistory() {
                       {actionModal.order?.is_gifting && (
                         <div style={{ marginTop: '12px', padding: '12px', background: '#fce4ec', borderRadius: '8px' }}>
                           <div className="oh-modal-field" style={{ marginBottom: '8px' }}>
-                            <label>🎁 New Product Value (₹) *</label>
+                            <label>New Product Value (₹) *</label>
                             <input
                               type="number"
                               value={exchangeNewValue}
@@ -1642,7 +1659,7 @@ export default function OrderHistory() {
                     )}
                     <p>📅 Validity: 12 months from today</p>
                     {actionModal.order?.is_gifting && (
-                      <p>🎁 Gifting order — all refunds as Store Credit only, no cash refund</p>
+                      <p>Gifting order — all refunds as Store Credit only, no cash refund</p>
                     )}
                   </div>
                 </>
@@ -1746,7 +1763,16 @@ export default function OrderHistory() {
           </div>
           <div className="oh-sidebar-card">
             <h4>Loyalty Points</h4>
-            <p className="muted">Coming soon</p>
+            {(Number(profile?.loyalty_points) || 0) > 0 ? (
+              <div className="oh-store-credit-info">
+                <p className="oh-credit-amount" style={{ color: '#e65100' }}>{profile.loyalty_points} pts</p>
+                <p className="oh-credit-expiry" style={{ fontSize: '11px', color: '#888' }}>
+                  Worth ₹{formatIndianNumber(profile.loyalty_points * 0.10)}
+                </p>
+              </div>
+            ) : (
+              <p className="muted">0 points — Earn 5 pts per ₹10 spent</p>
+            )}
           </div>
         </aside>
 
@@ -1820,7 +1846,7 @@ export default function OrderHistory() {
                       </div>
                       <div className="oh-card-badges">
                         <span className={`oh-badge ${getStatusClass(order.status)}`}>{getStatusText(order.status)}</span>
-                        {order.is_gifting && <span className="oh-badge" style={{ background: '#e91e63', color: '#fff' }}>🎁 Gift</span>}
+                        {order.is_gifting && <span className="oh-badge" style={{ background: '#e91e63', color: '#fff' }}>Gift</span>}
                         {editOk && <span className="oh-badge editable">Editable ({Math.floor(36 - hrs)}h)</span>}
                         <button
                           className="ad-print-pdf-btn active"
@@ -1979,7 +2005,7 @@ export default function OrderHistory() {
                       {/* Gifting return window info */}
                       {order.is_gifting && order.status?.toLowerCase() === "delivered" && isGiftingWithinReturnWindow(order) && (
                         <div style={{ fontSize: '11px', color: '#e91e63', marginTop: '4px' }}>
-                          🎁 Gifting order — 30-day return/exchange window ({Math.ceil(30 - getDaysSincePurchase(order.created_at))} days remaining)
+                          Gifting order — 30-day return/exchange window ({Math.ceil(30 - getDaysSincePurchase(order.created_at))} days remaining)
                         </div>
                       )}
 
@@ -2038,6 +2064,35 @@ export default function OrderHistory() {
               ) : (
                 <p className="oh-no-measurements">No store credits available.</p>
               )}
+
+              {/* Loyalty Points Section */}
+              <h3 style={{ marginTop: "30px" }}>Loyalty Points</h3>
+              <div className="oh-store-credit-card" style={{ borderColor: '#ffcc80' }}>
+                <div className="oh-credit-balance">
+                  <span className="oh-credit-label">Points Balance</span>
+                  <span className="oh-credit-value" style={{ color: '#e65100' }}>
+                    {Number(profile?.loyalty_points) || 0} pts
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                  <span style={{ fontSize: '13px', color: '#666' }}>
+                    Redeemable Value: ₹{formatIndianNumber((Number(profile?.loyalty_points) || 0) * 0.10)}
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#999' }}>
+                    Min 100 pts to redeem
+                  </span>
+                </div>
+                <div style={{
+                  marginTop: '12px',
+                  padding: '8px 12px',
+                  background: '#fff3e0',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: '#795548',
+                }}>
+                  <strong>How it works:</strong> Earn 5 pts for every ₹10 spent • 100 pts = ₹10 off
+                </div>
+              </div>
 
               {/* Draft Orders Section */}
               <h3 style={{ marginTop: "30px" }}>Draft Orders</h3>

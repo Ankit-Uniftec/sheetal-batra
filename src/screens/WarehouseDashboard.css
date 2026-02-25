@@ -37,6 +37,13 @@
   margin: 0;
 }
 
+.wd-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .wd-logout-btn {
   background: #d5b85a;
   color: white;
@@ -65,14 +72,10 @@
   display: none;
   flex-direction: column;
   justify-content: space-around;
-  width: 30px;
-  height: 25px;
+  width: 28px;
+  height: 22px;
   cursor: pointer;
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1001;
+  flex-shrink: 0;
 }
 
 .wd-hamburger-icon .wd-bar {
@@ -81,6 +84,11 @@
   background-color: #d5b85a;
   border-radius: 5px;
   transition: all 0.3s ease;
+}
+
+/* Sidebar Overlay — hidden on desktop */
+.wd-sidebar-overlay {
+  display: none;
 }
 
 /* ========== MAIN LAYOUT ========== */
@@ -153,7 +161,7 @@
   flex: 1;
   margin-top: 50px;
   padding: 24px;
-  margin-left: 300px;
+  margin-left: 230px;
   min-height: calc(100vh - 83px);
 }
 
@@ -218,6 +226,7 @@
   font-size: 14px;
   background: #fff;
   transition: all 0.2s;
+  box-sizing: border-box;
 }
 
 .wd-search-wrapper .wd-search-input:focus {
@@ -917,6 +926,29 @@
   cursor: pointer;
 }
 
+/* ========== INFO ROW (replaces inline flex styles) ========== */
+.wd-info-row {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+
+.wd-color-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wd-color-swatch {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  flex-shrink: 0;
+}
+
 /* ========== MEASUREMENTS ========== */
 .wd-measurement-section {
   margin: 16px 0;
@@ -1148,6 +1180,7 @@
   font-size: 14px;
   background: #fff;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
 .wd-search-input:focus {
@@ -1261,6 +1294,7 @@
 
 .wd-dropdown-info {
   flex: 1;
+  min-width: 0;
 }
 
 .wd-dropdown-info p {
@@ -1309,6 +1343,7 @@
 .wd-order-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Badges */
@@ -1515,7 +1550,8 @@
 
 /* ========== CALENDAR STYLES ========== */
 .wd-calendar-wrapper {
-  padding-right: 150px;
+  padding-right: 40px;
+  max-width: 800px;
 }
 
 .wd-ios-calendar {
@@ -1708,25 +1744,117 @@
   color: #d5b85a;
 }
 
-/* ========== RESPONSIVE ========== */
+
+/* ==============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================== */
+
+/* ---- LARGE TABLET / SMALL DESKTOP (1300px) ---- */
 @media (max-width: 1300px) {
   .wd-content-area {
-    margin-left: 220px;
+    margin-left: 240px;
     padding: 16px;
   }
 }
 
+/* ---- TABLET (1024px) — Sidebar collapses to hamburger ---- */
 @media (max-width: 1024px) {
+  /* Sidebar: slide-in like mobile */
+  .wd-sidebar {
+    left: -260px;
+    transition: left 0.3s ease;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    z-index: 99;
+  }
+
+  .wd-sidebar.wd-open {
+    left: 0;
+  }
+
+  /* Sidebar overlay: dark backdrop when sidebar is open */
+  .wd-sidebar-overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 98;
+  }
+
+  /* Content: full width since sidebar is collapsed */
+  .wd-content-area {
+    margin-left: 20px;
+    margin-right: 20px;
+    padding: 16px;
+  }
+
+  /* Hamburger: show on tablet */
+  .wd-hamburger-icon {
+    display: flex;
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    z-index: 1001;
+    flex-shrink: 0;
+  }
+
+  /* Header: proper flex spacing */
+  .wd-top-header {
+    padding: 10px 16px;
+    gap: 12px;
+  }
+
+  .wd-title {
+    font-size: 20px;
+    flex: 1;
+    text-align: center;
+  }
+
+  /* Desktop elements hidden */
+  .wd-desktop-only {
+    display: none;
+  }
+
+  .wd-mobile-only {
+    display: flex;
+  }
+
+  /* Orders section: full width */
+  .wd-orders-section {
+    max-width: 100%;
+  }
+
+  /* Filters: horizontal scroll */
   .wd-filter-dropdowns {
     overflow-x: auto;
     flex-wrap: nowrap;
     padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
   }
-  
+
   .wd-filter-dropdowns::-webkit-scrollbar {
     height: 4px;
   }
-  
+
+  .wd-filter-dropdowns::-webkit-scrollbar-thumb {
+    background: #ddd;
+    border-radius: 2px;
+  }
+
+  /* Info rows: tighter gap */
+  .wd-info-row {
+    gap: 24px;
+  }
+
+  /* Calendar */
+  .wd-calendar-wrapper {
+    padding-right: 20px;
+    max-width: 100%;
+  }
+
   .wd-ios-date-cell {
     min-height: 55px;
     padding: 10px 6px;
@@ -1743,36 +1871,104 @@
   }
 }
 
+/* ---- SMALL TABLET / LARGE PHONE (768px) ---- */
 @media (max-width: 768px) {
+  /* Header */
+  .wd-top-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .wd-title {
+    font-size: 16px;
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Main layout */
+  .wd-main-layout {
+    margin-top: 70px;
+    min-height: calc(100vh - 70px);
+  }
+
+  .wd-sidebar {
+    top: 60px;
+    height: calc(100vh - 60px);
+  }
+
+  /* Content */
+  .wd-content-area {
+    margin-left: 12px;
+    margin-right: 12px;
+    padding: 12px;
+    margin-top: 40px;
+  }
+
+  /* Search & Sort Bar: stack vertically */
   .wd-search-sort-bar {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .wd-search-wrapper {
+    min-width: 0;
     max-width: none;
   }
-  
+
   .wd-sort-export {
     justify-content: space-between;
   }
-  
+
+  .wd-sort-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Orders Header */
+  .wd-orders-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Order Card: stack body vertically */
   .wd-card-body {
     flex-direction: column;
+    padding: 12px 14px;
   }
-  
+
+  .wd-card-header {
+    padding: 10px 14px;
+  }
+
   .wd-card-image {
     width: 100%;
     max-width: 200px;
     margin: 0 auto;
   }
-  
+
   .wd-card-actions {
     flex-direction: row;
     justify-content: flex-start;
+    flex-wrap: wrap;
     margin-top: 12px;
+    gap: 8px;
   }
-  
+
+  .wd-card-actions .wd-status-select {
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* Order Amount */
+  .wd-order-amount {
+    font-size: 16px;
+  }
+
+  /* Dropdown panel: bottom sheet on mobile */
   .wd-dropdown-panel {
     position: fixed;
     top: auto;
@@ -1782,43 +1978,40 @@
     border-radius: 16px 16px 0 0;
     max-height: 70vh;
     overflow-y: auto;
+    z-index: 200;
+    min-width: unset;
+    animation: dropdownSlideUp 0.25s ease;
   }
-  
+
+  @keyframes dropdownSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Legacy search */
   .wd-search-input {
     padding: 10px 36px 10px 14px;
     font-size: 13px;
   }
-  
-  .wd-desktop-only {
-    display: none;
-  }
 
-  .wd-mobile-only {
-    display: flex;
-  }
-
-  .wd-sidebar {
-    left: -240px;
-    transition: left 0.3s ease;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-    z-index: 99;
-  }
-
-  .wd-sidebar.wd-open {
-    left: 0;
-  }
-
-  .wd-content-area {
-    margin-left: 20px;
-    padding: 16px;
-  }
-
-  .wd-orders-header {
+  /* Legacy order header */
+  .wd-order-header-row {
     flex-direction: column;
+    gap: 12px;
     align-items: flex-start;
-    gap: 8px;
   }
 
+  .wd-order-actions {
+    width: 100%;
+  }
+
+  /* Legacy dropdown content */
   .wd-dropdown-content {
     flex-direction: column;
   }
@@ -1830,18 +2023,41 @@
     margin: 0 auto;
   }
 
+  /* Info rows: stack vertically on mobile */
+  .wd-info-row {
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+  }
+
+  .wd-complete-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .wd-order-dropdown {
+    padding: 16px;
+  }
+
+  /* Measurements */
+  .wd-measurement-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Alteration */
+  .wd-alteration-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wd-attachment-thumb {
+    width: 60px;
+    height: 60px;
+  }
+
+  /* Pagination */
   .wd-pagination {
     flex-wrap: wrap;
     gap: 8px;
-  }
-  
-  .wd-hamburger-icon {
-    display: flex;
-    position: absolute;
-    left: 5px;   
-    top: 12%;
-    transform: translateY(-50%);
-    z-index: 1001;
   }
 
   .wd-pagination-pages {
@@ -1851,34 +2067,23 @@
     margin-top: 8px;
   }
 
-  .wd-measurement-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
+  /* Filter tabs */
   .wd-filter-tabs {
     justify-content: center;
   }
-  
+
   .wd-filter-tab {
     padding: 6px 12px;
     font-size: 12px;
   }
-  
-  .wd-order-header-row {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
+
+  /* Calendar */
+  .wd-calendar-wrapper {
+    padding: 16px;
+    padding-right: 16px;
+    max-width: 100%;
   }
-  
-  .wd-alteration-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .wd-attachment-thumb {
-    width: 60px;
-    height: 60px;
-  }
-  
+
   .wd-ios-calendar {
     padding: 16px;
   }
@@ -1915,30 +2120,194 @@
     padding: 5px 8px;
   }
 
-  .wd-calendar-wrapper {
-    padding: 16px;
+  /* Image modal */
+  .wd-image-modal-content {
+    max-width: 95vw;
+    max-height: 85vh;
+  }
+
+  /* Applied filters */
+  .wd-applied-filters {
+    padding: 10px 12px;
+    gap: 8px;
   }
 }
 
+/* ---- PHONE (480px) ---- */
 @media (max-width: 480px) {
   .wd-top-header {
-    padding: 16px 24px;
-    gap: 70px;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .wd-title {
+    font-size: 14px;
   }
 
   .wd-main-layout {
-    margin-top: 90px;
+    margin-top: 60px;
   }
 
   .wd-sidebar {
-    top: 110px;
-    height: calc(100vh - 70px);
+    top: 55px;
+    height: calc(100vh - 55px);
+    width: 200px;
   }
 
-  .wd-order-card {
-    padding: 16px;
+  .wd-content-area {
+    margin-left: 8px;
+    margin-right: 8px;
+    padding: 10px;
+    margin-top: 30px;
   }
 
+  .wd-section-title {
+    font-size: 20px;
+  }
+
+  .wd-orders-count {
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+
+  /* Search */
+  .wd-search-wrapper .wd-search-input {
+    padding: 10px 36px 10px 38px;
+    font-size: 13px;
+  }
+
+  .wd-sort-select {
+    padding: 9px 10px;
+    font-size: 13px;
+  }
+
+  /* Status tabs */
+  .wd-status-tabs {
+    gap: 6px;
+  }
+
+  .wd-status-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  /* Filter buttons */
+  .wd-filter-btn {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  /* Order card */
+  .wd-order-dropdown {
+    padding: 14px;
+    margin-bottom: 14px;
+    border-radius: 8px;
+  }
+
+  .wd-dropdown-title {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .wd-dropdown-content {
+    gap: 14px;
+  }
+
+  .wd-dropdown-img {
+    width: 100px;
+    min-width: 100px;
+    height: 130px;
+  }
+
+  .wd-dropdown-info p {
+    font-size: 13px;
+    margin: 4px 0;
+  }
+
+  /* Info rows */
+  .wd-info-row {
+    gap: 2px;
+  }
+
+  .wd-color-swatch {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Badges */
+  .wd-badge {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  .wd-order-badges {
+    gap: 6px;
+  }
+
+  .wd-order-actions {
+    gap: 6px;
+  }
+
+  /* Buttons */
+  .wd-pdf-Btn {
+    padding: 7px 14px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  .wd-complete-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    margin-top: 14px;
+  }
+
+  .wd-btn-secondary {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  /* Order Card */
+  .wd-card-header {
+    padding: 10px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .wd-card-body {
+    padding: 10px 12px;
+    gap: 12px;
+  }
+
+  .wd-card-image {
+    max-width: 160px;
+    height: 140px;
+  }
+
+  .wd-order-amount {
+    font-size: 15px;
+  }
+
+  .wd-customer-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .wd-customer-name {
+    font-size: 14px;
+  }
+
+  .wd-meta-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .wd-meta-item {
+    font-size: 12px;
+  }
+
+  /* Pagination */
   .wd-pagination-btn {
     padding: 6px 12px;
     font-size: 13px;
@@ -1956,39 +2325,71 @@
     font-size: 13px;
   }
 
+  /* Measurements */
   .wd-measurement-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wd-measurement-card {
+    padding: 8px 10px;
   }
 
   .wd-measurement-card-values {
     gap: 4px 12px;
   }
-  
-  .wd-status-tabs {
-    gap: 6px;
-  }
-  
-  .wd-status-tab {
-    padding: 8px 12px;
+
+  .wd-measurement-card-title {
     font-size: 12px;
   }
-  
-  .wd-filter-btn {
-    padding: 8px 12px;
+
+  .wd-measurement-item {
     font-size: 12px;
   }
-  
-  .wd-meta-row {
-    flex-direction: column;
-    gap: 6px;
+
+  /* Alteration */
+  .wd-alteration-details {
+    padding: 12px;
   }
-  
-  .wd-customer-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+
+  .wd-alt-label {
+    font-size: 10px;
   }
-  
+
+  .wd-alt-value {
+    font-size: 13px;
+  }
+
+  .wd-status-select {
+    min-width: 120px;
+    font-size: 12px;
+    padding: 7px 10px;
+  }
+
+  .wd-parent-order-link {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  /* Filter chips */
+  .wd-filter-chip {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  .wd-applied-label {
+    font-size: 12px;
+  }
+
+  .wd-clear-all {
+    font-size: 12px;
+  }
+
+  /* Calendar */
+  .wd-calendar-wrapper {
+    padding: 12px;
+    padding-right: 12px;
+  }
+
   .wd-ios-calendar {
     padding: 12px;
   }
@@ -2029,14 +2430,88 @@
   }
 
   .wd-calendar-orders-section {
-    padding: 14px;
+    padding: 12px;
   }
 
   .wd-calendar-order-item p {
     font-size: 13px;
   }
 
-  .wd-calendar-wrapper {
-    padding: 12px;
+  .wd-calendar-title {
+    font-size: 14px;
+  }
+
+  /* Image modal */
+  .wd-image-modal-content {
+    max-width: 98vw;
+  }
+
+  .wd-image-full {
+    max-height: 70vh;
+  }
+
+  .wd-image-nav {
+    gap: 14px;
+  }
+
+  .wd-image-nav button {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .wd-image-close {
+    top: -32px;
+    font-size: 20px;
+  }
+}
+
+/* ---- VERY SMALL PHONES (360px) ---- */
+@media (max-width: 360px) {
+  .wd-top-header {
+    padding: 8px 6px;
+  }
+
+  .wd-title {
+    font-size: 13px;
+  }
+
+  .wd-content-area {
+    padding: 8px;
+    margin-left: 4px;
+    margin-right: 4px;
+  }
+
+  .wd-section-title {
+    font-size: 18px;
+  }
+
+  .wd-order-dropdown {
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .wd-dropdown-img {
+    width: 80px;
+    min-width: 80px;
+    height: 110px;
+  }
+
+  .wd-dropdown-info p {
+    font-size: 12px;
+  }
+
+  .wd-status-tab {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .wd-filter-btn {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .wd-sidebar {
+    width: 180px;
   }
 }
