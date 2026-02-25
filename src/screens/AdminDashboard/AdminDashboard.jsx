@@ -11,7 +11,7 @@ import NotificationBell from "../../components/NotificationBell";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    PieChart, Pie, Cell
+    PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
 
 // Status options
@@ -57,6 +57,20 @@ const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL"
 // Chart colors
 const CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B", "#DAA520", "#B8860B", "#CD853F", "#DEB887"];
 const PIE_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37"];
+
+// Channel filter options
+const CHANNEL_OPTIONS = [
+    { value: "all", label: "All Channels" },
+    { value: "store", label: "Stores" },
+    { value: "website", label: "Website" },
+    { value: "b2b", label: "B2B" },
+    { value: "exhibition", label: "Exhibitions" },
+];
+
+// Placeholder badge for data not yet connected
+const PlaceholderBadge = ({ label }) => (
+    <span className="placeholder-badge" title="Data source pending — will be connected later">⏳ {label || "Placeholder"}</span>
+);
 
 // Growth Indicator Component
 const GrowthIndicator = ({ value, inverse = false }) => {
@@ -123,6 +137,18 @@ export default function AdminDashboard() {
     const [accountsDateTo, setAccountsDateTo] = useState("");
     const [accountsStatus, setAccountsStatus] = useState("");
     const [accountsPage, setAccountsPage] = useState(1);
+
+    // Clients tab states
+    const [clientsSearch, setClientsSearch] = useState("");
+    const [clientsPage, setClientsPage] = useState(1);
+    const [clientsSortBy, setClientsSortBy] = useState("totalSpend");
+
+    // B2B tab states
+    const [b2bSearch, setB2bSearch] = useState("");
+    const [b2bPage, setB2bPage] = useState(1);
+
+    // Channel filter for dashboard
+    const [channelFilter, setChannelFilter] = useState("all");
 
     // Analytics states
     const [analyticsTimeline, setAnalyticsTimeline] = useState("monthly");
@@ -808,6 +834,379 @@ export default function AdminDashboard() {
         invoice: filteredAccountItems.reduce((sum, i) => sum + i.invoice_value, 0),
     }), [filteredAccountItems]);
 
+    // ═══════════════════════════════════════════════════════════
+    // NEW: ENHANCED DASHBOARD STATS (Channel breakdown, AOV)
+    // ═══════════════════════════════════════════════════════════
+    const enhancedDashboardStats = useMemo(() => {
+        const dateRange = getDateRange(timeline);
+        const validOrders = orders.filter(o => {
+            if (isLxrtsOrder(o)) return false;
+            const d = new Date(o.created_at);
+            return d >= dateRange.start && d <= dateRange.end;
+        });
+
+        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalOrders = validOrders.length;
+        const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+        const totalItems = validOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
+
+        // Channel breakdown
+        const channelMap = {};
+        validOrders.forEach(o => {
+            const ch = o.salesperson_store || "Other";
+            if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
+            channelMap[ch].revenue += Number(o.grand_total || 0);
+            channelMap[ch].orders += 1;
+        });
+        const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
+
+        // Revenue mix %
+        const revenueMix = channelBreakdown.map(ch => ({
+            ...ch,
+            percent: totalRevenue > 0 ? ((ch.revenue / totalRevenue) * 100).toFixed(1) : 0
+        }));
+
+        return { avgOrderValue, totalItems, channelBreakdown, revenueMix };
+    }, [orders, timeline, customDateFrom, customDateTo]);
+
+    // ═══════════════════════════════════════════════════════════
+    // NEW: ORDER VALUE TREND (Daily line chart)
+    // ═══════════════════════════════════════════════════════════
+    const orderValueTrend = useMemo(() => {
+        const dateRange = getDateRange(timeline);
+        const validOrders = orders.filter(o => {
+            if (isLxrtsOrder(o)) return false;
+            const d = new Date(o.created_at);
+            return d >= dateRange.start && d <= dateRange.end;
+        });
+        const buckets = {};
+        validOrders.forEach(o => {
+            const d = new Date(o.created_at);
+            const key = `${d.getDate()}/${d.getMonth() + 1}`;
+            if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
+            buckets[key].revenue += Number(o.grand_total || 0);
+            buckets[key].orders += 1;
+        });
+        return Object.values(buckets)
+            .sort((a, b) => a.fullDate.localeCompare(b.fullDate))
+            .map(b => ({ ...b, aov: b.orders > 0 ? Math.round(b.revenue / b.orders) : 0 }));
+    }, [orders, timeline, customDateFrom, customDateTo]);
+
+    // ═══════════════════════════════════════════════════════════
+    // NEW: ENHANCED ANALYTICS (bottom products, colors, flagged)
+    // ═══════════════════════════════════════════════════════════
+    const enhancedAnalytics = useMemo(() => {
+        const dateRange = getAnalyticsDateRange(analyticsTimeline);
+        const validOrders = orders.filter(o => {
+            if (isLxrtsOrder(o)) return false;
+            if (o.status === "cancelled") return false;
+            const d = new Date(o.created_at);
+            return d >= dateRange.start && d <= dateRange.end;
+        });
+
+        // Products
+        const productSales = {};
+        validOrders.forEach(order => {
+            (order.items || []).forEach(item => {
+                const name = item.product_name || "Unknown";
+                if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
+                productSales[name].sales += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].count += Number(item.quantity || 1);
+            });
+        });
+        const sortedProducts = Object.values(productSales).sort((a, b) => b.sales - a.sales);
+        const bottomProducts = [...sortedProducts].sort((a, b) => a.sales - b.sales).slice(0, 10);
+
+        // Colors
+        const colorSales = {};
+        validOrders.forEach(order => {
+            (order.items || []).forEach(item => {
+                const topColor = item.top_color?.name || item.color?.name;
+                const bottomColor = item.bottom_color?.name;
+                const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
+                if (topColor && topColor !== "Unknown") {
+                    if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
+                    colorSales[topColor].sales += bottomColor ? itemSales / 2 : itemSales;
+                    colorSales[topColor].count += 1;
+                }
+                if (bottomColor) {
+                    if (!colorSales[bottomColor]) colorSales[bottomColor] = { name: bottomColor, sales: 0, count: 0 };
+                    colorSales[bottomColor].sales += itemSales / 2;
+                    colorSales[bottomColor].count += 1;
+                }
+            });
+        });
+        const sortedColors = Object.values(colorSales).sort((a, b) => b.sales - a.sales);
+        const bottomColors = [...sortedColors].sort((a, b) => a.sales - b.sales).slice(0, 5);
+
+        // Alterations: flagged + avg per outfit
+        const alterationOrders = orders.filter(o => {
+            if (isLxrtsOrder(o)) return false;
+            if (!o.is_alteration) return false;
+            const d = new Date(o.created_at);
+            return d >= dateRange.start && d <= dateRange.end;
+        });
+
+        const outfitAlterations = {};
+        alterationOrders.forEach(order => {
+            (order.items || []).forEach(item => {
+                const outfit = item.product_name || "Unknown";
+                if (!outfitAlterations[outfit]) outfitAlterations[outfit] = { name: outfit, count: 0 };
+                outfitAlterations[outfit].count += 1;
+            });
+        });
+        const totalAlterations = alterationOrders.length;
+        const totalProductsSold = Object.values(productSales).reduce((s, p) => s + p.count, 0);
+        const avgAlterationsPerOutfit = totalProductsSold > 0 ? (totalAlterations / totalProductsSold) : 0;
+        const flaggedAlterations = Object.values(outfitAlterations).filter(a => a.count >= 3).sort((a, b) => b.count - a.count);
+
+        return { bottomProducts, bottomColors, avgAlterationsPerOutfit, flaggedAlterations, totalAlterations };
+    }, [orders, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
+
+    // ═══════════════════════════════════════════════════════════
+    // NEW: CLIENT ANALYTICS
+    // ═══════════════════════════════════════════════════════════
+    const clientAnalytics = useMemo(() => {
+        const allOrders = orders.filter(o => !isLxrtsOrder(o));
+        const clientMap = {};
+
+        allOrders.forEach(order => {
+            const phone = order.delivery_phone || order.phone;
+            const name = order.delivery_name || "Unknown";
+            if (!phone) return;
+            if (!clientMap[phone]) {
+                clientMap[phone] = {
+                    name, phone,
+                    city: order.delivery_city || order.city || "-",
+                    totalSpend: 0, orderCount: 0, items: 0,
+                    firstOrder: order.created_at, lastOrder: order.created_at,
+                    stores: new Set(),
+                };
+            }
+            const c = clientMap[phone];
+            c.totalSpend += Number(order.grand_total || 0);
+            c.orderCount += 1;
+            c.items += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
+            if (order.salesperson_store) c.stores.add(order.salesperson_store);
+            if (new Date(order.created_at) < new Date(c.firstOrder)) c.firstOrder = order.created_at;
+            if (new Date(order.created_at) > new Date(c.lastOrder)) c.lastOrder = order.created_at;
+            // Update name if blank
+            if (c.name === "Unknown" && name !== "Unknown") c.name = name;
+        });
+
+        const clients = Object.values(clientMap).map(c => ({
+            ...c, stores: Array.from(c.stores).join(", "),
+            avgOrderValue: c.orderCount > 0 ? c.totalSpend / c.orderCount : 0,
+        }));
+
+        const totalClients = clients.length;
+        const repeatClients = clients.filter(c => c.orderCount > 1);
+        const repeatRate = totalClients > 0 ? ((repeatClients.length / totalClients) * 100) : 0;
+
+        // New clients in current period
+        const dateRange = getDateRange(timeline);
+        const newClients = clients.filter(c => {
+            const first = new Date(c.firstOrder);
+            return first >= dateRange.start && first <= dateRange.end;
+        });
+
+        // Sort by selected criteria
+        let sortedClients = [...clients];
+        if (clientsSortBy === "totalSpend") sortedClients.sort((a, b) => b.totalSpend - a.totalSpend);
+        else if (clientsSortBy === "orderCount") sortedClients.sort((a, b) => b.orderCount - a.orderCount);
+        else if (clientsSortBy === "recent") sortedClients.sort((a, b) => new Date(b.lastOrder) - new Date(a.lastOrder));
+
+        // Search
+        if (clientsSearch.trim()) {
+            const q = clientsSearch.toLowerCase();
+            sortedClients = sortedClients.filter(c =>
+                c.name?.toLowerCase().includes(q) || c.phone?.includes(q) || c.city?.toLowerCase().includes(q)
+            );
+        }
+
+        const clientsTotalPages = Math.ceil(sortedClients.length / ITEMS_PER_PAGE);
+        const currentClients = sortedClients.slice((clientsPage - 1) * ITEMS_PER_PAGE, clientsPage * ITEMS_PER_PAGE);
+
+        // Segmentation
+        const segmentation = [
+            { name: "New", value: newClients.length },
+            { name: "One-time", value: clients.filter(c => c.orderCount === 1).length },
+            { name: "Repeat (2-3)", value: clients.filter(c => c.orderCount >= 2 && c.orderCount <= 3).length },
+            { name: "Loyal (4+)", value: clients.filter(c => c.orderCount >= 4).length },
+        ];
+
+        // Per-store breakdown
+        const storeClients = {};
+        clients.forEach(c => {
+            (c.stores || "").split(", ").filter(Boolean).forEach(store => {
+                if (!storeClients[store]) storeClients[store] = { name: store, count: 0, spend: 0 };
+                storeClients[store].count += 1;
+                storeClients[store].spend += c.totalSpend;
+            });
+        });
+
+        return {
+            totalClients, repeatRate: repeatRate.toFixed(1), newClientsCount: newClients.length,
+            currentClients, clientsTotalPages, sortedClients,
+            segmentation, storeClients: Object.values(storeClients).sort((a, b) => b.spend - a.spend),
+            topClients: [...clients].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 10),
+        };
+    }, [orders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy]);
+
+    // ═══════════════════════════════════════════════════════════
+    // NEW: B2B STATS
+    // ═══════════════════════════════════════════════════════════
+    const b2bStats = useMemo(() => {
+        const b2bOrders = orders.filter(o => {
+            if (isLxrtsOrder(o)) return false;
+            return (o.salesperson_store || "").toLowerCase() === "b2b";
+        });
+
+        const dateRange = getDateRange(timeline);
+        const currentB2b = b2bOrders.filter(o => {
+            const d = new Date(o.created_at);
+            return d >= dateRange.start && d <= dateRange.end;
+        });
+
+        const clientSales = {};
+        currentB2b.forEach(o => {
+            const client = o.delivery_name || o.vendor_name || "Unknown";
+            if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
+            clientSales[client].sales += Number(o.grand_total || 0);
+            clientSales[client].orders += 1;
+            clientSales[client].advance += Number(o.advance_payment || 0);
+            clientSales[client].balance += Math.max(0, Number(o.grand_total || 0) - Number(o.advance_payment || 0));
+        });
+
+        const allClientSales = Object.values(clientSales).sort((a, b) => b.sales - a.sales);
+        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalB2bAdvance = currentB2b.reduce((s, o) => s + Number(o.advance_payment || 0), 0);
+
+        // Search
+        let filteredB2b = allClientSales;
+        if (b2bSearch.trim()) {
+            const q = b2bSearch.toLowerCase();
+            filteredB2b = filteredB2b.filter(c => c.name.toLowerCase().includes(q));
+        }
+
+        const b2bTotalPages = Math.ceil(filteredB2b.length / ITEMS_PER_PAGE);
+        const currentB2bClients = filteredB2b.slice((b2bPage - 1) * ITEMS_PER_PAGE, b2bPage * ITEMS_PER_PAGE);
+
+        return {
+            totalB2bRevenue, totalB2bOrders: currentB2b.length, totalB2bAdvance,
+            totalB2bBalance: totalB2bRevenue - totalB2bAdvance,
+            currentB2bClients, b2bTotalPages, allClientSales,
+            advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
+        };
+    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage]);
+
+    // ═══════════════════════════════════════════════════════════
+    // NEW: ENHANCED INVENTORY (Delayed deliveries)
+    // ═══════════════════════════════════════════════════════════
+    const enhancedInventoryStats = useMemo(() => {
+        const now = new Date();
+        const activeOrders = orders.filter(o =>
+            !isLxrtsOrder(o) &&
+            o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled"
+        );
+        const delayedDeliveries = activeOrders.filter(o => {
+            if (!o.delivery_date) return false;
+            return new Date(o.delivery_date) < now;
+        });
+
+        // Store-wise product count
+        const storeProducts = {};
+        products.forEach(p => {
+            const store = p.store || "All Stores";
+            if (!storeProducts[store]) storeProducts[store] = { name: store, count: 0, totalInventory: 0 };
+            storeProducts[store].count += 1;
+            storeProducts[store].totalInventory += Number(p.inventory || 0);
+        });
+
+        return {
+            delayedCount: delayedDeliveries.length,
+            delayedOrders: delayedDeliveries.slice(0, 20),
+            storeProducts: Object.values(storeProducts).sort((a, b) => b.totalInventory - a.totalInventory),
+        };
+    }, [orders, products]);
+
+    // ═══════════════════════════════════════════════════════════
+    // NEW: FINANCIAL STATS (Discounts by channel, salesperson)
+    // ═══════════════════════════════════════════════════════════
+    const financialStats = useMemo(() => {
+        const dateRange = getDateRange(timeline);
+        const validOrders = orders.filter(o => {
+            if (isLxrtsOrder(o)) return false;
+            const d = new Date(o.created_at);
+            return d >= dateRange.start && d <= dateRange.end;
+        });
+
+        const totalDiscount = validOrders.reduce((s, o) => s + Number(o.discount_amount || 0), 0);
+        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const grossRevenue = totalRevenue + totalDiscount;
+        const discountPercent = grossRevenue > 0 ? ((totalDiscount / grossRevenue) * 100).toFixed(1) : 0;
+
+        // By channel
+        const channelDiscounts = {};
+        validOrders.forEach(o => {
+            const ch = o.salesperson_store || "Other";
+            if (!channelDiscounts[ch]) channelDiscounts[ch] = { name: ch, discount: 0, revenue: 0 };
+            channelDiscounts[ch].discount += Number(o.discount_amount || 0);
+            channelDiscounts[ch].revenue += Number(o.grand_total || 0);
+        });
+
+        return {
+            totalDiscount, discountPercent,
+            channelDiscounts: Object.values(channelDiscounts).sort((a, b) => b.discount - a.discount),
+        };
+    }, [orders, timeline, customDateFrom, customDateTo]);
+
+    // ═══════════════════════════════════════════════════════════
+    // NEW: TARGETS PLACEHOLDER DATA
+    // ═══════════════════════════════════════════════════════════
+    const targetsData = useMemo(() => {
+        // Placeholder: monthly targets will come from a targets table later
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const currentMonth = new Date().getMonth();
+
+        // Calculate actual monthly revenue from orders
+        const monthlyRevenue = {};
+        const currentYear = new Date().getFullYear();
+        orders.filter(o => !isLxrtsOrder(o) && new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
+            const m = new Date(o.created_at).getMonth();
+            if (!monthlyRevenue[m]) monthlyRevenue[m] = 0;
+            monthlyRevenue[m] += Number(o.grand_total || 0);
+        });
+
+        const monthlyData = months.map((m, i) => ({
+            month: m,
+            target: 0, // Placeholder — will be set from targets table
+            achieved: monthlyRevenue[i] || 0,
+            isFuture: i > currentMonth,
+        }));
+
+        // Store-wise growth (compare current period to previous)
+        const dateRange = getDateRange(timeline);
+        const prevRange = {
+            start: new Date(dateRange.start.getTime() - (dateRange.end - dateRange.start)),
+            end: new Date(dateRange.start.getTime() - 1),
+        };
+        const storeGrowth = {};
+        orders.filter(o => !isLxrtsOrder(o)).forEach(o => {
+            const store = o.salesperson_store || "Other";
+            const d = new Date(o.created_at);
+            if (!storeGrowth[store]) storeGrowth[store] = { name: store, current: 0, previous: 0 };
+            if (d >= dateRange.start && d <= dateRange.end) storeGrowth[store].current += Number(o.grand_total || 0);
+            else if (d >= prevRange.start && d <= prevRange.end) storeGrowth[store].previous += Number(o.grand_total || 0);
+        });
+        const storeGrowthList = Object.values(storeGrowth).map(s => ({
+            ...s,
+            growth: s.previous > 0 ? (((s.current - s.previous) / s.previous) * 100).toFixed(1) : (s.current > 0 ? 100 : 0),
+        })).sort((a, b) => Number(b.growth) - Number(a.growth));
+
+        return { monthlyData, storeGrowthList };
+    }, [orders, timeline, customDateFrom, customDateTo]);
+
     const handleGeneratePdf = async (order, type = "customer") => {
         setPdfLoading(order.id);
         try {
@@ -821,6 +1220,8 @@ export default function AdminDashboard() {
     useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
     useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
     useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus]);
+    useEffect(() => { setClientsPage(1); }, [clientsSearch, clientsSortBy]);
+    useEffect(() => { setB2bPage(1); }, [b2bSearch]);
 
     useEffect(() => {
         if (activeTab === "dashboard") {
@@ -878,6 +1279,9 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
+                        <button className={`admin-nav-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Clients</button>
+                        <button className={`admin-nav-item ${activeTab === "b2b" ? "active" : ""}`} onClick={() => { setActiveTab("b2b"); setShowSidebar(false); }}>B2B</button>
+                        <button className={`admin-nav-item ${activeTab === "targets" ? "active" : ""}`} onClick={() => { setActiveTab("targets"); setShowSidebar(false); }}>Targets</button>
                         <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button>
                     </nav>
                 </aside>
@@ -955,6 +1359,96 @@ export default function AdminDashboard() {
                                     {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.cancelledGrowth} inverse={true} />}
                                 </div>
                             </div>
+
+                            {/* Extended KPIs */}
+                            <div className="admin-stats-grid overview-grid" style={{ marginTop: 0 }}>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Avg Order Value</span>
+                                    <span className="stat-value">₹{formatIndianNumber(enhancedDashboardStats.avgOrderValue.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Items Sold</span>
+                                    <span className="stat-value">{formatIndianNumber(enhancedDashboardStats.totalItems)}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Refund Value</span>
+                                    <span className="stat-value">₹0</span>
+                                    <PlaceholderBadge label="Refund data pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Refund Qty</span>
+                                    <span className="stat-value">0</span>
+                                    <PlaceholderBadge label="Refund data pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Repeat Customer Rate</span>
+                                    <span className="stat-value">{clientAnalytics.repeatRate}%</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Gross Margin</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="COGS data pending" />
+                                </div>
+                            </div>
+
+                            {/* Channel Revenue Breakdown + Order Value Trend */}
+                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Revenue by Channel</h3>
+                                    {enhancedDashboardStats.channelBreakdown.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie data={enhancedDashboardStats.channelBreakdown} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="revenue"
+                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
+                                                    {enhancedDashboardStats.channelBreakdown.map((_, i) => (
+                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`, "Revenue"]} />
+                                                <Legend verticalAlign="bottom" height={36} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Revenue Mix %</h3>
+                                    {enhancedDashboardStats.revenueMix.length > 0 ? (
+                                        <div className="revenue-mix-list">
+                                            {enhancedDashboardStats.revenueMix.map((ch, i) => (
+                                                <div key={i} className="revenue-mix-row">
+                                                    <div className="revenue-mix-info">
+                                                        <span className="revenue-mix-dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}></span>
+                                                        <span className="revenue-mix-name">{ch.name}</span>
+                                                    </div>
+                                                    <div className="revenue-mix-bar-wrap">
+                                                        <div className="revenue-mix-bar" style={{ width: `${ch.percent}%`, background: PIE_COLORS[i % PIE_COLORS.length] }}></div>
+                                                    </div>
+                                                    <span className="revenue-mix-val">{ch.percent}%</span>
+                                                    <span className="revenue-mix-amt">₹{formatIndianNumber(ch.revenue.toFixed(0))}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                            </div>
+
+                            {/* Order Value Trend */}
+                            {orderValueTrend.length > 1 && (
+                                <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
+                                    <h3 className="chart-title">Order Value Trend</h3>
+                                    <ResponsiveContainer width="100%" height={280}>
+                                        <AreaChart data={orderValueTrend} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                                            <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
+                                            <Tooltip formatter={(v, name) => [`₹${formatIndianNumber(v)}`, name === "revenue" ? "Revenue" : "AOV"]} />
+                                            <Legend />
+                                            <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#d5b85a" fill="rgba(213,184,90,0.15)" strokeWidth={2} />
+                                            <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
 
                             {/* Inventory Overview */}
                             <h3 className="admin-subsection-title">Inventory Overview</h3>
@@ -1225,6 +1719,107 @@ export default function AdminDashboard() {
                                         <div className="no-chart-data">No alteration data available</div>
                                     )}
                                 </div>
+
+                                {/* 7. Bottom 10 Products */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Bottom 10 Products (Low Sales)</h3>
+                                    {enhancedAnalytics.bottomProducts.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={350}>
+                                            <BarChart data={enhancedAnalytics.bottomProducts} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
+                                                <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }}
+                                                    tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (active && payload?.length) {
+                                                        const item = enhancedAnalytics.bottomProducts.find(p => p.name === label);
+                                                        return (<div style={{ background: '#fff', border: '1px solid #ccc', padding: '10px', borderRadius: '4px' }}>
+                                                            <p style={{ margin: 0, fontWeight: 'bold' }}>{label}</p>
+                                                            <p style={{ margin: '5px 0 0' }}>Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                            <p style={{ margin: '5px 0 0' }}>Qty: {item?.count || 0}</p>
+                                                        </div>);
+                                                    }
+                                                    return null;
+                                                }} />
+                                                <Bar dataKey="sales" fill="#c62828" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+
+                                {/* 8. Bottom 5 Colors */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Bottom 5 Colors (Low Sales)</h3>
+                                    {enhancedAnalytics.bottomColors.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={350}>
+                                            <BarChart data={enhancedAnalytics.bottomColors} margin={{ top: 10, right: 30, left: 10, bottom: 70 }}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="name" interval={0} tick={{ fontSize: 11 }} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
+                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`, "Sales"]} />
+                                                <Bar dataKey="sales" fill="#e65100" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+
+                                {/* 9. Flagged Alterations (Repetitive) */}
+                                <div className="analytics-chart-card wide">
+                                    <h3 className="chart-title">🚩 Flagged: Repetitive Alterations (3+ on same outfit)</h3>
+                                    <p className="chart-subtitle">Avg alterations per outfit: {enhancedAnalytics.avgAlterationsPerOutfit.toFixed(2)} | Total alterations: {enhancedAnalytics.totalAlterations}</p>
+                                    {enhancedAnalytics.flaggedAlterations.length > 0 ? (
+                                        <div className="admin-table-wrapper" style={{ maxHeight: 300, overflow: 'auto' }}>
+                                            <table className="admin-table">
+                                                <thead><tr><th>Outfit / Product</th><th>Alteration Count</th><th>Status</th></tr></thead>
+                                                <tbody>
+                                                    {enhancedAnalytics.flaggedAlterations.map((a, i) => (
+                                                        <tr key={i} className="urgent-row">
+                                                            <td>{a.name}</td>
+                                                            <td><span className="urgent-badge" style={{ fontSize: 11 }}>{a.count} alterations</span></td>
+                                                            <td><span className="status-badge cancelled">Needs Review</span></td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : <div className="no-chart-data">No repetitive alterations flagged — all good!</div>}
+                                </div>
+
+                                {/* 10. Customisation Trends (Placeholder) */}
+                                <div className="analytics-chart-card wide">
+                                    <h3 className="chart-title">Customisation Trends</h3>
+                                    <div className="admin-stats-grid" style={{ marginBottom: 0 }}>
+                                        <div className="admin-stat-card overview-card">
+                                            <span className="stat-label">Length-related</span>
+                                            <span className="stat-value">—</span>
+                                            <PlaceholderBadge label="Measurement data aggregation pending" />
+                                        </div>
+                                        <div className="admin-stat-card overview-card">
+                                            <span className="stat-label">Fit & Structure</span>
+                                            <span className="stat-value">—</span>
+                                            <PlaceholderBadge label="Measurement data aggregation pending" />
+                                        </div>
+                                        <div className="admin-stat-card overview-card">
+                                            <span className="stat-label">Silhouette-wise</span>
+                                            <span className="stat-value">—</span>
+                                            <PlaceholderBadge label="Measurement data aggregation pending" />
+                                        </div>
+                                        <div className="admin-stat-card overview-card">
+                                            <span className="stat-label">Colour-driven</span>
+                                            <span className="stat-value">—</span>
+                                            <PlaceholderBadge label="Measurement data aggregation pending" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 11. High Return Styles (Placeholder) */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">High Return Styles (%)</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="Returns data pending" />
+                                        <span>Return tracking will be displayed here once connected</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1233,12 +1828,46 @@ export default function AdminDashboard() {
                     {activeTab === "inventory" && (
                         <div className="admin-inventory-tab">
                             <h2 className="admin-section-title">Inventory Management</h2>
-                            <div className="admin-stats-grid">
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Products</span><span className="stat-value">{inventoryStats.total}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Stock</span><span className="stat-value">{formatIndianNumber(inventoryStats.totalInventory)}</span></div></div>
                                 <div className="admin-stat-card warning"><div className="stat-info"><span className="stat-label">Low Stock (&lt;5)</span><span className="stat-value">{inventoryStats.lowStock}</span></div></div>
                                 <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value">{inventoryStats.outOfStock}</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Active LXRTS</span><span className="stat-value">{enhancedInventoryStats.totalProducts > 0 ? products.filter(p => p.sync_enabled).length : 0}</span></div></div>
+                                <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Delayed Deliveries</span><span className="stat-value">{enhancedInventoryStats.delayedCount}</span></div></div>
+                                <div className="admin-stat-card">
+                                    <div className="stat-info"><span className="stat-label">Consignment Inventory</span><span className="stat-value">—</span><PlaceholderBadge label="Consignment data pending" /></div>
+                                </div>
                             </div>
+
+                            {/* Delayed Deliveries Table */}
+                            {enhancedInventoryStats.delayedCount > 0 && (
+                                <div style={{ marginBottom: 20 }}>
+                                    <h3 className="admin-subsection-title">⚠️ Delayed Deliveries ({enhancedInventoryStats.delayedCount})</h3>
+                                    <div className="admin-table-wrapper">
+                                        <div className="admin-table-container">
+                                            <table className="admin-table">
+                                                <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Promise Date</th><th>Days Late</th><th>Status</th></tr></thead>
+                                                <tbody>
+                                                    {enhancedInventoryStats.delayedOrders.map(o => {
+                                                        const daysLate = Math.floor((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
+                                                        return (
+                                                            <tr key={o.id} className="urgent-row">
+                                                                <td><span className="order-id">{o.order_no || "-"}</span></td>
+                                                                <td>{o.delivery_name || "-"}</td>
+                                                                <td className="product-cell">{o.items?.[0]?.product_name || "-"}</td>
+                                                                <td>{formatDate(o.delivery_date)}</td>
+                                                                <td><span className="urgent-badge">{daysLate} days</span></td>
+                                                                <td><span className={`status-badge ${o.status}`}>{o.status}</span></td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="admin-toolbar">
                                 <div className="admin-search-wrapper">
@@ -1549,6 +2178,366 @@ export default function AdminDashboard() {
                                     <button onClick={() => setAccountsPage(p => Math.min(accountsTotalPages, p + 1))} disabled={accountsPage === accountsTotalPages}>Next</button>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* CLIENTS TAB */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "clients" && (
+                        <div className="admin-clients-tab">
+                            <h2 className="admin-section-title">Client Insights</h2>
+
+                            {/* Client Stats */}
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Clients</span>
+                                    <span className="stat-value">{formatIndianNumber(clientAnalytics.totalClients)}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">New Clients (Period)</span>
+                                    <span className="stat-value">{clientAnalytics.newClientsCount}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Repeat Rate</span>
+                                    <span className="stat-value">{clientAnalytics.repeatRate}%</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total SB Clients</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="SB client book pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Avg Client Age</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="DOB data pending" />
+                                </div>
+                            </div>
+
+                            {/* Client Segmentation + Store Breakdown */}
+                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Client Segmentation</h3>
+                                    {clientAnalytics.segmentation.some(s => s.value > 0) ? (
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie data={clientAnalytics.segmentation.filter(s => s.value > 0)} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="value"
+                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
+                                                    {clientAnalytics.segmentation.map((_, i) => (
+                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip />
+                                                <Legend verticalAlign="bottom" height={36} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Clients by Store</h3>
+                                    {clientAnalytics.storeClients.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={clientAnalytics.storeClients} margin={{ top: 10, right: 30, left: 10, bottom: 50 }}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
+                                                <YAxis />
+                                                <Tooltip />
+                                                <Bar dataKey="count" name="Clients" fill="#d5b85a" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                            </div>
+
+                            {/* Top Clients Table */}
+                            <h3 className="admin-subsection-title">Top Clients</h3>
+                            <div className="admin-toolbar">
+                                <div className="admin-search-wrapper">
+                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+                                    <input type="text" placeholder="Search name, phone, city..." value={clientsSearch} onChange={(e) => setClientsSearch(e.target.value)} className="admin-search-input" />
+                                    {clientsSearch && <button className="search-clear" onClick={() => setClientsSearch("")}>×</button>}
+                                </div>
+                                <select value={clientsSortBy} onChange={(e) => setClientsSortBy(e.target.value)} className="admin-sort-select">
+                                    <option value="totalSpend">Highest Spend</option>
+                                    <option value="orderCount">Most Orders</option>
+                                    <option value="recent">Most Recent</option>
+                                </select>
+                            </div>
+
+                            <div className="admin-table-wrapper">
+                                <div className="admin-table-container" style={{ minWidth: 900 }}>
+                                    <table className="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th><th>Name</th><th>Phone</th><th>City</th><th>Stores</th>
+                                                <th>Orders</th><th>Items</th><th>Lifetime Spend</th><th>Avg Order Value</th>
+                                                <th>First Order</th><th>Last Order</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {clientAnalytics.currentClients.length === 0 ?
+                                                <tr><td colSpan="11" className="no-data">No clients found</td></tr> :
+                                                clientAnalytics.currentClients.map((c, idx) => (
+                                                    <tr key={c.phone}>
+                                                        <td>{(clientsPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
+                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                        <td>{c.phone}</td>
+                                                        <td>{c.city}</td>
+                                                        <td>{c.stores || "-"}</td>
+                                                        <td>{c.orderCount}</td>
+                                                        <td>{c.items}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.totalSpend.toFixed(0))}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.avgOrderValue.toFixed(0))}</td>
+                                                        <td>{formatDate(c.firstOrder)}</td>
+                                                        <td>{formatDate(c.lastOrder)}</td>
+                                                    </tr>
+                                                ))
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {clientAnalytics.clientsTotalPages > 1 && (
+                                <div className="admin-pagination">
+                                    <button onClick={() => setClientsPage(p => Math.max(1, p - 1))} disabled={clientsPage === 1}>Prev</button>
+                                    <span>Page {clientsPage} of {clientAnalytics.clientsTotalPages}</span>
+                                    <button onClick={() => setClientsPage(p => Math.min(clientAnalytics.clientsTotalPages, p + 1))} disabled={clientsPage === clientAnalytics.clientsTotalPages}>Next</button>
+                                </div>
+                            )}
+
+                            {/* SB Client Book + Purchase History Placeholder */}
+                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">SB Client Book</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="SB client book data pending" />
+                                        <span>Store-based client assignments will appear here</span>
+                                    </div>
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Client Purchase History (12M)</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="12-month rolling view pending" />
+                                        <span>Monthly purchase trend per client will appear here</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* B2B TAB */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "b2b" && (
+                        <div className="admin-b2b-tab">
+                            <h2 className="admin-section-title">B2B & Vendor Overview</h2>
+
+                            {/* B2B Stats */}
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">B2B Revenue</span>
+                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bRevenue.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">B2B Orders</span>
+                                    <span className="stat-value">{b2bStats.totalB2bOrders}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Advance Collected</span>
+                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bAdvance.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card danger" style={{ borderLeft: '3px solid #c62828' }}>
+                                    <span className="stat-label">Balance Pending</span>
+                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bBalance.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Credit Exposure</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Credit limit data pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Buyout vs Consignment</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Order type data pending" />
+                                </div>
+                            </div>
+
+                            {/* Client-wise Sales Table */}
+                            <h3 className="admin-subsection-title">Client-wise Sales</h3>
+                            <div className="admin-toolbar">
+                                <div className="admin-search-wrapper">
+                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+                                    <input type="text" placeholder="Search B2B client..." value={b2bSearch} onChange={(e) => setB2bSearch(e.target.value)} className="admin-search-input" />
+                                    {b2bSearch && <button className="search-clear" onClick={() => setB2bSearch("")}>×</button>}
+                                </div>
+                            </div>
+
+                            <div className="admin-table-wrapper">
+                                <div className="admin-table-container">
+                                    <table className="admin-table">
+                                        <thead><tr><th>#</th><th>Client Name</th><th>Orders</th><th>Total Sales</th><th>Advance Paid</th><th>Balance Pending</th></tr></thead>
+                                        <tbody>
+                                            {b2bStats.currentB2bClients.length === 0 ?
+                                                <tr><td colSpan="6" className="no-data">No B2B clients found for this period</td></tr> :
+                                                b2bStats.currentB2bClients.map((c, idx) => (
+                                                    <tr key={c.name + idx}>
+                                                        <td>{(b2bPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
+                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                        <td>{c.orders}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
+                                                        <td className="amount" style={{ color: c.balance > 0 ? '#c62828' : '#2e7d32', fontWeight: 600 }}>
+                                                            ₹{formatIndianNumber(c.balance.toFixed(0))}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {b2bStats.b2bTotalPages > 1 && (
+                                <div className="admin-pagination">
+                                    <button onClick={() => setB2bPage(p => Math.max(1, p - 1))} disabled={b2bPage === 1}>Prev</button>
+                                    <span>Page {b2bPage} of {b2bStats.b2bTotalPages}</span>
+                                    <button onClick={() => setB2bPage(p => Math.min(b2bStats.b2bTotalPages, p + 1))} disabled={b2bPage === b2bStats.b2bTotalPages}>Next</button>
+                                </div>
+                            )}
+
+                            {/* Advance Pending Clients */}
+                            {b2bStats.advancePending.length > 0 && (
+                                <div style={{ marginTop: 20 }}>
+                                    <h3 className="admin-subsection-title">⚠️ Advance Pending Clients</h3>
+                                    <div className="admin-table-wrapper">
+                                        <div className="admin-table-container">
+                                            <table className="admin-table">
+                                                <thead><tr><th>Client</th><th>Total Sales</th><th>Advance Paid</th><th>Balance Due</th></tr></thead>
+                                                <tbody>
+                                                    {b2bStats.advancePending.slice(0, 15).map((c, i) => (
+                                                        <tr key={i} className="urgent-row">
+                                                            <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                            <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
+                                                            <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
+                                                            <td className="amount" style={{ color: '#c62828', fontWeight: 700 }}>₹{formatIndianNumber(c.balance.toFixed(0))}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Buyout vs Consignment Placeholder */}
+                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Buyout vs Consignment Mix</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="Order type classification pending" />
+                                        <span>Buyout and consignment breakdown will appear here</span>
+                                    </div>
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Client Credit Exposure</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="Credit limit tracking pending" />
+                                        <span>Credit utilization per B2B client will appear here</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* TARGETS TAB */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "targets" && (
+                        <div className="admin-targets-tab">
+                            <h2 className="admin-section-title">Targets & Growth</h2>
+
+                            {/* Monthly Targets vs Achieved */}
+                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
+                                <h3 className="chart-title">Monthly Targets vs Achieved ({new Date().getFullYear()})</h3>
+                                <p className="chart-subtitle"><PlaceholderBadge label="Targets not yet set — showing actual revenue only" /></p>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={targetsData.monthlyData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                                        <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                                        <Tooltip formatter={(v, name) => [`₹${formatIndianNumber(v)}`, name === "target" ? "Target" : "Achieved"]} />
+                                        <Legend />
+                                        <Bar dataKey="target" name="Target" fill="#e0e0e0" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="achieved" name="Achieved" fill="#d5b85a" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            {/* Store Growth % */}
+                            <h3 className="admin-subsection-title">Store / Channel Growth</h3>
+                            <div className="admin-table-wrapper" style={{ marginBottom: 20 }}>
+                                <div className="admin-table-container">
+                                    <table className="admin-table">
+                                        <thead><tr><th>Store / Channel</th><th>Current Period Revenue</th><th>Previous Period Revenue</th><th>Growth %</th></tr></thead>
+                                        <tbody>
+                                            {targetsData.storeGrowthList.length === 0 ?
+                                                <tr><td colSpan="4" className="no-data">No data available</td></tr> :
+                                                targetsData.storeGrowthList.map((s, i) => {
+                                                    const growthNum = Number(s.growth);
+                                                    return (
+                                                        <tr key={i}>
+                                                            <td style={{ fontWeight: 500 }}>{s.name}</td>
+                                                            <td className="amount">₹{formatIndianNumber(s.current.toFixed(0))}</td>
+                                                            <td className="amount">₹{formatIndianNumber(s.previous.toFixed(0))}</td>
+                                                            <td>
+                                                                <span className={`growth-indicator ${growthNum >= 0 ? 'positive' : 'negative'}`} style={{ display: 'inline-flex' }}>
+                                                                    <span className="growth-arrow">{growthNum >= 0 ? '↑' : '↓'}</span>
+                                                                    {Math.abs(growthNum).toFixed(1)}%
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Growth Comparison Cards */}
+                            <h3 className="admin-subsection-title">Channel Growth Summary</h3>
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                                {targetsData.storeGrowthList.map((s, i) => {
+                                    const growthNum = Number(s.growth);
+                                    return (
+                                        <div key={i} className="admin-stat-card overview-card">
+                                            <span className="stat-label">{s.name}</span>
+                                            <span className="stat-value">₹{formatIndianNumber(s.current.toFixed(0))}</span>
+                                            <span className={`growth-indicator ${growthNum >= 0 ? 'positive' : 'negative'}`}>
+                                                <span className="growth-arrow">{growthNum >= 0 ? '↑' : '↓'}</span>
+                                                {Math.abs(growthNum).toFixed(1)}%
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Website Growth Placeholder */}
+                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Website Growth %</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="Website analytics integration pending" />
+                                        <span>Website traffic and conversion metrics will appear here</span>
+                                    </div>
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Gross Margin Trend</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="COGS data integration pending" />
+                                        <span>Margin trend over time will appear here</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </main>

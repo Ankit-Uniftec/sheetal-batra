@@ -1313,6 +1313,97 @@
 
 .accounts-toolbar { flex-wrap: wrap; }
 
+/* ============================================
+   PLACEHOLDER BADGE
+   ============================================ */
+
+.placeholder-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: #fff8e1;
+    border: 1px dashed #f9a825;
+    border-radius: 12px;
+    font-size: 10px;
+    color: #f57f17 !important;
+    font-weight: 500;
+    white-space: nowrap;
+    margin-top: 4px;
+}
+
+/* ============================================
+   REVENUE MIX LIST
+   ============================================ */
+
+.revenue-mix-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 0;
+}
+
+.revenue-mix-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.revenue-mix-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 120px;
+}
+
+.revenue-mix-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.revenue-mix-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+}
+
+.revenue-mix-bar-wrap {
+    flex: 1;
+    height: 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+    min-width: 60px;
+}
+
+.revenue-mix-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.revenue-mix-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: #d5b85a !important;
+    min-width: 40px;
+    text-align: right;
+}
+
+.revenue-mix-amt {
+    font-size: 11px;
+    font-family: monospace;
+    color: #666;
+    min-width: 80px;
+    text-align: right;
+}
+
 .accounts-filters {
     display: flex;
     align-items: center;

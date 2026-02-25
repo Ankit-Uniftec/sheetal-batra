@@ -34,6 +34,10 @@ export default function B2bMerchandiserDashboard() {
     const [vendorSearch, setVendorSearch] = useState("");
     const [vendorPage, setVendorPage] = useState(1);
     const VENDORS_PER_PAGE = 10;
+    const [showAddVendor, setShowAddVendor] = useState(false);
+    const [newVendor, setNewVendor] = useState({ store_brand_name: "", legal_name: "", vendor_code: "", location: "", gst_number: "", billing_address: "", shipping_address: "", payment_terms: "Credit", payment_type: "", contract_date: "", default_order_type: "Buyout", default_markdown_percent: 0, remarks: "", credit_limit: 1000000, credit_timeline_days: 30, advance_percent: 0 });
+    const [newContact, setNewContact] = useState({ contact_name: "", contact_email: "", contact_phone: "" });
+    const [vendorSaving, setVendorSaving] = useState(false);
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -170,6 +174,51 @@ export default function B2bMerchandiserDashboard() {
         } finally { setApprovalProcessing(false); }
     };
 
+    const handleSaveVendor = async () => {
+        if (!newVendor.legal_name.trim()) {
+            alert("Legal Name is required.");
+            return;
+        }
+        setVendorSaving(true);
+        try {
+            const payload = {
+                ...newVendor,
+                credit_limit: Number(newVendor.credit_limit) || 0,
+                default_markdown_percent: Number(newVendor.default_markdown_percent) || 0,
+                credit_timeline_days: Number(newVendor.credit_timeline_days) || 30,
+                advance_percent: Number(newVendor.advance_percent) || 0,
+                current_credit_used: 0,
+                is_active: true,
+            };
+            if (!payload.vendor_code.trim()) delete payload.vendor_code; // let trigger auto-generate
+            if (!payload.contract_date) delete payload.contract_date;
+
+            const { data, error } = await supabase.from("vendors").insert([payload]).select().single();
+            if (error) throw error;
+
+            // Add primary contact if provided
+            if (newContact.contact_name.trim() || newContact.contact_email.trim() || newContact.contact_phone.trim()) {
+                await supabase.from("vendor_contacts").insert([{
+                    vendor_id: data.id,
+                    contact_name: newContact.contact_name,
+                    contact_email: newContact.contact_email,
+                    contact_phone: newContact.contact_phone,
+                    is_primary: true,
+                }]);
+            }
+
+            setVendors(prev => [...prev, data].sort((a, b) => (a.store_brand_name || "").localeCompare(b.store_brand_name || "")));
+            setShowAddVendor(false);
+            setNewVendor({ store_brand_name: "", legal_name: "", vendor_code: "", location: "", gst_number: "", billing_address: "", shipping_address: "", payment_terms: "Credit", payment_type: "", contract_date: "", default_order_type: "Buyout", default_markdown_percent: 0, remarks: "", credit_limit: 1000000, credit_timeline_days: 30, advance_percent: 0 });
+            setNewContact({ contact_name: "", contact_email: "", contact_phone: "" });
+        } catch (err) {
+            console.error("Error adding vendor:", err);
+            alert("Failed to add vendor: " + (err.message || "Unknown error"));
+        } finally {
+            setVendorSaving(false);
+        }
+    };
+
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
@@ -247,6 +296,34 @@ export default function B2bMerchandiserDashboard() {
                                     <div className="merch-rev-item"><span className="merch-rev-title">Approved</span><span className="merch-rev-val">{stats.approved.length}</span></div>
                                     <div className="merch-rev-divider"></div>
                                     <div className="merch-rev-item"><span className="merch-rev-title">Rejected</span><span className="merch-rev-val merch-red">{stats.rejected.length}</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="merch-cell merch-target-section">
+                            <div className="merch-revenue-card">
+                                <div className="merch-revenue-header"><p className="merch-rev-label">B2B Target vs Achieved</p></div>
+                                <div className="merch-target-content">
+                                    <div className="merch-target-row">
+                                        <div className="merch-target-item">
+                                            <span className="merch-target-label">Monthly Target</span>
+                                            <span className="merch-target-val">{`\u20B9${formatIndianNumber(profile?.sales_target || 0)}`}</span>
+                                        </div>
+                                        <div className="merch-target-item">
+                                            <span className="merch-target-label">Achieved</span>
+                                            <span className="merch-target-val merch-green">{`\u20B9${formatIndianNumber(stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0))}`}</span>
+                                        </div>
+                                        <div className="merch-target-item">
+                                            <span className="merch-target-label">Remaining</span>
+                                            <span className={`merch-target-val ${((profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0)) > 0 ? "merch-red" : "merch-green"}`}>
+                                                {`\u20B9${formatIndianNumber(Math.max(0, (profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0)))}`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="merch-target-bar">
+                                        <div className="merch-target-fill" style={{ width: `${Math.min(100, (profile?.sales_target > 0 ? (stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0) / profile.sales_target) * 100 : 0))}%` }}></div>
+                                    </div>
+                                    <p className="merch-target-pct">{profile?.sales_target > 0 ? ((stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0) / profile.sales_target) * 100).toFixed(1) : 0}% achieved</p>
                                 </div>
                             </div>
                         </div>
@@ -420,7 +497,10 @@ export default function B2bMerchandiserDashboard() {
                 {/* ===== VENDOR BOOK TAB ===== */}
                 {activeTab === "vendors" && (
                     <div className="merch-tab-wrapper">
-                        <h2 className="merch-tab-title">Vendor Book</h2>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                            <h2 className="merch-tab-title" style={{ margin: 0 }}>Vendor Book</h2>
+                            <button className="merch-btn-approve" onClick={() => setShowAddVendor(true)} style={{ padding: "8px 16px", fontSize: 13 }}>+ Add Vendor</button>
+                        </div>
                         <div className="merch-vendor-search-bar"><input type="text" placeholder="Search vendors by name, code, or location..." value={vendorSearch} onChange={(e) => { setVendorSearch(e.target.value); setVendorPage(1); }} /></div>
                         <div className="merch-order-list-scroll">
                             {filteredVendors.length === 0 ? (<p className="merch-muted">No vendors found</p>) : (
@@ -554,6 +634,71 @@ export default function B2bMerchandiserDashboard() {
                         <div className="merch-modal-footer">
                             <button className="merch-modal-cancel" onClick={() => { setApprovalModal(null); setApprovalReason(""); }}>Cancel</button>
                             <button className={`merch-modal-confirm ${approvalModal.action}`} onClick={handleApprovalAction} disabled={approvalProcessing || (approvalModal.action === "reject" && !approvalReason.trim())}>{approvalProcessing ? "Processing..." : approvalModal.action === "approve" ? "Confirm Approve" : "Confirm Reject"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showAddVendor && (
+                <div className="merch-modal-overlay" onClick={() => setShowAddVendor(false)}>
+                    <div className="merch-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+                        <div className="merch-modal-top">
+                            <h3>Add New Vendor</h3>
+                            <button className="merch-modal-close" onClick={() => setShowAddVendor(false)}>{"\u00D7"}</button>
+                        </div>
+                        <div className="merch-modal-body" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+                            <p style={{ fontSize: 12, color: "#999", marginBottom: 12 }}>Fields marked * are required. Vendor code auto-generates if left blank.</p>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div className="merch-modal-field"><label>Legal Name *</label><input type="text" value={newVendor.legal_name} onChange={(e) => setNewVendor(p => ({ ...p, legal_name: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Store / Brand Name</label><input type="text" value={newVendor.store_brand_name} onChange={(e) => setNewVendor(p => ({ ...p, store_brand_name: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Vendor Code</label><input type="text" placeholder="Auto-generated if blank" value={newVendor.vendor_code} onChange={(e) => setNewVendor(p => ({ ...p, vendor_code: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Location</label><input type="text" value={newVendor.location} onChange={(e) => setNewVendor(p => ({ ...p, location: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>GST Number</label><input type="text" value={newVendor.gst_number} onChange={(e) => setNewVendor(p => ({ ...p, gst_number: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Contract Date</label><input type="date" value={newVendor.contract_date} onChange={(e) => setNewVendor(p => ({ ...p, contract_date: e.target.value }))} /></div>
+                                <div className="merch-modal-field">
+                                    <label>Payment Terms</label>
+                                    <select value={newVendor.payment_terms} onChange={(e) => setNewVendor(p => ({ ...p, payment_terms: e.target.value }))}>
+                                        <option value="Credit">Credit</option>
+                                        <option value="Advance">Advance</option>
+                                        <option value="Partial">Partial</option>
+                                        <option value="Full">Full</option>
+                                    </select>
+                                </div>
+                                <div className="merch-modal-field">
+                                    <label>Payment Type</label>
+                                    <select value={newVendor.payment_type} onChange={(e) => setNewVendor(p => ({ ...p, payment_type: e.target.value }))}>
+                                        <option value="">Select</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Cheque">Cheque</option>
+                                        <option value="Cash">Cash</option>
+                                    </select>
+                                </div>
+                                <div className="merch-modal-field"><label>Credit Limit ({"\u20B9"})</label><input type="number" value={newVendor.credit_limit} onChange={(e) => setNewVendor(p => ({ ...p, credit_limit: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Credit Timeline (days)</label><input type="number" value={newVendor.credit_timeline_days} onChange={(e) => setNewVendor(p => ({ ...p, credit_timeline_days: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Advance %</label><input type="number" min={0} max={100} value={newVendor.advance_percent} onChange={(e) => setNewVendor(p => ({ ...p, advance_percent: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Default Markdown %</label><input type="number" min={0} max={100} value={newVendor.default_markdown_percent} onChange={(e) => setNewVendor(p => ({ ...p, default_markdown_percent: e.target.value }))} /></div>
+                                <div className="merch-modal-field">
+                                    <label>Default Order Type</label>
+                                    <select value={newVendor.default_order_type} onChange={(e) => setNewVendor(p => ({ ...p, default_order_type: e.target.value }))}>
+                                        <option value="Buyout">Buyout</option>
+                                        <option value="Consignment">Consignment</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="merch-modal-field" style={{ marginTop: 12 }}><label>Billing Address</label><textarea rows={2} value={newVendor.billing_address} onChange={(e) => setNewVendor(p => ({ ...p, billing_address: e.target.value }))} /></div>
+                            <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Shipping Address</label><textarea rows={2} value={newVendor.shipping_address} onChange={(e) => setNewVendor(p => ({ ...p, shipping_address: e.target.value }))} /></div>
+                            <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Remarks</label><textarea rows={2} value={newVendor.remarks} onChange={(e) => setNewVendor(p => ({ ...p, remarks: e.target.value }))} /></div>
+
+                            <h4 style={{ margin: "16px 0 8px", fontSize: 14, color: "#555" }}>Primary Contact</h4>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div className="merch-modal-field"><label>Name</label><input type="text" value={newContact.contact_name} onChange={(e) => setNewContact(p => ({ ...p, contact_name: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Email</label><input type="email" value={newContact.contact_email} onChange={(e) => setNewContact(p => ({ ...p, contact_email: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Phone</label><input type="text" value={newContact.contact_phone} onChange={(e) => setNewContact(p => ({ ...p, contact_phone: e.target.value }))} /></div>
+                            </div>
+                        </div>
+                        <div className="merch-modal-footer">
+                            <button className="merch-modal-cancel" onClick={() => setShowAddVendor(false)}>Cancel</button>
+                            <button className="merch-modal-confirm approve" onClick={handleSaveVendor} disabled={vendorSaving}>{vendorSaving ? "Saving..." : "Add Vendor"}</button>
                         </div>
                     </div>
                 </div>
