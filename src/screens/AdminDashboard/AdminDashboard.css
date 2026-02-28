@@ -207,6 +207,23 @@
     color: #b71c1c;
 }
 
+.nav-section-label {
+    display: block;
+    padding: 8px 16px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: #999 !important;
+    border-top: 1px solid #eee;
+    margin-top: 4px;
+}
+
+.nav-section-label:first-child {
+    border-top: none;
+    margin-top: 0;
+}
+
 /* ============================================
    MAIN CONTENT
    ============================================ */
@@ -471,6 +488,12 @@
     font-size: 13px;
     color: #666;
     font-weight: 500;
+}
+
+.stat-sub {
+    font-size: 11px;
+    color: #999 !important;
+    margin-top: 2px;
 }
 
 /* ============================================
@@ -1213,6 +1236,10 @@
     font-size: 12px;
 }
 
+.admin-table th.amount {
+    text-align: right;
+}
+
 .admin-table td.invoice {
     font-weight: 600;
     color: #2e7d32 !important;
@@ -1312,6 +1339,18 @@
    ============================================ */
 
 .accounts-toolbar { flex-wrap: wrap; }
+
+.acc-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.acc-filter-bar .admin-search-wrapper { max-width: 280px; }
+.acc-filter-bar .cmo-compare-select { flex: 0 0 auto; }
+.acc-filter-bar .cmo-date-range { flex: 0 0 auto; }
 
 /* ============================================
    PLACEHOLDER BADGE
@@ -1538,6 +1577,9 @@
     .accounts-filters { width: 100%; flex-direction: column; }
     .accounts-filters input, .accounts-filters select { width: 100%; }
 
+    .acc-filter-bar { gap: 8px; }
+    .acc-filter-bar .admin-search-wrapper { max-width: none; flex: 1 1 100%; }
+
     .variants-grid { gap: 8px; }
     .variant-card { padding: 8px 10px; min-width: 60px; }
     .variant-size { font-size: 11px; }
@@ -1616,30 +1658,14 @@
     margin-top: 20px;
 }
 
-.analytics-chart-card {
-    background: #FFFFFFB0;
-    border: 1px solid #D4D4D4;
-    border-radius: 12px;
-    padding: 20px;
-    backdrop-filter: blur(10px);
-}
-
 .analytics-chart-card.wide {
     grid-column: span 2;
-}
-
-.chart-title {
-    font-family: "Athleas", serif !important;
-    font-size: 16px;
-    font-weight: 600;
-    color: #d5b85a !important;
-    margin: 0 0 16px 0;
 }
 
 .chart-subtitle {
     font-size: 12px;
     color: #666;
-    margin: -10px 0 12px 0;
+    margin: -6px 0 12px 0;
 }
 
 .no-chart-data {
@@ -1655,24 +1681,243 @@
 /* Recharts customization */
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
-    stroke: #e0e0e0;
+    stroke: #f0ece2;
 }
 
 .recharts-tooltip-wrapper .recharts-default-tooltip {
     background: #fff !important;
-    border: 1px solid #D4D4D4 !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid #e8e2d0 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    padding: 10px 14px !important;
+}
+
+.recharts-default-tooltip .recharts-tooltip-label {
+    font-weight: 600 !important;
+    color: #333 !important;
+    margin-bottom: 4px !important;
 }
 
 .recharts-legend-item-text {
-    color: #333 !important;
+    color: #555 !important;
     font-size: 12px !important;
 }
 
+.recharts-legend-wrapper {
+    padding-top: 8px !important;
+}
+
+/* Subtle bar hover */
+.recharts-bar-rectangle:hover {
+    filter: brightness(1.08);
+    transition: filter 0.2s ease;
+}
+
 /* ============================================
-   ANALYTICS RESPONSIVE
+   CMO TAB HEADER & FILTER BAR
    ============================================ */
+
+.cmo-tab-header {
+    margin-bottom: 24px;
+}
+
+.cmo-tab-header .admin-section-title {
+    margin-bottom: 14px;
+}
+
+.cmo-filters-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: #faf8f3;
+    border: 1px solid #e8e2d0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+}
+
+.cmo-timeline-pills {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.cmo-pill {
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #777;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.cmo-pill:hover {
+    background: rgba(213, 184, 90, 0.1);
+    color: #b5982e;
+}
+
+.cmo-pill.active {
+    background: #d5b85a;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(213, 184, 90, 0.35);
+}
+
+.cmo-filters-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.cmo-date-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cmo-date-range input {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    color: #444;
+    width: 130px;
+}
+
+.cmo-date-range input:focus {
+    border-color: #d5b85a;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.15);
+}
+
+.cmo-date-sep {
+    color: #bbb;
+    font-size: 13px;
+}
+
+.cmo-compare-select {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    cursor: pointer;
+    color: #555;
+    min-width: 130px;
+}
+
+.cmo-compare-select:focus {
+    border-color: #d5b85a;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.15);
+}
+
+/* ============================================
+   CMO CUSTOM CHART TOOLTIP
+   ============================================ */
+
+.cmo-chart-tooltip {
+    background: #fff;
+    border: 1px solid #e8e2d0;
+    border-radius: 10px;
+    padding: 12px 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    min-width: 140px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.cmo-chart-tooltip-label {
+    margin: 0 0 6px 0;
+    font-weight: 600;
+    color: #333;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cmo-chart-tooltip-row {
+    margin: 2px 0;
+    color: #555;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cmo-chart-tooltip-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    flex-shrink: 0;
+}
+
+/* ============================================
+   ENHANCED CHART CARDS
+   ============================================ */
+
+.analytics-chart-card {
+    background: #fff;
+    border: 1px solid #e8e2d0;
+    border-radius: 14px;
+    padding: 22px 24px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.2s ease;
+}
+
+.analytics-chart-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.07);
+}
+
+.chart-title {
+    font-family: "Athleas", serif !important;
+    font-size: 15px;
+    font-weight: 600;
+    color: #8B7355 !important;
+    margin: 0 0 16px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0ece2;
+    letter-spacing: 0.2px;
+}
+
+/* ============================================
+   CMO FILTER RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+    .cmo-filters-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .cmo-timeline-pills {
+        justify-content: center;
+    }
+
+    .cmo-filters-right {
+        justify-content: center;
+    }
+
+    .cmo-pill {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+
+    .cmo-date-range input {
+        width: 110px;
+    }
+}
 
 @media (max-width: 1024px) {
     .analytics-charts-grid {

@@ -72,6 +72,87 @@ const PlaceholderBadge = ({ label }) => (
     <span className="placeholder-badge" title="Data source pending — will be connected later">⏳ {label || "Placeholder"}</span>
 );
 
+// Map color names to actual hex values for chart bars
+const COLOR_NAME_MAP = {
+    "black": "#1a1a1a", "white": "#f5f5f5", "red": "#c62828", "blue": "#1565c0",
+    "navy": "#0d2137", "navy blue": "#0d2137", "green": "#2e7d32", "yellow": "#f9a825",
+    "pink": "#e91e8f", "baby pink": "#f8bbd0", "blush pink": "#f4a0b5", "dusty pink": "#d4919a",
+    "hot pink": "#ff1493", "purple": "#7b1fa2", "lavender": "#b39ddb", "orange": "#ef6c00",
+    "brown": "#5d4037", "beige": "#d7ccc8", "cream": "#fffdd0", "ivory": "#fffff0",
+    "grey": "#757575", "gray": "#757575", "silver": "#bdbdbd", "gold": "#d5b85a",
+    "maroon": "#6a1b29", "burgundy": "#800020", "wine": "#722f37", "rust": "#b7410e",
+    "teal": "#008080", "turquoise": "#40e0d0", "coral": "#ff7f50", "peach": "#ffdab9",
+    "sage": "#9caf88", "sage green": "#9caf88", "olive": "#6b8e23", "olive green": "#6b8e23",
+    "mint": "#98fb98", "mint green": "#98fb98", "forest green": "#228b22",
+    "sky blue": "#87ceeb", "royal blue": "#4169e1", "powder blue": "#b0c4de",
+    "taupe": "#8b8378", "tan": "#d2b48c", "camel": "#c19a6b", "khaki": "#c3b091",
+    "charcoal": "#36454f", "off white": "#faf0e6", "off-white": "#faf0e6",
+    "magenta": "#c2185b", "lilac": "#c8a2c8", "plum": "#8e4585", "mauve": "#e0b0ff",
+    "copper": "#b87333", "rose": "#e8a0bf", "rose gold": "#b76e79", "emerald": "#50c878",
+    "aqua": "#00bcd4", "indigo": "#3f51b5", "lemon": "#fff44f", "mustard": "#e1ad01",
+    "nude": "#e3bc9a", "champagne": "#f7e7ce", "sand": "#c2b280", "slate": "#708090",
+    "denim": "#1560bd", "cobalt": "#0047ab", "cerulean": "#007ba7", "fuchsia": "#ff00ff",
+    "scarlet": "#ff2400", "crimson": "#dc143c", "tangerine": "#ff9966", "apricot": "#fbceb1",
+    "sea green": "#2e8b57", "pistachio": "#93c572", "lime": "#a4c639", "moss": "#8a9a5b",
+};
+
+const getColorHex = (colorName) => {
+    if (!colorName) return "#d5b85a";
+    const lower = colorName.toLowerCase().trim();
+    // Direct match
+    if (COLOR_NAME_MAP[lower]) return COLOR_NAME_MAP[lower];
+    // Partial match
+    for (const [key, hex] of Object.entries(COLOR_NAME_MAP)) {
+        if (lower.includes(key) || key.includes(lower)) return hex;
+    }
+    // Fallback: generate a consistent color from name hash
+    let hash = 0;
+    for (let i = 0; i < lower.length; i++) hash = lower.charCodeAt(i) + ((hash << 5) - hash);
+    const h = Math.abs(hash) % 360;
+    return `hsl(${h}, 55%, 50%)`;
+};
+
+// Custom tooltip for charts
+const ChartTooltip = ({ active, payload, label, prefix = "₹", suffix = "" }) => {
+    if (!active || !payload?.length) return null;
+    return (
+        <div className="cmo-chart-tooltip">
+            <p className="cmo-chart-tooltip-label">{label}</p>
+            {payload.map((p, i) => (
+                <p key={i} className="cmo-chart-tooltip-row">
+                    <span className="cmo-chart-tooltip-dot" style={{ background: p.color || p.fill }}></span>
+                    <span>{p.name || "Value"}: {prefix}{formatIndianNumber(Math.round(p.value))}{suffix}</span>
+                </p>
+            ))}
+        </div>
+    );
+};
+
+// Custom XAxis tick that renders text HORIZONTAL and wraps long names
+const WrappedAxisTick = ({ x, y, payload, maxWidth = 80 }) => {
+    const text = payload?.value || "";
+    const words = text.split(/\s+/);
+    const lines = [];
+    let current = "";
+    words.forEach(w => {
+        const test = current ? current + " " + w : w;
+        if (test.length > 12 && current) { lines.push(current); current = w; }
+        else { current = test; }
+    });
+    if (current) lines.push(current);
+    // Truncate to max 2 lines
+    if (lines.length > 2) { lines.length = 2; lines[1] = lines[1].substring(0, 10) + "…"; }
+    return (
+        <g transform={`translate(${x},${y})`}>
+            {lines.map((line, i) => (
+                <text key={i} x={0} y={i * 14 + 8} textAnchor="middle" fill="#666" fontSize={11} fontFamily="inherit">
+                    {line}
+                </text>
+            ))}
+        </g>
+    );
+};
+
 // Growth Indicator Component
 const GrowthIndicator = ({ value, inverse = false }) => {
     if (value === 0 || isNaN(value)) return null;
@@ -90,7 +171,7 @@ export default function AdminDashboard() {
     const { showPopup, PopupComponent } = usePopup();
     const navigate = useNavigate();
 
-    const [activeTab, setActiveTab] = useState("dashboard");
+    const [activeTab, setActiveTab] = useState("brand_performance");
     const [showSidebar, setShowSidebar] = useState(false);
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
@@ -108,6 +189,8 @@ export default function AdminDashboard() {
     // Inventory states
     const [inventorySearch, setInventorySearch] = useState("");
     const [inventoryPage, setInventoryPage] = useState(1);
+    const [inventoryStockFilter, setInventoryStockFilter] = useState("all"); // all, in_stock, low_stock, out_of_stock
+    const [inventoryTypeFilter, setInventoryTypeFilter] = useState("all"); // all, lxrts, regular
     const [editingProductId, setEditingProductId] = useState(null);
     const [editInventoryValue, setEditInventoryValue] = useState("");
     const [savingInventory, setSavingInventory] = useState(false);
@@ -136,12 +219,15 @@ export default function AdminDashboard() {
     const [accountsDateFrom, setAccountsDateFrom] = useState("");
     const [accountsDateTo, setAccountsDateTo] = useState("");
     const [accountsStatus, setAccountsStatus] = useState("");
+    const [accountsStore, setAccountsStore] = useState("");
+    const [accountsSA, setAccountsSA] = useState("");
     const [accountsPage, setAccountsPage] = useState(1);
 
     // Clients tab states
     const [clientsSearch, setClientsSearch] = useState("");
     const [clientsPage, setClientsPage] = useState(1);
     const [clientsSortBy, setClientsSortBy] = useState("totalSpend");
+    const [clientsStoreFilter, setClientsStoreFilter] = useState("");
 
     // B2B tab states
     const [b2bSearch, setB2bSearch] = useState("");
@@ -228,6 +314,39 @@ export default function AdminDashboard() {
 
     const isLxrtsOrder = (order) => order.items?.[0]?.sync_enabled === true;
     const isLxrtsProduct = (product) => product.sync_enabled === true;
+
+    // Channel classifier: LXRTS → Website, B2B → B2B, store → store name
+    const getOrderChannel = (order) => {
+        if (isLxrtsOrder(order)) return "Website (LXRTS)";
+        const store = (order.salesperson_store || "").trim();
+        if (!store) return "Other";
+        if (store.toLowerCase() === "b2b") return "B2B";
+        return store;
+    };
+
+    // Get actual person name (not store name) for salesperson fields
+    const getOrderSalesperson = (order) => {
+        // For B2B orders, use merchandiser_name or approved_by as the person
+        if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") {
+            return order.merchandiser_name || order.salesperson || null;
+        }
+        return order.salesperson || null;
+    };
+
+    // Known store names to exclude from salesperson lists
+    const knownStoreNames = useMemo(() => {
+        const stores = new Set();
+        orders.forEach(o => {
+            const s = (o.salesperson_store || "").trim();
+            if (s) stores.add(s);
+        });
+        return stores;
+    }, [orders]);
+
+    const isPersonName = (name) => {
+        if (!name || name === "-" || name === "Unknown") return false;
+        return !knownStoreNames.has(name);
+    };
 
     const getLxrtsTotalInventory = (productId) => {
         const variants = variantInventory[productId];
@@ -361,14 +480,13 @@ export default function AdminDashboard() {
         return ((current - previous) / previous) * 100;
     };
 
-    // Dashboard Stats
+    // Dashboard Stats (ALL orders: store + website/LXRTS + B2B)
     const dashboardStats = useMemo(() => {
-        const validOrders = orders.filter(o => !isLxrtsOrder(o));
         const dateRange = getDateRange(timeline);
         const comparisonRange = getComparisonDateRange(timeline, comparison);
 
-        const currentOrders = filterOrdersByDateRange(validOrders, dateRange);
-        const previousOrders = comparisonRange ? filterOrdersByDateRange(validOrders, comparisonRange) : [];
+        const currentOrders = filterOrdersByDateRange(orders, dateRange);
+        const previousOrders = comparisonRange ? filterOrdersByDateRange(orders, comparisonRange) : [];
 
         const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         const totalOrders = currentOrders.length;
@@ -455,7 +573,6 @@ export default function AdminDashboard() {
     const analyticsData = useMemo(() => {
         const dateRange = getAnalyticsDateRange(analyticsTimeline);
         const validOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
             if (o.status === "cancelled") return false;
             const orderDate = new Date(o.created_at);
             return orderDate >= dateRange.start && orderDate <= dateRange.end;
@@ -499,10 +616,10 @@ export default function AdminDashboard() {
             .sort((a, b) => b.sales - a.sales)
             .slice(0, 10);
 
-        // 3. Sales by Store
+        // 3. Sales by Store / Channel
         const storeSales = {};
         validOrders.forEach(order => {
-            const store = order.salesperson_store || "Unknown";
+            const store = getOrderChannel(order);
             if (!storeSales[store]) storeSales[store] = { name: store, sales: 0, count: 0 };
             storeSales[store].sales += Number(order.grand_total || 0);
             storeSales[store].count += 1;
@@ -512,7 +629,8 @@ export default function AdminDashboard() {
         // 4. Sales and Discounts by Salesperson
         const salespersonData = {};
         validOrders.forEach(order => {
-            const sp = order.salesperson || "Unknown";
+            const sp = getOrderSalesperson(order);
+            if (!sp || !isPersonName(sp)) return;
             if (!salespersonData[sp]) salespersonData[sp] = { name: sp, sales: 0, discount: 0, count: 0 };
             salespersonData[sp].sales += Number(order.grand_total || 0);
             salespersonData[sp].discount += Number(order.discount_amount || 0);
@@ -524,7 +642,6 @@ export default function AdminDashboard() {
 
         // 5. Alteration by Outfit (filter alteration orders)
         const alterationOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
             if (!o.is_alteration) return false;
             const orderDate = new Date(o.created_at);
             return orderDate >= dateRange.start && orderDate <= dateRange.end;
@@ -572,10 +689,31 @@ export default function AdminDashboard() {
     const recentOrders = useMemo(() => orders.filter(o => !isLxrtsOrder(o)).slice(0, recentOrdersCount), [orders, recentOrdersCount]);
 
     // Inventory
-    const filteredProducts = useMemo(() => products.filter(p =>
-        p.name?.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-        p.sku_id?.toLowerCase().includes(inventorySearch.toLowerCase())
-    ), [products, inventorySearch]);
+    const filteredProducts = useMemo(() => {
+        let result = products;
+        // Search filter
+        if (inventorySearch) {
+            const q = inventorySearch.toLowerCase();
+            result = result.filter(p => p.name?.toLowerCase().includes(q) || p.sku_id?.toLowerCase().includes(q));
+        }
+        // Type filter
+        if (inventoryTypeFilter === "lxrts") result = result.filter(p => p.sync_enabled);
+        else if (inventoryTypeFilter === "regular") result = result.filter(p => !p.sync_enabled);
+        // Stock level filter
+        if (inventoryStockFilter === "out_of_stock") result = result.filter(p => {
+            const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+            return inv === 0;
+        });
+        else if (inventoryStockFilter === "low_stock") result = result.filter(p => {
+            const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+            return inv > 0 && inv < 5;
+        });
+        else if (inventoryStockFilter === "in_stock") result = result.filter(p => {
+            const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+            return inv >= 5;
+        });
+        return result;
+    }, [products, inventorySearch, inventoryTypeFilter, inventoryStockFilter, variantInventory]);
 
     const inventoryTotalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
     const currentProducts = useMemo(() => {
@@ -659,9 +797,12 @@ export default function AdminDashboard() {
     // Orders
     const salespersons = useMemo(() => {
         const spSet = new Set();
-        orders.forEach(o => { if (o.salesperson) spSet.add(o.salesperson); });
+        orders.forEach(o => {
+            const sp = getOrderSalesperson(o);
+            if (sp && isPersonName(sp)) spSet.add(sp);
+        });
         return Array.from(spSet).sort();
-    }, [orders]);
+    }, [orders, knownStoreNames]);
 
     const filteredByStatus = useMemo(() => {
         return orders.filter(o => {
@@ -684,7 +825,7 @@ export default function AdminDashboard() {
             result = result.filter(order => {
                 const item = order.items?.[0] || {};
                 return order.order_no?.toLowerCase().includes(q) || item.product_name?.toLowerCase().includes(q) ||
-                    order.delivery_name?.toLowerCase().includes(q) || order.delivery_phone?.includes(q) || order.salesperson?.toLowerCase().includes(q);
+                    order.delivery_name?.toLowerCase().includes(q) || order.delivery_phone?.includes(q) || (getOrderSalesperson(order) || "").toLowerCase().includes(q);
             });
         }
         if (filters.dateFrom || filters.dateTo) {
@@ -705,7 +846,7 @@ export default function AdminDashboard() {
         if (filters.priority.length > 0) result = result.filter(order => filters.priority.includes(getPriority(order)));
         if (filters.orderType.length > 0) result = result.filter(order => filters.orderType.includes(getOrderType(order)));
         if (filters.store.length > 0) result = result.filter(order => filters.store.includes(order.salesperson_store));
-        if (filters.salesperson) result = result.filter(order => order.salesperson === filters.salesperson);
+        if (filters.salesperson) result = result.filter(order => getOrderSalesperson(order) === filters.salesperson);
 
         result = [...result].sort((a, b) => {
             switch (sortBy) {
@@ -795,12 +936,13 @@ export default function AdminDashboard() {
 
                 items.push({
                     id: `${order.id}-${idx}`, order_no: order.order_no, order_date: order.created_at,
-                    sa_name: order.salesperson || "-", client_name: order.delivery_name || "-",
+                    sa_name: getOrderSalesperson(order) || "-", client_name: order.delivery_name || "-",
                     product_name: item.product_name || "-",
                     gross_value: Math.round(grossValue * 100) / 100, discount: Math.round(productDiscount * 100) / 100,
                     taxable_value: Math.round(taxableValue * 100) / 100, gst: Math.round(gst * 100) / 100,
                     invoice_value: Math.round(invoiceValue * 100) / 100, quantity,
                     status: order.status || "pending", delivery_date: item.delivery_date || order.delivery_date,
+                    store: order.salesperson_store || "-", payment_mode: order.payment_mode || "-",
                 });
             });
         });
@@ -817,8 +959,14 @@ export default function AdminDashboard() {
         if (accountsDateFrom) result = result.filter(item => new Date(item.order_date) >= new Date(accountsDateFrom));
         if (accountsDateTo) result = result.filter(item => new Date(item.order_date) <= new Date(accountsDateTo + "T23:59:59"));
         if (accountsStatus) result = result.filter(item => item.status === accountsStatus);
+        if (accountsStore) result = result.filter(item => item.store === accountsStore);
+        if (accountsSA) result = result.filter(item => item.sa_name === accountsSA);
         return result;
-    }, [accountsLineItems, accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus]);
+    }, [accountsLineItems, accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
+
+    // Unique stores and SAs for account filter dropdowns
+    const accountsStoreOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.store).filter(s => s && s !== "-"))].sort(), [accountsLineItems]);
+    const accountsSAOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.sa_name).filter(s => s && s !== "-" && isPersonName(s)))].sort(), [accountsLineItems, knownStoreNames]);
 
     const accountsTotalPages = Math.ceil(filteredAccountItems.length / 20);
     const currentAccountItems = useMemo(() => {
@@ -840,7 +988,6 @@ export default function AdminDashboard() {
     const enhancedDashboardStats = useMemo(() => {
         const dateRange = getDateRange(timeline);
         const validOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });
@@ -850,10 +997,10 @@ export default function AdminDashboard() {
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
         const totalItems = validOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
 
-        // Channel breakdown
+        // Channel breakdown using proper classification
         const channelMap = {};
         validOrders.forEach(o => {
-            const ch = o.salesperson_store || "Other";
+            const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
             channelMap[ch].revenue += Number(o.grand_total || 0);
             channelMap[ch].orders += 1;
@@ -875,7 +1022,6 @@ export default function AdminDashboard() {
     const orderValueTrend = useMemo(() => {
         const dateRange = getDateRange(timeline);
         const validOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });
@@ -898,7 +1044,6 @@ export default function AdminDashboard() {
     const enhancedAnalytics = useMemo(() => {
         const dateRange = getAnalyticsDateRange(analyticsTimeline);
         const validOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
             if (o.status === "cancelled") return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
@@ -941,7 +1086,6 @@ export default function AdminDashboard() {
 
         // Alterations: flagged + avg per outfit
         const alterationOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
             if (!o.is_alteration) return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
@@ -967,8 +1111,10 @@ export default function AdminDashboard() {
     // NEW: CLIENT ANALYTICS
     // ═══════════════════════════════════════════════════════════
     const clientAnalytics = useMemo(() => {
-        const allOrders = orders.filter(o => !isLxrtsOrder(o));
+        const allOrders = orders;
         const clientMap = {};
+        const now = new Date();
+        const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate());
 
         allOrders.forEach(order => {
             const phone = order.delivery_phone || order.phone;
@@ -978,19 +1124,21 @@ export default function AdminDashboard() {
                 clientMap[phone] = {
                     name, phone,
                     city: order.delivery_city || order.city || "-",
-                    totalSpend: 0, orderCount: 0, items: 0,
+                    totalSpend: 0, spend12M: 0, orderCount: 0, items: 0,
                     firstOrder: order.created_at, lastOrder: order.created_at,
                     stores: new Set(),
                 };
             }
             const c = clientMap[phone];
-            c.totalSpend += Number(order.grand_total || 0);
+            const amount = Number(order.grand_total || 0);
+            c.totalSpend += amount;
             c.orderCount += 1;
             c.items += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
-            if (order.salesperson_store) c.stores.add(order.salesperson_store);
+            const ch = getOrderChannel(order);
+            if (ch) c.stores.add(ch);
+            if (new Date(order.created_at) >= twelveMonthsAgo) c.spend12M += amount;
             if (new Date(order.created_at) < new Date(c.firstOrder)) c.firstOrder = order.created_at;
             if (new Date(order.created_at) > new Date(c.lastOrder)) c.lastOrder = order.created_at;
-            // Update name if blank
             if (c.name === "Unknown" && name !== "Unknown") c.name = name;
         });
 
@@ -1003,15 +1151,19 @@ export default function AdminDashboard() {
         const repeatClients = clients.filter(c => c.orderCount > 1);
         const repeatRate = totalClients > 0 ? ((repeatClients.length / totalClients) * 100) : 0;
 
-        // New clients in current period
         const dateRange = getDateRange(timeline);
         const newClients = clients.filter(c => {
             const first = new Date(c.firstOrder);
             return first >= dateRange.start && first <= dateRange.end;
         });
 
-        // Sort by selected criteria
+        // Apply store filter
         let sortedClients = [...clients];
+        if (clientsStoreFilter) {
+            sortedClients = sortedClients.filter(c => c.stores.includes(clientsStoreFilter));
+        }
+
+        // Sort
         if (clientsSortBy === "totalSpend") sortedClients.sort((a, b) => b.totalSpend - a.totalSpend);
         else if (clientsSortBy === "orderCount") sortedClients.sort((a, b) => b.orderCount - a.orderCount);
         else if (clientsSortBy === "recent") sortedClients.sort((a, b) => new Date(b.lastOrder) - new Date(a.lastOrder));
@@ -1027,7 +1179,6 @@ export default function AdminDashboard() {
         const clientsTotalPages = Math.ceil(sortedClients.length / ITEMS_PER_PAGE);
         const currentClients = sortedClients.slice((clientsPage - 1) * ITEMS_PER_PAGE, clientsPage * ITEMS_PER_PAGE);
 
-        // Segmentation
         const segmentation = [
             { name: "New", value: newClients.length },
             { name: "One-time", value: clients.filter(c => c.orderCount === 1).length },
@@ -1035,7 +1186,6 @@ export default function AdminDashboard() {
             { name: "Loyal (4+)", value: clients.filter(c => c.orderCount >= 4).length },
         ];
 
-        // Per-store breakdown
         const storeClients = {};
         clients.forEach(c => {
             (c.stores || "").split(", ").filter(Boolean).forEach(store => {
@@ -1045,21 +1195,24 @@ export default function AdminDashboard() {
             });
         });
 
+        // Unique store list for filter dropdown
+        const storeList = Object.keys(storeClients).sort();
+
         return {
             totalClients, repeatRate: repeatRate.toFixed(1), newClientsCount: newClients.length,
             currentClients, clientsTotalPages, sortedClients,
             segmentation, storeClients: Object.values(storeClients).sort((a, b) => b.spend - a.spend),
             topClients: [...clients].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 10),
+            storeList,
         };
-    }, [orders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy]);
+    }, [orders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy, clientsStoreFilter]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
         const b2bOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
-            return (o.salesperson_store || "").toLowerCase() === "b2b";
+            return getOrderChannel(o) === "B2B";
         });
 
         const dateRange = getDateRange(timeline);
@@ -1136,7 +1289,6 @@ export default function AdminDashboard() {
     const financialStats = useMemo(() => {
         const dateRange = getDateRange(timeline);
         const validOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });
@@ -1149,7 +1301,7 @@ export default function AdminDashboard() {
         // By channel
         const channelDiscounts = {};
         validOrders.forEach(o => {
-            const ch = o.salesperson_store || "Other";
+            const ch = getOrderChannel(o);
             if (!channelDiscounts[ch]) channelDiscounts[ch] = { name: ch, discount: 0, revenue: 0 };
             channelDiscounts[ch].discount += Number(o.discount_amount || 0);
             channelDiscounts[ch].revenue += Number(o.grand_total || 0);
@@ -1172,7 +1324,7 @@ export default function AdminDashboard() {
         // Calculate actual monthly revenue from orders
         const monthlyRevenue = {};
         const currentYear = new Date().getFullYear();
-        orders.filter(o => !isLxrtsOrder(o) && new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
+        orders.filter(o => new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
             const m = new Date(o.created_at).getMonth();
             if (!monthlyRevenue[m]) monthlyRevenue[m] = 0;
             monthlyRevenue[m] += Number(o.grand_total || 0);
@@ -1192,8 +1344,8 @@ export default function AdminDashboard() {
             end: new Date(dateRange.start.getTime() - 1),
         };
         const storeGrowth = {};
-        orders.filter(o => !isLxrtsOrder(o)).forEach(o => {
-            const store = o.salesperson_store || "Other";
+        orders.forEach(o => {
+            const store = getOrderChannel(o);
             const d = new Date(o.created_at);
             if (!storeGrowth[store]) storeGrowth[store] = { name: store, current: 0, previous: 0 };
             if (d >= dateRange.start && d <= dateRange.end) storeGrowth[store].current += Number(o.grand_total || 0);
@@ -1217,14 +1369,14 @@ export default function AdminDashboard() {
     };
 
     // Reset pages
-    useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
+    useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
     useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
-    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus]);
-    useEffect(() => { setClientsPage(1); }, [clientsSearch, clientsSortBy]);
+    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
+    useEffect(() => { setClientsPage(1); }, [clientsSearch, clientsSortBy, clientsStoreFilter]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
 
     useEffect(() => {
-        if (activeTab === "dashboard") {
+        if (activeTab === "inventory" || activeTab === "brand_performance") {
             const lxrtsProducts = products.filter((p) => p.sync_enabled);
             if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
         }
@@ -1274,127 +1426,80 @@ export default function AdminDashboard() {
                 {/* SIDEBAR */}
                 <aside className={`admin-sidebar ${showSidebar ? "open" : ""}`}>
                     <nav className="admin-nav">
-                        <button className={`admin-nav-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</button>
-                        <button className={`admin-nav-item ${activeTab === "analytics" ? "active" : ""}`} onClick={() => { setActiveTab("analytics"); setShowSidebar(false); }}>Analytics</button>
-                        <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
+                        <span className="nav-section-label">Dashboard</span>
+                        <button className={`admin-nav-item ${activeTab === "brand_performance" ? "active" : ""}`} onClick={() => { setActiveTab("brand_performance"); setShowSidebar(false); }}>Brand Performance</button>
+                        <button className={`admin-nav-item ${activeTab === "revenue" ? "active" : ""}`} onClick={() => { setActiveTab("revenue"); setShowSidebar(false); }}>Revenue & Drivers</button>
+                        <button className={`admin-nav-item ${activeTab === "products_style" ? "active" : ""}`} onClick={() => { setActiveTab("products_style"); setShowSidebar(false); }}>Products & Style</button>
+                        <button className={`admin-nav-item ${activeTab === "client_insights" ? "active" : ""}`} onClick={() => { setActiveTab("client_insights"); setShowSidebar(false); }}>Client Insights</button>
+                        <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory Overview</button>
+                        <button className={`admin-nav-item ${activeTab === "cost_expenditure" ? "active" : ""}`} onClick={() => { setActiveTab("cost_expenditure"); setShowSidebar(false); }}>Cost & Expenditure</button>
+                        <button className={`admin-nav-item ${activeTab === "b2b_vendor" ? "active" : ""}`} onClick={() => { setActiveTab("b2b_vendor"); setShowSidebar(false); }}>B2B & Vendor</button>
+                        <button className={`admin-nav-item ${activeTab === "targets_growth" ? "active" : ""}`} onClick={() => { setActiveTab("targets_growth"); setShowSidebar(false); }}>Targets & Growth</button>
+                        <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
-                        <button className={`admin-nav-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Clients</button>
-                        <button className={`admin-nav-item ${activeTab === "b2b" ? "active" : ""}`} onClick={() => { setActiveTab("b2b"); setShowSidebar(false); }}>B2B</button>
-                        <button className={`admin-nav-item ${activeTab === "targets" ? "active" : ""}`} onClick={() => { setActiveTab("targets"); setShowSidebar(false); }}>Targets</button>
-                        <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button>
+                        {/* <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button> */}
                     </nav>
                 </aside>
 
                 {/* MAIN CONTENT */}
                 <main className="admin-content">
-                    {/* DASHBOARD TAB */}
-                    {activeTab === "dashboard" && (
+
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 1: OVERALL BRAND PERFORMANCE */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {activeTab === "brand_performance" && (
                         <div className="admin-dashboard-tab">
-                            {/* Header with Timeline Filter */}
-                            <div className="dashboard-header">
-                                <h2 className="admin-section-title">Overview</h2>
-                                <div className="timeline-filter">
-                                    <div className="timeline-row">
-                                        <div className="timeline-buttons">
-                                            {TIMELINE_OPTIONS.map(opt => (
-                                                <button key={opt.value} className={`timeline-btn ${timeline === opt.value ? 'active' : ''}`} onClick={() => handleTimelineChange(opt.value)}>
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <div className="comparison-selector">
-                                            <span className="comparison-label">Compare to:</span>
-                                            <select
-                                                value={comparison}
-                                                onChange={(e) => setComparison(e.target.value)}
-                                                className="comparison-select"
-                                            >
-                                                {COMPARISON_OPTIONS.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                ))}
-                                            </select>
-                                        </div>
+                            {/* Clean filter bar */}
+                            <div className="cmo-tab-header">
+                                <h2 className="admin-section-title">Overall Brand Performance</h2>
+                                <div className="cmo-filters-row">
+                                    <div className="cmo-timeline-pills">
+                                        {TIMELINE_OPTIONS.map(opt => (
+                                            <button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`}
+                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
+                                                {opt.label}
+                                            </button>
+                                        ))}
                                     </div>
-                                    {showCustomDatePicker && (
-                                        <div className="custom-date-picker">
-                                            <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                            <span>to</span>
-                                            <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                        </div>
-                                    )}
+                                    <div className="cmo-filters-right">
+                                        {showCustomDatePicker && (
+                                            <div className="cmo-date-range">
+                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
+                                                <span className="cmo-date-sep">→</span>
+                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
+                                            </div>
+                                        )}
+                                        <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
+                                            {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Main Stats Grid - Headers Above Numbers - 6 Cards */}
+                            {/* 1. Cumulative Sales (website + stores + B2B + exhibitions) */}
+                            <h3 className="admin-subsection-title">Cumulative Sales</h3>
                             <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Revenue</span>
+                                    <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue)}</span>
+                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
+                                </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Total Orders</span>
                                     <span className="stat-value">{formatIndianNumber(dashboardStats.totalOrders)}</span>
                                     {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.ordersGrowth} />}
                                 </div>
                                 <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Revenue</span>
-                                    <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue.toFixed(0))}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Pending Orders</span>
-                                    <span className="stat-value">{dashboardStats.pendingOrders}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.pendingGrowth} inverse={true} />}
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Prepared</span>
-                                    <span className="stat-value">{dashboardStats.preparedOrders}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.preparedGrowth} />}
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Delivered</span>
-                                    <span className="stat-value">{dashboardStats.deliveredOrders}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.deliveredGrowth} />}
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Cancelled Orders</span>
-                                    <span className="stat-value">{dashboardStats.cancelledOrders}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.cancelledGrowth} inverse={true} />}
-                                </div>
-                            </div>
-
-                            {/* Extended KPIs */}
-                            <div className="admin-stats-grid overview-grid" style={{ marginTop: 0 }}>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Avg Order Value</span>
-                                    <span className="stat-value">₹{formatIndianNumber(enhancedDashboardStats.avgOrderValue.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Items Sold</span>
                                     <span className="stat-value">{formatIndianNumber(enhancedDashboardStats.totalItems)}</span>
                                 </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refund Value</span>
-                                    <span className="stat-value">₹0</span>
-                                    <PlaceholderBadge label="Refund data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refund Qty</span>
-                                    <span className="stat-value">0</span>
-                                    <PlaceholderBadge label="Refund data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Repeat Customer Rate</span>
-                                    <span className="stat-value">{clientAnalytics.repeatRate}%</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Gross Margin</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="COGS data pending" />
-                                </div>
                             </div>
 
-                            {/* Channel Revenue Breakdown + Order Value Trend */}
+                            {/* Channel breakdown */}
                             <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
                                 <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Revenue by Channel</h3>
+                                    <h3 className="chart-title">Sales by Channel</h3>
                                     {enhancedDashboardStats.channelBreakdown.length > 0 ? (
                                         <ResponsiveContainer width="100%" height={300}>
                                             <PieChart>
@@ -1404,14 +1509,14 @@ export default function AdminDashboard() {
                                                         <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                                                     ))}
                                                 </Pie>
-                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`, "Revenue"]} />
+                                                <Tooltip content={<ChartTooltip />} />
                                                 <Legend verticalAlign="bottom" height={36} />
                                             </PieChart>
                                         </ResponsiveContainer>
                                     ) : <div className="no-chart-data">No data available</div>}
                                 </div>
                                 <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Revenue Mix %</h3>
+                                    <h3 className="chart-title">Channel Revenue Breakdown</h3>
                                     {enhancedDashboardStats.revenueMix.length > 0 ? (
                                         <div className="revenue-mix-list">
                                             {enhancedDashboardStats.revenueMix.map((ch, i) => (
@@ -1424,7 +1529,7 @@ export default function AdminDashboard() {
                                                         <div className="revenue-mix-bar" style={{ width: `${ch.percent}%`, background: PIE_COLORS[i % PIE_COLORS.length] }}></div>
                                                     </div>
                                                     <span className="revenue-mix-val">{ch.percent}%</span>
-                                                    <span className="revenue-mix-amt">₹{formatIndianNumber(ch.revenue.toFixed(0))}</span>
+                                                    <span className="revenue-mix-amt">₹{formatIndianNumber(Math.round(ch.revenue))}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -1432,523 +1537,827 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* Order Value Trend */}
-                            {orderValueTrend.length > 1 && (
-                                <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
-                                    <h3 className="chart-title">Order Value Trend</h3>
-                                    <ResponsiveContainer width="100%" height={280}>
+                            {/* 2. Cumulative Refund */}
+                            <h3 className="admin-subsection-title">Cumulative Refund</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Refund Value</span>
+                                    <span className="stat-value">₹0</span>
+                                    <PlaceholderBadge label="Refund data pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Refund Quantity</span>
+                                    <span className="stat-value">0</span>
+                                    <PlaceholderBadge label="Refund data pending" />
+                                </div>
+                            </div>
+
+                            {/* 3. Top-performing Products */}
+                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
+                                <h3 className="chart-title">Top-Performing Products (Descending)</h3>
+                                {analyticsData.topProducts.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height={400}>
+                                        <BarChart data={analyticsData.topProducts} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
+                                            <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
+                                            <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
+                                                tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
+                                            <Tooltip content={({ active, payload, label }) => {
+                                                if (!active || !payload?.length) return null;
+                                                const item = analyticsData.topProducts.find(p => p.name === label);
+                                                return (
+                                                    <div className="cmo-chart-tooltip">
+                                                        <p className="cmo-chart-tooltip-label">{label}</p>
+                                                        <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                        <p className="cmo-chart-tooltip-row">Qty sold: {item?.count || 0}</p>
+                                                    </div>
+                                                );
+                                            }} />
+                                            <Bar dataKey="sales" radius={[0, 6, 6, 0]} barSize={20}>
+                                                {analyticsData.topProducts.map((_, i) => (
+                                                    <Cell key={i} fill={`rgba(213, 184, 90, ${1 - i * 0.07})`} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                ) : <div className="no-chart-data">No data available</div>}
+                            </div>
+
+                            {/* 4. Top & Bottom Colours — bars use ACTUAL colour */}
+                            <div className="analytics-charts-grid">
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Top Performing Colours</h3>
+                                    {analyticsData.topColors.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={380}>
+                                            <BarChart data={analyticsData.topColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    const item = analyticsData.topColors.find(c => c.name === label);
+                                                    return (
+                                                        <div className="cmo-chart-tooltip">
+                                                            <p className="cmo-chart-tooltip-label">
+                                                                <span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>
+                                                                {label}
+                                                            </p>
+                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                            <p className="cmo-chart-tooltip-row">Orders: {item?.count || 0}</p>
+                                                        </div>
+                                                    );
+                                                }} />
+                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
+                                                    {analyticsData.topColors.map((entry, i) => (
+                                                        <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Bottom Performing Colours</h3>
+                                    {enhancedAnalytics.bottomColors.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={380}>
+                                            <BarChart data={enhancedAnalytics.bottomColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (
+                                                        <div className="cmo-chart-tooltip">
+                                                            <p className="cmo-chart-tooltip-label">
+                                                                <span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>
+                                                                {label}
+                                                            </p>
+                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                        </div>
+                                                    );
+                                                }} />
+                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
+                                                    {enhancedAnalytics.bottomColors.map((entry, i) => (
+                                                        <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 2: REVENUE & BUSINESS DRIVERS */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {activeTab === "revenue" && (
+                        <div className="admin-dashboard-tab">
+                            <div className="cmo-tab-header">
+                                <h2 className="admin-section-title">Revenue & Business Drivers</h2>
+                                <div className="cmo-filters-row">
+                                    <div className="cmo-timeline-pills">
+                                        {TIMELINE_OPTIONS.map(opt => (
+                                            <button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`}
+                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="cmo-filters-right">
+                                        {showCustomDatePicker && (
+                                            <div className="cmo-date-range">
+                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
+                                                <span className="cmo-date-sep">→</span>
+                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
+                                            </div>
+                                        )}
+                                        <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
+                                            {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 1. Total Revenue (multi-channel) */}
+                            <h3 className="admin-subsection-title">Total Revenue</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Revenue</span>
+                                    <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue)}</span>
+                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
+                                </div>
+                                {enhancedDashboardStats.channelBreakdown.map((ch, i) => (
+                                    <div key={i} className="admin-stat-card overview-card">
+                                        <span className="stat-label">{ch.name}</span>
+                                        <span className="stat-value">₹{formatIndianNumber(Math.round(ch.revenue))}</span>
+                                        <span className="stat-sub">{ch.orders} orders</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* 2. Revenue Mix % */}
+                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
+                                <h3 className="chart-title">Revenue Mix %</h3>
+                                {enhancedDashboardStats.revenueMix.length > 0 ? (
+                                    <div className="revenue-mix-list">
+                                        {enhancedDashboardStats.revenueMix.map((ch, i) => (
+                                            <div key={i} className="revenue-mix-row">
+                                                <div className="revenue-mix-info">
+                                                    <span className="revenue-mix-dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}></span>
+                                                    <span className="revenue-mix-name">{ch.name}</span>
+                                                </div>
+                                                <div className="revenue-mix-bar-wrap">
+                                                    <div className="revenue-mix-bar" style={{ width: `${ch.percent}%`, background: PIE_COLORS[i % PIE_COLORS.length] }}></div>
+                                                </div>
+                                                <span className="revenue-mix-val">{ch.percent}%</span>
+                                                <span className="revenue-mix-amt">₹{formatIndianNumber(Math.round(ch.revenue))}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : <div className="no-chart-data">No data available</div>}
+                            </div>
+
+                            {/* 3. Order Value Trend */}
+                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
+                                <h3 className="chart-title">Order Value Trend</h3>
+                                {orderValueTrend.length > 1 ? (
+                                    <ResponsiveContainer width="100%" height={300}>
                                         <AreaChart data={orderValueTrend} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                            <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                            <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                             <Tooltip formatter={(v, name) => [`₹${formatIndianNumber(v)}`, name === "revenue" ? "Revenue" : "AOV"]} />
                                             <Legend />
                                             <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#d5b85a" fill="rgba(213,184,90,0.15)" strokeWidth={2} />
                                             <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
                                         </AreaChart>
                                     </ResponsiveContainer>
-                                </div>
-                            )}
+                                ) : <div className="no-chart-data">Select a wider date range to see trends</div>}
+                            </div>
 
-                            {/* Inventory Overview */}
-                            <h3 className="admin-subsection-title">Inventory Overview</h3>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v6" /><path d="M16.76 3a2 2 0 0 1 1.8 1.1l2.23 4.479a2 2 0 0 1 .21.891V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.472a2 2 0 0 1 .211-.894L5.45 4.1A2 2 0 0 1 7.24 3z" /><path d="M3.054 9.013h17.893" /></svg></div>
-                                    <div className="stat-info"><span className="stat-label">Total Products</span><span className="stat-value">{inventoryStats.total}</span></div>
+                            {/* 4. Growth % Comparison */}
+                            <h3 className="admin-subsection-title">Growth % Comparison</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Revenue Growth</span>
+                                    <span className="stat-value"><GrowthIndicator value={dashboardStats.revenueGrowth} /></span>
                                 </div>
-                                <div className="admin-stat-card">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg></div>
-                                    <div className="stat-info"><span className="stat-label">On Shopify</span><span className="stat-value">{inventoryStats.onShopify}</span></div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Orders Growth</span>
+                                    <span className="stat-value"><GrowthIndicator value={dashboardStats.ordersGrowth} /></span>
                                 </div>
-                                <div className="admin-stat-card warning">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg></div>
-                                    <div className="stat-info"><span className="stat-label">Low Stock</span><span className="stat-value">{inventoryStats.lowStock}</span></div>
-                                </div>
-                                <div className="admin-stat-card danger">
-                                    <div className="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4.929 4.929 19.07 19.071" /><circle cx="12" cy="12" r="10" /></svg></div>
-                                    <div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value">{inventoryStats.outOfStock}</span></div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Delivered Growth</span>
+                                    <span className="stat-value"><GrowthIndicator value={dashboardStats.deliveredGrowth} /></span>
                                 </div>
                             </div>
 
-                            {/* Recent Orders */}
-                            <div className="admin-recent-orders">
-                                <div className="recent-header">
-                                    <h3 className="admin-subsection-title">Recent Orders</h3>
-                                    <select value={recentOrdersCount} onChange={(e) => setRecentOrdersCount(Number(e.target.value))} className="recent-count-select">
-                                        <option value={5}>Last 5</option>
-                                        <option value={10}>Last 10</option>
-                                        <option value={20}>Last 20</option>
-                                    </select>
+                            {/* 5. Average Order Value */}
+                            <h3 className="admin-subsection-title">Average Order Value</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">AOV</span>
+                                    <span className="stat-value">₹{formatIndianNumber(enhancedDashboardStats.avgOrderValue.toFixed(0))}</span>
                                 </div>
-                                <div className="admin-table-wrapper">
-                                    <div className="admin-table-container">
+                            </div>
+
+                            {/* 6. Customer Cohorts */}
+                            <h3 className="admin-subsection-title">Customer Cohorts</h3>
+                            <div className="analytics-charts-grid">
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Customer Segmentation</h3>
+                                    {clientAnalytics.segmentation.some(s => s.value > 0) ? (
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie data={clientAnalytics.segmentation.filter(s => s.value > 0)} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="value"
+                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
+                                                    {clientAnalytics.segmentation.map((_, i) => (
+                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip />
+                                                <Legend verticalAlign="bottom" height={36} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Cohort Stats</h3>
+                                    <div className="admin-stats-grid" style={{ gridTemplateColumns: '1fr' }}>
+                                        <div className="admin-stat-card overview-card">
+                                            <span className="stat-label">Repeat Customer Rate</span>
+                                            <span className="stat-value">{clientAnalytics.repeatRate}%</span>
+                                        </div>
+                                        <div className="admin-stat-card overview-card">
+                                            <span className="stat-label">New Clients (Period)</span>
+                                            <span className="stat-value">{clientAnalytics.newClientsCount}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 7. Gross Margin Trend (Placeholder) */}
+                            <div className="analytics-chart-card" style={{ marginTop: 20 }}>
+                                <h3 className="chart-title">Gross Margin Trend (Overall)</h3>
+                                <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                    <PlaceholderBadge label="COGS data integration pending" />
+                                    <span>Margin trend over time will appear here</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 3: PRODUCT, STYLE & DESIGN PERFORMANCE */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {activeTab === "products_style" && (
+                        <div className="admin-analytics-tab">
+                            <div className="cmo-tab-header">
+                                <h2 className="admin-section-title">Product, Style & Design Performance</h2>
+                                <div className="cmo-filters-row">
+                                    <div className="cmo-timeline-pills">
+                                        {TIMELINE_OPTIONS.map(opt => (
+                                            <button key={opt.value} className={`cmo-pill ${analyticsTimeline === opt.value ? "active" : ""}`}
+                                                onClick={() => handleAnalyticsTimelineChange(opt.value)}>
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="cmo-filters-right">
+                                        {showAnalyticsCustomPicker && (
+                                            <div className="cmo-date-range">
+                                                <input type="date" value={analyticsCustomFrom} onChange={(e) => setAnalyticsCustomFrom(e.target.value)} />
+                                                <span className="cmo-date-sep">→</span>
+                                                <input type="date" value={analyticsCustomTo} onChange={(e) => setAnalyticsCustomTo(e.target.value)} />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="analytics-charts-grid">
+                                {/* 1. Top Products (descending) */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Top-Performing Products</h3>
+                                    {analyticsData.topProducts.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <BarChart data={analyticsData.topProducts} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
+                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
+                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
+                                                    tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    const item = analyticsData.topProducts.find(p => p.name === label);
+                                                    return (
+                                                        <div className="cmo-chart-tooltip">
+                                                            <p className="cmo-chart-tooltip-label">{label}</p>
+                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                            <p className="cmo-chart-tooltip-row">Qty sold: {item?.count || 0}</p>
+                                                        </div>
+                                                    );
+                                                }} />
+                                                <Bar dataKey="sales" radius={[0, 6, 6, 0]} barSize={20}>
+                                                    {analyticsData.topProducts.map((_, i) => (
+                                                        <Cell key={i} fill={`rgba(213, 184, 90, ${1 - i * 0.07})`} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+
+                                {/* 2. Bottom Products */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Bottom-Performing Products</h3>
+                                    {enhancedAnalytics.bottomProducts.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <BarChart data={enhancedAnalytics.bottomProducts} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
+                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
+                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
+                                                    tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (
+                                                        <div className="cmo-chart-tooltip">
+                                                            <p className="cmo-chart-tooltip-label">{label}</p>
+                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                        </div>
+                                                    );
+                                                }} />
+                                                <Bar dataKey="sales" radius={[0, 6, 6, 0]} barSize={20}>
+                                                    {enhancedAnalytics.bottomProducts.map((_, i) => (
+                                                        <Cell key={i} fill={`rgba(198, 40, 40, ${0.9 - i * 0.07})`} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+
+                                {/* 3. Top Colours */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Top Performing Colours</h3>
+                                    {analyticsData.topColors.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={380}>
+                                            <BarChart data={analyticsData.topColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (
+                                                        <div className="cmo-chart-tooltip">
+                                                            <p className="cmo-chart-tooltip-label"><span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>{label}</p>
+                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                        </div>
+                                                    );
+                                                }} />
+                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
+                                                    {analyticsData.topColors.map((entry, i) => <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />)}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+
+                                {/* 3b. Bottom Colours */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Bottom Performing Colours</h3>
+                                    {enhancedAnalytics.bottomColors.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={380}>
+                                            <BarChart data={enhancedAnalytics.bottomColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (
+                                                        <div className="cmo-chart-tooltip">
+                                                            <p className="cmo-chart-tooltip-label"><span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>{label}</p>
+                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
+                                                        </div>
+                                                    );
+                                                }} />
+                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
+                                                    {enhancedAnalytics.bottomColors.map((entry, i) => <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />)}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+
+                                {/* 4. High & Repetitive Alterations */}
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">High Alterations by Outfit</h3>
+                                    {analyticsData.alterationsByOutfit.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={350}>
+                                            <BarChart data={analyticsData.alterationsByOutfit} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
+                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
+                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
+                                                    tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p><p className="cmo-chart-tooltip-row">Alterations: {payload[0].value}</p></div>);
+                                                }} />
+                                                <Bar dataKey="count" fill="#C9A94E" radius={[0, 6, 6, 0]} barSize={20} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No alteration data available</div>}
+                                </div>
+
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Alterations by Customers</h3>
+                                    {analyticsData.alterationsByCustomer.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={350}>
+                                            <BarChart data={analyticsData.alterationsByCustomer} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
+                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
+                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
+                                                    tickFormatter={(v) => v.length > 18 ? v.substring(0, 18) + '…' : v} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p><p className="cmo-chart-tooltip-row">Alterations: {payload[0].value}</p></div>);
+                                                }} />
+                                                <Bar dataKey="count" fill="#A67C52" radius={[0, 6, 6, 0]} barSize={20} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No alteration data available</div>}
+                                </div>
+                            </div>
+
+                            {/* Flagged Repetitive Alterations */}
+                            <div className="analytics-chart-card wide" style={{ marginTop: 20 }}>
+                                <h3 className="chart-title">🚩 Flagged: Repetitive Alterations (3+ on same outfit)</h3>
+                                <p className="chart-subtitle">Avg alterations per outfit: {enhancedAnalytics.avgAlterationsPerOutfit.toFixed(2)} | Total: {enhancedAnalytics.totalAlterations}</p>
+                                {enhancedAnalytics.flaggedAlterations.length > 0 ? (
+                                    <div className="admin-table-wrapper" style={{ maxHeight: 300, overflow: 'auto' }}>
                                         <table className="admin-table">
-                                            <thead>
-                                                <tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Status</th><th>Date</th></tr>
-                                            </thead>
+                                            <thead><tr><th>Outfit / Product</th><th>Alteration Count</th><th>Status</th></tr></thead>
                                             <tbody>
-                                                {recentOrders.map(order => (
-                                                    <tr key={order.id}>
-                                                        <td><span className="order-id">{order.order_no || "-"}</span></td>
-                                                        <td>{order.delivery_name || "-"}</td>
-                                                        <td className="product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                        <td>₹{formatIndianNumber(order.grand_total || 0)}</td>
-                                                        <td><span className={`status-badge ${order.status || "pending"}`}>{order.status || "Pending"}</span></td>
-                                                        <td>{formatDate(order.created_at)}</td>
+                                                {enhancedAnalytics.flaggedAlterations.map((a, i) => (
+                                                    <tr key={i} className="urgent-row">
+                                                        <td>{a.name}</td>
+                                                        <td><span className="urgent-badge" style={{ fontSize: 11 }}>{a.count} alterations</span></td>
+                                                        <td><span className="status-badge cancelled">Needs Review</span></td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
+                                ) : <div className="no-chart-data">No repetitive alterations — all good!</div>}
+                            </div>
+
+                            {/* 5. Average Alterations per Outfit */}
+                            <h3 className="admin-subsection-title" style={{ marginTop: 20 }}>Alteration Stats</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Avg Alterations / Outfit</span>
+                                    <span className="stat-value">{enhancedAnalytics.avgAlterationsPerOutfit.toFixed(2)}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Alterations</span>
+                                    <span className="stat-value">{enhancedAnalytics.totalAlterations}</span>
+                                </div>
+                            </div>
+
+                            {/* 6. High Return Styles (Placeholder) */}
+                            <div className="analytics-chart-card" style={{ marginTop: 20 }}>
+                                <h3 className="chart-title">High Return Styles (%)</h3>
+                                <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                    <PlaceholderBadge label="Returns data pending" />
+                                    <span>Return tracking by style will be displayed here</span>
+                                </div>
+                            </div>
+
+                            {/* 7. Customisation Trends (Placeholder) */}
+                            <h3 className="admin-subsection-title" style={{ marginTop: 20 }}>Customisation Trends</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Length-related</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Measurement aggregation pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Fit & Structure</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Measurement aggregation pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Silhouette-wise</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Measurement aggregation pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Colour-driven</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Measurement aggregation pending" />
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* ANALYTICS TAB */}
-                    {activeTab === "analytics" && (
-                        <div className="admin-analytics-tab">
-                            {/* Header with Timeline Filter */}
-                            <div className="dashboard-header">
-                                <h2 className="admin-section-title">Analytics</h2>
-                                <div className="timeline-filter">
-                                    <div className="timeline-row">
-                                        <div className="timeline-buttons">
-                                            {TIMELINE_OPTIONS.map(opt => (
-                                                <button key={opt.value} className={`timeline-btn ${analyticsTimeline === opt.value ? 'active' : ''}`} onClick={() => handleAnalyticsTimelineChange(opt.value)}>
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    {showAnalyticsCustomPicker && (
-                                        <div className="custom-date-picker">
-                                            <input type="date" value={analyticsCustomFrom} onChange={(e) => setAnalyticsCustomFrom(e.target.value)} />
-                                            <span>to</span>
-                                            <input type="date" value={analyticsCustomTo} onChange={(e) => setAnalyticsCustomTo(e.target.value)} />
-                                        </div>
-                                    )}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 4: CLIENT INSIGHTS */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {activeTab === "client_insights" && (
+                        <div className="admin-clients-tab">
+                            <h2 className="admin-section-title">Client Insights</h2>
+
+                            {/* Stats Row */}
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Clients</span>
+                                    <span className="stat-value">{formatIndianNumber(clientAnalytics.totalClients)}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">New Clients (Period)</span>
+                                    <span className="stat-value">{clientAnalytics.newClientsCount}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Repeat Customer Rate</span>
+                                    <span className="stat-value">{clientAnalytics.repeatRate}%</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total SB Clients</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="SB client book pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Avg Age of Clients</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="DOB data pending" />
                                 </div>
                             </div>
 
-                            {/* Charts Grid */}
-                            <div className="analytics-charts-grid">
-                                {/* 1. Sales of Top 10 Products */}
+                            {/* Segmentation + Store breakdown */}
+                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
                                 <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Sales by Top 10 Products</h3>
-                                    {analyticsData.topProducts.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <BarChart data={analyticsData.topProducts} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
-                                                <YAxis
-                                                    type="category"
-                                                    dataKey="name"
-                                                    width={120}
-                                                    tick={{ fontSize: 11 }}
-                                                    tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
-                                                />
-                                                <Tooltip
-                                                    content={({ active, payload, label }) => {
-                                                        if (active && payload && payload.length) {
-                                                            const item = analyticsData.topProducts.find(p => p.name === label);
-                                                            return (
-                                                                <div style={{ background: '#fff', border: '1px solid #ccc', padding: '10px', borderRadius: '4px' }}>
-                                                                    <p style={{ margin: 0, fontWeight: 'bold' }}>{label}</p>
-                                                                    <p style={{ margin: '5px 0 0' }}>Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                                    <p style={{ margin: '5px 0 0' }}>Orders: {item?.count || 0}</p>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    }}
-                                                />
-                                                <Bar dataKey="sales" fill="#d5b85a" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="no-chart-data">No data available</div>
-                                    )}
-                                </div>
-
-                                {/* 2. Sales of Top 10 Colors */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Sales by Top 10 Colors</h3>
-                                    {analyticsData.topColors.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <BarChart data={analyticsData.topColors} margin={{ top: 10, right: 30, left: 10, bottom: 70 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis
-                                                    dataKey="name"
-                                                    interval={0}
-                                                    tick={{ fontSize: 11 }}
-                                                    tickFormatter={(v) => v.length > 10 ? v.substring(0, 10) + '...' : v}
-                                                />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
-                                                <Tooltip
-                                                    content={({ active, payload, label }) => {
-                                                        if (active && payload && payload.length) {
-                                                            const item = analyticsData.topColors.find(c => c.name === label);
-                                                            return (
-                                                                <div style={{ background: '#fff', border: '1px solid #ccc', padding: '10px', borderRadius: '4px' }}>
-                                                                    <p style={{ margin: 0, fontWeight: 'bold' }}>{label}</p>
-                                                                    <p style={{ margin: '5px 0 0' }}>Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                                    <p style={{ margin: '5px 0 0' }}>Orders: {item?.count || 0}</p>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    }}
-                                                />
-                                                <Bar dataKey="sales" fill="#d5b85a" radius={[4, 4, 0, 0]}>
-                                                    {analyticsData.topColors.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="no-chart-data">No data available</div>
-                                    )}
-                                </div>
-
-                                {/* 3. Sales by Store */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Sales by Store</h3>
-                                    {analyticsData.salesByStore.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
+                                    <h3 className="chart-title">Client Segmentation Growth</h3>
+                                    {clientAnalytics.segmentation.some(s => s.value > 0) ? (
+                                        <ResponsiveContainer width="100%" height={300}>
                                             <PieChart>
-                                                <Pie
-                                                    data={analyticsData.salesByStore}
-                                                    cx="50%"
-                                                    cy="45%"
-                                                    innerRadius={60}
-                                                    outerRadius={100}
-                                                    fill="#8884d8"
-                                                    dataKey="sales"
-                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                                                    labelLine={true}
-                                                >
-                                                    {analyticsData.salesByStore.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                                    ))}
+                                                <Pie data={clientAnalytics.segmentation.filter(s => s.value > 0)} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="value"
+                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
+                                                    {clientAnalytics.segmentation.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                                                 </Pie>
-                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`, "Sales"]} />
+                                                <Tooltip />
                                                 <Legend verticalAlign="bottom" height={36} />
                                             </PieChart>
                                         </ResponsiveContainer>
-                                    ) : (
-                                        <div className="no-chart-data">No data available</div>
-                                    )}
+                                    ) : <div className="no-chart-data">No data available</div>}
                                 </div>
-
-                                {/* 4. Sales and Discounts by Salesperson */}
-                                <div className="analytics-chart-card wide">
-                                    <h3 className="chart-title">Sales & Discounts by Salesperson</h3>
-                                    {analyticsData.salesBySalesperson.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <BarChart data={analyticsData.salesBySalesperson} margin={{ top: 10, right: 30, left: 20, bottom: 70 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis
-                                                    dataKey="name"
-                                                    textAnchor="end"
-                                                    interval={0}
-                                                    tick={{ fontSize: 11 }}
-                                                    height={70}
-                                                    tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
-                                                />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
-                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`]} />
-                                                <Legend verticalAlign="top" height={36} />
-                                                <Bar dataKey="sales" name="Sales" fill="#d5b85a" radius={[4, 4, 0, 0]} />
-                                                <Bar dataKey="discount" name="Discount" fill="#8B7355" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="no-chart-data">No data available</div>
-                                    )}
-                                </div>
-
-                                {/* 5. Alteration by Outfit */}
                                 <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Alterations by Outfit</h3>
-                                    <p className="chart-subtitle">Total: {analyticsData.totalAlterations} alterations</p>
-                                    {analyticsData.alterationsByOutfit.length > 0 ? (
+                                    <h3 className="chart-title">Clients by Store</h3>
+                                    {clientAnalytics.storeClients.length > 0 ? (
                                         <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={analyticsData.alterationsByOutfit} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis type="number" allowDecimals={false} />
-                                                <YAxis
-                                                    type="category"
-                                                    dataKey="name"
-                                                    width={120}
-                                                    tick={{ fontSize: 11 }}
-                                                    tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
-                                                />
-                                                <Tooltip formatter={(v) => [v, "Alterations"]} />
-                                                <Bar dataKey="count" fill="#8B7355" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="no-chart-data">No alteration data available</div>
-                                    )}
-                                </div>
-
-                                {/* 6. Alteration by Customers */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Alterations by Customers</h3>
-                                    <p className="chart-subtitle">Top 10 customers with most alterations</p>
-                                    {analyticsData.alterationsByCustomer.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={analyticsData.alterationsByCustomer} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis type="number" allowDecimals={false} />
-                                                <YAxis
-                                                    type="category"
-                                                    dataKey="name"
-                                                    width={120}
-                                                    tick={{ fontSize: 11 }}
-                                                    tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
-                                                />
-                                                <Tooltip formatter={(v) => [v, "Alterations"]} />
-                                                <Bar dataKey="count" fill="#A67C52" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="no-chart-data">No alteration data available</div>
-                                    )}
-                                </div>
-
-                                {/* 7. Bottom 10 Products */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Bottom 10 Products (Low Sales)</h3>
-                                    {enhancedAnalytics.bottomProducts.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <BarChart data={enhancedAnalytics.bottomProducts} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
-                                                <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }}
-                                                    tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (active && payload?.length) {
-                                                        const item = enhancedAnalytics.bottomProducts.find(p => p.name === label);
-                                                        return (<div style={{ background: '#fff', border: '1px solid #ccc', padding: '10px', borderRadius: '4px' }}>
-                                                            <p style={{ margin: 0, fontWeight: 'bold' }}>{label}</p>
-                                                            <p style={{ margin: '5px 0 0' }}>Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                            <p style={{ margin: '5px 0 0' }}>Qty: {item?.count || 0}</p>
-                                                        </div>);
-                                                    }
-                                                    return null;
-                                                }} />
-                                                <Bar dataKey="sales" fill="#c62828" radius={[0, 4, 4, 0]} />
+                                            <BarChart data={clientAnalytics.storeClients} margin={{ top: 10, right: 30, left: 10, bottom: 50 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" tick={<WrappedAxisTick />} interval={0} axisLine={false} tickLine={false} height={50} />
+                                                <YAxis />
+                                                <Tooltip />
+                                                <Bar dataKey="count" name="Clients" fill="#d5b85a" radius={[4, 4, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     ) : <div className="no-chart-data">No data available</div>}
                                 </div>
+                            </div>
 
-                                {/* 8. Bottom 5 Colors */}
+                            {/* 1. Top Clients per Store */}
+                            <h3 className="admin-subsection-title">Top Clients per Store</h3>
+                            <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
+                                <div className="admin-search-wrapper">
+                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+                                    <input type="text" placeholder="Search name, phone, city..." value={clientsSearch} onChange={(e) => setClientsSearch(e.target.value)} className="admin-search-input" />
+                                    {clientsSearch && <button className="search-clear" onClick={() => setClientsSearch("")}>×</button>}
+                                </div>
+                                <div className="cmo-filters-right" style={{ gap: 8 }}>
+                                    <select value={clientsStoreFilter} onChange={(e) => setClientsStoreFilter(e.target.value)} className="cmo-compare-select">
+                                        <option value="">All Stores</option>
+                                        {clientAnalytics.storeList.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    <select value={clientsSortBy} onChange={(e) => setClientsSortBy(e.target.value)} className="cmo-compare-select">
+                                        <option value="totalSpend">Highest Spend</option>
+                                        <option value="orderCount">Most Orders</option>
+                                        <option value="recent">Most Recent</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="admin-table-wrapper">
+                                <div className="admin-table-container" style={{ minWidth: 1000 }}>
+                                    <table className="admin-table">
+                                        <thead>
+                                            <tr><th>#</th><th>Name</th><th>Phone</th><th>City</th><th>Stores</th><th>Birthday</th><th>Orders</th><th>Items</th><th className="amount">12M Spend</th><th className="amount">Lifetime Spend</th><th>Last Order</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {clientAnalytics.currentClients.length === 0 ?
+                                                <tr><td colSpan="11" className="no-data">No clients found</td></tr> :
+                                                clientAnalytics.currentClients.map((c, idx) => (
+                                                    <tr key={c.phone}>
+                                                        <td>{(clientsPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
+                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                        <td>{c.phone}</td>
+                                                        <td>{c.city}</td>
+                                                        <td>{c.stores || "-"}</td>
+                                                        <td><PlaceholderBadge label="DOB" /></td>
+                                                        <td>{c.orderCount}</td>
+                                                        <td>{c.items}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.spend12M.toFixed(0))}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.totalSpend.toFixed(0))}</td>
+                                                        <td>{formatDate(c.lastOrder)}</td>
+                                                    </tr>
+                                                ))
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {clientAnalytics.clientsTotalPages > 1 && (
+                                <div className="admin-pagination">
+                                    <button onClick={() => setClientsPage(p => Math.max(1, p - 1))} disabled={clientsPage === 1}>Prev</button>
+                                    <span>Page {clientsPage} of {clientAnalytics.clientsTotalPages}</span>
+                                    <button onClick={() => setClientsPage(p => Math.min(clientAnalytics.clientsTotalPages, p + 1))} disabled={clientsPage === clientAnalytics.clientsTotalPages}>Next</button>
+                                </div>
+                            )}
+
+                            {/* 2-3. Client Purchase History + SB Client Book */}
+                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
                                 <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Bottom 5 Colors (Low Sales)</h3>
-                                    {enhancedAnalytics.bottomColors.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <BarChart data={enhancedAnalytics.bottomColors} margin={{ top: 10, right: 30, left: 10, bottom: 70 }}>
-                                                <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis dataKey="name" interval={0} tick={{ fontSize: 11 }} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
-                                                <Tooltip formatter={(v) => [`₹${formatIndianNumber(v)}`, "Sales"]} />
-                                                <Bar dataKey="sales" fill="#e65100" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-
-                                {/* 9. Flagged Alterations (Repetitive) */}
-                                <div className="analytics-chart-card wide">
-                                    <h3 className="chart-title">🚩 Flagged: Repetitive Alterations (3+ on same outfit)</h3>
-                                    <p className="chart-subtitle">Avg alterations per outfit: {enhancedAnalytics.avgAlterationsPerOutfit.toFixed(2)} | Total alterations: {enhancedAnalytics.totalAlterations}</p>
-                                    {enhancedAnalytics.flaggedAlterations.length > 0 ? (
-                                        <div className="admin-table-wrapper" style={{ maxHeight: 300, overflow: 'auto' }}>
-                                            <table className="admin-table">
-                                                <thead><tr><th>Outfit / Product</th><th>Alteration Count</th><th>Status</th></tr></thead>
-                                                <tbody>
-                                                    {enhancedAnalytics.flaggedAlterations.map((a, i) => (
-                                                        <tr key={i} className="urgent-row">
-                                                            <td>{a.name}</td>
-                                                            <td><span className="urgent-badge" style={{ fontSize: 11 }}>{a.count} alterations</span></td>
-                                                            <td><span className="status-badge cancelled">Needs Review</span></td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    ) : <div className="no-chart-data">No repetitive alterations flagged — all good!</div>}
-                                </div>
-
-                                {/* 10. Customisation Trends (Placeholder) */}
-                                <div className="analytics-chart-card wide">
-                                    <h3 className="chart-title">Customisation Trends</h3>
-                                    <div className="admin-stats-grid" style={{ marginBottom: 0 }}>
-                                        <div className="admin-stat-card overview-card">
-                                            <span className="stat-label">Length-related</span>
-                                            <span className="stat-value">—</span>
-                                            <PlaceholderBadge label="Measurement data aggregation pending" />
-                                        </div>
-                                        <div className="admin-stat-card overview-card">
-                                            <span className="stat-label">Fit & Structure</span>
-                                            <span className="stat-value">—</span>
-                                            <PlaceholderBadge label="Measurement data aggregation pending" />
-                                        </div>
-                                        <div className="admin-stat-card overview-card">
-                                            <span className="stat-label">Silhouette-wise</span>
-                                            <span className="stat-value">—</span>
-                                            <PlaceholderBadge label="Measurement data aggregation pending" />
-                                        </div>
-                                        <div className="admin-stat-card overview-card">
-                                            <span className="stat-label">Colour-driven</span>
-                                            <span className="stat-value">—</span>
-                                            <PlaceholderBadge label="Measurement data aggregation pending" />
-                                        </div>
+                                    <h3 className="chart-title">Client Purchase History (12M + Lifetime)</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="12-month rolling view pending" />
+                                        <span>Monthly purchase trend per client will appear here</span>
                                     </div>
                                 </div>
-
-                                {/* 11. High Return Styles (Placeholder) */}
                                 <div className="analytics-chart-card">
-                                    <h3 className="chart-title">High Return Styles (%)</h3>
+                                    <h3 className="chart-title">SB Client Book</h3>
                                     <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="Returns data pending" />
-                                        <span>Return tracking will be displayed here once connected</span>
+                                        <PlaceholderBadge label="SB client book data pending" />
+                                        <span>Store-based client assignments will appear here</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* INVENTORY TAB */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 5: INVENTORY OVERVIEW */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
                     {activeTab === "inventory" && (
                         <div className="admin-inventory-tab">
-                            <h2 className="admin-section-title">Inventory Management</h2>
+                            <h2 className="admin-section-title">Inventory Overview</h2>
                             <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                                <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Delayed Deliveries</span><span className="stat-value">{enhancedInventoryStats.delayedCount}</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Active LXRTS Products</span><span className="stat-value">{products.filter(p => p.sync_enabled).length}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Products</span><span className="stat-value">{inventoryStats.total}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Stock</span><span className="stat-value">{formatIndianNumber(inventoryStats.totalInventory)}</span></div></div>
                                 <div className="admin-stat-card warning"><div className="stat-info"><span className="stat-label">Low Stock (&lt;5)</span><span className="stat-value">{inventoryStats.lowStock}</span></div></div>
                                 <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value">{inventoryStats.outOfStock}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Active LXRTS</span><span className="stat-value">{enhancedInventoryStats.totalProducts > 0 ? products.filter(p => p.sync_enabled).length : 0}</span></div></div>
-                                <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Delayed Deliveries</span><span className="stat-value">{enhancedInventoryStats.delayedCount}</span></div></div>
-                                <div className="admin-stat-card">
-                                    <div className="stat-info"><span className="stat-label">Consignment Inventory</span><span className="stat-value">—</span><PlaceholderBadge label="Consignment data pending" /></div>
-                                </div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Consignment Inventory</span><span className="stat-value">—</span><PlaceholderBadge label="Consignment data pending" /></div></div>
                             </div>
 
                             {/* Delayed Deliveries Table */}
                             {enhancedInventoryStats.delayedCount > 0 && (
                                 <div style={{ marginBottom: 20 }}>
                                     <h3 className="admin-subsection-title">⚠️ Delayed Deliveries ({enhancedInventoryStats.delayedCount})</h3>
-                                    <div className="admin-table-wrapper">
-                                        <div className="admin-table-container">
-                                            <table className="admin-table">
-                                                <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Promise Date</th><th>Days Late</th><th>Status</th></tr></thead>
-                                                <tbody>
-                                                    {enhancedInventoryStats.delayedOrders.map(o => {
-                                                        const daysLate = Math.floor((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
-                                                        return (
-                                                            <tr key={o.id} className="urgent-row">
-                                                                <td><span className="order-id">{o.order_no || "-"}</span></td>
-                                                                <td>{o.delivery_name || "-"}</td>
-                                                                <td className="product-cell">{o.items?.[0]?.product_name || "-"}</td>
-                                                                <td>{formatDate(o.delivery_date)}</td>
-                                                                <td><span className="urgent-badge">{daysLate} days</span></td>
-                                                                <td><span className={`status-badge ${o.status}`}>{o.status}</span></td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
+                                    <div className="admin-table-wrapper"><div className="admin-table-container">
+                                        <table className="admin-table">
+                                            <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Promise Date</th><th>Days Late</th><th>Status</th></tr></thead>
+                                            <tbody>
+                                                {enhancedInventoryStats.delayedOrders.map(o => {
+                                                    const daysLate = Math.floor((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
+                                                    return (
+                                                        <tr key={o.id} className="urgent-row">
+                                                            <td><span className="order-id">{o.order_no || "-"}</span></td>
+                                                            <td>{o.delivery_name || "-"}</td>
+                                                            <td className="product-cell">{o.items?.[0]?.product_name || "-"}</td>
+                                                            <td>{formatDate(o.delivery_date)}</td>
+                                                            <td><span className="urgent-badge">{daysLate} days</span></td>
+                                                            <td><span className={`status-badge ${o.status}`}>{o.status}</span></td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div></div>
                                 </div>
                             )}
 
-                            <div className="admin-toolbar">
+                            {/* 3. Inventory by Store */}
+                            <h3 className="admin-subsection-title">Inventory Quantity & Value by Store</h3>
+                            {enhancedInventoryStats.storeProducts.length > 0 ? (
+                                <div className="admin-table-wrapper" style={{ marginBottom: 20 }}><div className="admin-table-container">
+                                    <table className="admin-table">
+                                        <thead><tr><th>Store</th><th>Products</th><th>Total Inventory</th></tr></thead>
+                                        <tbody>
+                                            {enhancedInventoryStats.storeProducts.map((s, i) => (
+                                                <tr key={i}><td style={{ fontWeight: 500 }}>{s.name}</td><td>{s.count}</td><td>{formatIndianNumber(s.totalInventory)}</td></tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div></div>
+                            ) : null}
+
+                            {/* Product Inventory Table (existing) */}
+                            <h3 className="admin-subsection-title">Product Inventory Management</h3>
+                            <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
                                 <div className="admin-search-wrapper">
                                     <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
                                     <input type="text" placeholder="Search by name or SKU..." value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="admin-search-input" />
                                     {inventorySearch && <button className="search-clear" onClick={() => setInventorySearch("")}>×</button>}
                                 </div>
-                                <span className="showing-info">Showing {currentProducts.length} of {filteredProducts.length} products</span>
-                            </div>
-
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container">
-                                    <table className="admin-table inventory-table">
-                                        <thead><tr><th>SKU</th><th>Product Name</th><th>Default Top</th><th>Default Bottom</th><th>Base Price</th><th>Inventory</th><th>Actions</th></tr></thead>
-                                        <tbody>
-                                            {currentProducts.map(product => {
-                                                const isLxrts = isLxrtsProduct(product);
-                                                const isExpanded = expandedProduct === product.id;
-                                                return (
-                                                    <React.Fragment key={product.id}>
-                                                        <tr className={`${isLxrts ? "lxrts-row" : ""} ${isExpanded ? "expanded" : ""}`}>
-                                                            <td><span className="sku-code">{product.sku_id || "-"}</span></td>
-                                                            <td className="product-name-cell">{product.name || "-"}{isLxrts && <span className="lxrts-badge">LXRTS</span>}</td>
-                                                            <td>{product.default_top || "-"}</td>
-                                                            <td>{product.default_bottom || "-"}</td>
-                                                            <td>₹{formatIndianNumber(product.base_price || 0)}</td>
-                                                            <td className="inventory-cell">
-                                                                {isLxrts ? (
-                                                                    <span className="inventory-value lxrts">{lxrtsSyncLoading ? "..." : getLxrtsTotalInventory(product.id)}</span>
-                                                                ) : editingProductId === product.id ? (
-                                                                    <div className="inventory-edit">
-                                                                        <input type="number" value={editInventoryValue} onChange={(e) => setEditInventoryValue(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Enter") handleInventoryUpdate(product.id); if (e.key === "Escape") { setEditingProductId(null); setEditInventoryValue(""); } }} />
-                                                                        <button onClick={() => handleInventoryUpdate(product.id)} disabled={savingInventory}>{savingInventory ? "..." : "Save"}</button>
-                                                                        <button onClick={() => { setEditingProductId(null); setEditInventoryValue(""); }}>×</button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className={`inventory-value ${(product.inventory || 0) === 0 ? "out" : (product.inventory || 0) < 5 ? "low" : "ok"}`} onClick={() => { setEditingProductId(product.id); setEditInventoryValue(String(product.inventory || 0)); }}>{product.inventory || 0}</span>
-                                                                )}
-                                                            </td>
-                                                            <td>{isLxrts && <button className={`expand-btn ${isExpanded ? "expanded" : ""}`} onClick={() => handleExpandProduct(product)}>{isExpanded ? "Collapse" : "Expand"}</button>}</td>
-                                                        </tr>
-                                                        {isLxrts && isExpanded && (
-                                                            <tr className="variants-row">
-                                                                <td colSpan="7">
-                                                                    <div className="variants-container">
-                                                                        <div className="variants-header">
-                                                                            <span className="variants-title">Size Variants - {product.name}</span>
-                                                                            <span className="variants-total">Total: <strong>{getLxrtsTotalInventory(product.id)}</strong></span>
-                                                                        </div>
-                                                                        {lxrtsSyncLoading ? <p className="loading-text">Syncing inventory from Shopify...</p> :
-                                                                            getProductSizes(product.id).length === 0 ? <p className="no-variants">No variant data available</p> : (
-                                                                                <div className="variants-grid">
-                                                                                    {getProductSizes(product.id).map((size) => {
-                                                                                        const qty = variantInventory[product.id]?.[size] || 0;
-                                                                                        const isEditingThis = editingVariant?.productId === product.id && editingVariant?.size === size;
-                                                                                        return (
-                                                                                            <div key={size} className={`variant-card ${getInventoryClass(qty)}`}>
-                                                                                                <span className="variant-size">{size}</span>
-                                                                                                {isEditingThis ? (
-                                                                                                    <div className="variant-edit">
-                                                                                                        <input type="number" value={variantEditValue} onChange={(e) => setVariantEditValue(e.target.value)} autoFocus min="0" onKeyDown={(e) => { if (e.key === "Enter") handleVariantInventoryUpdate(product.id, size); if (e.key === "Escape") { setEditingVariant(null); setVariantEditValue(""); } }} />
-                                                                                                        <button onClick={() => handleVariantInventoryUpdate(product.id, size)} disabled={savingVariant}>{savingVariant ? "..." : "OK"}</button>
-                                                                                                        <button onClick={() => { setEditingVariant(null); setVariantEditValue(""); }}>×</button>
-                                                                                                    </div>
-                                                                                                ) : <span className="variant-qty" onClick={() => { setEditingVariant({ productId: product.id, size }); setVariantEditValue(String(qty)); }}>{qty}</span>}
-                                                                                            </div>
-                                                                                        );
-                                                                                    })}
-                                                                                </div>
-                                                                            )}
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        )}
-                                                    </React.Fragment>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                <div className="cmo-filters-right" style={{ gap: 8 }}>
+                                    <select className="cmo-compare-select" value={inventoryStockFilter} onChange={(e) => setInventoryStockFilter(e.target.value)}>
+                                        <option value="all">All Stock</option>
+                                        <option value="in_stock">In Stock (5+)</option>
+                                        <option value="low_stock">Low Stock (&lt;5)</option>
+                                        <option value="out_of_stock">Out of Stock</option>
+                                    </select>
+                                    <select className="cmo-compare-select" value={inventoryTypeFilter} onChange={(e) => setInventoryTypeFilter(e.target.value)}>
+                                        <option value="all">All Types</option>
+                                        <option value="lxrts">LXRTS Only</option>
+                                        <option value="regular">Regular Only</option>
+                                    </select>
+                                    <span className="showing-info">Showing {currentProducts.length} of {filteredProducts.length}</span>
                                 </div>
                             </div>
+                            <div className="admin-table-wrapper"><div className="admin-table-container">
+                                <table className="admin-table">
+                                    <thead><tr><th>SKU</th><th>Product Name</th><th>Default Top</th><th>Default Bottom</th><th>Default Top-Bottom</th><th>Base Price</th><th>Inventory</th></tr></thead>
+                                    <tbody>
+                                        {currentProducts.map(product => (
+                                            <React.Fragment key={product.id}>
+                                                <tr className={isLxrtsProduct(product) ? "lxrts-row" : ""}>
+                                                    <td><span className="order-id">{product.sku_id || "-"}</span></td>
+                                                    <td className="product-cell">
+                                                        {isLxrtsProduct(product) && <span className="lxrts-badge">LXRTS</span>}
+                                                        {product.name}
+                                                        {isLxrtsProduct(product) && (
+                                                            <button className="expand-btn" onClick={() => handleExpandProduct(product)}>
+                                                                {expandedProduct === product.id ? "▲" : "▼"}
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                    <td>{product.default_top || "-"}</td>
+                                                    <td>{product.default_bottom || "-"}</td>
+                                                    <td>{product.default_color || "-"}</td>
+                                                    <td>₹{formatIndianNumber(product.base_price || 0)}</td>
+                                                    <td>
+                                                        {isLxrtsProduct(product) ? (
+                                                            <span className={getInventoryClass(getLxrtsTotalInventory(product.id))}>
+                                                                {lxrtsSyncLoading ? "..." : getLxrtsTotalInventory(product.id)}
+                                                            </span>
+                                                        ) : editingProductId === product.id ? (
+                                                            <div className="inline-edit">
+                                                                <input type="number" value={editInventoryValue} onChange={(e) => setEditInventoryValue(e.target.value)}
+                                                                    onKeyDown={(e) => { if (e.key === "Enter") handleInventoryUpdate(product.id); if (e.key === "Escape") setEditingProductId(null); }}
+                                                                    autoFocus className="inline-edit-input" />
+                                                                <button onClick={() => handleInventoryUpdate(product.id)} disabled={savingInventory} className="inline-save-btn">
+                                                                    {savingInventory ? "..." : "✓"}
+                                                                </button>
+                                                                <button onClick={() => setEditingProductId(null)} className="inline-cancel-btn">✗</button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className={`editable-inventory ${getInventoryClass(product.inventory || 0)}`}
+                                                                onClick={() => { setEditingProductId(product.id); setEditInventoryValue(String(product.inventory || 0)); }}>
+                                                                {product.inventory || 0}
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                                {isLxrtsProduct(product) && expandedProduct === product.id && (
+                                                    <tr className="variant-row"><td colSpan="7">
+                                                        <div className="variant-grid">
+                                                            {getProductSizes(product.id).map(size => (
+                                                                <div key={size} className="variant-cell">
+                                                                    <span className="variant-size">{size}</span>
+                                                                    {editingVariant === `${product.id}-${size}` ? (
+                                                                        <div className="inline-edit compact">
+                                                                            <input type="number" value={variantEditValue} onChange={(e) => setVariantEditValue(e.target.value)}
+                                                                                onKeyDown={(e) => { if (e.key === "Enter") handleVariantInventoryUpdate(product.id, size); if (e.key === "Escape") setEditingVariant(null); }}
+                                                                                autoFocus className="inline-edit-input" />
+                                                                            <button onClick={() => handleVariantInventoryUpdate(product.id, size)} disabled={savingVariant} className="inline-save-btn">{savingVariant ? "..." : "✓"}</button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className={`editable-inventory ${getInventoryClass(variantInventory[product.id]?.[size] || 0)}`}
+                                                                            onClick={() => { setEditingVariant(`${product.id}-${size}`); setVariantEditValue(String(variantInventory[product.id]?.[size] || 0)); }}>
+                                                                            {variantInventory[product.id]?.[size] ?? "..."}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </td></tr>
+                                                )}
+                                            </React.Fragment>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div></div>
                             {inventoryTotalPages > 1 && (
                                 <div className="admin-pagination">
                                     <button onClick={() => setInventoryPage(p => Math.max(1, p - 1))} disabled={inventoryPage === 1}>Prev</button>
@@ -1959,7 +2368,317 @@ export default function AdminDashboard() {
                         </div>
                     )}
 
-                    {/* ORDERS TAB */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 6: COST & EXPENDITURE */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {activeTab === "cost_expenditure" && (
+                        <div className="admin-dashboard-tab">
+                            <h2 className="admin-section-title">Cost & Expenditure</h2>
+
+                            {/* 1. Discounts Given */}
+                            <h3 className="admin-subsection-title">Discounts Given</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Discount</span>
+                                    <span className="stat-value">₹{formatIndianNumber(financialStats.totalDiscount.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Discount %</span>
+                                    <span className="stat-value">{financialStats.discountPercent}%</span>
+                                </div>
+                            </div>
+
+                            {/* Discount by Channel */}
+                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Discounts by Channel</h3>
+                                    {financialStats.channelDiscounts.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={financialStats.channelDiscounts} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" tick={<WrappedAxisTick />} interval={0} axisLine={false} tickLine={false} height={50} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p><p className="cmo-chart-tooltip-row">Discount: ₹{formatIndianNumber(payload[0].value)}</p></div>);
+                                                }} />
+                                                <Bar dataKey="discount" name="Discount" fill="#d5b85a" radius={[6, 6, 0, 0]} barSize={36} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Discount by Salesperson</h3>
+                                    {analyticsData.salesBySalesperson.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height={320}>
+                                            <BarChart data={analyticsData.salesBySalesperson} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={({ active, payload, label }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p>{payload.map((p, i) => (<p key={i} className="cmo-chart-tooltip-row"><span className="cmo-chart-tooltip-dot" style={{ background: p.fill }}></span>{p.name}: ₹{formatIndianNumber(p.value)}</p>))}</div>);
+                                                }} />
+                                                <Legend />
+                                                <Bar dataKey="sales" name="Sales" fill="#d5b85a" radius={[6, 6, 0, 0]} barSize={18} />
+                                                <Bar dataKey="discount" name="Discount" fill="#8B7355" radius={[6, 6, 0, 0]} barSize={18} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="no-chart-data">No data available</div>}
+                                </div>
+                            </div>
+
+                            {/* 2. Refunds Value (Placeholder) */}
+                            <h3 className="admin-subsection-title">Refunds Value</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Refunds</span>
+                                    <span className="stat-value">₹0</span>
+                                    <PlaceholderBadge label="Refund data pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Refunds — Website</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Channel refunds pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Refunds — Stores</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Channel refunds pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Refunds — B2B</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Channel refunds pending" />
+                                </div>
+                            </div>
+
+                            {/* 3. Returns Value (Placeholder) */}
+                            <h3 className="admin-subsection-title">Returns Value</h3>
+                            <div className="admin-stats-grid overview-grid">
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Total Returns</span>
+                                    <span className="stat-value">₹0</span>
+                                    <PlaceholderBadge label="Returns data pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Returns — Website</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Channel returns pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Returns — Stores</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Channel returns pending" />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Returns — B2B</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Channel returns pending" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 7: B2B & VENDOR OVERVIEW */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {activeTab === "b2b_vendor" && (
+                        <div className="admin-b2b-tab">
+                            <h2 className="admin-section-title">B2B & Vendor Overview</h2>
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">B2B Revenue</span>
+                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bRevenue.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">B2B Orders</span>
+                                    <span className="stat-value">{b2bStats.totalB2bOrders}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Advance Collected</span>
+                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bAdvance.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card danger" style={{ borderLeft: '3px solid #c62828' }}>
+                                    <span className="stat-label">Balance Pending</span>
+                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bBalance.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Credit Exposure</span>
+                                    <span className="stat-value">—</span>
+                                    <PlaceholderBadge label="Credit limit data pending" />
+                                </div>
+                            </div>
+
+                            {/* 1. Client-wise Sales */}
+                            <h3 className="admin-subsection-title">Client-wise Sales</h3>
+                            <div className="admin-toolbar">
+                                <div className="admin-search-wrapper">
+                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+                                    <input type="text" placeholder="Search B2B client..." value={b2bSearch} onChange={(e) => setB2bSearch(e.target.value)} className="admin-search-input" />
+                                    {b2bSearch && <button className="search-clear" onClick={() => setB2bSearch("")}>×</button>}
+                                </div>
+                            </div>
+                            <div className="admin-table-wrapper"><div className="admin-table-container">
+                                <table className="admin-table">
+                                    <thead><tr><th>#</th><th>Client Name</th><th>Orders</th><th className="amount">Total Sales</th><th className="amount">Advance Paid</th><th className="amount">Balance Pending</th></tr></thead>
+                                    <tbody>
+                                        {b2bStats.currentB2bClients.length === 0 ?
+                                            <tr><td colSpan="6" className="no-data">No B2B clients found</td></tr> :
+                                            b2bStats.currentB2bClients.map((c, idx) => (
+                                                <tr key={c.name + idx}>
+                                                    <td>{(b2bPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
+                                                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                    <td>{c.orders}</td>
+                                                    <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
+                                                    <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
+                                                    <td className="amount" style={{ color: c.balance > 0 ? '#c62828' : '#2e7d32', fontWeight: 600 }}>₹{formatIndianNumber(c.balance.toFixed(0))}</td>
+                                                </tr>
+                                            ))
+                                        }
+                                    </tbody>
+                                </table>
+                            </div></div>
+                            {b2bStats.b2bTotalPages > 1 && (
+                                <div className="admin-pagination">
+                                    <button onClick={() => setB2bPage(p => Math.max(1, p - 1))} disabled={b2bPage === 1}>Prev</button>
+                                    <span>Page {b2bPage} of {b2bStats.b2bTotalPages}</span>
+                                    <button onClick={() => setB2bPage(p => Math.min(b2bStats.b2bTotalPages, p + 1))} disabled={b2bPage === b2bStats.b2bTotalPages}>Next</button>
+                                </div>
+                            )}
+
+                            {/* 3. Advance Pending Clients */}
+                            {b2bStats.advancePending.length > 0 && (
+                                <div style={{ marginTop: 20 }}>
+                                    <h3 className="admin-subsection-title">⚠️ Advance Pending Clients</h3>
+                                    <div className="admin-table-wrapper"><div className="admin-table-container">
+                                        <table className="admin-table">
+                                            <thead><tr><th>Client</th><th className="amount">Total Sales</th><th className="amount">Advance Paid</th><th className="amount">Balance Due</th></tr></thead>
+                                            <tbody>
+                                                {b2bStats.advancePending.slice(0, 15).map((c, i) => (
+                                                    <tr key={i} className="urgent-row">
+                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
+                                                        <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
+                                                        <td className="amount" style={{ color: '#c62828', fontWeight: 700 }}>₹{formatIndianNumber(c.balance.toFixed(0))}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div></div>
+                                </div>
+                            )}
+
+                            {/* 4. Buyout vs Consignment */}
+                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Buyout vs Consignment Mix</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="Order type classification pending" />
+                                        <span>Buyout and consignment breakdown will appear here</span>
+                                    </div>
+                                </div>
+                                <div className="analytics-chart-card">
+                                    <h3 className="chart-title">Client Credit Exposure</h3>
+                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                        <PlaceholderBadge label="Credit limit tracking pending" />
+                                        <span>Credit utilization per B2B client will appear here</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {/* TAB 8: TARGETS & GROWTH */}
+                    {/* ═══════════════════════════════════════════════════════════ */}
+                    {activeTab === "targets_growth" && (
+                        <div className="admin-targets-tab">
+                            <h2 className="admin-section-title">Targets & Growth</h2>
+
+                            {/* 1. Monthly Targets vs Achieved */}
+                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
+                                <h3 className="chart-title">Monthly Targets vs Achieved ({new Date().getFullYear()})</h3>
+                                <p className="chart-subtitle"><PlaceholderBadge label="Targets not yet set — showing actual revenue only" /></p>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={targetsData.monthlyData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                        <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#666' }} axisLine={false} tickLine={false} />
+                                        <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                        <Tooltip content={({ active, payload, label }) => {
+                                            if (!active || !payload?.length) return null;
+                                            return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p>{payload.map((p, i) => (<p key={i} className="cmo-chart-tooltip-row"><span className="cmo-chart-tooltip-dot" style={{ background: p.fill }}></span>{p.name}: ₹{formatIndianNumber(p.value)}</p>))}</div>);
+                                        }} />
+                                        <Legend />
+                                        <Bar dataKey="target" name="Target" fill="#e8e2d0" radius={[6, 6, 0, 0]} />
+                                        <Bar dataKey="achieved" name="Achieved" fill="#d5b85a" radius={[6, 6, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            {/* 2. Store Growth % */}
+                            <h3 className="admin-subsection-title">Store Growth %</h3>
+                            <div className="admin-table-wrapper" style={{ marginBottom: 20 }}><div className="admin-table-container">
+                                <table className="admin-table">
+                                    <thead><tr><th>Store / Channel</th><th className="amount">Current Period</th><th className="amount">Previous Period</th><th>Growth %</th></tr></thead>
+                                    <tbody>
+                                        {targetsData.storeGrowthList.length === 0 ?
+                                            <tr><td colSpan="4" className="no-data">No data available</td></tr> :
+                                            targetsData.storeGrowthList.map((s, i) => {
+                                                const g = Number(s.growth);
+                                                return (
+                                                    <tr key={i}>
+                                                        <td style={{ fontWeight: 500 }}>{s.name}</td>
+                                                        <td className="amount">₹{formatIndianNumber(s.current.toFixed(0))}</td>
+                                                        <td className="amount">₹{formatIndianNumber(s.previous.toFixed(0))}</td>
+                                                        <td><span className={`growth-indicator ${g >= 0 ? 'positive' : 'negative'}`} style={{ display: 'inline-flex' }}>
+                                                            <span className="growth-arrow">{g >= 0 ? '↑' : '↓'}</span>{Math.abs(g).toFixed(1)}%
+                                                        </span></td>
+                                                    </tr>
+                                                );
+                                            })
+                                        }
+                                    </tbody>
+                                </table>
+                            </div></div>
+
+                            {/* 3. B2B Growth % */}
+                            <h3 className="admin-subsection-title">B2B Growth %</h3>
+                            <div className="admin-stats-grid overview-grid" style={{ marginBottom: 20 }}>
+                                {targetsData.storeGrowthList.filter(s => s.name.toLowerCase() === 'b2b').map((s, i) => {
+                                    const g = Number(s.growth);
+                                    return (
+                                        <div key={i} className="admin-stat-card overview-card">
+                                            <span className="stat-label">B2B Revenue</span>
+                                            <span className="stat-value">₹{formatIndianNumber(s.current.toFixed(0))}</span>
+                                            <span className={`growth-indicator ${g >= 0 ? 'positive' : 'negative'}`}>
+                                                <span className="growth-arrow">{g >= 0 ? '↑' : '↓'}</span>{Math.abs(g).toFixed(1)}%
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                                {targetsData.storeGrowthList.filter(s => s.name.toLowerCase() === 'b2b').length === 0 && (
+                                    <div className="admin-stat-card overview-card">
+                                        <span className="stat-label">B2B Growth</span>
+                                        <span className="stat-value">—</span>
+                                        <span className="stat-sub">No B2B data in period</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 4. Website Growth % */}
+                            <h3 className="admin-subsection-title">Website Growth %</h3>
+                            <div className="analytics-chart-card">
+                                <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
+                                    <PlaceholderBadge label="Website analytics integration pending" />
+                                    <span>Website traffic, conversion and revenue growth will appear here</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+
+                    {/* ═══════════ OPERATIONS: ORDERS ═══════════ */}
                     {activeTab === "orders" && (
                         <div className="admin-orders-tab">
                             <h2 className="admin-section-title">Order Management</h2>
@@ -2052,17 +2771,10 @@ export default function AdminDashboard() {
                                     )}
                                 </div>
                                 <div className="filter-dropdown">
-                                    <button className={`filter-btn ${filters.salesperson ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "salesperson" ? null : "salesperson")}>Salesperson ▾</button>
-                                    {openDropdown === "salesperson" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Salesperson</div>
-                                            <select value={filters.salesperson} onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))} className="sp-select">
-                                                <option value="">All Salespersons</option>
-                                                {salespersons.map(sp => <option key={sp} value={sp}>{sp}</option>)}
-                                            </select>
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
+                                    <select className="filter-btn" style={{ cursor: 'pointer' }} value={filters.salesperson} onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}>
+                                        <option value="">All Salespersons</option>
+                                        {salespersons.map(sp => <option key={sp} value={sp}>{sp}</option>)}
+                                    </select>
                                 </div>
                             </div>
 
@@ -2117,6 +2829,8 @@ export default function AdminDashboard() {
                     )}
 
                     {/* ACCOUNTS TAB */}
+
+                    {/* ═══════════ OPERATIONS: ACCOUNTS ═══════════ */}
                     {activeTab === "accounts" && (
                         <div className="admin-accounts-tab">
                             <h2 className="admin-section-title">Accounts & Finance</h2>
@@ -2127,27 +2841,39 @@ export default function AdminDashboard() {
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Invoice Value</span><span className="stat-value">₹{formatIndianNumber(accountsTotals.invoice.toFixed(0))}</span></div></div>
                             </div>
 
-                            <div className="admin-toolbar accounts-toolbar">
-                                <div className="admin-search-wrapper">
+                            <div className="acc-filter-bar">
+                                <div className="admin-search-wrapper" style={{ flex: '0 0 auto', maxWidth: 280 }}>
                                     <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search Order, Customer, Product..." value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} className="admin-search-input" />
+                                    <input type="text" placeholder="Search Order, Customer..." value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} className="admin-search-input" />
                                 </div>
-                                <div className="accounts-filters">
+                                <div className="cmo-date-range">
                                     <input type="date" value={accountsDateFrom} onChange={(e) => setAccountsDateFrom(e.target.value)} />
-                                    <span>to</span>
+                                    <span className="cmo-date-sep">→</span>
                                     <input type="date" value={accountsDateTo} onChange={(e) => setAccountsDateTo(e.target.value)} />
-                                    <select value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
-                                        <option value="">All Status</option>
-                                        <option value="pending">Pending</option><option value="in_production">In Production</option><option value="ready">Ready</option>
-                                        <option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
-                                    </select>
                                 </div>
+                                <select className="cmo-compare-select" value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
+                                    <option value="">All Status</option>
+                                    <option value="pending">Pending</option><option value="in_production">In Production</option><option value="ready">Ready</option>
+                                    <option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
+                                </select>
+                                <select className="cmo-compare-select" value={accountsStore} onChange={(e) => setAccountsStore(e.target.value)}>
+                                    <option value="">All Stores</option>
+                                    {accountsStoreOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                                <select className="cmo-compare-select" value={accountsSA} onChange={(e) => setAccountsSA(e.target.value)}>
+                                    <option value="">All Salespersons</option>
+                                    {accountsSAOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                                {(accountsDateFrom || accountsDateTo || accountsStatus || accountsStore || accountsSA) && (
+                                    <button className="cmo-pill" onClick={() => { setAccountsDateFrom(""); setAccountsDateTo(""); setAccountsStatus(""); setAccountsStore(""); setAccountsSA(""); }}
+                                        style={{ color: '#c62828', borderColor: '#c62828' }}>Clear</button>
+                                )}
                             </div>
 
                             <div className="admin-table-wrapper">
                                 <div className="admin-table-container accounts-table-container">
                                     <table className="admin-table accounts-table">
-                                        <thead><tr><th>SA Name</th><th>Order ID</th><th>Date</th><th>Customer</th><th>Product</th><th>Gross</th><th>Discount</th><th>Taxable</th><th>GST</th><th>Invoice</th><th>Qty</th><th>Status</th><th>Delivery Date</th></tr></thead>
+                                        <thead><tr><th>SA Name</th><th>Order ID</th><th>Date</th><th>Customer</th><th>Product</th><th className="amount">Gross</th><th className="amount">Discount</th><th className="amount">Taxable</th><th className="amount">GST</th><th className="amount">Invoice</th><th>Qty</th><th>Status</th><th>Delivery Date</th></tr></thead>
                                         <tbody>
                                             {currentAccountItems.length === 0 ? <tr><td colSpan="13" className="no-data">No records found</td></tr> :
                                                 currentAccountItems.map(item => (
@@ -2184,362 +2910,7 @@ export default function AdminDashboard() {
                     {/* ═══════════════════════════════════════════════════ */}
                     {/* CLIENTS TAB */}
                     {/* ═══════════════════════════════════════════════════ */}
-                    {activeTab === "clients" && (
-                        <div className="admin-clients-tab">
-                            <h2 className="admin-section-title">Client Insights</h2>
 
-                            {/* Client Stats */}
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Clients</span>
-                                    <span className="stat-value">{formatIndianNumber(clientAnalytics.totalClients)}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">New Clients (Period)</span>
-                                    <span className="stat-value">{clientAnalytics.newClientsCount}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Repeat Rate</span>
-                                    <span className="stat-value">{clientAnalytics.repeatRate}%</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total SB Clients</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="SB client book pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Avg Client Age</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="DOB data pending" />
-                                </div>
-                            </div>
-
-                            {/* Client Segmentation + Store Breakdown */}
-                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Client Segmentation</h3>
-                                    {clientAnalytics.segmentation.some(s => s.value > 0) ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <PieChart>
-                                                <Pie data={clientAnalytics.segmentation.filter(s => s.value > 0)} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="value"
-                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
-                                                    {clientAnalytics.segmentation.map((_, i) => (
-                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip />
-                                                <Legend verticalAlign="bottom" height={36} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Clients by Store</h3>
-                                    {clientAnalytics.storeClients.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={clientAnalytics.storeClients} margin={{ top: 10, right: 30, left: 10, bottom: 50 }}>
-                                                <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
-                                                <YAxis />
-                                                <Tooltip />
-                                                <Bar dataKey="count" name="Clients" fill="#d5b85a" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                            </div>
-
-                            {/* Top Clients Table */}
-                            <h3 className="admin-subsection-title">Top Clients</h3>
-                            <div className="admin-toolbar">
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search name, phone, city..." value={clientsSearch} onChange={(e) => setClientsSearch(e.target.value)} className="admin-search-input" />
-                                    {clientsSearch && <button className="search-clear" onClick={() => setClientsSearch("")}>×</button>}
-                                </div>
-                                <select value={clientsSortBy} onChange={(e) => setClientsSortBy(e.target.value)} className="admin-sort-select">
-                                    <option value="totalSpend">Highest Spend</option>
-                                    <option value="orderCount">Most Orders</option>
-                                    <option value="recent">Most Recent</option>
-                                </select>
-                            </div>
-
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container" style={{ minWidth: 900 }}>
-                                    <table className="admin-table">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th><th>Name</th><th>Phone</th><th>City</th><th>Stores</th>
-                                                <th>Orders</th><th>Items</th><th>Lifetime Spend</th><th>Avg Order Value</th>
-                                                <th>First Order</th><th>Last Order</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {clientAnalytics.currentClients.length === 0 ?
-                                                <tr><td colSpan="11" className="no-data">No clients found</td></tr> :
-                                                clientAnalytics.currentClients.map((c, idx) => (
-                                                    <tr key={c.phone}>
-                                                        <td>{(clientsPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
-                                                        <td>{c.phone}</td>
-                                                        <td>{c.city}</td>
-                                                        <td>{c.stores || "-"}</td>
-                                                        <td>{c.orderCount}</td>
-                                                        <td>{c.items}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.totalSpend.toFixed(0))}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.avgOrderValue.toFixed(0))}</td>
-                                                        <td>{formatDate(c.firstOrder)}</td>
-                                                        <td>{formatDate(c.lastOrder)}</td>
-                                                    </tr>
-                                                ))
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            {clientAnalytics.clientsTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setClientsPage(p => Math.max(1, p - 1))} disabled={clientsPage === 1}>Prev</button>
-                                    <span>Page {clientsPage} of {clientAnalytics.clientsTotalPages}</span>
-                                    <button onClick={() => setClientsPage(p => Math.min(clientAnalytics.clientsTotalPages, p + 1))} disabled={clientsPage === clientAnalytics.clientsTotalPages}>Next</button>
-                                </div>
-                            )}
-
-                            {/* SB Client Book + Purchase History Placeholder */}
-                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">SB Client Book</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="SB client book data pending" />
-                                        <span>Store-based client assignments will appear here</span>
-                                    </div>
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Client Purchase History (12M)</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="12-month rolling view pending" />
-                                        <span>Monthly purchase trend per client will appear here</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ═══════════════════════════════════════════════════ */}
-                    {/* B2B TAB */}
-                    {/* ═══════════════════════════════════════════════════ */}
-                    {activeTab === "b2b" && (
-                        <div className="admin-b2b-tab">
-                            <h2 className="admin-section-title">B2B & Vendor Overview</h2>
-
-                            {/* B2B Stats */}
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">B2B Revenue</span>
-                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bRevenue.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">B2B Orders</span>
-                                    <span className="stat-value">{b2bStats.totalB2bOrders}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Advance Collected</span>
-                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bAdvance.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card danger" style={{ borderLeft: '3px solid #c62828' }}>
-                                    <span className="stat-label">Balance Pending</span>
-                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bBalance.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Credit Exposure</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Credit limit data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Buyout vs Consignment</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Order type data pending" />
-                                </div>
-                            </div>
-
-                            {/* Client-wise Sales Table */}
-                            <h3 className="admin-subsection-title">Client-wise Sales</h3>
-                            <div className="admin-toolbar">
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search B2B client..." value={b2bSearch} onChange={(e) => setB2bSearch(e.target.value)} className="admin-search-input" />
-                                    {b2bSearch && <button className="search-clear" onClick={() => setB2bSearch("")}>×</button>}
-                                </div>
-                            </div>
-
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container">
-                                    <table className="admin-table">
-                                        <thead><tr><th>#</th><th>Client Name</th><th>Orders</th><th>Total Sales</th><th>Advance Paid</th><th>Balance Pending</th></tr></thead>
-                                        <tbody>
-                                            {b2bStats.currentB2bClients.length === 0 ?
-                                                <tr><td colSpan="6" className="no-data">No B2B clients found for this period</td></tr> :
-                                                b2bStats.currentB2bClients.map((c, idx) => (
-                                                    <tr key={c.name + idx}>
-                                                        <td>{(b2bPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
-                                                        <td>{c.orders}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
-                                                        <td className="amount" style={{ color: c.balance > 0 ? '#c62828' : '#2e7d32', fontWeight: 600 }}>
-                                                            ₹{formatIndianNumber(c.balance.toFixed(0))}
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            {b2bStats.b2bTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setB2bPage(p => Math.max(1, p - 1))} disabled={b2bPage === 1}>Prev</button>
-                                    <span>Page {b2bPage} of {b2bStats.b2bTotalPages}</span>
-                                    <button onClick={() => setB2bPage(p => Math.min(b2bStats.b2bTotalPages, p + 1))} disabled={b2bPage === b2bStats.b2bTotalPages}>Next</button>
-                                </div>
-                            )}
-
-                            {/* Advance Pending Clients */}
-                            {b2bStats.advancePending.length > 0 && (
-                                <div style={{ marginTop: 20 }}>
-                                    <h3 className="admin-subsection-title">⚠️ Advance Pending Clients</h3>
-                                    <div className="admin-table-wrapper">
-                                        <div className="admin-table-container">
-                                            <table className="admin-table">
-                                                <thead><tr><th>Client</th><th>Total Sales</th><th>Advance Paid</th><th>Balance Due</th></tr></thead>
-                                                <tbody>
-                                                    {b2bStats.advancePending.slice(0, 15).map((c, i) => (
-                                                        <tr key={i} className="urgent-row">
-                                                            <td style={{ fontWeight: 500 }}>{c.name}</td>
-                                                            <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
-                                                            <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
-                                                            <td className="amount" style={{ color: '#c62828', fontWeight: 700 }}>₹{formatIndianNumber(c.balance.toFixed(0))}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Buyout vs Consignment Placeholder */}
-                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Buyout vs Consignment Mix</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="Order type classification pending" />
-                                        <span>Buyout and consignment breakdown will appear here</span>
-                                    </div>
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Client Credit Exposure</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="Credit limit tracking pending" />
-                                        <span>Credit utilization per B2B client will appear here</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ═══════════════════════════════════════════════════ */}
-                    {/* TARGETS TAB */}
-                    {/* ═══════════════════════════════════════════════════ */}
-                    {activeTab === "targets" && (
-                        <div className="admin-targets-tab">
-                            <h2 className="admin-section-title">Targets & Growth</h2>
-
-                            {/* Monthly Targets vs Achieved */}
-                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
-                                <h3 className="chart-title">Monthly Targets vs Achieved ({new Date().getFullYear()})</h3>
-                                <p className="chart-subtitle"><PlaceholderBadge label="Targets not yet set — showing actual revenue only" /></p>
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={targetsData.monthlyData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                                        <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
-                                        <Tooltip formatter={(v, name) => [`₹${formatIndianNumber(v)}`, name === "target" ? "Target" : "Achieved"]} />
-                                        <Legend />
-                                        <Bar dataKey="target" name="Target" fill="#e0e0e0" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="achieved" name="Achieved" fill="#d5b85a" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* Store Growth % */}
-                            <h3 className="admin-subsection-title">Store / Channel Growth</h3>
-                            <div className="admin-table-wrapper" style={{ marginBottom: 20 }}>
-                                <div className="admin-table-container">
-                                    <table className="admin-table">
-                                        <thead><tr><th>Store / Channel</th><th>Current Period Revenue</th><th>Previous Period Revenue</th><th>Growth %</th></tr></thead>
-                                        <tbody>
-                                            {targetsData.storeGrowthList.length === 0 ?
-                                                <tr><td colSpan="4" className="no-data">No data available</td></tr> :
-                                                targetsData.storeGrowthList.map((s, i) => {
-                                                    const growthNum = Number(s.growth);
-                                                    return (
-                                                        <tr key={i}>
-                                                            <td style={{ fontWeight: 500 }}>{s.name}</td>
-                                                            <td className="amount">₹{formatIndianNumber(s.current.toFixed(0))}</td>
-                                                            <td className="amount">₹{formatIndianNumber(s.previous.toFixed(0))}</td>
-                                                            <td>
-                                                                <span className={`growth-indicator ${growthNum >= 0 ? 'positive' : 'negative'}`} style={{ display: 'inline-flex' }}>
-                                                                    <span className="growth-arrow">{growthNum >= 0 ? '↑' : '↓'}</span>
-                                                                    {Math.abs(growthNum).toFixed(1)}%
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-
-                            {/* Growth Comparison Cards */}
-                            <h3 className="admin-subsection-title">Channel Growth Summary</h3>
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-                                {targetsData.storeGrowthList.map((s, i) => {
-                                    const growthNum = Number(s.growth);
-                                    return (
-                                        <div key={i} className="admin-stat-card overview-card">
-                                            <span className="stat-label">{s.name}</span>
-                                            <span className="stat-value">₹{formatIndianNumber(s.current.toFixed(0))}</span>
-                                            <span className={`growth-indicator ${growthNum >= 0 ? 'positive' : 'negative'}`}>
-                                                <span className="growth-arrow">{growthNum >= 0 ? '↑' : '↓'}</span>
-                                                {Math.abs(growthNum).toFixed(1)}%
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Website Growth Placeholder */}
-                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Website Growth %</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="Website analytics integration pending" />
-                                        <span>Website traffic and conversion metrics will appear here</span>
-                                    </div>
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Gross Margin Trend</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="COGS data integration pending" />
-                                        <span>Margin trend over time will appear here</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </main>
             </div>
         </div>
