@@ -313,3 +313,18 @@
 .merch-modal-credit-warning strong { color: #c62828; font-size: 14px; }
 .merch-modal-credit-warning p { margin: 6px 0; font-size: 13px; color: #555; }
 .merch-modal-credit-info { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 13px; color: #333; font-weight: 500; }
+
+/* Target vs Achieved */
+.merch-target-section { grid-column: 1 / -1; }
+.merch-target-content { padding: 16px 20px; }
+.merch-target-row { display: flex; justify-content: space-around; gap: 16px; margin-bottom: 16px; }
+.merch-target-item { text-align: center; }
+.merch-target-label { display: block; font-size: 12px; color: #999; margin-bottom: 4px; }
+.merch-target-val { font-size: 18px; font-weight: 700; color: #333; }
+.merch-green { color: #2e7d32 !important; }
+.merch-target-bar { height: 10px; background: #eee; border-radius: 5px; overflow: hidden; }
+.merch-target-fill { height: 100%; background: linear-gradient(90deg, #c5a46d, #8b7240); border-radius: 5px; transition: width 0.5s ease; }
+.merch-target-pct { text-align: center; font-size: 13px; color: #666; margin-top: 8px; }
+
+/* Add Vendor Modal fields */
+.merch-modal-field select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff; }

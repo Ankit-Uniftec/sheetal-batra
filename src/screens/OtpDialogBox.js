@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen2.css";
 import Logo from "../images/logo.png";
+import config from "../config/config";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import { usePopup } from "../components/Popup";
 
@@ -47,7 +48,7 @@ export default function OtpDialogBox() {
     }
   };
 
-  /* ---------- VERIFY OTP ---------- */
+  /* ---------- VERIFY OTP VIA SPUR EDGE FUNCTION ---------- */
   const verifyOTP = async () => {
     const code = otp.join("");
 
@@ -57,74 +58,129 @@ export default function OtpDialogBox() {
         message: "Enter a valid 6-digit OTP",
         type: "warning",
         confirmText: "Ok",
-      })
-      // alert("Enter a valid 6-digit OTP");
+      });
       return;
     }
 
     setLoading(true);
 
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone: phoneNumber,
-      token: code,
-      type: "sms",
-    });
+    try {
+      // Call verify-otp edge function
+      const response = await fetch(
+        `${config.SUPABASE_URL}/functions/v1/verify-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": config.SUPABASE_KEY,
+            "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ phone: phoneNumber, code }),
+        }
+      );
 
-    setLoading(false);
+      const result = await response.json();
 
-    if (error) {
+      if (!response.ok || !result.success) {
+        setLoading(false);
+        showPopup({
+          title: "Error",
+          message: result.error || "Invalid or expired OTP",
+          type: "error",
+          confirmText: "Ok",
+        });
+        return;
+      }
+
+      // OTP verified! Now create a session using the magic link token
+      if (result.token) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.verifyOtp({
+          token_hash: result.token,
+          type: "magiclink",
+        });
+
+        if (sessionError) {
+          console.error("Session creation error:", sessionError);
+          // Even if session creation fails, OTP was verified
+          // Try to navigate based on profile status
+        }
+      }
+
+      setLoading(false);
+
+      // Navigate based on profile status
+      if (result.hasProfile) {
+        navigate("/product");
+      } else {
+        navigate("/userinfo", { state: { phoneNumber } });
+      }
+
+    } catch (err) {
+      console.error("Verify error:", err);
+      setLoading(false);
       showPopup({
         title: "Error",
-        message: error.message,
+        message: "Something went wrong. Please try again.",
         type: "error",
         confirmText: "Ok",
-      })
-      // alert(error.message);
-      return;
+      });
     }
-
-    const formatted = phoneNumber;
-
-    await supabase.from("profiles").upsert({
-      id: data.user.id,
-      phone: formatted,
-    });
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", data.user.id)
-      .maybeSingle();
-
-    profile?.full_name
-      ? navigate("/product")
-      : navigate("/userinfo", { state: { phoneNumber: formatted } });
   };
 
-  /* ---------- RESEND OTP ---------- */
+  /* ---------- RESEND OTP VIA SPUR WHATSAPP ---------- */
   const resendOTP = async () => {
     if (time !== 0) return;
 
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: phoneNumber,
-    });
-    setLoading(false);
 
-    if (error) {
+    try {
+      const response = await fetch(
+        `${config.SUPABASE_URL}/functions/v1/send-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": config.SUPABASE_KEY,
+            "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ phone: phoneNumber }),
+        }
+      );
+
+      const result = await response.json();
+      setLoading(false);
+
+      if (!response.ok || !result.success) {
+        showPopup({
+          title: "Error",
+          message: result.error || "Failed to resend OTP",
+          type: "error",
+          confirmText: "Ok",
+        });
+        return;
+      }
+
+      setTime(30);
+      setOtp(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
+
+      showPopup({
+        title: "OTP Sent",
+        message: "A new OTP has been sent to your WhatsApp.",
+        type: "success",
+        confirmText: "Ok",
+      });
+
+    } catch (err) {
+      console.error("Resend error:", err);
+      setLoading(false);
       showPopup({
         title: "Error",
-        message: error.message,
+        message: "Failed to resend OTP. Please try again.",
         type: "error",
         confirmText: "Ok",
-      })
-      // alert(error.message);
-      return;
+      });
     }
-
-    setTime(30);
-    setOtp(["", "", "", "", "", ""]);
-    inputRefs.current[0]?.focus();
   };
 
   const handleBack = () => {
@@ -152,7 +208,7 @@ export default function OtpDialogBox() {
 
 
         <div className="otpBox">
-          <p className="otp-text">OTP has been sent to {phoneNumber}</p>
+          <p className="otp-text">OTP has been sent to your WhatsApp on {phoneNumber}</p>
 
           {otp.map((v, i) => (
             <input

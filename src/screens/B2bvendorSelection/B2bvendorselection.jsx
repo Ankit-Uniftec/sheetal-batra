@@ -277,7 +277,11 @@ export default function B2bVendorSelection() {
                                             <button className={`vs-type-btn ${orderType === "Consignment" ? "active" : ""}`} onClick={() => setOrderType("Consignment")}>Consignment</button>
                                         </div>
                                     </div>
-                                    <div className="field"><label>Markdown %</label><input type="number" className="input-line" placeholder="0" min={0} max={100} value={discountPercent} onChange={(e) => setDiscountPercent(Number(e.target.value) || 0)} /></div>
+                                    <div className="field">
+                                        <label>Markdown %</label>
+                                        <input type="number" className="input-line" placeholder="0" min={0} max={100} value={discountPercent} onChange={(e) => setDiscountPercent(Number(e.target.value) || 0)} disabled={userRole?.toLowerCase() === "executive"} style={userRole?.toLowerCase() === "executive" ? { background: "#f0f0f0", cursor: "not-allowed" } : {}} />
+                                        {userRole?.toLowerCase() === "executive" && <span style={{ fontSize: 11, color: "#999", marginTop: 4 }}>Only merchandisers can edit markdown</span>}
+                                    </div>
                                 </div>
 
                                 <div className="row">

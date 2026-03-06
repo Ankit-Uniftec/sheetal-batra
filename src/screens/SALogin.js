@@ -98,6 +98,19 @@ export default function SALogin() {
         email: email.trim(),
       }));
       navigate("/b2b-production-dashboard")
+    } else if (userRecord.role === "production_manager") {
+      const { data: sp } = await supabase
+        .from("salesperson")
+        .select("name, store")
+        .eq("email", email.trim())
+        .single();
+      sessionStorage.setItem("currentSalesperson", JSON.stringify({
+        store: sp?.store || "All",
+        name: sp?.name || "",
+        email: email.trim(),
+      }));
+      navigate("/production-manager-dashboard");
+
     } else {
       showPopup({
         title: "Unknown role",

@@ -59,6 +59,30 @@ export default function OtpVerification() {
     }
   };
 
+  /* ---------- SEND OTP VIA SPUR WHATSAPP ---------- */
+  const sendOtpViaSpur = async (phoneNumber) => {
+    const response = await fetch(
+      `${config.SUPABASE_URL}/functions/v1/send-otp`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": config.SUPABASE_KEY,
+          "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+        },
+        body: JSON.stringify({ phone: phoneNumber }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || "Failed to send OTP");
+    }
+
+    return result;
+  };
+
   const handleContinue = async () => {
     const normalized = mobile.replace(/\D/g, "");
 
@@ -68,8 +92,7 @@ export default function OtpVerification() {
         message: "Please enter a valid mobile number.",
         type: "warning",
         confirmText: "Ok",
-      })
-      // alert("Please enter a valid mobile number");
+      });
       return;
     }
 
@@ -91,7 +114,6 @@ export default function OtpVerification() {
 
       if (existingProfile) {
         // ✅ EXISTING CUSTOMER - Try to auto sign-in
-        // console.log("✅ Existing customer found:", existingProfile.full_name || existingProfile.name);
         setStatusMessage("Welcome back! Signing you in...");
 
         // Call edge function to get magic link token
@@ -109,7 +131,7 @@ export default function OtpVerification() {
         );
 
         const result = await response.json();
-        console.log("Auto-signin response:", result);
+        // console.log("Auto-signin response:", result);
 
         if (result.success && result.token) {
           // Verify the magic link token to create session
@@ -120,10 +142,9 @@ export default function OtpVerification() {
 
           if (verifyError) {
             console.error("Token verification error:", verifyError);
-            // Fallback to OTP
-            setStatusMessage("Sending OTP...");
+            // Fallback to Spur WhatsApp OTP
+            setStatusMessage("Sending OTP via WhatsApp...");
           } else {
-            // console.log("✅ Session created, user:", sessionData.user?.id);
             setLoading(false);
 
             // Check if profile is complete (has full_name)
@@ -136,22 +157,36 @@ export default function OtpVerification() {
           }
         } else {
           console.log("Auto-signin failed:", result.error);
-          // Fallback to OTP if auto-signin fails
-          setStatusMessage("Sending OTP...");
+          // Fallback to Spur WhatsApp OTP
+          setStatusMessage("Sending OTP via WhatsApp...");
         }
       }
 
-      // console.log("Sending OTP to:", phoneNumber);
-      setStatusMessage("Sending OTP...");
+      // ======= SPUR WHATSAPP OTP (replaces Twilio SMS) =======
+      setStatusMessage("Sending OTP via WhatsApp...");
 
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phoneNumber,
-      });
-
-      if (error) {
+      try {
+        await sendOtpViaSpur(phoneNumber);
+      } catch (otpError) {
         setLoading(false);
         setStatusMessage("");
-        // alert(error.message);
+
+        // Handle rate limit (30 second cooldown)
+        if (otpError.message.includes("30 seconds")) {
+          showPopup({
+            title: "Please wait",
+            message: "Please wait 30 seconds before requesting another OTP.",
+            type: "warning",
+            confirmText: "Ok",
+          });
+        } else {
+          showPopup({
+            title: "Failed to send OTP",
+            message: otpError.message || "Could not send OTP. Please try again.",
+            type: "error",
+            confirmText: "Ok",
+          });
+        }
         return;
       }
 
@@ -174,8 +209,7 @@ export default function OtpVerification() {
         message: "Something went wrong.",
         type: "error",
         confirmText: "Ok",
-      })
-      // alert("Something went wrong. Please try again.");
+      });
     }
   };
 
