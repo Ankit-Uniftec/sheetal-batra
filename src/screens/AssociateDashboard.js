@@ -208,7 +208,7 @@ export default function Dashboard() {
         ...c,
         gender: profileMap.get(c.email)?.gender || "—",
         dob: formatDate(profileMap.get(c.email)?.dob),
-        loyalty_points: Number(profileMap.get(c.email)?.loyalty_points) || 0,
+        // loyalty_points: Number(profileMap.get(c.email)?.loyalty_points) || 0,
       }));
 
       setClients(finalClients);
@@ -1394,7 +1394,7 @@ export default function Dashboard() {
                       <tr>
                         <th>Name</th>
                         <th>Phone</th>
-                        <th>Points</th>
+                        {/* <th>Points</th> */}
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -1403,9 +1403,9 @@ export default function Dashboard() {
                         <tr key={i}>
                           <td data-label="Name">{c.name}</td>
                           <td data-label="Phone">{c.phone}</td>
-                          <td data-label="Points" style={{ color: c.loyalty_points > 0 ? '#e65100' : '#999' }}>
+                          {/* <td data-label="Points" style={{ color: c.loyalty_points > 0 ? '#e65100' : '#999' }}>
                             {c.loyalty_points > 0 ? `${c.loyalty_points} pts` : '0'}
-                          </td>
+                          </td> */}
                           <td data-label="Action">
                             <button
                               className="ad-view-btn"

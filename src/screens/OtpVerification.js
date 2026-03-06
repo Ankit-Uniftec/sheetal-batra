@@ -131,7 +131,7 @@ export default function OtpVerification() {
         );
 
         const result = await response.json();
-        console.log("Auto-signin response:", result);
+        // console.log("Auto-signin response:", result);
 
         if (result.success && result.token) {
           // Verify the magic link token to create session

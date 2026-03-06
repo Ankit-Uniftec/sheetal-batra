@@ -3111,7 +3111,7 @@ export default function ProductForm() {
                 </div>
               )}
 
-              <div className="field">
+              <div className="">
                 <button
                   className="add-extra-btn"
                   style={{

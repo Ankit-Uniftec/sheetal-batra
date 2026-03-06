@@ -1761,7 +1761,7 @@ export default function OrderHistory() {
               <p className="muted">No store credits</p>
             )}
           </div>
-          <div className="oh-sidebar-card">
+          {/* <div className="oh-sidebar-card">
             <h4>Loyalty Points</h4>
             {(Number(profile?.loyalty_points) || 0) > 0 ? (
               <div className="oh-store-credit-info">
@@ -1773,7 +1773,7 @@ export default function OrderHistory() {
             ) : (
               <p className="muted">0 points — Earn 5 pts per ₹10 spent</p>
             )}
-          </div>
+          </div> */}
         </aside>
 
         {/* Content */}
@@ -2066,7 +2066,7 @@ export default function OrderHistory() {
               )}
 
               {/* Loyalty Points Section */}
-              <h3 style={{ marginTop: "30px" }}>Loyalty Points</h3>
+              {/* <h3 style={{ marginTop: "30px" }}>Loyalty Points</h3>
               <div className="oh-store-credit-card" style={{ borderColor: '#ffcc80' }}>
                 <div className="oh-credit-balance">
                   <span className="oh-credit-label">Points Balance</span>
@@ -2092,7 +2092,7 @@ export default function OrderHistory() {
                 }}>
                   <strong>How it works:</strong> Earn 5 pts for every ₹10 spent • 100 pts = ₹10 off
                 </div>
-              </div>
+              </div> */}
 
               {/* Draft Orders Section */}
               <h3 style={{ marginTop: "30px" }}>Draft Orders</h3>

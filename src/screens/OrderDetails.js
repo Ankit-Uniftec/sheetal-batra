@@ -88,9 +88,9 @@ export default function OrderDetails() {
   const [storeCreditExpiry, setStoreCreditExpiry] = useState(null);
 
   // Loyalty Points
-  const [availableLoyaltyPoints, setAvailableLoyaltyPoints] = useState(0);
-  const [loyaltyPointsApplied, setLoyaltyPointsApplied] = useState(false);
-  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
+  // const [availableLoyaltyPoints, setAvailableLoyaltyPoints] = useState(0);
+  // const [loyaltyPointsApplied, setLoyaltyPointsApplied] = useState(false);
+  // const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
 
   // Split Payment
   const [isSplitPayment, setIsSplitPayment] = useState(false);
@@ -245,11 +245,11 @@ export default function OrderDetails() {
     }
 
     // Loyalty points discount (applied after store credit)
-    let loyaltyDiscount = 0;
-    if (loyaltyPointsApplied && loyaltyPointsToRedeem > 0) {
-      loyaltyDiscount = Math.min(loyaltyPointsToRedeem * 0.10, netAfterStoreCredit); // 100 pts = ₹10
-      netAfterStoreCredit = Math.max(0, netAfterStoreCredit - loyaltyDiscount);
-    }
+    // let loyaltyDiscount = 0;
+    // if (loyaltyPointsApplied && loyaltyPointsToRedeem > 0) {
+    //   loyaltyDiscount = Math.min(loyaltyPointsToRedeem * 0.10, netAfterStoreCredit); // 100 pts = ₹10
+    //   netAfterStoreCredit = Math.max(0, netAfterStoreCredit - loyaltyDiscount);
+    // }
     // Calculate min advance: on netAfterStoreCredit if store credit applied, 
     // on netPayable if discount applied, otherwise on totalAmount
     const minAdvanceBase = storeCreditApplied ? netAfterStoreCredit : (hasDiscount ? netPayable : totalAmount);
@@ -271,8 +271,8 @@ export default function OrderDetails() {
       codCharge: appliedCodCharge,
       storeCreditUsed,
       remainingStoreCredit: availableStoreCredit - storeCreditUsed,
-      loyaltyDiscount,
-      loyaltyPointsUsed: loyaltyDiscount > 0 ? Math.ceil(loyaltyDiscount / 0.10) : 0,
+      // loyaltyDiscount,
+      // loyaltyPointsUsed: loyaltyDiscount > 0 ? Math.ceil(loyaltyDiscount / 0.10) : 0,
     };
   }, [
     totalDiscount,
@@ -291,8 +291,8 @@ export default function OrderDetails() {
     isSplitPayment,
     splitPayments,
     storeCreditApplied,
-    loyaltyPointsApplied,
-    loyaltyPointsToRedeem,
+    // loyaltyPointsApplied,
+    // loyaltyPointsToRedeem,
     availableStoreCredit,
     isStoreCreditValid
   ]);
@@ -348,7 +348,7 @@ export default function OrderDetails() {
           if (prof) {
             setAvailableStoreCredit(Number(prof.store_credit) || 0);
             setStoreCreditExpiry(prof.store_credit_expiry || null);
-            setAvailableLoyaltyPoints(Number(prof.loyalty_points) || 0);
+            // setAvailableLoyaltyPoints(Number(prof.loyalty_points) || 0);
           }
         }
       }
@@ -420,8 +420,8 @@ export default function OrderDetails() {
         if (data.codWaiverApplied !== undefined) setCodWaiverApplied(data.codWaiverApplied);
         if (data.storeCreditApplied !== undefined) setStoreCreditApplied(data.storeCreditApplied);
 
-        if (data.loyaltyPointsApplied !== undefined) setLoyaltyPointsApplied(data.loyaltyPointsApplied);
-        if (data.loyaltyPointsToRedeem) setLoyaltyPointsToRedeem(Number(data.loyaltyPointsToRedeem) || 0);
+        // if (data.loyaltyPointsApplied !== undefined) setLoyaltyPointsApplied(data.loyaltyPointsApplied);
+        // if (data.loyaltyPointsToRedeem) setLoyaltyPointsToRedeem(Number(data.loyaltyPointsToRedeem) || 0);
 
         if (data.isSplitPayment !== undefined) setIsSplitPayment(data.isSplitPayment);
         if (data.splitPayments) setSplitPayments(data.splitPayments);
@@ -479,8 +479,8 @@ export default function OrderDetails() {
       storeCreditApplied,
       giftRecipientName,
       giftRecipientContact,
-      loyaltyPointsApplied,
-      loyaltyPointsToRedeem,
+      // loyaltyPointsApplied,
+      // loyaltyPointsToRedeem,
       isSplitPayment,
       splitPayments,
     };
@@ -511,8 +511,8 @@ export default function OrderDetails() {
     storeCreditApplied,
     giftRecipientName,
     giftRecipientContact,
-    loyaltyPointsApplied,
-    loyaltyPointsToRedeem,
+    // loyaltyPointsApplied,
+    // loyaltyPointsToRedeem,
     isSplitPayment,
     splitPayments,
   ]);
@@ -559,8 +559,8 @@ export default function OrderDetails() {
       store_credit_remaining: pricing.remainingStoreCredit,
 
       // Loyalty points info
-      loyalty_points_redeemed: pricing.loyaltyPointsUsed,
-      loyalty_discount: pricing.loyaltyDiscount,
+      // loyalty_points_redeemed: pricing.loyaltyPointsUsed,
+      // loyalty_discount: pricing.loyaltyDiscount,
 
       delivery_name: profile.full_name,
       delivery_email: profile.email,
@@ -837,56 +837,56 @@ export default function OrderDetails() {
   };
 
   // Loyalty Points handlers
-  const handleApplyLoyaltyPoints = () => {
-    if (availableLoyaltyPoints < 100) {
-      showPopup({
-        title: "Not Enough Points",
-        message: `You need at least 100 points to redeem. Current balance: ${availableLoyaltyPoints} pts`,
-        type: "warning",
-        confirmText: "OK",
-      });
-      return;
-    }
+  // const handleApplyLoyaltyPoints = () => {
+  //   if (availableLoyaltyPoints < 100) {
+  //     showPopup({
+  //       title: "Not Enough Points",
+  //       message: `You need at least 100 points to redeem. Current balance: ${availableLoyaltyPoints} pts`,
+  //       type: "warning",
+  //       confirmText: "OK",
+  //     });
+  //     return;
+  //   }
 
-    if (loyaltyPointsApplied) {
-      showPopup({
-        title: "Already Applied",
-        message: "Loyalty points are already applied to this order.",
-        type: "warning",
-        confirmText: "OK",
-      });
-      return;
-    }
+  //   if (loyaltyPointsApplied) {
+  //     showPopup({
+  //       title: "Already Applied",
+  //       message: "Loyalty points are already applied to this order.",
+  //       type: "warning",
+  //       confirmText: "OK",
+  //     });
+  //     return;
+  //   }
 
-    // Calculate max redeemable: cap at available points AND order value
-    const maxDiscount = pricing.netAfterStoreCredit || pricing.netPayable;
-    const maxPointsByValue = Math.ceil(maxDiscount / 0.10); // How many points to cover full order
-    const pointsToUse = Math.min(availableLoyaltyPoints, maxPointsByValue);
-    const discountValue = pointsToUse * 0.10;
+  //   // Calculate max redeemable: cap at available points AND order value
+  //   const maxDiscount = pricing.netAfterStoreCredit || pricing.netPayable;
+  //   const maxPointsByValue = Math.ceil(maxDiscount / 0.10); // How many points to cover full order
+  //   const pointsToUse = Math.min(availableLoyaltyPoints, maxPointsByValue);
+  //   const discountValue = pointsToUse * 0.10;
 
-    showPopup({
-      title: "Redeem Loyalty Points?",
-      message: `Available: ${availableLoyaltyPoints} pts\nRedeeming: ${pointsToUse} pts = ₹${formatIndianNumber(discountValue)} off`,
-      type: "confirm",
-      confirmText: "Redeem",
-      cancelText: "Cancel",
-      onConfirm: () => {
-        setLoyaltyPointsToRedeem(pointsToUse);
-        setLoyaltyPointsApplied(true);
-        showPopup({
-          title: "Points Redeemed!",
-          message: `${pointsToUse} points applied — ₹${formatIndianNumber(discountValue)} off!`,
-          type: "success",
-          confirmText: "OK",
-        });
-      },
-    });
-  };
+  //   showPopup({
+  //     title: "Redeem Loyalty Points?",
+  //     message: `Available: ${availableLoyaltyPoints} pts\nRedeeming: ${pointsToUse} pts = ₹${formatIndianNumber(discountValue)} off`,
+  //     type: "confirm",
+  //     confirmText: "Redeem",
+  //     cancelText: "Cancel",
+  //     onConfirm: () => {
+  //       setLoyaltyPointsToRedeem(pointsToUse);
+  //       setLoyaltyPointsApplied(true);
+  //       showPopup({
+  //         title: "Points Redeemed!",
+  //         message: `${pointsToUse} points applied — ₹${formatIndianNumber(discountValue)} off!`,
+  //         type: "success",
+  //         confirmText: "OK",
+  //       });
+  //     },
+  //   });
+  // };
 
-  const removeLoyaltyPoints = () => {
-    setLoyaltyPointsApplied(false);
-    setLoyaltyPointsToRedeem(0);
-  };
+  // const removeLoyaltyPoints = () => {
+  //   setLoyaltyPointsApplied(false);
+  //   setLoyaltyPointsToRedeem(0);
+  // };
 
   const handleSplitPaymentSave = (payments, totalAmount) => {
     setSplitPayments(payments);
@@ -1280,7 +1280,7 @@ export default function OrderDetails() {
               )}
 
               {/* Loyalty Points Button - Only show if user has 100+ points */}
-              {availableLoyaltyPoints >= 100 && (
+              {/* {availableLoyaltyPoints >= 100 && (
                 <button
                   onClick={handleApplyLoyaltyPoints}
                   style={{
@@ -1296,7 +1296,7 @@ export default function OrderDetails() {
                 >
                   Loyalty Points ({availableLoyaltyPoints})
                 </button>
-              )}
+              )} */}
             </div>
           </div>
 
@@ -1348,7 +1348,7 @@ export default function OrderDetails() {
           )}
 
           {/* Loyalty Points Info Banner */}
-          {availableLoyaltyPoints > 0 && (
+          {/* {availableLoyaltyPoints > 0 && (
             <div
               style={{
                 background: "#fff3e0",
@@ -1386,7 +1386,7 @@ export default function OrderDetails() {
                 </button>
               )}
             </div>
-          )}
+          )} */}
 
           {/* Applied Discounts Display */}
           {(discountApplied || birthdayApplied || codWaiverApplied || storeCreditApplied) && (
@@ -1523,7 +1523,7 @@ export default function OrderDetails() {
                   >×</button>
                 </div>
               )}
-              {loyaltyPointsApplied && (
+              {/* {loyaltyPointsApplied && (
                 <div
                   style={{
                     background: "#fff3e0",
@@ -1548,7 +1548,7 @@ export default function OrderDetails() {
                     }}
                   >×</button>
                 </div>
-              )}
+              )} */}
             </div>
           )}
 
@@ -1641,7 +1641,7 @@ export default function OrderDetails() {
           )}
 
           {/* Loyalty Points Applied Row */}
-          {loyaltyPointsApplied && pricing.loyaltyDiscount > 0 && (
+          {/* {loyaltyPointsApplied && pricing.loyaltyDiscount > 0 && (
             <div className="row3">
               <div className="field">
                 <label>Loyalty Points Redeemed:</label>
@@ -1654,7 +1654,7 @@ export default function OrderDetails() {
                 <span style={{ color: "#666" }}>{availableLoyaltyPoints - pricing.loyaltyPointsUsed} pts</span>
               </div>
             </div>
-          )}
+          )} */}
 
           <div className="row3">
             <div className="field">
