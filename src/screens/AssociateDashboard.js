@@ -1049,6 +1049,31 @@ export default function Dashboard() {
                           <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
                             {order.status || "Pending"}
                           </div>
+                          <div className={`ad-warehouse-stage-badge ${(order.warehouse_stage === "disposed" || order.warehouse_stage === "scrapped") ? "ad-stage-alert" : ""}`}>
+                            {order.is_rework && <span className="ad-rework-dot"></span>}
+                            {(() => {
+                              const stageLabels = {
+                                order_received: "Order Received",
+                                cloth_issued: "Cloth Issued",
+                                dyeing_in_progress: "Dyeing",
+                                pattern_cutting_in_progress: "Pattern Cutting",
+                                pattern_printing_in_progress: "Pattern Printing",
+                                embroidery_in_progress: "Embroidery",
+                                dry_cleaning_in_progress: "Dry Cleaning",
+                                trims_in_progress: "Trims",
+                                cutting_stitching_in_progress: "Cutting & Stitching",
+                                hemming_in_progress: "Hemming",
+                                finishing_in_progress: "Finishing",
+                                qc_in_progress: "QC In-Progress",
+                                qc_passed: "QC Passed",
+                                qc_failed: "QC Failed",
+                                packaging_dispatch: "Packaging & Dispatch",
+                                disposed: "Disposed",
+                                scrapped: "Scrapped",
+                              };
+                              return stageLabels[order.warehouse_stage] || "Order Received";
+                            })()}
+                          </div>
                           {canEdit(order) && (
                             <div className="ad-editable-badge">
                               Editable ({Math.floor(36 - hoursSince)}h)

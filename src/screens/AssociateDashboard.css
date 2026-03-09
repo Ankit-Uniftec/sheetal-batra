@@ -2166,3 +2166,45 @@
     font-size: 1.2rem;
   }
 }
+
+/* ========== WAREHOUSE STAGE BADGE (Read-only for SA) ========== */
+.ad-warehouse-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #e1bee7;
+  white-space: nowrap;
+}
+
+.ad-warehouse-stage-badge.ad-stage-alert {
+  background: #ffebee;
+  color: #c62828;
+  border-color: #ffcdd2;
+}
+
+.ad-rework-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e65100;
+  display: inline-block;
+  animation: ad-rework-pulse 1.5s infinite;
+}
+
+@keyframes ad-rework-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@media (max-width: 600px) {
+  .ad-warehouse-stage-badge {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+}

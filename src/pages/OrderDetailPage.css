@@ -170,6 +170,40 @@
   font-weight: 600;
 }
 
+.odp-warehouse-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  background: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #e1bee7;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.odp-warehouse-stage-badge.odp-stage-alert {
+  background: #ffebee;
+  color: #c62828;
+  border-color: #ffcdd2;
+}
+
+.odp-rework-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e65100;
+  display: inline-block;
+  animation: odp-rework-pulse 1.5s infinite;
+}
+
+@keyframes odp-rework-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 .odp-summary-right {
   display: flex;
   gap: 10px;
@@ -676,6 +710,11 @@
 
   .odp-order-no {
     font-size: 16px;
+  }
+
+  .odp-warehouse-stage-badge {
+    font-size: 10px;
+    padding: 3px 8px;
   }
 
   .odp-content {
