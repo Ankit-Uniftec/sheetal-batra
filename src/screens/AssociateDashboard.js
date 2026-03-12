@@ -69,10 +69,26 @@ export default function Dashboard() {
     return salesperson?.designation?.toLowerCase().includes("manager");
   }, [salesperson]);
 
+  // Check if user is sa_services (can see all orders, view-only for others)
+  const isServices = useMemo(() => {
+    return salesperson?.role === "sa_services";
+  }, [salesperson]);
+
+  // Check if an order belongs to the current SA
+  const isOwnOrder = (order) => {
+    if (!salesperson?.email) return false;
+    return order.salesperson_email?.toLowerCase() === salesperson.email.toLowerCase();
+  };
+
   // ✅ OPTIMIZED: Memoize heavy calculations
   const stats = useMemo(() => {
+    // For sa_services, only count own orders in stats
+    const ownOrders = isServices
+      ? orders.filter(o => o.salesperson_email?.toLowerCase() === salesperson?.email?.toLowerCase())
+      : orders;
+
     // Filter out Warehouse alterations for all stats
-    const displayOrders = orders.filter((o) => {
+    const displayOrders = ownOrders.filter((o) => {
       if (o.is_alteration) {
         return o.alteration_location === "In-Store";
       }
@@ -88,7 +104,7 @@ export default function Dashboard() {
     );
 
     return { totalRevenue, totalOrders, totalClients, activeOrders };
-  }, [orders]);
+  }, [orders, isServices, salesperson]);
 
   // Sales Target - use DB value or default to 800000
   const DEFAULT_SALES_TARGET = 800000;
@@ -228,28 +244,42 @@ export default function Dashboard() {
           setLoading(false);
           return;
         }
-        // ✅ Fetch salesperson and orders in PARALLEL
-        const [salespersonResult, ordersResult] = await Promise.all([
-          supabase.from("salesperson").select("*").eq("email", user.email.toLowerCase()).single(),
-          supabase.from("orders").select("*").eq("salesperson_email", user.email.toLowerCase()).order("created_at", { ascending: false })
-        ]);
+        // Step 1: Fetch salesperson profile first (need role to decide order query)
+        const { data: spData } = await supabase
+          .from("salesperson")
+          .select("*")
+          .eq("email", user.email.toLowerCase())
+          .single();
 
-        // ✅ Role check - only salesperson users allowed
-        if (!salespersonResult.data || salespersonResult.data.role !== "salesperson") {
+        // ✅ Role check - only salesperson and sa_services users allowed
+        if (!spData || (spData.role !== "salesperson" && spData.role !== "sa_services")) {
           console.log("❌ Access denied - not a salesperson");
           await supabase.auth.signOut();
           navigate("/login", { replace: true });
           return;
         }
 
-        setSalesperson(salespersonResult.data);
+        setSalesperson(spData);
         localStorage.setItem("sp_email", user.email);
 
-        if (ordersResult.data) {
-          setOrders(ordersResult.data);
+        // Step 2: Fetch orders - sa_services gets ALL orders, regular SA gets only their own
+        const isServicesUser = spData.role === "sa_services";
+        let ordersQuery = supabase.from("orders").select("*").order("created_at", { ascending: false });
 
-          // ✅ Extract clients from orders (no extra DB query for orders)
-          extractClientsFromOrders(ordersResult.data);
+        if (!isServicesUser) {
+          ordersQuery = ordersQuery.eq("salesperson_email", user.email.toLowerCase());
+        }
+
+        const { data: ordersData } = await ordersQuery;
+
+        if (ordersData) {
+          setOrders(ordersData);
+
+          // ✅ Extract clients from OWN orders only (not other SAs' orders)
+          const ownOrders = isServicesUser
+            ? ordersData.filter(o => o.salesperson_email?.toLowerCase() === user.email.toLowerCase())
+            : ordersData;
+          extractClientsFromOrders(ownOrders);
         }
 
         setLoading(false);
@@ -608,6 +638,9 @@ export default function Dashboard() {
       }));
     }
 
+    // sa_services viewing another SA's order = read-only
+    const isReadOnly = isServices && !isOwnOrder(order);
+
     navigate("/orderHistory", {
       state: {
         customer: {
@@ -617,6 +650,9 @@ export default function Dashboard() {
           phone: order.delivery_phone,
         },
         fromAssociate: true,
+        readOnly: isReadOnly,
+        saEmail: salesperson?.email || null,
+        isServices: isServices,
       }
     });
   };
@@ -642,6 +678,8 @@ export default function Dashboard() {
           phone: client.phone,
         },
         fromAssociate: true,
+        saEmail: salesperson?.email || null,
+        isServices: isServices,
       }
     });
   };
@@ -1022,11 +1060,12 @@ export default function Dashboard() {
                   const item = order.items?.[0] || {};
                   const imgSrc = item.image_url || "/placeholder.png";
                   const hoursSince = getHoursSinceOrder(order.created_at);
+                  const own = !isServices || isOwnOrder(order);
 
                   return (
                     <div
                       key={order.id}
-                      className="ad-order-card"
+                      className={`ad-order-card ${!own ? "ad-order-card-readonly" : ""}`}
                       onClick={() => viewCustomerOrders(order)}
                       style={{ cursor: 'pointer' }}
                     >
@@ -1044,6 +1083,12 @@ export default function Dashboard() {
                             <span className="ad-header-label">DELIVERY:</span>
                             <span className="ad-header-value">{formatDate(order.delivery_date) || "—"}</span>
                           </div>
+                          {isServices && !own && (
+                            <div className="ad-header-item">
+                              <span className="ad-header-label">SA:</span>
+                              <span className="ad-header-value">{order.salesperson || "—"}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="ad-header-actions">
                           <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
@@ -1074,7 +1119,7 @@ export default function Dashboard() {
                               return stageLabels[order.warehouse_stage] || "Order Received";
                             })()}
                           </div>
-                          {canEdit(order) && (
+                          {own && canEdit(order) && (
                             <div className="ad-editable-badge">
                               Editable ({Math.floor(36 - hoursSince)}h)
                             </div>
@@ -1229,7 +1274,7 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {canMarkDelivered(order) && (
+                      {own && canMarkDelivered(order) && (
                         <div className="ad-order-actions">
                           <button
                             className="ad-action-btn ad-delivered-btn"
@@ -1370,6 +1415,9 @@ export default function Dashboard() {
                           >
                             <p><b>Order No:</b> {order.order_no}</p>
                             <p><b>Client Name:</b> {order.delivery_name}</p>
+                            {isServices && !isOwnOrder(order) && (
+                              <p><b>SA:</b> {order.salesperson || "—"}</p>
+                            )}
                             <p><b>Status:</b> {order.status || "Pending"}</p>
                             <p><b>Delivery Date:</b> {formatDate(order.delivery_date)}</p>
                           </div>

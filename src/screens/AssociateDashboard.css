@@ -1496,6 +1496,11 @@
   transition: all 0.2s ease;
 }
 
+.ad-order-card-readonly {
+  opacity: 0.85;
+  border-left: 3px solid #ccc;
+}
+
 .ad-order-card:hover {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
