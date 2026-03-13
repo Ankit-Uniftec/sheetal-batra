@@ -156,23 +156,27 @@
 }
 
 .productBtn {
+  background: #d5b85a;
+  border: none;
+  color: white !important;
+}
+
+.productBtn:hover {
   background: white;
   border: 1px solid #d5b85a;
   color: #d5b85a !important;
 }
 
-.productBtn:hover {
-  background: #faf6e8;
-}
-
 .draftBtn {
-  background: white;
-  border: 1px solid #D4D4D4;
-  color: #555;
+  background: #d5b85a;
+  border: none;
+  color: white !important;
 }
 
 .draftBtn:hover {
-  border-color: #d5b85a;
+  background: white;
+  border: 1px solid #d5b85a;
+  color: #d5b85a !important;
 }
 
 .continueBtn {
@@ -182,7 +186,9 @@
 }
 
 .continueBtn:hover {
-  background: #c9a94e;
+  background: white;
+  border: 1px solid #d5b85a;
+  color: #d5b85a !important;
 }
 
 /* ===== BACK BUTTON ===== */
