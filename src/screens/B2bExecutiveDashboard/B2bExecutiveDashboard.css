@@ -23,7 +23,6 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 40px;
-  position: sticky;
   top: 0;
   z-index: 100;
   width: 100%;
@@ -77,13 +76,13 @@
 }
 
 
-/* ---------------- MAIN GRID (3 ROW × 4 COLUMN) ---------------- */
+/* ---------------- MAIN GRID (2 ROW × 4 COLUMN) ---------------- */
 .b2b-grid-table {
   margin-top: 30px;
   width: 100%;
   display: grid;
   grid-template-columns: 180px 1fr 1fr 260px;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
   gap: 25px;
 }
 
@@ -154,15 +153,9 @@
   grid-column: 4;
 }
 
-/* Row 2 */
-.b2b-quick-actions {
-  grid-row: 2;
-  grid-column: 2 / 4;
-}
-
-/* Row 2—"3 Alerts */
+/* Row 2 Alerts */
 .b2b-alerts-box {
-  grid-row: 2 / 4;
+  grid-row: 2;
   grid-column: 4;
   padding: 20px;
   border-radius: 12px;
@@ -208,9 +201,9 @@
   font-size: 14px;
 }
 
-/* Row 3 */
+/* Row 2 Recent Orders */
 .b2b-active-orders {
-  grid-row: 3;
+  grid-row: 2;
   grid-column: 2 / 4;
 }
 
@@ -515,20 +508,21 @@
   border-radius: 4px;
 }
 
-/* ===== ORDER CARD ===== */
+/* ============ ORDER CARDS ============ */
 .b2b-order-card {
-  position: relative;
-  background: #fff;
+  background: linear-gradient(135deg, #fdfcf8 0%, #f9f7f0 100%);
+  border: 2px solid #d5b85a7c;
   border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f0f0f0;
+  padding: 0;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
   transition: all 0.2s ease;
 }
 
 .b2b-order-card:hover {
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 6px 20px rgba(213, 184, 90, 0.15);
+  border-color: #d5b85a;
 }
 
 /* Header Row */
@@ -536,14 +530,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0ead0;
   flex-wrap: wrap;
   gap: 10px;
 }
 
 .b2b-header-info {
   display: flex;
-  gap: 24px;
+  gap: 28px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -556,7 +551,7 @@
 
 .b2b-header-label {
   font-size: 10px;
-  color: #888;
+  color: #999;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -576,7 +571,7 @@
 
 /* Status Badge */
 .b2b-order-status-badge {
-  padding: 6px 14px;
+  padding: 5px 14px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
@@ -603,7 +598,7 @@
 
 /* Type Badge */
 .b2b-order-type-badge {
-  padding: 5px 10px;
+  padding: 4px 10px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
@@ -624,7 +619,8 @@
 /* Content Row */
 .b2b-order-content {
   display: flex;
-  gap: 24px;
+  gap: 20px;
+  padding: 16px 20px;
 }
 
 .b2b-product-thumb {
@@ -634,12 +630,12 @@
 }
 
 .b2b-product-thumb:hover {
-  transform: scale(1.02);
+  transform: scale(1.03);
 }
 
 .b2b-product-thumb img {
-  width: 120px;
-  height: 150px;
+  width: 100px;
+  height: 130px;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid #eee;
@@ -649,7 +645,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
 .b2b-product-name {
@@ -662,10 +658,11 @@
   font-size: 13px;
   color: #c9a34a;
   font-weight: 600;
+  min-width: fit-content;
 }
 
 .b2b-field-value {
-  font-size: 14px;
+  font-size: 13px;
   color: #333;
   font-weight: 500;
 }
@@ -673,8 +670,11 @@
 /* Details Grid */
 .b2b-details-grid {
   display: flex;
-  gap: 48px;
+  gap: 32px;
   flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #f0ead0;
 }
 
 .b2b-detail-item {
@@ -684,15 +684,46 @@
 }
 
 .b2b-detail-item .b2b-order-label {
-  font-size: 13px;
-  color: #c9a34a;
+  font-size: 11px;
+  color: #999;
   font-weight: 600;
+  text-transform: uppercase;
 }
 
 .b2b-detail-item .b2b-field-value {
-  font-size: 12px;
+  font-size: 13px;
   color: #333;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+/* Card Footer - PDF */
+.b2b-order-card-footer {
+  padding: 10px 20px;
+  border-top: 1px solid #f0ead0;
+  display: flex;
+  gap: 8px;
+}
+
+.b2b-pdf-btn {
+  padding: 5px 14px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.b2b-pdf-btn:hover {
+  background: #f5f5f5;
+  border-color: #d5b85a;
+}
+
+.b2b-pdf-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Pagination */
@@ -1112,3 +1143,9 @@
 
 /* Credit Exceeded Badge */
 .b2b-credit-badge { background: #fce4ec; color: #c62828; border: 1px solid #c62828; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+/* PDF Button */
+.b2b-order-card-footer { padding: 8px 16px; border-top: 1px solid #f0f0f0; }
+.b2b-pdf-btn { background: none; border: 1px solid #c5a46d; color: #8b7240; padding: 4px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500; }
+.b2b-pdf-btn:hover { background: #fdf6e3; }
+.b2b-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; }

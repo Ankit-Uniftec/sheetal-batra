@@ -5,6 +5,7 @@ import "./B2bMerchandiserDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function B2bMerchandiserDashboard() {
     const [vendorMap, setVendorMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(null);
 
     // Approvals
     const [approvalModal, setApprovalModal] = useState(null);
@@ -229,6 +231,30 @@ export default function B2bMerchandiserDashboard() {
         setTypeFilter("all");
         setCurrentPage(1);
         setActiveTab("orders");
+    };
+
+    const handleDownloadPdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadCustomerPdf(order);
+        } catch (err) {
+            console.error("PDF download failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
+    };
+
+    const handleDownloadWarehousePdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadWarehousePdf(order, null, true);
+        } catch (err) {
+            console.error("Warehouse PDF failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
     };
 
     const getStatusBadgeClass = (status) => {
@@ -451,14 +477,20 @@ export default function B2bMerchandiserDashboard() {
                                         <div className="merch-ocard-header">
                                             <div className="merch-ocard-info">
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">ORDER NO:</span><span className="merch-ocard-val">{order.order_no || "\u2014"}</span></div>
+                                                <div className="merch-ocard-field"><span className="merch-ocard-label">DELIVERY:</span><span className="merch-ocard-val">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">PO NUMBER:</span><span className="merch-ocard-val">{order.po_number || "\u2014"}</span></div>
-                                                <div className="merch-ocard-field"><span className="merch-ocard-label">DATE:</span><span className="merch-ocard-val">{formatDate(order.created_at)}</span></div>
                                             </div>
                                             <div className="merch-ocard-badges">
                                                 <div className={`merch-order-status-badge ${getStatusBadgeClass(order.approval_status)}`}>{order.approval_status || "Pending"}</div>
                                                 {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
                                                 {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"\u26A0"} Urgent</div>)}
                                                 {order.credit_exceeded && (<div className="merch-credit-badge">Credit Exceeded</div>)}
+                                                <button className="merch-pdf-btn" onClick={(e) => handleDownloadPdf(e, order)} disabled={pdfLoading === order.id}>
+                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Customer PDF"}
+                                                </button>
+                                                <button className="merch-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
+                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
+                                                </button>
                                             </div>
                                         </div>
                                         <div className="merch-ocard-content">
@@ -471,6 +503,7 @@ export default function B2bMerchandiserDashboard() {
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Qty:</span><span className="merch-ocard-dval">{order.total_quantity || 1}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Markdown:</span><span className="merch-ocard-dval">{order.markdown_percent || 0}%</span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Delivery:</span><span className="merch-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -599,6 +632,8 @@ export default function B2bMerchandiserDashboard() {
                     </div>
                 )}
             </div>
+
+            <button className="merch-add-btn" onClick={() => navigate("/b2b-vendor-selection")}>+</button>
 
             {/* ===== APPROVAL MODAL ===== */}
             {approvalModal && (

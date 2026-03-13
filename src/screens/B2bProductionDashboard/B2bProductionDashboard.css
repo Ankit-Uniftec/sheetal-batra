@@ -8,7 +8,7 @@
 }
 
 /* ---------------- HEADER ---------------- */
-.prod-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; position: sticky; top: 0; z-index: 100; width: 100%; margin-bottom: 20px; }
+.prod-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; top: 0; z-index: 100; width: 100%; margin-bottom: 20px; }
 .prod-header-logo { height: 70px; cursor: pointer; }
 .prod-header-right { display: flex; align-items: center; gap: 15px; }
 .prod-header-btn { background: #d5b85a; color: white !important; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
@@ -116,29 +116,34 @@
 .prod-list-scroll::-webkit-scrollbar-thumb { background: #c7a24f; border-radius: 4px; }
 
 /* ---------------- ORDER CARDS (list style) ---------------- */
-.prod-order-card-full { position: relative; background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border: 1px solid #f0f0f0; transition: all 0.2s ease; }
-.prod-order-card-full:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
+.prod-order-card-full { position: relative; background: linear-gradient(135deg, #fdfcf8 0%, #f9f7f0 100%); border: 2px solid #d5b85a7c; border-radius: 12px; padding: 0; margin-bottom: 20px; overflow: hidden; transition: all 0.2s ease; }
+.prod-order-card-full:hover { box-shadow: 0 6px 20px rgba(213, 184, 90, 0.15); border-color: #d5b85a; }
 
-.prod-ocard-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0 12px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid #f0f0f0; margin-bottom: 12px; }
-.prod-ocard-info { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.prod-ocard-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid #f0ead0; }
+.prod-ocard-info { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
 .prod-ocard-field { display: flex; flex-direction: column; gap: 2px; }
-.prod-ocard-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.prod-ocard-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
 .prod-ocard-val { font-size: 13px; font-weight: 600; color: #333; }
 .prod-ocard-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-.prod-ocard-content { display: flex; gap: 24px; }
-.prod-ocard-thumb { flex-shrink: 0; }
-.prod-ocard-thumb img { width: 120px; height: 150px; object-fit: cover; border-radius: 8px; border: 1px solid #eee; }
-.prod-ocard-details { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.prod-ocard-content { display: flex; gap: 20px; padding: 16px 20px; }
+.prod-ocard-thumb { flex-shrink: 0; cursor: pointer; transition: transform 0.2s; }
+.prod-ocard-thumb:hover { transform: scale(1.03); }
+.prod-ocard-thumb img { width: 100px; height: 130px; object-fit: cover; border-radius: 8px; border: 1px solid #eee; }
+.prod-ocard-details { flex: 1; display: flex; flex-direction: column; gap: 6px; }
 .prod-ocard-row { display: flex; align-items: center; gap: 8px; }
-.prod-ocard-dlabel { font-size: 13px; color: #c9a34a; font-weight: 600; }
-.prod-ocard-dval { font-size: 14px; color: #333; font-weight: 500; }
-.prod-ocard-grid { display: flex; gap: 48px; flex-wrap: wrap; }
+.prod-ocard-dlabel { font-size: 13px; color: #c9a34a; font-weight: 600; min-width: fit-content; }
+.prod-ocard-dval { font-size: 13px; color: #333; font-weight: 500; }
+.prod-ocard-grid { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 6px; padding-top: 8px; border-top: 1px solid #f0ead0; }
 .prod-ocard-gitem { display: flex; flex-direction: column; gap: 2px; }
-.prod-ocard-gitem .prod-ocard-dlabel { font-size: 13px; }
-.prod-ocard-gitem .prod-ocard-dval { font-size: 12px; }
+.prod-ocard-gitem .prod-ocard-dlabel { font-size: 11px; color: #999; text-transform: uppercase; }
+.prod-ocard-gitem .prod-ocard-dval { font-size: 13px; font-weight: 600; }
 
-.prod-ocard-actions { display: flex; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #f0f0f0; }
+.prod-ocard-actions { display: flex; gap: 10px; padding: 12px 20px; border-top: 1px solid #f0ead0; }
+
+.prod-pdf-btn { padding: 5px 14px; background: white; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.prod-pdf-btn:hover { background: #f5f5f5; border-color: #d5b85a; }
+.prod-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .prod-btn-accept, .prod-btn-ready, .prod-btn-dispatch, .prod-btn-detail { padding: 8px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
 .prod-btn-accept { background: #e3f2fd; color: #1565c0; }
 .prod-btn-accept:hover { background: #1565c0; color: white; }
@@ -283,3 +288,8 @@
 
 /* Credit Exceeded Badge */
 .prod-credit-badge { background: #fce4ec; color: #c62828; border: 1px solid #c62828; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+/* PDF Button */
+.prod-pdf-btn { background: none; border: 1px solid #c5a46d; color: #8b7240; padding: 4px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500; }
+.prod-pdf-btn:hover { background: #fdf6e3; }
+.prod-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; }

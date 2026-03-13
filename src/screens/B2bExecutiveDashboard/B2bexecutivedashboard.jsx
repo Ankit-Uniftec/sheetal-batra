@@ -5,6 +5,7 @@ import "./B2bExecutiveDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function B2bExecutiveDashboard() {
     const [vendors, setVendors] = useState({});
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(null);
 
     // Calendar
     const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -54,7 +56,7 @@ export default function B2bExecutiveDashboard() {
 
                 const [profileResult, ordersResult] = await Promise.all([
                     supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
-                    supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false })
+                    supabase.from("orders").select("*").eq("is_b2b", true).eq("salesperson_email", user.email?.toLowerCase()).order("created_at", { ascending: false })
                 ]);
 
                 if (profileResult.data) setProfile(profileResult.data);
@@ -129,6 +131,30 @@ export default function B2bExecutiveDashboard() {
 
     const handleNewOrder = () => navigate("/b2b-vendor-selection");
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
+
+    const handleDownloadPdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadCustomerPdf(order);
+        } catch (err) {
+            console.error("PDF download failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
+    };
+
+    const handleDownloadWarehousePdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadWarehousePdf(order, null, true);
+        } catch (err) {
+            console.error("Warehouse PDF failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
+    };
 
     const handleEditOrder = async (order) => {
         try {
@@ -238,21 +264,6 @@ export default function B2bExecutiveDashboard() {
                             <StatCard title="Pending Approval" value={formatIndianNumber(stats.pendingOrders.length)} change={`Today: ${stats.todayOrders.length}`} />
                         </div>
 
-                        {/* Row 2: Quick Actions (spans 2 cols) */}
-                        <div className="b2b-cell b2b-quick-actions">
-                            <div className="b2b-sales-card">
-                                <div className="b2b-sales-header">
-                                    <div>
-                                        <p className="b2b-sales-label">Quick Actions</p>
-                                    </div>
-                                </div>
-                                <div className="b2b-quick-btns">
-                                    <button className="b2b-quick-btn primary" onClick={handleNewOrder}>+ New B2B Order</button>
-                                    <button className="b2b-quick-btn" onClick={() => navigate("/b2b-order-history")}>Order History</button>
-                                    <button className="b2b-quick-btn" onClick={() => setActiveTab("calendar")}>Calendar</button>
-                                </div>
-                            </div>
-                        </div>
 
                         {/* Row 2-3: Alerts (col 4, spans 2 rows) */}
                         <aside className="b2b-cell b2b-alerts-box">
@@ -336,7 +347,7 @@ export default function B2bExecutiveDashboard() {
                                     <div
                                         key={order.id}
                                         className="b2b-order-card"
-                                        onClick={() => navigate("/b2b-order-history")}
+                                        onClick={() => handleViewOrder(order.id)}
                                         style={{ cursor: 'pointer' }}
                                     >
                                         {/* Header Row */}
@@ -351,8 +362,8 @@ export default function B2bExecutiveDashboard() {
                                                     <span className="b2b-header-value">{formatDate(order.created_at) || "—"}</span>
                                                 </div>
                                                 <div className="b2b-header-item">
-                                                    <span className="b2b-header-label">PO NUMBER:</span>
-                                                    <span className="b2b-header-value">{order.po_number || "—"}</span>
+                                                    <span className="b2b-header-label">DELIVERY:</span>
+                                                    <span className="b2b-header-value">{formatDate(order.delivery_date) || "—"}</span>
                                                 </div>
                                             </div>
                                             <div className="b2b-header-actions">
@@ -370,12 +381,18 @@ export default function B2bExecutiveDashboard() {
                                                 {order.credit_exceeded && (
                                                     <div className="b2b-credit-badge">Credit Exceeded</div>
                                                 )}
+                                                <button className="b2b-pdf-btn" onClick={(e) => handleDownloadPdf(e, order)} disabled={pdfLoading === order.id}>
+                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Customer PDF"}
+                                                </button>
+                                                <button className="b2b-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
+                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
+                                                </button>
                                             </div>
                                         </div>
 
                                         {/* Content Row */}
                                         <div className="b2b-order-content">
-                                            <div className="b2b-product-thumb" onClick={() => handleViewOrder(order.id)}>
+                                            <div className="b2b-product-thumb" onClick={(e) => { e.stopPropagation(); handleViewOrder(order.id); }}>
                                                 <img src={imgSrc} alt={item.product_name || "Product"} />
                                             </div>
                                             <div className="b2b-product-details">
@@ -537,7 +554,7 @@ export default function B2bExecutiveDashboard() {
                                                 <p><b>Order No:</b> {order.order_no}</p>
                                                 <p><b>PO:</b> {order.po_number || "—"}</p>
                                                 <p><b>Status:</b> {order.approval_status || "Pending"}</p>
-                                                {order.order_flag === "Urgent" && <p><b style={{color: "#e53935"}}>{"\u26A0"} Urgent</b></p>}
+                                                {order.order_flag === "Urgent" && <p><b style={{ color: "#e53935" }}>{"\u26A0"} Urgent</b></p>}
                                                 <p><b>Delivery:</b> {formatDate(order.delivery_date)}</p>
                                             </div>
                                         ))
