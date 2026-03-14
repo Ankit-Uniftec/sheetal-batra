@@ -69,8 +69,8 @@ export default function B2bVendorSelection() {
     const [remarks, setRemarks] = useState("");
 
     const merchandisers = [
-        { label: "Prastuti", value: "Prastuti" },
-        { label: "Sharia", value: "Sharia" },
+        { label: "Prastuti Kaushik", value: "Prastuti Kaushik" },
+        { label: "Tanuja Singh", value: "Tanuja Singh" },
     ];
 
     // Fetch user role
@@ -275,6 +275,7 @@ export default function B2bVendorSelection() {
                                         <div className="vs-type-btns">
                                             <button className={`vs-type-btn ${orderType === "Buyout" ? "active" : ""}`} onClick={() => setOrderType("Buyout")}>Buyout</button>
                                             <button className={`vs-type-btn ${orderType === "Consignment" ? "active" : ""}`} onClick={() => setOrderType("Consignment")}>Consignment</button>
+                                            <button className={`vs-type-btn ${orderType === "Client Order" ? "active" : ""}`} onClick={() => setOrderType("Client Order")}>Client Order</button>
                                         </div>
                                     </div>
                                     <div className="field">

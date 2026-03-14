@@ -337,3 +337,123 @@
 
 /* Add Order Button */
 .merch-add-btn { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; border-radius: 50%; border: 3px solid #d5b85a; background: #d5b85a; font-size: 36px; color: white !important; cursor: pointer; z-index: 999; }
+/* ===== CALENDAR TAB ===== */
+.merch-calendar-wrapper {
+  grid-column: 2 / 5;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.merch-ios-calendar {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  backdrop-filter: blur(10px);
+}
+.merch-ios-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  gap: 20px;
+}
+.merch-ios-month-year {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  min-width: 160px;
+  text-align: center;
+}
+.merch-ios-nav-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #d5b85a;
+  cursor: pointer;
+  padding: 5px 12px;
+  transition: transform 0.15s;
+  line-height: 1;
+}
+.merch-ios-nav-btn:hover:not(:disabled) { transform: scale(1.1); }
+.merch-ios-nav-btn:disabled { color: #ccc; cursor: not-allowed; }
+.merch-ios-days-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+.merch-ios-day-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  padding: 8px 0;
+  text-transform: uppercase;
+}
+.merch-ios-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+.merch-ios-date-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  padding: 12px 8px;
+  min-height: 60px;
+}
+.merch-ios-date-cell:hover:not(.merch-ios-empty) { background: rgba(213, 184, 90, 0.1); }
+.merch-ios-date-cell.merch-ios-empty { cursor: default; }
+.merch-ios-date-num { font-size: 16px; font-weight: 500; color: #333; }
+.merch-ios-empty .merch-ios-date-num { visibility: hidden; }
+.merch-ios-date-cell.merch-ios-today { background: #d5b85a; border-radius: 12px; }
+.merch-ios-date-cell.merch-ios-today .merch-ios-date-num { color: white; font-weight: 600; }
+.merch-ios-date-cell.merch-ios-today .merch-ios-order-count { background: white; color: #d5b85a; }
+.merch-ios-date-cell.merch-ios-selected:not(.merch-ios-today) { background: rgba(213, 184, 90, 0.12); box-shadow: inset 0 0 0 2px #d5b85a; }
+.merch-ios-date-cell.merch-ios-selected .merch-ios-date-num { font-weight: 600; color: #d5b85a; }
+.merch-ios-order-count {
+  font-size: 11px;
+  font-weight: 600;
+  background: #d5b85a;
+  color: white;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  margin-top: 4px;
+}
+.merch-calendar-orders-section {
+  margin-top: 0;
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+}
+.merch-calendar-orders-list { max-height: 350px; overflow-y: auto; margin-top: 12px; }
+.merch-calendar-order-item {
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.merch-calendar-order-item:hover { background: #fafafa; }
+.merch-calendar-order-item p { margin: 0 0 4px; font-size: 13px; }
+
+@media (max-width: 900px) {
+  .merch-calendar-wrapper { grid-column: 1 / -1; }
+  .merch-ios-date-cell { padding: 8px 4px; min-height: 44px; }
+  .merch-ios-date-num { font-size: 13px; }
+  .merch-ios-order-count { font-size: 9px; min-width: 16px; height: 16px; }
+}

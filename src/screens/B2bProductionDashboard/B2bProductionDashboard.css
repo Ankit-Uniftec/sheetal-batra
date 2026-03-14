@@ -33,9 +33,8 @@
 .prod-stat-1 { grid-row: 1; grid-column: 2; }
 .prod-stat-2 { grid-row: 1; grid-column: 3; }
 .prod-stat-3 { grid-row: 1; grid-column: 4; }
-.prod-quick-actions { grid-row: 2; grid-column: 2 / 4; }
+.prod-recent-orders { grid-row: 2; grid-column: 2 / 4; }
 .prod-pending-box { grid-row: 2 / 4; grid-column: 4; padding: 20px; border-radius: 12px; background: #FFFFFFB0; border: 1px solid #D4D4D4; }
-.prod-recent-orders { grid-row: 3; grid-column: 2 / 4; }
 
 /* ---------------- STAT CARDS ---------------- */
 .prod-gold-text { color: #d5b85a !important; }

@@ -163,7 +163,7 @@ export default function B2bOrderDetails() {
                     <h3>Delivery Details</h3>
                     <div className="b2b-od-row3">
                         <div className="b2b-od-field"><label>Delivery Address:</label><span>{deliveryAddress}</span></div>
-                        <div className="b2b-od-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "Delhi Store"}</span></div>
+                        <div className="b2b-od-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "B2B Store"}</span></div>
                     </div>
                     <div className="b2b-od-row3" style={{ marginTop: 16 }}>
                         <div className="b2b-od-field" style={{ flex: "1 1 100%" }}>
@@ -182,29 +182,22 @@ export default function B2bOrderDetails() {
                 {/* Order Totals */}
                 <div className="b2b-od-section">
                     <h3>Order Totals</h3>
-                    <div className="b2b-od-row3">
-                        <div className="b2b-od-field"><label>Subtotal:</label><span>₹{formatIndianNumber(Math.round(subtotal))}</span></div>
-                        <div className="b2b-od-field"><label>GST (18%):</label><span>₹{formatIndianNumber(Math.round(taxes))}</span></div>
-                        <div className="b2b-od-field"><label>Gross Total:</label><span style={{ fontWeight: 600 }}>₹{formatIndianNumber(Math.round(grandTotal))}</span></div>
-                    </div>
-                    {discountPercent > 0 && (
-                        <div className="b2b-od-row3">
-                            <div className="b2b-od-field"><label>Markdown ({discountPercent}%):</label><span style={{ color: "#4caf50" }}>- ₹{formatIndianNumber(Math.round(markdownAmount))}</span></div>
-                        </div>
-                    )}
-                    <div className="b2b-od-row3">
-                        <div className="b2b-od-field b2b-od-final-total"><label>Final Total:</label><span>₹{formatIndianNumber(Math.round(finalTotal))}</span></div>
-                        <div className="b2b-od-field">
-                            <label>Available Credit:</label>
-                            <span style={{ color: availableCredit <= 0 ? "#c62828" : "#2e7d32", fontWeight: 600 }}>₹{formatIndianNumber(availableCredit)}</span>
-                        </div>
+                    <div className="b2b-od-payment-rows">
+                        <div className="b2b-od-field-inline"><label>Subtotal:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(subtotal))}</span></div>
+                        <div className="b2b-od-field-inline"><label>GST (18%):</label><span>{"\u20B9"}{formatIndianNumber(Math.round(taxes))}</span></div>
+                        <div className="b2b-od-field-inline"><label>Gross Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(grandTotal))}</span></div>
+                        {discountPercent > 0 && (
+                            <div className="b2b-od-field-inline"><label>Markdown ({discountPercent}%):</label><span style={{ color: "#4caf50" }}>- {"\u20B9"}{formatIndianNumber(Math.round(markdownAmount))}</span></div>
+                        )}
+                        <div className="b2b-od-final-total-inline"><label>Final Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(finalTotal))}</span></div>
+                        <div className="b2b-od-field-inline"><label>Available Credit:</label><span style={{ color: availableCredit <= 0 ? "#c62828" : "#2e7d32" }}>{"\u20B9"}{formatIndianNumber(availableCredit)}</span></div>
                     </div>
                 </div>
 
                 {/* Credit Warning */}
                 {exceedsCredit && (
                     <div className="b2b-od-warning">
-                        <span>⚠️</span>
+                        <span>{"⚠️"}</span>
                         <div>
                             <strong>Credit Limit Warning</strong>
                             <p>This order will exceed the vendor's credit limit and will require approval.</p>
@@ -214,12 +207,12 @@ export default function B2bOrderDetails() {
 
                 {/* Footer Buttons */}
                 <div className="footer-btns">
-                    <button className="draftBtn" onClick={handleBack}>← Back to Products</button>
-                    <button className="continueBtn" onClick={handleContinue}>Review Order →</button>
+                    <button className="draftBtn" onClick={handleBack}>Back to Products</button>
+                    <button className="continueBtn" onClick={handleContinue}>Review Order</button>
                 </div>
             </div>
 
-            <button className="back-btn" onClick={handleBack}>←</button>
+            <button className="back-btn" onClick={handleBack}>{"←"}</button>
         </div>
     );
 }

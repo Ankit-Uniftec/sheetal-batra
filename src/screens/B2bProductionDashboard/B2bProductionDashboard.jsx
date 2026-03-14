@@ -302,32 +302,19 @@ export default function B2bProductionDashboard() {
                 {activeTab === "dashboard" && (
                     <>
                         <div className="prod-cell prod-stat-1">
-                            <StatCard title="Pending Production" value={stats.pending} change={`Total: ${stats.total}`} highlight={stats.pending > 0} />
+                            <StatCard title="Alerts" value={stats.pending} change={`Total: ${stats.total}`} highlight={stats.pending > 0} />
                         </div>
                         <div className="prod-cell prod-stat-2">
                             <StatCard title="In Production" value={stats.inProd} change={`Ready: ${stats.ready}`} />
                         </div>
                         <div className="prod-cell prod-stat-3">
-                            <StatCard title="Dispatched" value={stats.dispatched} change={`\u20B9${formatIndianNumber(stats.totalValue)}`} />
+                            <StatCard title="Dispatched" value={stats.dispatched} change={`Total: ${stats.total}`} />
                         </div>
 
-                        {/* Quick Actions */}
-                        <div className="prod-cell prod-quick-actions">
-                            <div className="prod-sales-card">
-                                <div className="prod-sales-header"><p className="prod-sales-label">Quick Actions</p></div>
-                                <div className="prod-quick-btns">
-                                    <button className={`prod-quick-btn ${stats.pending > 0 ? "primary" : ""}`} onClick={() => setActiveTab("queue")}>Production Queue ({stats.pending})</button>
-                                    <button className="prod-quick-btn" onClick={() => setActiveTab("inprod")}>In Production ({stats.inProd})</button>
-                                    <button className="prod-quick-btn" onClick={() => setActiveTab("dispatch")}>Dispatch ({stats.ready})</button>
-                                    <button className="prod-quick-btn" onClick={() => setActiveTab("calendar")}>Calendar</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Pending Production Preview */}
+                        {/* Alerts */}
                         <aside className="prod-cell prod-pending-box">
                             <div className="prod-pending-header">
-                                <span className="prod-pending-title">Pending Production</span>
+                                <span className="prod-pending-title">Alerts</span>
                                 <button className="prod-view-btn" onClick={() => setActiveTab("queue")}>View All</button>
                             </div>
                             <div className="prod-pending-body">
@@ -340,7 +327,7 @@ export default function B2bProductionDashboard() {
                                                 <b className="prod-gold-text">{order.order_no}</b>
                                                 <span className={`prod-type-tag ${order.b2b_order_type === "Buyout" ? "prod-tag-buyout" : "prod-tag-consignment"}`}>{order.b2b_order_type || "\u2014"}</span>
                                             </div>
-                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"} {"\u00B7"} {`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</p>
+                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
                                             <div className="prod-pending-btns">
                                                 <button className="prod-accept-sm" onClick={() => setStatusModal({ order, newStatus: "in_production" })}>{"\u2713"} Accept</button>
                                                 <button className="prod-detail-sm" onClick={() => handleViewOrder(order.id)}>View</button>
@@ -366,7 +353,7 @@ export default function B2bProductionDashboard() {
                                                 <div className="prod-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
                                                     <p><b>Order No:</b> {o.order_no} &nbsp;|&nbsp; <b>PO:</b> {o.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Type:</b> {o.b2b_order_type || "\u2014"}</p>
-                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span> &nbsp;|&nbsp; <b>Total:</b> {`\u20B9${formatIndianNumber(o.grand_total || 0)}`}</p>
+                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span></p>
                                                 </div>
                                             );
                                         })
@@ -567,7 +554,7 @@ export default function B2bProductionDashboard() {
                                                 <div className="prod-order-item" key={order.id} onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
                                                     <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
-                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span> &nbsp;|&nbsp; <b>Total:</b> {`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</p>
+                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span></p>
                                                 </div>
                                             );
                                         })
@@ -605,7 +592,6 @@ export default function B2bProductionDashboard() {
                                 <p><b>Order:</b> {statusModal.order.order_no}</p>
                                 <p><b>PO:</b> {statusModal.order.po_number || "N/A"}</p>
                                 <p><b>Type:</b> {statusModal.order.b2b_order_type || "N/A"}</p>
-                                <p><b>Total:</b> <span className="prod-gold-text">{`\u20B9${formatIndianNumber(statusModal.order.grand_total || 0)}`}</span></p>
                                 <p><b>Vendor:</b> {vendorMap[statusModal.order.vendor_id]?.store_brand_name || "N/A"}</p>
                             </div>
                             <div className="prod-modal-status-change">

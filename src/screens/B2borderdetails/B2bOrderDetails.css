@@ -130,3 +130,39 @@
     .b2b-od-row3 { flex-direction: column; gap: 12px; }
     .b2b-od-section h3 { font-size: 17px; }
 }
+/* Payment fields - label and value side by side, full width rows */
+.b2b-od-payment-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.b2b-od-field-inline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px;
+}
+.b2b-od-field-inline label {
+    font-size: 13px;
+    color: #888;
+    font-weight: 500;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.b2b-od-field-inline span {
+    font-size: 15px;
+    color: #333;
+    font-weight: 600;
+    text-align: right;
+}
+.b2b-od-final-total-inline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 4px 0;
+    margin-top: 4px;
+    border-top: 2px solid #d5b85a;
+}
+.b2b-od-final-total-inline label { font-size: 14px; color: #d5b85a; font-weight: 600; margin: 0; }
+.b2b-od-final-total-inline span { font-size: 22px; font-weight: 700; color: #d5b85a; }

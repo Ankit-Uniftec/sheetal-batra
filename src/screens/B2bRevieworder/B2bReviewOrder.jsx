@@ -187,11 +187,13 @@ export default function B2bReviewOrder() {
                 delivery_address: deliveryAddress,
                 items: items,
                 comments: [remarks, orderNotes].filter(Boolean).join("\n\n"),
+                order_notes: orderNotes || "",
+                delivery_notes: orderNotes || "",
                 subtotal: subtotal,
                 taxes: taxes,
                 grand_total: grandTotal,
                 total_quantity: totalQuantity,
-                mode_of_delivery: productData?.modeOfDelivery || "Delhi Store",
+                mode_of_delivery: productData?.modeOfDelivery || "B2B Store",
                 order_flag: productData?.orderFlag || "Normal",
                 urgent_reason: productData?.urgentReason || null,
                 attachments: productData?.attachments || [],
@@ -369,12 +371,22 @@ export default function B2bReviewOrder() {
                     </div>
                     <div className="b2b-ro-row3">
                         <div className="b2b-ro-field"><label>Markdown:</label><span>{discountPercent}%</span></div>
-                        <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "Delhi Store"}</span></div>
+                        <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "B2B Store"}</span></div>
                     </div>
                     {deliveryAddress && (
                         <div className="b2b-ro-field b2b-ro-field-wide" style={{ marginTop: 12 }}>
                             <label>Delivery Address:</label>
                             <span>{deliveryAddress}</span>
+                        </div>
+                    )}
+                    {vendorData?.primaryContact && (
+                        <div className="b2b-ro-field b2b-ro-field-wide" style={{ marginTop: 8 }}>
+                            <label>Vendor Contact:</label>
+                            <span>
+                                {vendorData.primaryContact.contact_name || ""}
+                                {vendorData.primaryContact.contact_phone && ` \u2022 ${vendorData.primaryContact.contact_phone}`}
+                                {vendorData.primaryContact.contact_email && ` \u2022 ${vendorData.primaryContact.contact_email}`}
+                            </span>
                         </div>
                     )}
                 </div>
@@ -407,20 +419,20 @@ export default function B2bReviewOrder() {
                                     </div>
                                     <div className="b2b-ro-field"><label>Size:</label><span>{item.size}</span></div>
                                     <div className="b2b-ro-field"><label>Qty:</label><span>{item.quantity || 1}</span></div>
-                                    <div className="b2b-ro-field"><label>Unit Price:</label><span>₹{formatIndianNumber(item.price)}</span></div>
-                                    <div className="b2b-ro-field"><label>Total:</label><span style={{ fontWeight: 600 }}>₹{formatIndianNumber(item.price * (item.quantity || 1))}</span></div>
+                                    <div className="b2b-ro-field"><label>Unit Price:</label><span>{"\u20B9"}{formatIndianNumber(item.price)}</span></div>
+                                    <div className="b2b-ro-field"><label>Total:</label><span style={{ fontWeight: 600 }}>{"\u20B9"}{formatIndianNumber(item.price * (item.quantity || 1) + (Array.isArray(item.extras) ? item.extras.reduce((s, e) => s + Number(e.price || 0), 0) : 0))}</span></div>
                                     {item.delivery_date && (
                                         <div className="b2b-ro-field"><label>Delivery:</label><span>{formatDate(item.delivery_date)}</span></div>
                                     )}
                                 </div>
-                                {item.extras && item.extras.length > 0 && (
+                                {Array.isArray(item.extras) && item.extras.length > 0 && (
                                     <div className="b2b-ro-field b2b-ro-field-wide">
                                         <label>Extras:</label>
                                         <div className="b2b-ro-extras">
                                             {item.extras.map((extra, idx) => (
                                                 <div key={idx} className="b2b-ro-extra-item">
-                                                    <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
-                                                    {extra.color && <ColorDotDisplay colorObject={extra.color} />}
+                                                    <span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price || 0)})</span>
+                                                    {extra.color && extra.color.name && <ColorDotDisplay colorObject={extra.color} />}
                                                 </div>
                                             ))}
                                         </div>
@@ -434,21 +446,14 @@ export default function B2bReviewOrder() {
                 {/* Payment Details */}
                 <div className="b2b-ro-section">
                     <h3>Payment Details</h3>
-                    <div className="b2b-ro-row3">
-                        <div className="b2b-ro-field"><label>Subtotal:</label><span>₹{formatIndianNumber(Math.round(subtotal))}</span></div>
-                        <div className="b2b-ro-field"><label>GST (18%):</label><span>₹{formatIndianNumber(Math.round(taxes))}</span></div>
-                        <div className="b2b-ro-field"><label>Gross Total:</label><span style={{ fontWeight: 600 }}>₹{formatIndianNumber(Math.round(grandTotal))}</span></div>
-                    </div>
-                    {discountPercent > 0 && (
-                        <div className="b2b-ro-row3">
-                            <div className="b2b-ro-field"><label>Markdown ({discountPercent}%):</label><span style={{ color: "#4caf50" }}>- ₹{formatIndianNumber(Math.round(markdownAmount))}</span></div>
-                        </div>
-                    )}
-                    <div className="b2b-ro-row3">
-                        <div className="b2b-ro-field b2b-ro-final-total">
-                            <label>Final Total:</label>
-                            <span>₹{formatIndianNumber(Math.round(finalTotal))}</span>
-                        </div>
+                    <div className="b2b-ro-payment-rows">
+                        <div className="b2b-ro-field-inline"><label>Subtotal:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(subtotal))}</span></div>
+                        <div className="b2b-ro-field-inline"><label>GST (18%):</label><span>{"\u20B9"}{formatIndianNumber(Math.round(taxes))}</span></div>
+                        <div className="b2b-ro-field-inline"><label>Gross Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(grandTotal))}</span></div>
+                        {discountPercent > 0 && (
+                            <div className="b2b-ro-field-inline"><label>Markdown ({discountPercent}%):</label><span style={{ color: "#4caf50" }}>- {"\u20B9"}{formatIndianNumber(Math.round(markdownAmount))}</span></div>
+                        )}
+                        <div className="b2b-ro-final-total-inline"><label>Final Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(finalTotal))}</span></div>
                     </div>
                 </div>
 
@@ -474,7 +479,7 @@ export default function B2bReviewOrder() {
                 {/* Credit Warning */}
                 {exceedsCredit && (
                     <div className="b2b-ro-warning">
-                        <span>⚠ï¸</span>
+                        <span>{"⚠️"}</span>
                         <div>
                             <strong>Credit Limit Warning</strong>
                             <p>This order exceeds the vendor's available credit and will require approval.</p>
