@@ -86,37 +86,37 @@ function StatusBadge({ status }) {
 }
 
 // Warehouse stage badge component
-function WarehouseStageBadge({ stage, isRework }) {
-  const stageLabels = {
-    order_received: "Order Received",
-    cloth_issued: "Cloth Issued",
-    dyeing_in_progress: "Dyeing",
-    pattern_cutting_in_progress: "Pattern Cutting",
-    pattern_printing_in_progress: "Pattern Printing",
-    embroidery_in_progress: "Embroidery",
-    dry_cleaning_in_progress: "Dry Cleaning",
-    trims_in_progress: "Trims",
-    cutting_stitching_in_progress: "Cutting & Stitching",
-    hemming_in_progress: "Hemming",
-    finishing_in_progress: "Finishing",
-    qc_in_progress: "QC In-Progress",
-    qc_passed: "QC Passed",
-    qc_failed: "QC Failed",
-    packaging_dispatch: "Packaging & Dispatch",
-    disposed: "Disposed",
-    scrapped: "Scrapped",
-  };
+// function WarehouseStageBadge({ stage, isRework }) {
+//   const stageLabels = {
+//     order_received: "Order Received",
+//     cloth_issued: "Cloth Issued",
+//     dyeing_in_progress: "Dyeing",
+//     pattern_cutting_in_progress: "Pattern Cutting",
+//     pattern_printing_in_progress: "Pattern Printing",
+//     embroidery_in_progress: "Embroidery",
+//     dry_cleaning_in_progress: "Dry Cleaning",
+//     trims_in_progress: "Trims",
+//     cutting_stitching_in_progress: "Cutting & Stitching",
+//     hemming_in_progress: "Hemming",
+//     finishing_in_progress: "Finishing",
+//     qc_in_progress: "QC In-Progress",
+//     qc_passed: "QC Passed",
+//     qc_failed: "QC Failed",
+//     packaging_dispatch: "Packaging & Dispatch",
+//     disposed: "Disposed",
+//     scrapped: "Scrapped",
+//   };
 
-  const isAlert = stage === "disposed" || stage === "scrapped";
-  const label = stageLabels[stage] || "Order Received";
+//   const isAlert = stage === "disposed" || stage === "scrapped";
+//   const label = stageLabels[stage] || "Order Received";
 
-  return (
-    <span className={`odp-warehouse-stage-badge ${isAlert ? "odp-stage-alert" : ""}`}>
-      {isRework && <span className="odp-rework-dot"></span>}
-      {label}
-    </span>
-  );
-}
+//   return (
+//     <span className={`odp-warehouse-stage-badge ${isAlert ? "odp-stage-alert" : ""}`}>
+//       {isRework && <span className="odp-rework-dot"></span>}
+//       {label}
+//     </span>
+//   );
+// }
 
 export default function OrderDetailPage() {
   const { user } = useAuth();
@@ -448,7 +448,7 @@ export default function OrderDetailPage() {
         <div className="odp-summary-left">
           <span className="odp-order-no">{order.order_no}</span>
           <StatusBadge status={order.status} />
-          <WarehouseStageBadge stage={order.warehouse_stage} isRework={order.is_rework} />
+          {/* <WarehouseStageBadge stage={order.warehouse_stage} isRework={order.is_rework} /> */}
           {order.order_flag === "Urgent" && (
             <span className="odp-urgent-badge">URGENT</span>
           )}
