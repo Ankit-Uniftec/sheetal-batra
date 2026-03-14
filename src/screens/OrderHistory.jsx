@@ -192,6 +192,25 @@ export default function OrderHistory() {
   const customerFromState = location.state?.customer;
   const fromAssociate = location.state?.fromAssociate;
 
+  // Persist SA flags in sessionStorage so they survive back-navigation
+  const readOnly = (location.state?.readOnly ?? JSON.parse(sessionStorage.getItem("oh_readOnly") || "false"));
+  const saEmail = (location.state?.saEmail ?? sessionStorage.getItem("oh_saEmail")) || null;
+  const isServicesSA = (location.state?.isServices ?? JSON.parse(sessionStorage.getItem("oh_isServices") || "false"));
+
+  useEffect(() => {
+    if (location.state?.saEmail !== undefined) {
+      sessionStorage.setItem("oh_saEmail", location.state.saEmail || "");
+      sessionStorage.setItem("oh_readOnly", JSON.stringify(location.state.readOnly || false));
+      sessionStorage.setItem("oh_isServices", JSON.stringify(location.state.isServices || false));
+    }
+  }, [location.state]);
+
+  // Check if an order belongs to the current SA
+  const isOwnOrder = (order) => {
+    if (!saEmail) return true; // Customer login or no SA context = full access
+    return order.salesperson_email?.toLowerCase() === saEmail.toLowerCase();
+  };
+
   const [orders, setOrders] = useState([]);
   const [profile, setProfile] = useState(null);
   const [measurementsHistory, setMeasurementsHistory] = useState([]);
@@ -401,7 +420,13 @@ export default function OrderHistory() {
           }
 
           const { data } = await query.order("created_at", { ascending: false });
-          setOrders(data || []);
+
+          // Regular SA only sees their own orders, sa_services sees all
+          if (saEmail && !isServicesSA) {
+            setOrders((data || []).filter(o => o.salesperson_email?.toLowerCase() === saEmail.toLowerCase()));
+          } else {
+            setOrders(data || []);
+          }
 
         } else {
           if (!user) { setLoading(false); return; }
@@ -1175,6 +1200,10 @@ export default function OrderHistory() {
   };
 
   const handleBack = () => {
+    // Clean up SA flags from sessionStorage
+    sessionStorage.removeItem("oh_saEmail");
+    sessionStorage.removeItem("oh_readOnly");
+    sessionStorage.removeItem("oh_isServices");
     if (fromAssociate) navigate("/AssociateDashboard");
     else navigate(-1);
   };
@@ -1811,12 +1840,13 @@ export default function OrderHistory() {
                 const item = order.items?.[0] || {};
                 const imgSrc = publicImageUrl(item.image_url);
                 const hrs = getHoursSinceOrder(order.created_at);
-                const editOk = canEdit(order);
-                const cancelOk = canCancel(order);
-                const revokeOk = canRevoke(order);
-                const exchangeOk = canExchange(order);
-                const returnOk = canReturn(order);
-                const refundOk = canRefund(order);
+                const ownOrder = isOwnOrder(order);
+                const editOk = ownOrder && !readOnly && canEdit(order);
+                const cancelOk = ownOrder && !readOnly && canCancel(order);
+                const revokeOk = ownOrder && !readOnly && canRevoke(order);
+                const exchangeOk = ownOrder && !readOnly && canExchange(order);
+                const returnOk = ownOrder && !readOnly && canReturn(order);
+                const refundOk = ownOrder && !readOnly && canRefund(order);
                 const { isNonReturnable, reasons: nonReturnableReasons } = checkNonReturnable(order);
 
                 return (

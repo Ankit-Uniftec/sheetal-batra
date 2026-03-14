@@ -5,6 +5,7 @@ import "./B2bOrderView.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 
 function ColorDotDisplay({ colorObject }) {
     if (!colorObject) return null;
@@ -30,8 +31,23 @@ export default function B2bOrderView() {
     const { id } = useParams();
     const [order, setOrder] = useState(null);
     const [vendor, setVendor] = useState(null);
+    const [vendorContacts, setVendorContacts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userRole, setUserRole] = useState(null);
+    const [pdfLoading, setPdfLoading] = useState(null);
+
+    const handleDownloadPdf = async (type) => {
+        if (!order) return;
+        setPdfLoading(type);
+        try {
+            if (type === "customer") await downloadCustomerPdf(order);
+            else await downloadWarehousePdf(order, null, true);
+        } catch (err) {
+            console.error("PDF download failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
+    };
 
     useEffect(() => {
         const fetchOrder = async () => {
@@ -71,6 +87,14 @@ export default function B2bOrderView() {
                         .eq("id", data.vendor_id)
                         .single();
                     setVendor(vendorData);
+
+                    // Fetch vendor contacts
+                    const { data: contacts } = await supabase
+                        .from("vendor_contacts")
+                        .select("*")
+                        .eq("vendor_id", data.vendor_id)
+                        .order("is_primary", { ascending: false });
+                    setVendorContacts(contacts || []);
                 }
             } catch (err) {
                 console.error("Error fetching order:", err);
@@ -227,6 +251,16 @@ export default function B2bOrderView() {
                     </div>
                 </div>
 
+                {/* PDF Actions */}
+                <div className="b2bov-actions-bar" style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "10px 20px", flexWrap: "wrap" }}>
+                    <button className="b2bov-action-btn" onClick={() => handleDownloadPdf("customer")} disabled={pdfLoading === "customer"} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
+                        {pdfLoading === "customer" ? "Downloading..." : "\uD83D\uDCC4 Customer PDF"}
+                    </button>
+                    <button className="b2bov-action-btn" onClick={() => handleDownloadPdf("warehouse")} disabled={pdfLoading === "warehouse"} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
+                        {pdfLoading === "warehouse" ? "Downloading..." : "\uD83D\uDCC4 Warehouse PDF"}
+                    </button>
+                </div>
+
                 {/* Urgent Reason Banner */}
                 {order.order_flag === "Urgent" && order.urgent_reason && (
                     <div className="b2bov-urgent-banner">
@@ -286,14 +320,14 @@ export default function B2bOrderView() {
                                         <span>₹{formatIndianNumber(item.price || 0)}</span>
                                     </div>
                                 </div>
-                                {item.extras && item.extras.length > 0 && (
+                                {Array.isArray(item.extras) && item.extras.length > 0 && (
                                     <div className="b2bov-field b2bov-field-wide">
                                         <label>Extras:</label>
                                         <div className="b2bov-extras-display">
                                             {item.extras.map((extra, idx) => (
                                                 <div key={idx} className="b2bov-extra-item">
-                                                    <span>{extra.name} (₹{formatIndianNumber(extra.price)})</span>
-                                                    {extra.color && <ColorDotDisplay colorObject={extra.color} />}
+                                                    <span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price || 0)})</span>
+                                                    {extra.color && extra.color.name && <ColorDotDisplay colorObject={extra.color} />}
                                                 </div>
                                             ))}
                                         </div>
@@ -334,13 +368,23 @@ export default function B2bOrderView() {
                         </div>
                         <div className="b2bov-field">
                             <label>Delivery Address:</label>
-                            <span>{order.delivery_address || "—"}</span>
+                            <span>{order.delivery_address || "\u2014"}</span>
                         </div>
+                        {vendorContacts.length > 0 && vendorContacts.map((contact, idx) => (
+                            <div key={idx} className="b2bov-field">
+                                <label>{contact.is_primary ? "Primary Contact:" : "Contact:"}</label>
+                                <span>
+                                    {contact.contact_name || ""}
+                                    {contact.contact_phone && ` \u2022 ${contact.contact_phone}`}
+                                    {contact.contact_email && ` \u2022 ${contact.contact_email}`}
+                                </span>
+                            </div>
+                        ))}
                     </div>
-                    {order.order_notes && (
+                    {(order.order_notes || order.delivery_notes || order.comments) && (
                         <div className="b2bov-field b2bov-field-wide" style={{ marginTop: 12 }}>
                             <label>Order Notes:</label>
-                            <span>{order.order_notes}</span>
+                            <span>{order.order_notes || order.delivery_notes || order.comments}</span>
                         </div>
                     )}
                 </div>

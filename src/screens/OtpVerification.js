@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen1.css";
 import Logo from "../images/logo.png";
+import LogoVideo from "../images/logo.mp4"
+import LogoVideoWebm from "../images/logo.webm";
 import config from "../config/config";
 import { usePopup } from "../components/Popup";
 
@@ -48,6 +50,8 @@ export default function OtpVerification() {
   const [mobile, setMobile] = useState("");
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  const [showVideo, setShowVideo] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
 
   const handleBack = () => {
     if (location.state?.fromAssociate) {
@@ -81,6 +85,19 @@ export default function OtpVerification() {
     }
 
     return result;
+  };
+
+  // Play video then navigate
+  const navigateWithVideo = (path, state) => {
+    setPendingNavigation({ path, state });
+    setShowVideo(true);
+  };
+
+  const handleVideoEnd = () => {
+    setShowVideo(false);
+    if (pendingNavigation) {
+      navigate(pendingNavigation.path, { state: pendingNavigation.state });
+    }
   };
 
   const handleContinue = async () => {
@@ -149,9 +166,9 @@ export default function OtpVerification() {
 
             // Check if profile is complete (has full_name)
             if (existingProfile.full_name) {
-              navigate("/product");
+              navigateWithVideo("/product");
             } else {
-              navigate("/userinfo", { state: { phoneNumber } });
+              navigateWithVideo("/userinfo", { phoneNumber });
             }
             return;
           }
@@ -191,13 +208,11 @@ export default function OtpVerification() {
       }
 
       setLoading(false);
-      navigate("/otp", {
-        state: {
-          mobile: normalized,
-          phoneNumber,
-          countryCode,
-          fromAssociate: location.state?.fromAssociate || false,
-        },
+      navigateWithVideo("/otp", {
+        mobile: normalized,
+        phoneNumber,
+        countryCode,
+        fromAssociate: location.state?.fromAssociate || false,
       });
 
     } catch (err) {
@@ -217,6 +232,41 @@ export default function OtpVerification() {
     <div className="screen1">
       {/* Popup Component */}
       {PopupComponent}
+      {/* Full-screen video overlay */}
+      {showVideo && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "#ffffff",
+          zIndex: 99999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          <video
+            ref={(el) => {
+              if (el) {
+                el.playbackRate = 2.5;
+                el.play().catch(() => handleVideoEnd());
+              }
+            }}
+            muted
+            playsInline
+            onEnded={handleVideoEnd}
+            style={{
+              width: "680px",
+              height: "680px",
+              objectFit: "contain",
+            }}
+          >
+            <source src={LogoVideoWebm} type="video/webm" />
+            <source src={LogoVideo} type="video/mp4" />
+          </video>
+        </div>
+      )}
       <button className="back-btn" onClick={handleBack}>
         ←
       </button>

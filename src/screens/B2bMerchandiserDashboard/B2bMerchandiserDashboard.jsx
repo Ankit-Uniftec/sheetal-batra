@@ -5,6 +5,7 @@ import "./B2bMerchandiserDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function B2bMerchandiserDashboard() {
     const [vendorMap, setVendorMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(null);
 
     // Approvals
     const [approvalModal, setApprovalModal] = useState(null);
@@ -38,6 +40,15 @@ export default function B2bMerchandiserDashboard() {
     const [newVendor, setNewVendor] = useState({ store_brand_name: "", legal_name: "", vendor_code: "", location: "", gst_number: "", billing_address: "", shipping_address: "", payment_terms: "Credit", payment_type: "", contract_date: "", default_order_type: "Buyout", default_markdown_percent: 0, remarks: "", credit_limit: 1000000, credit_timeline_days: 30, advance_percent: 0 });
     const [newContact, setNewContact] = useState({ contact_name: "", contact_email: "", contact_phone: "" });
     const [vendorSaving, setVendorSaving] = useState(false);
+
+    // Edit vendor
+    const [editingVendor, setEditingVendor] = useState(null);
+    const [editVendorData, setEditVendorData] = useState(null);
+    const [editContact, setEditContact] = useState({ contact_name: "", contact_email: "", contact_phone: "", id: null });
+
+    // Calendar
+    const [calendarDate, setCalendarDate] = useState(() => new Date());
+    const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -103,6 +114,14 @@ export default function B2bMerchandiserDashboard() {
         const buyoutValue = orders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         const consignmentValue = orders.filter(o => o.b2b_order_type === "Consignment").reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         return { totalRevenue, totalOrders: orders.length, pending, approved, rejected, buyoutValue, consignmentValue };
+    }, [orders]);
+
+    const ordersByDate = useMemo(() => {
+        return orders.reduce((acc, order) => {
+            const date = order.delivery_date ? formatDate(order.delivery_date) : null;
+            if (date) acc[date] = (acc[date] || 0) + 1;
+            return acc;
+        }, {});
     }, [orders]);
 
     // ==================== FILTERED ORDERS ====================
@@ -219,6 +238,82 @@ export default function B2bMerchandiserDashboard() {
         }
     };
 
+    const handleEditVendor = async (vendor, e) => {
+        if (e) e.stopPropagation();
+        setEditingVendor(vendor);
+        setEditVendorData({
+            store_brand_name: vendor.store_brand_name || "",
+            legal_name: vendor.legal_name || "",
+            vendor_code: vendor.vendor_code || "",
+            location: vendor.location || "",
+            gst_number: vendor.gst_number || "",
+            billing_address: vendor.billing_address || "",
+            shipping_address: vendor.shipping_address || "",
+            payment_terms: vendor.payment_terms || "Credit",
+            payment_type: vendor.payment_type || "",
+            contract_date: vendor.contract_date || "",
+            default_order_type: vendor.default_order_type || "Buyout",
+            default_markdown_percent: vendor.default_markdown_percent || 0,
+            remarks: vendor.remarks || "",
+            credit_limit: vendor.credit_limit || 0,
+            credit_timeline_days: vendor.credit_timeline_days || 30,
+            advance_percent: vendor.advance_percent || 0,
+        });
+        // Fetch primary contact
+        try {
+            const { data: contacts } = await supabase.from("vendor_contacts").select("*").eq("vendor_id", vendor.id).eq("is_primary", true).limit(1);
+            if (contacts && contacts.length > 0) {
+                setEditContact({ contact_name: contacts[0].contact_name || "", contact_email: contacts[0].contact_email || "", contact_phone: contacts[0].contact_phone || "", id: contacts[0].id });
+            } else {
+                setEditContact({ contact_name: "", contact_email: "", contact_phone: "", id: null });
+            }
+        } catch { setEditContact({ contact_name: "", contact_email: "", contact_phone: "", id: null }); }
+    };
+
+    const handleUpdateVendor = async () => {
+        if (!editVendorData.legal_name.trim()) { alert("Legal Name is required."); return; }
+        setVendorSaving(true);
+        try {
+            const payload = {
+                ...editVendorData,
+                credit_limit: Number(editVendorData.credit_limit) || 0,
+                default_markdown_percent: Number(editVendorData.default_markdown_percent) || 0,
+                credit_timeline_days: Number(editVendorData.credit_timeline_days) || 30,
+                advance_percent: Number(editVendorData.advance_percent) || 0,
+            };
+            if (!payload.contract_date) delete payload.contract_date;
+
+            const { error } = await supabase.from("vendors").update(payload).eq("id", editingVendor.id);
+            if (error) throw error;
+
+            // Upsert primary contact
+            if (editContact.contact_name.trim() || editContact.contact_email.trim() || editContact.contact_phone.trim()) {
+                if (editContact.id) {
+                    await supabase.from("vendor_contacts").update({
+                        contact_name: editContact.contact_name,
+                        contact_email: editContact.contact_email,
+                        contact_phone: editContact.contact_phone,
+                    }).eq("id", editContact.id);
+                } else {
+                    await supabase.from("vendor_contacts").insert([{
+                        vendor_id: editingVendor.id,
+                        contact_name: editContact.contact_name,
+                        contact_email: editContact.contact_email,
+                        contact_phone: editContact.contact_phone,
+                        is_primary: true,
+                    }]);
+                }
+            }
+
+            setEditingVendor(null);
+            setEditVendorData(null);
+            loadAllData();
+        } catch (err) {
+            console.error("Error updating vendor:", err);
+            alert("Failed to update vendor: " + (err.message || "Unknown error"));
+        } finally { setVendorSaving(false); }
+    };
+
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
@@ -229,6 +324,30 @@ export default function B2bMerchandiserDashboard() {
         setTypeFilter("all");
         setCurrentPage(1);
         setActiveTab("orders");
+    };
+
+    const handleDownloadPdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadCustomerPdf(order);
+        } catch (err) {
+            console.error("PDF download failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
+    };
+
+    const handleDownloadWarehousePdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadWarehousePdf(order, null, true);
+        } catch (err) {
+            console.error("Warehouse PDF failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
     };
 
     const getStatusBadgeClass = (status) => {
@@ -267,6 +386,7 @@ export default function B2bMerchandiserDashboard() {
                         <a className={`merch-menu-item ${activeTab === "approvals" ? "active" : ""}`} onClick={() => { setActiveTab("approvals"); setShowSidebar(false); }}>Approvals {stats.pending.length > 0 && <span className="merch-badge-count">{stats.pending.length}</span>}</a>
                         <a className={`merch-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders</a>
                         <a className={`merch-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor Book</a>
+                        <a className={`merch-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`merch-menu-item ${activeTab === "consignment" ? "active" : ""}`} onClick={() => { setActiveTab("consignment"); setShowSidebar(false); }}>Consignment</a>
                         <a className="merch-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
@@ -451,14 +571,20 @@ export default function B2bMerchandiserDashboard() {
                                         <div className="merch-ocard-header">
                                             <div className="merch-ocard-info">
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">ORDER NO:</span><span className="merch-ocard-val">{order.order_no || "\u2014"}</span></div>
+                                                <div className="merch-ocard-field"><span className="merch-ocard-label">DELIVERY:</span><span className="merch-ocard-val">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">PO NUMBER:</span><span className="merch-ocard-val">{order.po_number || "\u2014"}</span></div>
-                                                <div className="merch-ocard-field"><span className="merch-ocard-label">DATE:</span><span className="merch-ocard-val">{formatDate(order.created_at)}</span></div>
                                             </div>
                                             <div className="merch-ocard-badges">
                                                 <div className={`merch-order-status-badge ${getStatusBadgeClass(order.approval_status)}`}>{order.approval_status || "Pending"}</div>
                                                 {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
                                                 {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"\u26A0"} Urgent</div>)}
                                                 {order.credit_exceeded && (<div className="merch-credit-badge">Credit Exceeded</div>)}
+                                                <button className="merch-pdf-btn" onClick={(e) => handleDownloadPdf(e, order)} disabled={pdfLoading === order.id}>
+                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Customer PDF"}
+                                                </button>
+                                                <button className="merch-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
+                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
+                                                </button>
                                             </div>
                                         </div>
                                         <div className="merch-ocard-content">
@@ -471,6 +597,7 @@ export default function B2bMerchandiserDashboard() {
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Qty:</span><span className="merch-ocard-dval">{order.total_quantity || 1}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Markdown:</span><span className="merch-ocard-dval">{order.markdown_percent || 0}%</span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Delivery:</span><span className="merch-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -542,8 +669,9 @@ export default function B2bMerchandiserDashboard() {
                                             </div>
 
                                             {/* Footer action */}
-                                            <div className="merch-vc-footer">
+                                            <div className="merch-vc-footer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                 <p className="merch-vc-action">View Orders {"\u2192"}</p>
+                                                <button onClick={(e) => handleEditVendor(vendor, e)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 12 }}>{"\u270E"} Edit</button>
                                             </div>
                                         </div>
                                     );
@@ -586,6 +714,89 @@ export default function B2bMerchandiserDashboard() {
                     </div>
                 )}
 
+                {/* ===== CALENDAR TAB ===== */}
+                {activeTab === "calendar" && (() => {
+                    const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
+                    return (
+                    <div className="merch-calendar-wrapper">
+                        <div className="merch-ios-calendar">
+                            <div className="merch-ios-cal-header">
+                                <button
+                                    className="merch-ios-nav-btn"
+                                    disabled={new Date(calendarDate).getFullYear() === MIN_CALENDAR_DATE.getFullYear() && new Date(calendarDate).getMonth() === MIN_CALENDAR_DATE.getMonth()}
+                                    onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; })}
+                                >{"\u2039"}</button>
+                                <span className="merch-ios-month-year">
+                                    {new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}
+                                </span>
+                                <button className="merch-ios-nav-btn" onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() + 1); return n; })}>{"\u203A"}</button>
+                            </div>
+
+                            <div className="merch-ios-days-row">
+                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                    <div key={day} className="merch-ios-day-label">{day}</div>
+                                ))}
+                            </div>
+
+                            <div className="merch-ios-date-grid">
+                                {(() => {
+                                    const year = new Date(calendarDate).getFullYear();
+                                    const month = new Date(calendarDate).getMonth();
+                                    const firstDayOfMonth = new Date(year, month, 1).getDay();
+                                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                    const totalCells = Math.ceil((firstDayOfMonth + daysInMonth) / 7) * 7;
+
+                                    return Array.from({ length: totalCells }).map((_, i) => {
+                                        const date = i - firstDayOfMonth + 1;
+                                        if (date <= 0 || date > daysInMonth) {
+                                            return <div key={i} className="merch-ios-date-cell merch-ios-empty" />;
+                                        }
+                                        const currentDay = new Date(year, month, date);
+                                        const fullDate = formatDate(currentDay);
+                                        const todayDate = formatDate(new Date());
+                                        const isToday = fullDate === todayDate;
+                                        const isSelected = selectedCalendarDate === fullDate;
+                                        const orderCount = ordersByDate[fullDate] || 0;
+
+                                        return (
+                                            <div key={i} className={`merch-ios-date-cell ${isToday ? "merch-ios-today" : ""} ${isSelected ? "merch-ios-selected" : ""}`} onClick={() => setSelectedCalendarDate(fullDate)}>
+                                                <span className="merch-ios-date-num">{date}</span>
+                                                {orderCount > 0 && <span className="merch-ios-order-count">{orderCount}</span>}
+                                            </div>
+                                        );
+                                    });
+                                })()}
+                            </div>
+                        </div>
+
+                        {selectedCalendarDate && (
+                            <div className="merch-calendar-orders-section">
+                                <div className="merch-card-header" style={{ marginBottom: 8 }}>
+                                    <span className="merch-tab-title" style={{ margin: 0 }}>Orders for {selectedCalendarDate} ({orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length})</span>
+                                </div>
+                                <div className="merch-calendar-orders-list">
+                                    {orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length === 0 ? (
+                                        <p className="merch-muted">No orders scheduled for this date</p>
+                                    ) : (
+                                        orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).map((order) => (
+                                            <div className="merch-calendar-order-item" key={order.id} onClick={() => navigate(`/b2b-order-view/${order.id}`)} style={{ cursor: "pointer" }}>
+                                                <p><b>Order No:</b> {order.order_no}</p>
+                                                <p><b>PO:</b> {order.po_number || "\u2014"}</p>
+                                                <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
+                                                <p><b>Status:</b> {order.approval_status || "Pending"}
+                                                    {order.order_flag === "Urgent" && <b style={{ color: "#e53935", marginLeft: 8 }}>{"\u26A0"} Urgent</b>}
+                                                </p>
+                                                <p><b>Delivery:</b> {formatDate(order.delivery_date)}</p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    );
+                })()}
+
                 {/* ===== PROFILE TAB ===== */}
                 {activeTab === "profile" && (
                     <div className="merch-tab-wrapper merch-profile-wrap">
@@ -599,6 +810,8 @@ export default function B2bMerchandiserDashboard() {
                     </div>
                 )}
             </div>
+
+            <button className="merch-add-btn" onClick={() => navigate("/b2b-vendor-selection")}>+</button>
 
             {/* ===== APPROVAL MODAL ===== */}
             {approvalModal && (
@@ -699,6 +912,72 @@ export default function B2bMerchandiserDashboard() {
                         <div className="merch-modal-footer">
                             <button className="merch-modal-cancel" onClick={() => setShowAddVendor(false)}>Cancel</button>
                             <button className="merch-modal-confirm approve" onClick={handleSaveVendor} disabled={vendorSaving}>{vendorSaving ? "Saving..." : "Add Vendor"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ===== EDIT VENDOR MODAL ===== */}
+            {editingVendor && editVendorData && (
+                <div className="merch-modal-overlay" onClick={() => { setEditingVendor(null); setEditVendorData(null); }}>
+                    <div className="merch-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+                        <div className="merch-modal-top">
+                            <h3>Edit Vendor: {editingVendor.store_brand_name || editingVendor.legal_name}</h3>
+                            <button className="merch-modal-close" onClick={() => { setEditingVendor(null); setEditVendorData(null); }}>{"\u00D7"}</button>
+                        </div>
+                        <div className="merch-modal-body" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div className="merch-modal-field"><label>Legal Name *</label><input type="text" value={editVendorData.legal_name} onChange={(e) => setEditVendorData(p => ({ ...p, legal_name: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Store / Brand Name</label><input type="text" value={editVendorData.store_brand_name} onChange={(e) => setEditVendorData(p => ({ ...p, store_brand_name: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Vendor Code</label><input type="text" value={editVendorData.vendor_code} onChange={(e) => setEditVendorData(p => ({ ...p, vendor_code: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Location</label><input type="text" value={editVendorData.location} onChange={(e) => setEditVendorData(p => ({ ...p, location: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>GST Number</label><input type="text" value={editVendorData.gst_number} onChange={(e) => setEditVendorData(p => ({ ...p, gst_number: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Contract Date</label><input type="date" value={editVendorData.contract_date} onChange={(e) => setEditVendorData(p => ({ ...p, contract_date: e.target.value }))} /></div>
+                                <div className="merch-modal-field">
+                                    <label>Payment Terms</label>
+                                    <select value={editVendorData.payment_terms} onChange={(e) => setEditVendorData(p => ({ ...p, payment_terms: e.target.value }))}>
+                                        <option value="Credit">Credit</option>
+                                        <option value="Advance">Advance</option>
+                                        <option value="Partial">Partial</option>
+                                        <option value="Full">Full</option>
+                                    </select>
+                                </div>
+                                <div className="merch-modal-field">
+                                    <label>Payment Type</label>
+                                    <select value={editVendorData.payment_type} onChange={(e) => setEditVendorData(p => ({ ...p, payment_type: e.target.value }))}>
+                                        <option value="">Select</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Cheque">Cheque</option>
+                                        <option value="Cash">Cash</option>
+                                    </select>
+                                </div>
+                                <div className="merch-modal-field"><label>Credit Limit ({"\u20B9"})</label><input type="number" value={editVendorData.credit_limit} onChange={(e) => setEditVendorData(p => ({ ...p, credit_limit: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Credit Timeline (days)</label><input type="number" value={editVendorData.credit_timeline_days} onChange={(e) => setEditVendorData(p => ({ ...p, credit_timeline_days: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Advance %</label><input type="number" min={0} max={100} value={editVendorData.advance_percent} onChange={(e) => setEditVendorData(p => ({ ...p, advance_percent: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Default Markdown %</label><input type="number" min={0} max={100} value={editVendorData.default_markdown_percent} onChange={(e) => setEditVendorData(p => ({ ...p, default_markdown_percent: e.target.value }))} /></div>
+                                <div className="merch-modal-field">
+                                    <label>Default Order Type</label>
+                                    <select value={editVendorData.default_order_type} onChange={(e) => setEditVendorData(p => ({ ...p, default_order_type: e.target.value }))}>
+                                        <option value="Buyout">Buyout</option>
+                                        <option value="Consignment">Consignment</option>
+                                        <option value="Client Order">Client Order</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="merch-modal-field" style={{ marginTop: 12 }}><label>Billing Address</label><textarea rows={2} value={editVendorData.billing_address} onChange={(e) => setEditVendorData(p => ({ ...p, billing_address: e.target.value }))} /></div>
+                            <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Shipping Address</label><textarea rows={2} value={editVendorData.shipping_address} onChange={(e) => setEditVendorData(p => ({ ...p, shipping_address: e.target.value }))} /></div>
+                            <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Remarks</label><textarea rows={2} value={editVendorData.remarks} onChange={(e) => setEditVendorData(p => ({ ...p, remarks: e.target.value }))} /></div>
+
+                            <h4 style={{ margin: "16px 0 8px", fontSize: 14, color: "#555" }}>Primary Contact</h4>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div className="merch-modal-field"><label>Name</label><input type="text" value={editContact.contact_name} onChange={(e) => setEditContact(p => ({ ...p, contact_name: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Email</label><input type="email" value={editContact.contact_email} onChange={(e) => setEditContact(p => ({ ...p, contact_email: e.target.value }))} /></div>
+                                <div className="merch-modal-field"><label>Phone</label><input type="text" value={editContact.contact_phone} onChange={(e) => setEditContact(p => ({ ...p, contact_phone: e.target.value }))} /></div>
+                            </div>
+                        </div>
+                        <div className="merch-modal-footer">
+                            <button className="merch-modal-cancel" onClick={() => { setEditingVendor(null); setEditVendorData(null); }}>Cancel</button>
+                            <button className="merch-modal-confirm approve" onClick={handleUpdateVendor} disabled={vendorSaving}>{vendorSaving ? "Saving..." : "Update Vendor"}</button>
                         </div>
                     </div>
                 </div>

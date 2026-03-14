@@ -63,7 +63,7 @@ export default function SALogin() {
       return;
     }
 
-    if (userRecord.role === "salesperson") {
+    if (userRecord.role === "salesperson" || userRecord.role === "sa_services") {
       localStorage.setItem("sp_email", email.trim());
       navigate("/AssociateDashboard");
     } else if (userRecord.role === "warehouse") {

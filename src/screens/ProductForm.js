@@ -3392,11 +3392,11 @@ export default function ProductForm() {
 
             {/* ORDER DETAILS */}
             <div className="row">
-              <div className="field">
+              <div className="field" style={{ display: "flex", flexDirection: 'row', alignItems: 'center', }}>
                 <label>Delivery Date*</label>
                 <input
                   type="date"
-                  className="input-line"
+                  className={`input-line ${deliveryDate ? "date-filled" : "date-empty"}`}
                   value={deliveryDate}
                   min={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setDeliveryDate(e.target.value)}
@@ -3450,11 +3450,11 @@ export default function ProductForm() {
               </div>
 
               <div className="field">
-                <label>Attachments</label>
+                {/* <label>Attachments</label> */}
 
                 <div className="custom-file-upload">
                   <label className="upload-btn">
-                    Upload Files
+                    Upload Attachments
                     <input
                       type="file"
                       accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx"

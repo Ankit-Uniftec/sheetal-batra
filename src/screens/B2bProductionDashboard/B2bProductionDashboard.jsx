@@ -5,6 +5,7 @@ import "./B2bProductionDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function B2bProductionDashboard() {
     const [vendorMap, setVendorMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(null);
 
     // Status update modal
     const [statusModal, setStatusModal] = useState(null);
@@ -207,6 +209,30 @@ export default function B2bProductionDashboard() {
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
 
+    const handleDownloadPdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadCustomerPdf(order);
+        } catch (err) {
+            console.error("PDF download failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
+    };
+
+    const handleDownloadWarehousePdf = async (e, order) => {
+        e.stopPropagation();
+        setPdfLoading(order.id);
+        try {
+            await downloadWarehousePdf(order, null, true);
+        } catch (err) {
+            console.error("Warehouse PDF failed:", err);
+        } finally {
+            setPdfLoading(null);
+        }
+    };
+
     const getProdStatusLabel = (status) => {
         switch (status) {
             case "in_production": return "In Production";
@@ -262,7 +288,7 @@ export default function B2bProductionDashboard() {
                         <a className={`prod-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>View Profile</a>
                         <a className={`prod-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
                         <a className={`prod-menu-item ${activeTab === "queue" ? "active" : ""}`} onClick={() => { setActiveTab("queue"); setShowSidebar(false); }}>
-                            Production Queue {stats.pending > 0 && <span className="prod-badge-count">{stats.pending}</span>}
+                            Production Queue 
                         </a>
                         <a className={`prod-menu-item ${activeTab === "inprod" ? "active" : ""}`} onClick={() => { setActiveTab("inprod"); setShowSidebar(false); }}>In Production</a>
                         <a className={`prod-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
@@ -276,32 +302,19 @@ export default function B2bProductionDashboard() {
                 {activeTab === "dashboard" && (
                     <>
                         <div className="prod-cell prod-stat-1">
-                            <StatCard title="Pending Production" value={stats.pending} change={`Total: ${stats.total}`} highlight={stats.pending > 0} />
+                            <StatCard title="Alerts" value={stats.pending} change={`Total: ${stats.total}`} highlight={stats.pending > 0} />
                         </div>
                         <div className="prod-cell prod-stat-2">
                             <StatCard title="In Production" value={stats.inProd} change={`Ready: ${stats.ready}`} />
                         </div>
                         <div className="prod-cell prod-stat-3">
-                            <StatCard title="Dispatched" value={stats.dispatched} change={`\u20B9${formatIndianNumber(stats.totalValue)}`} />
+                            <StatCard title="Dispatched" value={stats.dispatched} change={`Total: ${stats.total}`} />
                         </div>
 
-                        {/* Quick Actions */}
-                        <div className="prod-cell prod-quick-actions">
-                            <div className="prod-sales-card">
-                                <div className="prod-sales-header"><p className="prod-sales-label">Quick Actions</p></div>
-                                <div className="prod-quick-btns">
-                                    <button className={`prod-quick-btn ${stats.pending > 0 ? "primary" : ""}`} onClick={() => setActiveTab("queue")}>Production Queue ({stats.pending})</button>
-                                    <button className="prod-quick-btn" onClick={() => setActiveTab("inprod")}>In Production ({stats.inProd})</button>
-                                    <button className="prod-quick-btn" onClick={() => setActiveTab("dispatch")}>Dispatch ({stats.ready})</button>
-                                    <button className="prod-quick-btn" onClick={() => setActiveTab("calendar")}>Calendar</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Pending Production Preview */}
+                        {/* Alerts */}
                         <aside className="prod-cell prod-pending-box">
                             <div className="prod-pending-header">
-                                <span className="prod-pending-title">Pending Production</span>
+                                <span className="prod-pending-title">Alerts</span>
                                 <button className="prod-view-btn" onClick={() => setActiveTab("queue")}>View All</button>
                             </div>
                             <div className="prod-pending-body">
@@ -314,7 +327,7 @@ export default function B2bProductionDashboard() {
                                                 <b className="prod-gold-text">{order.order_no}</b>
                                                 <span className={`prod-type-tag ${order.b2b_order_type === "Buyout" ? "prod-tag-buyout" : "prod-tag-consignment"}`}>{order.b2b_order_type || "\u2014"}</span>
                                             </div>
-                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"} {"\u00B7"} {`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</p>
+                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
                                             <div className="prod-pending-btns">
                                                 <button className="prod-accept-sm" onClick={() => setStatusModal({ order, newStatus: "in_production" })}>{"\u2713"} Accept</button>
                                                 <button className="prod-detail-sm" onClick={() => handleViewOrder(order.id)}>View</button>
@@ -340,7 +353,7 @@ export default function B2bProductionDashboard() {
                                                 <div className="prod-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
                                                     <p><b>Order No:</b> {o.order_no} &nbsp;|&nbsp; <b>PO:</b> {o.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Type:</b> {o.b2b_order_type || "\u2014"}</p>
-                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span> &nbsp;|&nbsp; <b>Total:</b> {`\u20B9${formatIndianNumber(o.grand_total || 0)}`}</p>
+                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span></p>
                                                 </div>
                                             );
                                         })
@@ -367,7 +380,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>{"\u2728"} No orders pending production!</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "in_production" })} actionLabel={"\u2713 Accept for Production"} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} />)}
+                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "in_production" })} actionLabel={"\u2713 Accept for Production"} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 {filteredQueue.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
                                         <button disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
@@ -396,7 +409,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>No orders in production</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "ready_for_dispatch" })} actionLabel="Mark Ready for Dispatch" actionClass="prod-btn-ready" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} />)}
+                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "ready_for_dispatch" })} actionLabel="Mark Ready for Dispatch" actionClass="prod-btn-ready" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 {filteredInprod.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
                                         <button disabled={inprodPage === 1} onClick={() => setInprodPage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
@@ -437,7 +450,7 @@ export default function B2bProductionDashboard() {
                                     <OrderCard key={order.id} order={order} vendorMap={vendorMap} onView={handleViewOrder}
                                         onAction={dispatchSection === "ready" ? () => setStatusModal({ order, newStatus: "dispatched" }) : null}
                                         actionLabel={dispatchSection === "ready" ? "Mark as Dispatched" : null}
-                                        actionClass="prod-btn-dispatch" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} />
+                                        actionClass="prod-btn-dispatch" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
                                 ))}
                                 {dispatchList.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
@@ -474,7 +487,7 @@ export default function B2bProductionDashboard() {
                             {filteredOrders.length === 0 && <p className="prod-muted">No orders match your filters.</p>}
                             {paginatedOrders.map(order => {
                                 const nextAction = getNextAction(getProdStatus(order));
-                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} onView={handleViewOrder} onAction={nextAction ? () => setStatusModal({ order, newStatus: nextAction.newStatus }) : null} actionLabel={nextAction?.label || null} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} />;
+                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} onView={handleViewOrder} onAction={nextAction ? () => setStatusModal({ order, newStatus: nextAction.newStatus }) : null} actionLabel={nextAction?.label || null} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
                             })}
                             {filteredOrders.length > ORDERS_PER_PAGE && (
                                 <div className="prod-pagination">
@@ -541,7 +554,7 @@ export default function B2bProductionDashboard() {
                                                 <div className="prod-order-item" key={order.id} onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
                                                     <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
-                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span> &nbsp;|&nbsp; <b>Total:</b> {`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</p>
+                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span></p>
                                                 </div>
                                             );
                                         })
@@ -579,7 +592,6 @@ export default function B2bProductionDashboard() {
                                 <p><b>Order:</b> {statusModal.order.order_no}</p>
                                 <p><b>PO:</b> {statusModal.order.po_number || "N/A"}</p>
                                 <p><b>Type:</b> {statusModal.order.b2b_order_type || "N/A"}</p>
-                                <p><b>Total:</b> <span className="prod-gold-text">{`\u20B9${formatIndianNumber(statusModal.order.grand_total || 0)}`}</span></p>
                                 <p><b>Vendor:</b> {vendorMap[statusModal.order.vendor_id]?.store_brand_name || "N/A"}</p>
                             </div>
                             <div className="prod-modal-status-change">
@@ -604,7 +616,7 @@ export default function B2bProductionDashboard() {
 }
 
 // ==================== ORDER CARD COMPONENT ====================
-function OrderCard({ order, vendorMap, onView, onAction, actionLabel, actionClass, getProdStatusClass, getProdStatusLabel, getProdStatus }) {
+function OrderCard({ order, vendorMap, onView, onAction, actionLabel, actionClass, getProdStatusClass, getProdStatusLabel, getProdStatus, onPdf, onWarehousePdf, pdfLoading }) {
     const item = order.items?.[0] || {};
     const imgSrc = item.image_url || "/placeholder.png";
     const ps = getProdStatus(order);
@@ -614,14 +626,19 @@ function OrderCard({ order, vendorMap, onView, onAction, actionLabel, actionClas
             <div className="prod-ocard-header">
                 <div className="prod-ocard-info">
                     <div className="prod-ocard-field"><span className="prod-ocard-label">ORDER NO:</span><span className="prod-ocard-val">{order.order_no || "\u2014"}</span></div>
-                    <div className="prod-ocard-field"><span className="prod-ocard-label">PO NUMBER:</span><span className="prod-ocard-val">{order.po_number || "\u2014"}</span></div>
                     <div className="prod-ocard-field"><span className="prod-ocard-label">DELIVERY:</span><span className="prod-ocard-val">{formatDate(order.delivery_date) || "\u2014"}</span></div>
+                    <div className="prod-ocard-field"><span className="prod-ocard-label">PO NUMBER:</span><span className="prod-ocard-val">{order.po_number || "\u2014"}</span></div>
                 </div>
                 <div className="prod-ocard-badges">
                     <div className={`prod-order-status-badge ${getProdStatusClass(ps)}`}>{getProdStatusLabel(ps)}</div>
                     {order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
-                    {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"⚠"} Urgent</div>)}
-                    {order.credit_exceeded && (<div className="prod-credit-badge">Credit Exceeded</div>)}
+                    {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"\u26A0"} Urgent</div>)}
+                    <button className="prod-pdf-btn" onClick={(e) => onPdf(e, order)} disabled={pdfLoading === order.id}>
+                        {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Customer PDF"}
+                    </button>
+                    <button className="prod-pdf-btn" onClick={(e) => onWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
+                        {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
+                    </button>
                 </div>
             </div>
             <div className="prod-ocard-content">
@@ -630,7 +647,6 @@ function OrderCard({ order, vendorMap, onView, onAction, actionLabel, actionClas
                     <div className="prod-ocard-row"><span className="prod-ocard-dlabel">Product:</span><span className="prod-ocard-dval">{item.product_name || "\u2014"}</span></div>
                     <div className="prod-ocard-row"><span className="prod-ocard-dlabel">Vendor:</span><span className="prod-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>
                     <div className="prod-ocard-grid">
-                        <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Amount:</span><span className="prod-ocard-dval">{`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</span></div>
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Qty:</span><span className="prod-ocard-dval">{order.total_quantity || 1}</span></div>
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Delivery:</span><span className="prod-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                     </div>

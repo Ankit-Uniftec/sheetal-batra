@@ -239,6 +239,7 @@ select,
   padding: 8px 16px;
   white-space: nowrap;
   align-self: flex-end;
+  color: #fff !important;
 }
 
 .measure-header-buttons {
@@ -306,11 +307,11 @@ select,
 }
 
 .productBtn {
+  height: 56px;
+  width: 165px;
   background: #D5B85A;
   color: #fff !important;
   border: none;
-  height: 56px;
-  width: 165px;
   padding: 12px 20px;
   font-size: 16px;
   font-weight: 500;
@@ -563,11 +564,11 @@ select,
 
 .upload-btn {
   display: inline-block;
-  color: white;
+  color: rgb(141, 130, 130) !important;
   padding: 10px 16px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px !important;
   font-weight: 500;
 }
 
@@ -1171,7 +1172,7 @@ select,
 
 .add-additional-btn {
   background: #d5b85a;
-  color: white;
+  color: white !important;
   border: none;
   padding: 8px 16px;
   border-radius: 6px;
@@ -1467,6 +1468,15 @@ select,
   border-color: #e67e22 !important;
   background-color: #fff8f0 !important;
 }
+
+input[type="date"].input-line.date-empty {
+  color: #999 !important;
+}
+
+input[type="date"].input-line.date-filled {
+  color: #000;
+}
+
 
 /* Warning emoji indicator */
 .deviation-warning {

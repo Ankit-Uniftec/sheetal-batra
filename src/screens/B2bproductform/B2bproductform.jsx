@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
+import ExtrasPopup from "../../components/ExtrasPopup";
 
 /**
  * Session Storage Keys
@@ -168,8 +169,12 @@ export default function B2bProductForm() {
     const [selectedExtra, setSelectedExtra] = useState("");
     const [selectedExtraColor, setSelectedExtraColor] = useState({ name: "", hex: "" });
     const [selectedExtrasWithColors, setSelectedExtrasWithColors] = useState([]);
-    const [selectedAdditionals, setSelectedAdditionals] = useState([]);
-    const [showAdditionals, setShowAdditionals] = useState(false);
+    const [selectedAdditionals, setSelectedAdditionals] = useState([{ name: "", price: "" }]);
+    const [showAdditionals, setShowAdditionals] = useState(true);
+    const [showExtrasModal, setShowExtrasModal] = useState(false);
+    const [editExtrasModalItemId, setEditExtrasModalItemId] = useState(null);
+    const [editExtraSelected, setEditExtraSelected] = useState("");
+    const [editExtraSelectedColor, setEditExtraSelectedColor] = useState({ name: "", hex: "" });
 
     // Size & Quantity
     const [selectedSize, setSelectedSize] = useState("M");
@@ -189,7 +194,7 @@ export default function B2bProductForm() {
 
     // Order Details
     const [deliveryDate, setDeliveryDate] = useState("");
-    const [modeOfDelivery, setModeOfDelivery] = useState("Delhi Store");
+    const [modeOfDelivery, setModeOfDelivery] = useState("B2B Store");
     const [orderFlag, setOrderFlag] = useState("Normal");
     const [comments, setComments] = useState("");
     const [attachments, setAttachments] = useState([]);
@@ -390,6 +395,14 @@ export default function B2bProductForm() {
         setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" });
     };
     const handleRemoveExtra = (idx) => setSelectedExtrasWithColors(prev => prev.filter((_, i) => i !== idx));
+    const handleAddExtraToItem = (itemId, extraName, extraColor) => {
+        const extra = globalExtras.find(e => e.name === extraName);
+        if (!extra) return;
+        setOrderItems(prev => prev.map(item => {
+            if (item._id !== itemId) return item;
+            return { ...item, extras: [...(item.extras || []), { name: extraName, color: extraColor, price: extra.price || 0 }] };
+        }));
+    };
     const handleFileUpload = async (e) => {
         const files = e.target.files;
         if (!files?.length) return;
@@ -426,7 +439,8 @@ export default function B2bProductForm() {
             isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
         }]);
         setSelectedProduct(null); setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" });
-        setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" }); setSelectedExtrasWithColors([]); setSelectedAdditionals([]);
+        setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" }); setSelectedExtrasWithColors([]); setSelectedAdditionals([{ name: "", price: "" }]);
+        setShowExtrasModal(false); setShowAdditionals(true);
         setSelectedSize("M"); setQuantity(1); setMeasurements({}); setComments("");
     };
 
@@ -518,6 +532,15 @@ export default function B2bProductForm() {
                                     return (
                                         <div className="added-product-row" key={item._id}>
                                             <span className="product-info">{i + 1}. {item.product_name} | {item.category || (item.isKids ? "Kids" : "Women")} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}</span>
+                                            {item.extras && item.extras.length > 0 && (
+                                                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4, paddingLeft: 16 }}>
+                                                    {item.extras.map((extra, eidx) => (
+                                                        <span key={eidx} style={{ background: "#fff5d9", border: "1px solid #d5b85a", borderRadius: 12, padding: "2px 10px", fontSize: 11, color: "#8b7240" }}>
+                                                            {extra.name}{extra.color?.name ? ` (${extra.color.name})` : ""} - {"\u20B9"}{formatIndianNumber(extra.price)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                             <div className="product-buttons"><button className="expand" onClick={() => toggleExpand(item._id)}>{expanded ? "−" : "✎"}</button><button className="delete" onClick={() => handleDelete(item._id)}>🗑</button></div>
                                             {expanded && (
                                                 <div className="expand-panel full-edit">
@@ -529,22 +552,25 @@ export default function B2bProductForm() {
                                                     </div>
                                                     {/* Extras */}
                                                     <div className="row">
-                                                        <div className="field"><label>Extra</label><SearchableSelect options={toExtraOptions(globalExtras)} value={expandedRowIds[`${item._id}_extra`] || ""} onChange={(v) => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_extra`]: v }))} placeholder="Select Extra" /></div>
-                                                        {expandedRowIds[`${item._id}_extra`] && <div className="field"><label>Extra Color</label><SearchableSelect options={toColorOptions(colors)} value={expandedRowIds[`${item._id}_extraColor`] || ""} onChange={(n) => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_extraColor`]: n }))} placeholder="Select Color" /></div>}
-                                                        <button className="add-extra-btn" style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: "3px", padding: "6px 14px", cursor: "pointer" }} disabled={!expandedRowIds[`${item._id}_extra`]} onClick={() => {
-                                                            const extraName = expandedRowIds[`${item._id}_extra`];
-                                                            const extraColorName = expandedRowIds[`${item._id}_extraColor`];
-                                                            if (!extraName) return;
-                                                            const extra = globalExtras.find(e => e.name === extraName);
-                                                            const color = colors.find(c => c.name === extraColorName) || { name: "", hex: "" };
-                                                            const newExtras = [...(item.extras || []), { name: extraName, color, price: extra?.price || 0 }];
-                                                            updateItem(item._id, { extras: newExtras });
-                                                            setExpandedRowIds(prev => ({ ...prev, [`${item._id}_extra`]: "", [`${item._id}_extraColor`]: "" }));
-                                                        }}>Add Extra</button>
+                                                        <div className="field extras-field">
+                                                            <label>Extras</label>
+                                                            {item.extras && item.extras.length > 0 ? (
+                                                                <div className="extras-list">
+                                                                    {item.extras.map((extraItem, eidx) => (
+                                                                        <div key={eidx} className="added-extra-item-edit">
+                                                                            <span className="extra-name">{extraItem.name}</span>
+                                                                            <SearchableSelect options={toColorOptions(colors)} value={extraItem.color?.name || ""} onChange={(colorName) => { const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" }; const newExtras = [...item.extras]; newExtras[eidx].color = colorObj; updateItem(item._id, { extras: newExtras }); }} placeholder="Color" />
+                                                                            <span className="extra-price">{"\u20B9"}{formatIndianNumber(extraItem.price)}</span>
+                                                                            <button className="remove-extra-btn" onClick={() => updateItem(item._id, { extras: item.extras.filter((_, ei) => ei !== eidx) })}>{"\u00D7"}</button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <p className="muted" style={{ fontSize: 12, color: "#aaa", margin: "4px 0" }}>No extras added</p>
+                                                            )}
+                                                            <button className="add-extra-btn" style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: "3px", cursor: "pointer", padding: "6px 14px", fontSize: "13px", marginTop: "8px" }} onClick={() => { setEditExtrasModalItemId(item._id); setEditExtraSelected(""); setEditExtraSelectedColor({ name: "", hex: "" }); }}>+ Add Extras</button>
+                                                        </div>
                                                     </div>
-                                                    {item.extras?.length > 0 && item.extras.map((extra, eidx) => (
-                                                        <div key={eidx} className="selected-extra-item"><span>{extra.name} (\u20b9{formatIndianNumber(extra.price)}){extra.color?.name && ` (${extra.color.name})`}</span><button onClick={() => updateItem(item._id, { extras: item.extras.filter((_, ei) => ei !== eidx) })}>x</button></div>
-                                                    ))}
                                                     <div className="size-box edit-size-box"><span className="size-label">Size:</span><div className="sizes">{(item.isKids ? KIDS_SIZE_OPTIONS : opts.sizes).map((s, idx) => <button key={idx} className={item.size === s ? "size-btn active" : "size-btn"} onClick={() => updateItem(item._id, { size: s })}>{s}</button>)}</div></div>
                                                     <div className="row"><div className="qty-field"><label>Qty</label><div className="qty-controls"><button onClick={() => updateItem(item._id, { quantity: Math.max(1, (item.quantity || 1) - 1) })}>−</button><span>{item.quantity || 1}</span><button onClick={() => updateItem(item._id, { quantity: (item.quantity || 1) + 1 })}>+</button></div></div><div className="field"><label>Delivery Date</label><input type="date" className="input-line" value={item.delivery_date || ""} min={new Date().toISOString().split("T")[0]} onChange={(e) => updateItem(item._id, { delivery_date: e.target.value })} /></div></div>
                                                     {/* Custom Measurements */}
@@ -612,12 +638,13 @@ export default function B2bProductForm() {
                             {selectedTop && <div className="field"><SearchableSelect options={toColorOptions(colors)} value={selectedTopColor.name} onChange={(n) => setSelectedTopColor(colors.find(c => c.name === n) || { name: "", hex: "" })} placeholder="Select Top Color" /></div>}
                             <div className="field"><SearchableSelect options={toOptions(bottoms)} value={selectedBottom} onChange={setSelectedBottom} placeholder="Select Bottom" /></div>
                             {selectedBottom && <div className="field"><SearchableSelect options={toColorOptions(colors)} value={selectedBottomColor.name} onChange={(n) => setSelectedBottomColor(colors.find(c => c.name === n) || { name: "", hex: "" })} placeholder="Select Bottom Color" /></div>}
-                            <div className="field"><SearchableSelect options={toExtraOptions(globalExtras)} value={selectedExtra} onChange={setSelectedExtra} placeholder="Select Extra" /></div>
-                            {selectedExtra && <div className="field"><SearchableSelect options={toColorOptions(colors)} value={selectedExtraColor.name} onChange={(n) => setSelectedExtraColor(colors.find(c => c.name === n) || { name: "", hex: "" })} placeholder="Select Extra Color" /></div>}
-                            <button className="add-extra-btn" style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: "3px" }} onClick={handleAddExtra} disabled={!selectedExtra}>Add Extra</button>
+
+                            <div className="">
+                                <button className="add-extra-btn" style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: "3px", cursor: "pointer", padding: "8px 16px", fontSize: "13px" }} onClick={() => setShowExtrasModal(true)}>+ Add Extras</button>
+                            </div>
                         </div>
 
-                        {selectedExtrasWithColors.map((extra, idx) => <div key={idx} className="selected-extra-item"><span>{extra.name} (₹{formatIndianNumber(extra.price)}){extra.color?.name && ` (${extra.color.name})`}</span><button onClick={() => handleRemoveExtra(idx)}>x</button></div>)}
+                        {selectedExtrasWithColors.map((extra, idx) => <div key={idx} className="selected-extra-item"><span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price)}){extra.color?.name && ` (${extra.color.name})`}</span><button onClick={() => handleRemoveExtra(idx)}>x</button></div>)}
 
                         <div className="size-box"><span className="size-label">Size:</span><div className="sizes">{availableSizes.map((s, i) => <button key={i} className={selectedSize === s ? "size-btn active" : "size-btn"} onClick={() => setSelectedSize(s)}>{s}</button>)}</div></div>
 
@@ -639,7 +666,7 @@ export default function B2bProductForm() {
 
                         <div className="row">
                             <div className="field"><label>Delivery Date*</label><input type="date" className="input-line" value={deliveryDate} min={new Date().toISOString().split("T")[0]} onChange={(e) => setDeliveryDate(e.target.value)} /></div>
-                            <div className="field"><SearchableSelect options={[{ label: "Home Delivery", value: "Home Delivery" }, { label: "Delhi Store", value: "Delhi Store" }, { label: "Ludhiana Store", value: "Ludhiana Store" }]} value={modeOfDelivery} onChange={setModeOfDelivery} placeholder="Mode of Delivery" /></div>
+                            <div className="field"><SearchableSelect options={[{ label: "B2B Store", value: "B2B Store" }]} value={modeOfDelivery} onChange={setModeOfDelivery} placeholder="Mode of Delivery" /></div>
                             <div className="field"><SearchableSelect options={[{ label: "Urgent", value: "Urgent" }, { label: "Normal", value: "Normal" }]} value={orderFlag} onChange={(v) => { if (v === "Urgent") setShowUrgentModal(true); else { setOrderFlag(v); setUrgentReason(""); } }} placeholder="Order Flag" /></div>
                         </div>
 
@@ -661,7 +688,74 @@ export default function B2bProductForm() {
                 <div className="modal-overlay"><div className="modal-box"><h3>Urgent Order</h3><label>Reason for Urgent</label><div style={{ border: "1px solid #D5B85A" }}><SearchableSelect options={[{ label: "Client Escalation", value: "Client Escalation" }, { label: "VIP Order", value: "VIP Order" }, { label: "Celebrity Order", value: "Celebrity Order" }, { label: "Others", value: "Others" }]} value={urgentReason} onChange={(v) => { setUrgentReason(v); if (v !== "Others") setOtherUrgentReason(""); }} placeholder="Select Urgent Reason" /></div>{urgentReason === "Others" && <textarea className="input-line" placeholder="Specify other reason..." value={otherUrgentReason} onChange={(e) => setOtherUrgentReason(e.target.value)} rows={2} style={{ marginTop: "20px", border: "1px solid #d5b85a" }} />}<div className="modal-actions"><button className="cancel-btn" onClick={() => { setShowUrgentModal(false); setOrderFlag("Normal"); setUrgentReason(""); setOtherUrgentReason(""); }}>Cancel</button><button className="confirm-btn" onClick={() => { const reason = urgentReason === "Others" ? otherUrgentReason : urgentReason; if (!reason.trim()) { showPopup({ title: "Reason Required", message: "Please select or enter a reason.", type: "warning" }); return; } setOrderFlag("Urgent"); setShowUrgentModal(false); }}>Confirm</button></div></div></div>
             )}
 
-            <button className="back-btn" onClick={handleBack}>←</button>
+            <button className="back-btn" onClick={handleBack}>{"\u2190"}</button>
+
+            {/* EXTRAS POPUP - New Product */}
+            <ExtrasPopup isOpen={showExtrasModal} onClose={() => { setShowExtrasModal(false); setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" }); }} title="Add Extras">
+                <div className="ep-field">
+                    <label className="ep-label">Select Extra</label>
+                    <SearchableSelect options={toExtraOptions(globalExtras)} value={selectedExtra} onChange={setSelectedExtra} placeholder="Select Extra" />
+                </div>
+                {selectedExtra && (
+                    <div className="ep-field">
+                        <label className="ep-label">Select Color</label>
+                        <SearchableSelect options={toColorOptions(colors)} value={selectedExtraColor.name} onChange={(colorName) => { const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" }; setSelectedExtraColor(colorObj); }} placeholder="Select Extra Color" />
+                    </div>
+                )}
+                <div className="ep-field">
+                    <button className="ep-add-btn" onClick={() => { if (!selectedExtra) { showPopup({ title: "Extra Required", message: "Please select an extra to add.", type: "warning" }); return; } handleAddExtra(); }}>+ Add Extra</button>
+                </div>
+                {selectedExtrasWithColors.length > 0 && (
+                    <div className="ep-added-list">
+                        <label className="ep-added-label">Added Extras:</label>
+                        {selectedExtrasWithColors.map((extra, index) => (
+                            <div key={index} className="ep-added-item">
+                                <span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price)}){extra.color?.name && ` \u2014 ${extra.color.name}`}</span>
+                                <button onClick={() => handleRemoveExtra(index)}>{"\u00D7"}</button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </ExtrasPopup>
+
+            {/* EXTRAS POPUP - Edit Mode (per cart item) */}
+            <ExtrasPopup isOpen={!!editExtrasModalItemId} onClose={() => { setEditExtrasModalItemId(null); setEditExtraSelected(""); setEditExtraSelectedColor({ name: "", hex: "" }); }} title="Add Extras">
+                <div className="ep-field">
+                    <label className="ep-label">Select Extra</label>
+                    <SearchableSelect options={globalExtras.map((e) => ({ label: `${e.name} (\u20B9${formatIndianNumber(e.price)})`, value: e.name }))} value={editExtraSelected} onChange={setEditExtraSelected} placeholder="Select Extra" />
+                </div>
+                {editExtraSelected && (
+                    <div className="ep-field">
+                        <label className="ep-label">Select Color</label>
+                        <SearchableSelect options={toColorOptions(colors)} value={editExtraSelectedColor.name} onChange={(colorName) => { const colorObj = colors.find(c => c.name === colorName) || { name: "", hex: "" }; setEditExtraSelectedColor(colorObj); }} placeholder="Select Extra Color" />
+                    </div>
+                )}
+                <div className="ep-field">
+                    <button className="ep-add-btn" onClick={() => {
+                        if (!editExtraSelected) { showPopup({ title: "Extra Required", message: "Please select an extra to add.", type: "warning" }); return; }
+                        if (!editExtraSelectedColor.name) { showPopup({ title: "Color Required", message: "Please select a color for the extra.", type: "warning" }); return; }
+                        handleAddExtraToItem(editExtrasModalItemId, editExtraSelected, editExtraSelectedColor);
+                        setEditExtraSelected(""); setEditExtraSelectedColor({ name: "", hex: "" });
+                    }}>+ Add Extra</button>
+                </div>
+                {(() => {
+                    const currentItem = orderItems.find(it => it._id === editExtrasModalItemId);
+                    if (currentItem?.extras?.length > 0) {
+                        return (
+                            <div className="ep-added-list">
+                                <label className="ep-added-label">Current Extras:</label>
+                                {currentItem.extras.map((extraItem, idx) => (
+                                    <div key={idx} className="ep-added-item">
+                                        <span>{extraItem.name} ({"\u20B9"}{formatIndianNumber(extraItem.price)}){extraItem.color?.name && ` \u2014 ${extraItem.color.name}`}</span>
+                                        <button onClick={() => { const newExtras = currentItem.extras.filter((_, i) => i !== idx); updateItem(editExtrasModalItemId, { extras: newExtras }); }}>{"\u00D7"}</button>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
+            </ExtrasPopup>
         </div>
     );
 }
