@@ -1359,6 +1359,13 @@ export default function ProductForm() {
           // Use inventory from Shopify sync
           setLocalInventory(result.inventory);
 
+          // Fetch variant prices from DB
+          const { data: variants } = await supabase
+            .from("product_variants")
+            .select("*")
+            .eq("product_id", selectedProduct.id);
+          setProductVariants(variants || []);
+
           // Set available sizes for sync products
           const syncSizes = Object.keys(result.inventory).filter(size => result.inventory[size] > 0);
           const sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
@@ -1876,8 +1883,14 @@ export default function ProductForm() {
   const getBasePrice = () => {
     if (!selectedProduct) return 0;
 
-    // BASE PRICE
-    let price = Number(selectedProduct.base_price || 0);
+    // For LXRTS: use variant price based on selected size
+    let price = 0;
+    if (isSyncProduct && selectedSize && productVariants.length > 0) {
+      const variant = productVariants.find(v => v.size === selectedSize);
+      price = Number(variant?.price || selectedProduct.base_price || 0);
+    } else {
+      price = Number(selectedProduct.base_price || 0);
+    }
 
     // 👶 APPLY KIDS DISCOUNT (ONLY IF KIDS + SIZE SELECTED)
     if (isKidsProduct && selectedSize && KIDS_DISCOUNT_PERCENT[selectedSize]) {
