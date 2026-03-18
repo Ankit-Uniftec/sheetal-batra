@@ -152,7 +152,7 @@ export default function B2bVendorSelection() {
             setSelectedVendor(vendor);
             setVendorContacts(vendor.vendor_contacts || []);
             if (!orderType) setOrderType(vendor.default_order_type || "Buyout");
-            if (discountPercent === 0) setDiscountPercent(vendor.default_markdown_percent || 0);
+            setDiscountPercent(vendor.default_markdown_percent || 0);
         }
     }, [selectedVendorId, vendors]);
 
