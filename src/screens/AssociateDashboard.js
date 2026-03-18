@@ -1094,7 +1094,7 @@ export default function Dashboard() {
                           <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
                             {order.status || "Pending"}
                           </div>
-                          {/* <div className={`ad-warehouse-stage-badge ${(order.warehouse_stage === "disposed" || order.warehouse_stage === "scrapped") ? "ad-stage-alert" : ""}`}>
+                          <div className={`ad-warehouse-stage-badge ${(order.warehouse_stage === "disposed" || order.warehouse_stage === "scrapped") ? "ad-stage-alert" : ""}`}>
                             {order.is_rework && <span className="ad-rework-dot"></span>}
                             {(() => {
                               const stageLabels = {
@@ -1118,7 +1118,7 @@ export default function Dashboard() {
                               };
                               return stageLabels[order.warehouse_stage] || "Order Received";
                             })()}
-                          </div> */}
+                          </div>
                           {own && canEdit(order) && (
                             <div className="ad-editable-badge">
                               Editable ({Math.floor(36 - hoursSince)}h)
