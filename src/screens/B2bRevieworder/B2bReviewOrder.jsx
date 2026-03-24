@@ -148,6 +148,8 @@ export default function B2bReviewOrder() {
     const merchandiser = vendorData?.merchandiser || "";
     const orderType = vendorData?.orderType || "Buyout";
     const discountPercent = vendorData?.discountPercent || 0;
+    const collectorDiscount = vendorData?.collectorDiscount || 0;
+    const collectorCode = vendorData?.collectorCode || "";
     const remarks = vendorData?.remarks || "";
     const availableCredit = vendorData?.availableCredit || 0;
 
@@ -155,7 +157,8 @@ export default function B2bReviewOrder() {
     const orderNotes = detailsData?.orderNotes || "";
 
     const markdownAmount = grandTotal * (discountPercent / 100);
-    const finalTotal = grandTotal - markdownAmount;
+    const collectorDiscountAmount = grandTotal * (collectorDiscount / 100);
+    const finalTotal = grandTotal - markdownAmount - collectorDiscountAmount;
 
     const projectedCredit = (vendor?.current_credit_used || 0) + (orderType === "Buyout" ? finalTotal : 0);
     const creditLimit = vendor?.credit_limit || 0;
@@ -183,6 +186,10 @@ export default function B2bReviewOrder() {
                 salesperson_phone: salespersonPhone || "",
                 markdown_percent: discountPercent,
                 markdown_amount: markdownAmount,
+                discount_percent: collectorDiscount,
+                discount_amount: Math.round(collectorDiscountAmount),
+                discount_code: collectorCode || null,
+                grand_total_after_discount: Math.round(finalTotal),
                 delivery_date: earliestDeliveryDate,
                 delivery_address: deliveryAddress,
                 items: items,
@@ -371,6 +378,9 @@ export default function B2bReviewOrder() {
                     </div>
                     <div className="b2b-ro-row3">
                         <div className="b2b-ro-field"><label>Markdown:</label><span>{discountPercent}%</span></div>
+                        {collectorDiscount > 0 && (
+                            <div className="b2b-ro-field"><label>Collector Code:</label><span>{collectorCode} ({collectorDiscount}%)</span></div>
+                        )}
                         <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "B2B Store"}</span></div>
                     </div>
                     {deliveryAddress && (
@@ -453,6 +463,9 @@ export default function B2bReviewOrder() {
                         {discountPercent > 0 && (
                             <div className="b2b-ro-field-inline"><label>Markdown ({discountPercent}%):</label><span style={{ color: "#4caf50" }}>- {"\u20B9"}{formatIndianNumber(Math.round(markdownAmount))}</span></div>
                         )}
+                        {collectorDiscount > 0 && (
+                            <div className="b2b-ro-field-inline"><label>Collector Code ({collectorDiscount}%):</label><span style={{ color: "#4caf50" }}>- {"\u20B9"}{formatIndianNumber(Math.round(collectorDiscountAmount))}</span></div>
+                        )}
                         <div className="b2b-ro-final-total-inline"><label>Final Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(finalTotal))}</span></div>
                     </div>
                 </div>
@@ -498,7 +511,7 @@ export default function B2bReviewOrder() {
 
                 {/* Action Buttons */}
                 <div className="footer-btns">
-                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>← Back to Edit</button>
+                    <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>Back to Edit</button>
                     <button className="continueBtn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: isSubmitting ? "#ccc" : "#4caf50" }}>
                         {isSubmitting ? "Submitting..." : editingOrderId ? (userRole?.toLowerCase().includes("merchandiser") ? "Update Order" : "Resubmit for Approval") : (userRole?.toLowerCase().includes("merchandiser") ? "Create Order (Auto-Approved)" : "Submit for Approval")}
                     </button>

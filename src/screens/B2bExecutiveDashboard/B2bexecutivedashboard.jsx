@@ -25,6 +25,11 @@ export default function B2bExecutiveDashboard() {
 
     // Order History tab
     const [orderSearch, setOrderSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [typeFilter, setTypeFilter] = useState("all");
+    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
 
@@ -105,18 +110,38 @@ export default function B2bExecutiveDashboard() {
         }, {});
     }, [orders]);
 
+    const uniqueMerchandisers = useMemo(() => {
+        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        return names.sort();
+    }, [orders]);
+
     // Filtered orders for Order History tab
     const filteredOrders = useMemo(() => {
-        if (!orderSearch.trim()) return orders;
-        const q = orderSearch.toLowerCase();
-        return orders.filter((order) => {
-            const orderNo = order.order_no?.toLowerCase() || "";
-            const poNumber = order.po_number?.toLowerCase() || "";
-            const vendorName = vendors[order.vendor_id]?.store_brand_name?.toLowerCase() || "";
-            const itemName = order.items?.[0]?.product_name?.toLowerCase() || "";
-            return orderNo.includes(q) || poNumber.includes(q) || vendorName.includes(q) || itemName.includes(q);
-        });
-    }, [orders, orderSearch, vendors]);
+        let filtered = [...orders];
+
+        if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter);
+        if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
+        if (dateTo) {
+            const endDate = new Date(dateTo);
+            endDate.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
+        }
+
+        if (orderSearch.trim()) {
+            const q = orderSearch.toLowerCase();
+            filtered = filtered.filter((order) => {
+                const orderNo = order.order_no?.toLowerCase() || "";
+                const poNumber = order.po_number?.toLowerCase() || "";
+                const vendorName = vendors[order.vendor_id]?.store_brand_name?.toLowerCase() || "";
+                const itemName = order.items?.[0]?.product_name?.toLowerCase() || "";
+                return orderNo.includes(q) || poNumber.includes(q) || vendorName.includes(q) || itemName.includes(q);
+            });
+        }
+
+        return filtered;
+    }, [orders, orderSearch, vendors, statusFilter, typeFilter, merchandiserFilter, dateFrom, dateTo]);
 
     const paginatedOrders = useMemo(() => {
         const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -334,6 +359,29 @@ export default function B2bExecutiveDashboard() {
                                     setCurrentPage(1);
                                 }}
                             />
+                            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}>
+                                <option value="all">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }}>
+                                <option value="all">All Types</option>
+                                <option value="buyout">Buyout</option>
+                                <option value="consignment">Consignment</option>
+                                <option value="client order">Client Order</option>
+                            </select>
+                            <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }}>
+                                <option value="all">All Merchandisers</option>
+                                {uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} title="From date" />
+                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} title="To date" />
+                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
+                                <button onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} className="b2b-clear-filters-btn">
+                                    Clear Filters
+                                </button>
+                            )}
                         </div>
 
                         <div className="b2b-order-list-scroll">

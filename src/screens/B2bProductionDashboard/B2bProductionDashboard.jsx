@@ -52,6 +52,9 @@ export default function B2bProductionDashboard() {
 
     // All Orders type filter
     const [allTypeFilter, setAllTypeFilter] = useState("all");
+    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -134,11 +137,23 @@ export default function B2bProductionDashboard() {
         }, {});
     }, [orders]);
 
+    const uniqueMerchandisers = useMemo(() => {
+        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        return names.sort();
+    }, [orders]);
+
     // ==================== FILTERED ORDERS ====================
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
         if (prodFilter !== "all") filtered = filtered.filter(o => getProdStatus(o) === prodFilter);
         if (allTypeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type === allTypeFilter);
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
+        if (dateTo) {
+            const endDate = new Date(dateTo);
+            endDate.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
+        }
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
             filtered = filtered.filter(o =>
@@ -147,7 +162,7 @@ export default function B2bProductionDashboard() {
             );
         }
         return filtered;
-    }, [orders, prodFilter, allTypeFilter, orderSearch, vendorMap]);
+    }, [orders, prodFilter, allTypeFilter, merchandiserFilter, dateFrom, dateTo, orderSearch, vendorMap]);
 
     const paginatedOrders = useMemo(() => {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -288,7 +303,7 @@ export default function B2bProductionDashboard() {
                         <a className={`prod-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>View Profile</a>
                         <a className={`prod-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
                         <a className={`prod-menu-item ${activeTab === "queue" ? "active" : ""}`} onClick={() => { setActiveTab("queue"); setShowSidebar(false); }}>
-                            Production Queue 
+                            Production Queue
                         </a>
                         <a className={`prod-menu-item ${activeTab === "inprod" ? "active" : ""}`} onClick={() => { setActiveTab("inprod"); setShowSidebar(false); }}>In Production</a>
                         <a className={`prod-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
@@ -468,7 +483,7 @@ export default function B2bProductionDashboard() {
                 {activeTab === "orders" && (
                     <div className="prod-tab-wrapper">
                         <h2 className="prod-tab-title">All Orders</h2>
-                        <div className="prod-filters-row">
+                        <div className="prod-filters-row" style={{ flexWrap: "wrap" }}>
                             <input type="text" placeholder="Search order #, PO, vendor..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="prod-search-input" />
                             <select value={prodFilter} onChange={(e) => { setProdFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
                                 <option value="all">All Status</option>
@@ -481,7 +496,17 @@ export default function B2bProductionDashboard() {
                                 <option value="all">All Types</option>
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
+                                <option value="Client Order">Client Order</option>
                             </select>
+                            <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
+                                <option value="all">All Merchandisers</option>
+                                {uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="prod-filter-select" title="From date" />
+                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="prod-filter-select" title="To date" />
+                            {(prodFilter !== "all" || allTypeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
+                                <button onClick={() => { setProdFilter("all"); setAllTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
+                            )}
                         </div>
                         <div className="prod-list-scroll">
                             {filteredOrders.length === 0 && <p className="prod-muted">No orders match your filters.</p>}
@@ -633,9 +658,6 @@ function OrderCard({ order, vendorMap, onView, onAction, actionLabel, actionClas
                     <div className={`prod-order-status-badge ${getProdStatusClass(ps)}`}>{getProdStatusLabel(ps)}</div>
                     {order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
                     {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"\u26A0"} Urgent</div>)}
-                    <button className="prod-pdf-btn" onClick={(e) => onPdf(e, order)} disabled={pdfLoading === order.id}>
-                        {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Customer PDF"}
-                    </button>
                     <button className="prod-pdf-btn" onClick={(e) => onWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
                         {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
                     </button>

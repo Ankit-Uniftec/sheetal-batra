@@ -18,36 +18,36 @@ const ALTERATION_STATUS_OPTIONS = [
 ];
 
 // Warehouse production stages (manual dropdown)
-const WAREHOUSE_STAGES = [
-  { value: "order_received", label: "Order Received", color: "#9e9e9e" },
-  { value: "cloth_issued", label: "Cloth Issued", color: "#795548" },
-  { value: "dyeing_in_progress", label: "Dyeing In-Progress", color: "#e91e63" },
-  { value: "pattern_cutting_in_progress", label: "Pattern Cutting In-Progress", color: "#9c27b0" },
-  { value: "pattern_printing_in_progress", label: "Pattern Printing In-Progress", color: "#673ab7" },
-  { value: "embroidery_in_progress", label: "Embroidery In-Progress", color: "#3f51b5" },
-  { value: "dry_cleaning_in_progress", label: "Dry Cleaning In-Progress", color: "#00bcd4" },
-  { value: "trims_in_progress", label: "Trims In-Progress", color: "#009688" },
-  { value: "cutting_stitching_in_progress", label: "Cutting & Stitching In-Progress", color: "#ff9800" },
-  { value: "hemming_in_progress", label: "Hemming In-Progress", color: "#ff5722" },
-  { value: "finishing_in_progress", label: "Finishing In-Progress", color: "#607d8b" },
-  { value: "qc_in_progress", label: "QC In-Progress", color: "#f44336" },
-  { value: "qc_passed", label: "QC Passed", color: "#4caf50" },
-  { value: "qc_failed", label: "QC Failed", color: "#d32f2f" },
-  { value: "packaging_dispatch", label: "Packaging & Dispatch", color: "#2e7d32" },
-];
+// const WAREHOUSE_STAGES = [
+//   { value: "order_received", label: "Order Received", color: "#9e9e9e" },
+//   { value: "cloth_issued", label: "Cloth Issued", color: "#795548" },
+//   { value: "dyeing_in_progress", label: "Dyeing In-Progress", color: "#e91e63" },
+//   { value: "pattern_cutting_in_progress", label: "Pattern Cutting In-Progress", color: "#9c27b0" },
+//   { value: "pattern_printing_in_progress", label: "Pattern Printing In-Progress", color: "#673ab7" },
+//   { value: "embroidery_in_progress", label: "Embroidery In-Progress", color: "#3f51b5" },
+//   { value: "dry_cleaning_in_progress", label: "Dry Cleaning In-Progress", color: "#00bcd4" },
+//   { value: "trims_in_progress", label: "Trims In-Progress", color: "#009688" },
+//   { value: "cutting_stitching_in_progress", label: "Cutting & Stitching In-Progress", color: "#ff9800" },
+//   { value: "hemming_in_progress", label: "Hemming In-Progress", color: "#ff5722" },
+//   { value: "finishing_in_progress", label: "Finishing In-Progress", color: "#607d8b" },
+//   { value: "qc_in_progress", label: "QC In-Progress", color: "#f44336" },
+//   { value: "qc_passed", label: "QC Passed", color: "#4caf50" },
+//   { value: "qc_failed", label: "QC Failed", color: "#d32f2f" },
+//   { value: "packaging_dispatch", label: "Packaging & Dispatch", color: "#2e7d32" },
+// ];
 
-// Stages available for re-journey restart
-const REJOURNEY_STAGES = [
-  { value: "dyeing_in_progress", label: "Dyeing" },
-  { value: "pattern_cutting_in_progress", label: "Pattern Cutting" },
-  { value: "pattern_printing_in_progress", label: "Pattern Printing" },
-  { value: "embroidery_in_progress", label: "Embroidery" },
-  { value: "dry_cleaning_in_progress", label: "Dry Cleaning" },
-  { value: "trims_in_progress", label: "Trims" },
-  { value: "cutting_stitching_in_progress", label: "Cutting & Stitching" },
-  { value: "hemming_in_progress", label: "Hemming" },
-  { value: "finishing_in_progress", label: "Finishing" },
-];
+// // Stages available for re-journey restart
+// const REJOURNEY_STAGES = [
+//   { value: "dyeing_in_progress", label: "Dyeing" },
+//   { value: "pattern_cutting_in_progress", label: "Pattern Cutting" },
+//   { value: "pattern_printing_in_progress", label: "Pattern Printing" },
+//   { value: "embroidery_in_progress", label: "Embroidery" },
+//   { value: "dry_cleaning_in_progress", label: "Dry Cleaning" },
+//   { value: "trims_in_progress", label: "Trims" },
+//   { value: "cutting_stitching_in_progress", label: "Cutting & Stitching" },
+//   { value: "hemming_in_progress", label: "Hemming" },
+//   { value: "finishing_in_progress", label: "Finishing" },
+// ];
 
 // Status Tabs (Primary Filter - Mutually Exclusive by Order Lifecycle)
 const STATUS_TABS = [
@@ -123,15 +123,15 @@ const WarehouseDashboard = () => {
   const [attachmentLoading, setAttachmentLoading] = useState(null);
 
   // QC Fail Popup state
-  const [qcFailPopup, setQcFailPopup] = useState({
-    isOpen: false,
-    orderId: null,
-    orderNo: "",
-    reason: "",
-    outcome: "", // dispose | scrap | rejourney
-    rejourneyStage: "",
-  });
-  const [stageUpdating, setStageUpdating] = useState(null);
+  // const [qcFailPopup, setQcFailPopup] = useState({
+  //   isOpen: false,
+  //   orderId: null,
+  //   orderNo: "",
+  //   reason: "",
+  //   outcome: "", // dispose | scrap | rejourney
+  //   rejourneyStage: "",
+  // });
+  // const [stageUpdating, setStageUpdating] = useState(null);
 
   // Get unique salespersons from orders
   const salespersons = useMemo(() => {
@@ -561,148 +561,148 @@ const WarehouseDashboard = () => {
   };
 
   // Update warehouse stage from dropdown
-  const updateWarehouseStage = async (orderId, orderNo, newStage) => {
-    // If QC Failed selected, open popup instead of saving directly
-    if (newStage === "qc_failed") {
-      setQcFailPopup({
-        isOpen: true,
-        orderId,
-        orderNo,
-        reason: "",
-        outcome: "",
-        rejourneyStage: "",
-      });
-      return;
-    }
+  // const updateWarehouseStage = async (orderId, orderNo, newStage) => {
+  //   // If QC Failed selected, open popup instead of saving directly
+  //   if (newStage === "qc_failed") {
+  //     setQcFailPopup({
+  //       isOpen: true,
+  //       orderId,
+  //       orderNo,
+  //       reason: "",
+  //       outcome: "",
+  //       rejourneyStage: "",
+  //     });
+  //     return;
+  //   }
 
-    setStageUpdating(orderId);
-    try {
-      const updateData = {
-        warehouse_stage: newStage,
-        warehouse_stage_updated_at: new Date().toISOString(),
-      };
+  //   setStageUpdating(orderId);
+  //   try {
+  //     const updateData = {
+  //       warehouse_stage: newStage,
+  //       warehouse_stage_updated_at: new Date().toISOString(),
+  //     };
 
-      // If Packaging & Dispatch, auto-complete the order
-      if (newStage === "packaging_dispatch") {
-        updateData.status = "completed";
-      }
+  //     // If Packaging & Dispatch, auto-complete the order
+  //     if (newStage === "packaging_dispatch") {
+  //       updateData.status = "completed";
+  //     }
 
-      const { error } = await supabase
-        .from("orders")
-        .update(updateData)
-        .eq("id", orderId);
+  //     const { error } = await supabase
+  //       .from("orders")
+  //       .update(updateData)
+  //       .eq("id", orderId);
 
-      if (!error) {
-        fetchOrders();
-        if (newStage === "packaging_dispatch") {
-          showPopup({
-            title: "Order Completed",
-            message: `Order ${orderNo} has been marked as Packaging & Dispatch. Status updated to Completed.`,
-            type: "success",
-            confirmText: "OK",
-          });
-        }
-      } else {
-        showPopup({ title: "Error", message: "Failed to update stage", type: "error", confirmText: "OK" });
-      }
-    } catch (err) {
-      console.error("Stage update error:", err);
-      showPopup({ title: "Error", message: "Something went wrong", type: "error", confirmText: "OK" });
-    } finally {
-      setStageUpdating(null);
-    }
-  };
+  //     if (!error) {
+  //       fetchOrders();
+  //       if (newStage === "packaging_dispatch") {
+  //         showPopup({
+  //           title: "Order Completed",
+  //           message: `Order ${orderNo} has been marked as Packaging & Dispatch. Status updated to Completed.`,
+  //           type: "success",
+  //           confirmText: "OK",
+  //         });
+  //       }
+  //     } else {
+  //       showPopup({ title: "Error", message: "Failed to update stage", type: "error", confirmText: "OK" });
+  //     }
+  //   } catch (err) {
+  //     console.error("Stage update error:", err);
+  //     showPopup({ title: "Error", message: "Something went wrong", type: "error", confirmText: "OK" });
+  //   } finally {
+  //     setStageUpdating(null);
+  //   }
+  // };
 
   // Handle QC Fail popup submission
-  const handleQcFailSubmit = async () => {
-    const { orderId, reason, outcome, rejourneyStage } = qcFailPopup;
+  // const handleQcFailSubmit = async () => {
+  //   const { orderId, reason, outcome, rejourneyStage } = qcFailPopup;
 
-    if (!reason.trim()) {
-      showPopup({ title: "Required", message: "Please enter a reason for QC failure", type: "warning", confirmText: "OK" });
-      return;
-    }
-    if (!outcome) {
-      showPopup({ title: "Required", message: "Please select an outcome (Dispose, Scrap, or Re-journey)", type: "warning", confirmText: "OK" });
-      return;
-    }
-    if (outcome === "rejourney" && !rejourneyStage) {
-      showPopup({ title: "Required", message: "Please select which stage to restart from", type: "warning", confirmText: "OK" });
-      return;
-    }
+  //   if (!reason.trim()) {
+  //     showPopup({ title: "Required", message: "Please enter a reason for QC failure", type: "warning", confirmText: "OK" });
+  //     return;
+  //   }
+  //   if (!outcome) {
+  //     showPopup({ title: "Required", message: "Please select an outcome (Dispose, Scrap, or Re-journey)", type: "warning", confirmText: "OK" });
+  //     return;
+  //   }
+  //   if (outcome === "rejourney" && !rejourneyStage) {
+  //     showPopup({ title: "Required", message: "Please select which stage to restart from", type: "warning", confirmText: "OK" });
+  //     return;
+  //   }
 
-    setStageUpdating(orderId);
-    try {
-      // Get current order to check rejourney count
-      const { data: currentOrder } = await supabase
-        .from("orders")
-        .select("rejourney_count")
-        .eq("id", orderId)
-        .single();
+  //   setStageUpdating(orderId);
+  //   try {
+  //     // Get current order to check rejourney count
+  //     const { data: currentOrder } = await supabase
+  //       .from("orders")
+  //       .select("rejourney_count")
+  //       .eq("id", orderId)
+  //       .single();
 
-      const currentCount = currentOrder?.rejourney_count || 0;
+  //     const currentCount = currentOrder?.rejourney_count || 0;
 
-      let updateData = {
-        qc_fail_reason: reason,
-        qc_fail_outcome: outcome,
-        warehouse_stage_updated_at: new Date().toISOString(),
-      };
+  //     let updateData = {
+  //       qc_fail_reason: reason,
+  //       qc_fail_outcome: outcome,
+  //       warehouse_stage_updated_at: new Date().toISOString(),
+  //     };
 
-      if (outcome === "dispose") {
-        updateData.warehouse_stage = "disposed";
-      } else if (outcome === "scrap") {
-        updateData.warehouse_stage = "scrapped";
-      } else if (outcome === "rejourney") {
-        const newCount = currentCount + 1;
-        updateData.warehouse_stage = rejourneyStage;
-        updateData.rejourney_count = newCount;
-        updateData.is_rework = true;
+  //     if (outcome === "dispose") {
+  //       updateData.warehouse_stage = "disposed";
+  //     } else if (outcome === "scrap") {
+  //       updateData.warehouse_stage = "scrapped";
+  //     } else if (outcome === "rejourney") {
+  //       const newCount = currentCount + 1;
+  //       updateData.warehouse_stage = rejourneyStage;
+  //       updateData.rejourney_count = newCount;
+  //       updateData.is_rework = true;
 
-        // Alert on 3rd re-journey
-        if (newCount >= 3) {
-          // We'll show alert after update
-        }
-      }
+  //       // Alert on 3rd re-journey
+  //       if (newCount >= 3) {
+  //         // We'll show alert after update
+  //       }
+  //     }
 
-      const { error } = await supabase
-        .from("orders")
-        .update(updateData)
-        .eq("id", orderId);
+  //     const { error } = await supabase
+  //       .from("orders")
+  //       .update(updateData)
+  //       .eq("id", orderId);
 
-      if (!error) {
-        fetchOrders();
-        setQcFailPopup({ isOpen: false, orderId: null, orderNo: "", reason: "", outcome: "", rejourneyStage: "" });
+  //     if (!error) {
+  //       fetchOrders();
+  //       setQcFailPopup({ isOpen: false, orderId: null, orderNo: "", reason: "", outcome: "", rejourneyStage: "" });
 
-        if (outcome === "rejourney" && currentCount + 1 >= 3) {
-          showPopup({
-            title: "⚠ Re-journey Alert",
-            message: `This order has been sent for re-journey ${currentCount + 1} times. Please alert Manish Batra.`,
-            type: "warning",
-            confirmText: "OK",
-          });
-        } else if (outcome === "dispose") {
-          showPopup({ title: "Disposed", message: "Component marked as disposed.", type: "info", confirmText: "OK" });
-        } else if (outcome === "scrap") {
-          showPopup({ title: "Scrapped", message: "Component moved to scrap.", type: "info", confirmText: "OK" });
-        } else {
-          const stageLabel = REJOURNEY_STAGES.find(s => s.value === rejourneyStage)?.label || rejourneyStage;
-          showPopup({ title: "Re-journey Started", message: `Order sent back to ${stageLabel} stage.`, type: "success", confirmText: "OK" });
-        }
-      } else {
-        showPopup({ title: "Error", message: "Failed to update QC status", type: "error", confirmText: "OK" });
-      }
-    } catch (err) {
-      console.error("QC fail update error:", err);
-      showPopup({ title: "Error", message: "Something went wrong", type: "error", confirmText: "OK" });
-    } finally {
-      setStageUpdating(null);
-    }
-  };
+  //       if (outcome === "rejourney" && currentCount + 1 >= 3) {
+  //         showPopup({
+  //           title: "⚠ Re-journey Alert",
+  //           message: `This order has been sent for re-journey ${currentCount + 1} times. Please alert Manish Batra.`,
+  //           type: "warning",
+  //           confirmText: "OK",
+  //         });
+  //       } else if (outcome === "dispose") {
+  //         showPopup({ title: "Disposed", message: "Component marked as disposed.", type: "info", confirmText: "OK" });
+  //       } else if (outcome === "scrap") {
+  //         showPopup({ title: "Scrapped", message: "Component moved to scrap.", type: "info", confirmText: "OK" });
+  //       } else {
+  //         const stageLabel = REJOURNEY_STAGES.find(s => s.value === rejourneyStage)?.label || rejourneyStage;
+  //         showPopup({ title: "Re-journey Started", message: `Order sent back to ${stageLabel} stage.`, type: "success", confirmText: "OK" });
+  //       }
+  //     } else {
+  //       showPopup({ title: "Error", message: "Failed to update QC status", type: "error", confirmText: "OK" });
+  //     }
+  //   } catch (err) {
+  //     console.error("QC fail update error:", err);
+  //     showPopup({ title: "Error", message: "Something went wrong", type: "error", confirmText: "OK" });
+  //   } finally {
+  //     setStageUpdating(null);
+  //   }
+  // };
 
-  // Get stage label and color for display
-  const getStageInfo = (stageValue) => {
-    const stage = WAREHOUSE_STAGES.find(s => s.value === stageValue);
-    return stage || { label: stageValue || "Order Received", color: "#9e9e9e" };
-  };
+  // // Get stage label and color for display
+  // const getStageInfo = (stageValue) => {
+  //   const stage = WAREHOUSE_STAGES.find(s => s.value === stageValue);
+  //   return stage || { label: stageValue || "Order Received", color: "#9e9e9e" };
+  // };
 
   const updateAlterationStatus = async (orderId, newStatus) => {
     setStatusUpdating(orderId);
@@ -1179,12 +1179,12 @@ const WarehouseDashboard = () => {
                                 URGENT
                               </span>
                             )}
-
+                            {/* 
                             {order.is_rework && (
                               <span className="wd-badge wd-badge-rework">
                                 REWORK
                               </span>
-                            )}
+                            )} */}
 
                             {isAlteration && order.alteration_number && (
                               <span className="wd-badge wd-badge-number">
@@ -1307,6 +1307,9 @@ const WarehouseDashboard = () => {
 
                           <div className="wd-dropdown-info">
                             <p><strong className="wd-label">Order Id:</strong> {order.order_no}</p>
+                            {order.is_b2b && order.po_number && (
+                              <p><strong className="wd-label">PO Number:</strong> {order.po_number}</p>
+                            )}
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
 
                             {/* Client & SA Name — responsive row */}
@@ -1360,67 +1363,67 @@ const WarehouseDashboard = () => {
 
                             {/* Warehouse Stage Dropdown - for non-alteration orders */}
                             {!isAlteration && (
-                              // <button
-                              //   className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""} `}
-                              //   disabled={
-                              //     order.status === "completed" ||
-                              //     order.status === "delivered" ||
-                              //     order.status === "cancelled"
-                              //   }
-                              //   onClick={() => markAsCompleted(order.id)}
-                              // >
-                              //   {order.status === "completed" ? "Completed" :
-                              //     order.status === "delivered" ? "Delivered" :
-                              //       order.status === "cancelled" ? "Cancelled" :
-                              //         "Mark as Completed"}
-                              // </button>
-                              <div className="wd-stage-section">
-                                <div className="wd-stage-row">
-                                  <strong className="wd-label">Production Stage:</strong>
-                                  {order.is_rework && (
-                                    <span className="wd-badge wd-badge-rework">REWORK</span>
-                                  )}
-                                  {order.rejourney_count > 0 && (
-                                    <span className="wd-rejourney-count">Re-journey: {order.rejourney_count}</span>
-                                  )}
-                                </div>
-                                {order.status === "cancelled" ? (
-                                  <div className="wd-stage-badge" style={{ background: "#ffebee", color: "#c62828", border: "1px solid #ffcdd2" }}>
-                                    Cancelled
-                                  </div>
-                                ) : order.warehouse_stage === "disposed" ? (
-                                  <div className="wd-stage-badge" style={{ background: "#ffebee", color: "#c62828", border: "1px solid #ffcdd2" }}>
-                                    Disposed
-                                  </div>
-                                ) : order.warehouse_stage === "scrapped" ? (
-                                  <div className="wd-stage-badge" style={{ background: "#fff3e0", color: "#e65100", border: "1px solid #ffcc80" }}>
-                                    Scrapped
-                                  </div>
-                                ) : (order.status === "completed" || order.status === "delivered") ? (
-                                  <div className="wd-stage-badge" style={{ background: "#e8f5e9", color: "#2e7d32", border: "1px solid #c8e6c9" }}>
-                                    {getStageInfo(order.warehouse_stage).label}
-                                  </div>
-                                ) : (
-                                  <select
-                                    className="wd-stage-select"
-                                    value={order.warehouse_stage || "order_received"}
-                                    onChange={(e) => updateWarehouseStage(order.id, order.order_no, e.target.value)}
-                                    disabled={stageUpdating === order.id}
-                                    style={{ borderColor: getStageInfo(order.warehouse_stage || "order_received").color }}
-                                  >
-                                    {WAREHOUSE_STAGES.map((stage) => (
-                                      <option key={stage.value} value={stage.value}>
-                                        {stage.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                                {order.qc_fail_reason && (
-                                  <p className="wd-qc-fail-note">
-                                    <strong>Last QC Fail:</strong> {order.qc_fail_reason}
-                                  </p>
-                                )}
-                              </div>
+                              <button
+                                className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""} `}
+                                disabled={
+                                  order.status === "completed" ||
+                                  order.status === "delivered" ||
+                                  order.status === "cancelled"
+                                }
+                                onClick={() => markAsCompleted(order.id)}
+                              >
+                                {order.status === "completed" ? "Completed" :
+                                  order.status === "delivered" ? "Delivered" :
+                                    order.status === "cancelled" ? "Cancelled" :
+                                      "Mark as Completed"}
+                              </button>
+                              // <div className="wd-stage-section">
+                              //   <div className="wd-stage-row">
+                              //     <strong className="wd-label">Production Stage:</strong>
+                              //     {order.is_rework && (
+                              //       <span className="wd-badge wd-badge-rework">REWORK</span>
+                              //     )}
+                              //     {order.rejourney_count > 0 && (
+                              //       <span className="wd-rejourney-count">Re-journey: {order.rejourney_count}</span>
+                              //     )}
+                              //   </div>
+                              //   {order.status === "cancelled" ? (
+                              //     <div className="wd-stage-badge" style={{ background: "#ffebee", color: "#c62828", border: "1px solid #ffcdd2" }}>
+                              //       Cancelled
+                              //     </div>
+                              //   ) : order.warehouse_stage === "disposed" ? (
+                              //     <div className="wd-stage-badge" style={{ background: "#ffebee", color: "#c62828", border: "1px solid #ffcdd2" }}>
+                              //       Disposed
+                              //     </div>
+                              //   ) : order.warehouse_stage === "scrapped" ? (
+                              //     <div className="wd-stage-badge" style={{ background: "#fff3e0", color: "#e65100", border: "1px solid #ffcc80" }}>
+                              //       Scrapped
+                              //     </div>
+                              //   ) : (order.status === "completed" || order.status === "delivered") ? (
+                              //     <div className="wd-stage-badge" style={{ background: "#e8f5e9", color: "#2e7d32", border: "1px solid #c8e6c9" }}>
+                              //       {getStageInfo(order.warehouse_stage).label}
+                              //     </div>
+                              //   ) : (
+                              //     <select
+                              //       className="wd-stage-select"
+                              //       value={order.warehouse_stage || "order_received"}
+                              //       onChange={(e) => updateWarehouseStage(order.id, order.order_no, e.target.value)}
+                              //       disabled={stageUpdating === order.id}
+                              //       style={{ borderColor: getStageInfo(order.warehouse_stage || "order_received").color }}
+                              //     >
+                              //       {WAREHOUSE_STAGES.map((stage) => (
+                              //         <option key={stage.value} value={stage.value}>
+                              //           {stage.label}
+                              //         </option>
+                              //       ))}
+                              //     </select>
+                              //   )}
+                              //   {order.qc_fail_reason && (
+                              //     <p className="wd-qc-fail-note">
+                              //       <strong>Last QC Fail:</strong> {order.qc_fail_reason}
+                              //     </p>
+                              //   )}
+                              // </div>
                             )}
                           </div>
                         </div>
@@ -1549,6 +1552,9 @@ const WarehouseDashboard = () => {
                         .map((order) => (
                           <div className="wd-calendar-order-item" key={order.id}>
                             <p><b>Order No:</b> {order.order_no}</p>
+                            {order.is_b2b && order.po_number && (
+                              <p><b>PO Number:</b> {order.po_number}</p>
+                            )}
                             <p><b>Client Name:</b> {order.delivery_name}</p>
                             <p><b>Status:</b> {order.status || "Pending"}</p>
                           </div>
@@ -1563,7 +1569,7 @@ const WarehouseDashboard = () => {
       </div>
 
       {/* QC Fail Popup */}
-      {qcFailPopup.isOpen && (
+      {/* {qcFailPopup.isOpen && (
         <div className="popup-overlay" onClick={(e) => { if (e.target === e.currentTarget) setQcFailPopup(prev => ({ ...prev, isOpen: false })); }}>
           <div className="popup-box popup-warning" style={{ maxWidth: 480 }}>
             <div className="popup-header">
@@ -1571,9 +1577,9 @@ const WarehouseDashboard = () => {
               <h3 className="popup-title">QC Failed — {qcFailPopup.orderNo}</h3>
             </div>
 
-            <div className="popup-body">
-              {/* Reason Field */}
-              <div className="wd-qc-field">
+            <div className="popup-body"> */}
+      {/* Reason Field */}
+      {/* <div className="wd-qc-field">
                 <label className="wd-qc-label">Reason for QC Failure *</label>
                 <textarea
                   className="wd-qc-textarea"
@@ -1582,10 +1588,10 @@ const WarehouseDashboard = () => {
                   onChange={(e) => setQcFailPopup(prev => ({ ...prev, reason: e.target.value }))}
                   rows={3}
                 />
-              </div>
+              </div> */}
 
-              {/* Outcome Selection */}
-              <div className="wd-qc-field">
+      {/* Outcome Selection */}
+      {/* <div className="wd-qc-field">
                 <label className="wd-qc-label">Select Outcome *</label>
                 <div className="wd-qc-outcome-btns">
                   <button
@@ -1607,10 +1613,10 @@ const WarehouseDashboard = () => {
                     Re-journey
                   </button>
                 </div>
-              </div>
+              </div> */}
 
-              {/* Re-journey Stage Dropdown (only if rejourney selected) */}
-              {qcFailPopup.outcome === "rejourney" && (
+      {/* Re-journey Stage Dropdown (only if rejourney selected) */}
+      {/* {qcFailPopup.outcome === "rejourney" && (
                 <div className="wd-qc-field">
                   <label className="wd-qc-label">Restart from Stage *</label>
                   <select
@@ -1646,7 +1652,7 @@ const WarehouseDashboard = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Image Viewer Modal */}
       {viewingImages && (

@@ -66,6 +66,9 @@ export default function B2bVendorSelection() {
     const [merchandiser, setMerchandiser] = useState("");
     const [orderType, setOrderType] = useState("");
     const [discountPercent, setDiscountPercent] = useState(0);
+    const [collectorDiscount, setCollectorDiscount] = useState(0);
+    const [collectorCode, setCollectorCode] = useState("");
+    const [collectorApplied, setCollectorApplied] = useState(false);
     const [remarks, setRemarks] = useState("");
 
     const merchandisers = [
@@ -109,6 +112,9 @@ export default function B2bVendorSelection() {
                 if (data.merchandiser) setMerchandiser(data.merchandiser);
                 if (data.orderType) setOrderType(data.orderType);
                 if (data.discountPercent !== undefined) setDiscountPercent(data.discountPercent);
+                if (data.collectorDiscount !== undefined) setCollectorDiscount(data.collectorDiscount);
+                if (data.collectorCode) setCollectorCode(data.collectorCode);
+                if (data.collectorApplied) setCollectorApplied(data.collectorApplied);
                 if (data.remarks) setRemarks(data.remarks);
             } catch (e) {
                 console.error("Error restoring vendor data:", e);
@@ -118,9 +124,9 @@ export default function B2bVendorSelection() {
 
     // Save to session
     useEffect(() => {
-        const data = { selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, remarks };
+        const data = { selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, collectorDiscount, collectorCode, collectorApplied, remarks };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
-    }, [selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, remarks]);
+    }, [selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, collectorDiscount, collectorCode, collectorApplied, remarks]);
 
     // Fetch vendors
     useEffect(() => {
@@ -169,6 +175,40 @@ export default function B2bVendorSelection() {
         vendorContacts.find((c) => c.is_primary) || vendorContacts[0] || null,
         [vendorContacts]);
 
+    const handleApplyCollectorCode = async () => {
+        const code = collectorCode.trim().toUpperCase();
+        if (!code) {
+            showPopup({ title: "Invalid Code", message: "Please enter a valid collector code.", type: "warning" });
+            return;
+        }
+        try {
+            const { data, error } = await supabase
+                .from("discount")
+                .select("code, percent")
+                .ilike("code", code)
+                .limit(1)
+                .maybeSingle();
+            if (error || !data) {
+                showPopup({ title: "Invalid Code", message: "Invalid or expired discount code.", type: "error" });
+                return;
+            }
+            const pct = Number(data.percent) || 0;
+            setCollectorDiscount(pct);
+            setCollectorCode(data.code.toUpperCase());
+            setCollectorApplied(true);
+            showPopup({ title: "Discount Applied! ✅", message: `Collector code "${data.code.toUpperCase()}" — ${pct}% discount applied!`, type: "success" });
+        } catch (err) {
+            console.error("Collector code error:", err);
+            showPopup({ title: "Error", message: "Failed to apply collector code.", type: "error" });
+        }
+    };
+
+    const handleRemoveCollectorCode = () => {
+        setCollectorDiscount(0);
+        setCollectorCode("");
+        setCollectorApplied(false);
+    };
+
     const handleContinue = () => {
         if (!selectedVendor) { showPopup({ title: "Vendor Required", message: "Please select a vendor to continue.", type: "warning" }); return; }
         if (!poNumber.trim()) { showPopup({ title: "PO Number Required", message: "Please enter the Purchase Order (PO) number.", type: "warning" }); return; }
@@ -177,7 +217,7 @@ export default function B2bVendorSelection() {
 
         const b2bData = {
             selectedVendorId, vendor: selectedVendor, vendorContacts, primaryContact,
-            poNumber: poNumber.trim(), merchandiser, orderType, discountPercent, remarks, availableCredit,
+            poNumber: poNumber.trim(), merchandiser, orderType, discountPercent, collectorDiscount, collectorCode, collectorApplied, remarks, availableCredit,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(b2bData));
         navigate("/b2b-product-form");
@@ -286,6 +326,37 @@ export default function B2bVendorSelection() {
                                 </div>
 
                                 <div className="row">
+                                    <div className="field">
+                                        <label>Collector Code</label>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <input
+                                                type="text"
+                                                className="input-line"
+                                                placeholder="Enter collector code"
+                                                value={collectorCode}
+                                                onChange={(e) => setCollectorCode(e.target.value.toUpperCase())}
+                                                disabled={collectorApplied}
+                                                style={collectorApplied ? { background: "#f0f0f0", flex: 1 } : { flex: 1 }}
+                                            />
+                                            {!collectorApplied ? (
+                                                <button onClick={handleApplyCollectorCode} style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: 5, padding: "8px 16px", fontWeight: 600, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }}>
+                                                    Apply
+                                                </button>
+                                            ) : (
+                                                <button onClick={handleRemoveCollectorCode} style={{ background: "#e53935", border: "none", color: "white", borderRadius: 5, padding: "8px 12px", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}>
+                                                    ✕ Remove
+                                                </button>
+                                            )}
+                                        </div>
+                                        {collectorApplied && (
+                                            <span style={{ fontSize: 12, color: "#2e7d32", marginTop: 4, display: "block" }}>
+                                                ✅ {collectorCode} — {collectorDiscount}% discount applied
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="row">
                                     <div className="field"><label>Remarks (Optional)</label><input type="text" className="input-line" placeholder="Any special instructions or notes..." value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
                                 </div>
 
@@ -294,8 +365,8 @@ export default function B2bVendorSelection() {
                                 )}
 
                                 <div className="footer-btns">
-                                    <button className="draftBtn" onClick={handleBack}>{"\u2190"} Cancel</button>
-                                    <button className="continueBtn" onClick={handleContinue}>Continue to Products {"\u2192"}</button>
+                                    <button className="draftBtn" onClick={handleBack}> Cancel</button>
+                                    <button className="continueBtn" onClick={handleContinue}>Continue to Products</button>
                                 </div>
                             </>
                         )}

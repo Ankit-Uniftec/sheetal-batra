@@ -144,6 +144,9 @@ export default function B2bOrderView() {
             merchandiser: order.merchandiser_name || "",
             orderType: order.b2b_order_type || "Buyout",
             discountPercent: order.markdown_percent || 0,
+            collectorDiscount: order.discount_percent || 0,
+            collectorCode: order.discount_code || "",
+            collectorApplied: (order.discount_percent || 0) > 0,
             remarks: order.comments || "",
             availableCredit: (vendor.credit_limit || 0) - (vendor.current_credit_used || 0),
         };
@@ -197,7 +200,7 @@ export default function B2bOrderView() {
                 <img src={Logo} alt="logo" className="b2bov-logo" onClick={handleBack} />
                 <h1 className="b2bov-title">Order Details</h1>
                 <div className="b2bov-header-actions">
-                    {canEdit() && (
+                    {canEdit() && userRole !== "production" && (
                         <button className="b2bov-edit-btn" onClick={handleEdit}>
                             {"\u270E"} Edit Order
                         </button>
@@ -215,13 +218,15 @@ export default function B2bOrderView() {
                             <strong>Order Rejected</strong>
                             {order.rejection_reason && <p className="b2bov-rejection-reason">{order.rejection_reason}</p>}
                             {order.approved_by && <p className="b2bov-rejection-by">Rejected by: {order.approved_by} {order.approved_at ? `on ${formatDate(order.approved_at)}` : ""}</p>}
-                            <button className="b2bov-edit-inline-btn" onClick={handleEdit}>{"\u270E"} Edit & Resubmit</button>
+                            {userRole !== "production" && (
+                                <button className="b2bov-edit-inline-btn" onClick={handleEdit}>{"\u270E"} Edit & Resubmit</button>
+                            )}
                         </div>
                     </div>
                 )}
 
                 {/* Edit Window Notice */}
-                {order.approval_status?.toLowerCase() === "pending" && getHoursSinceSubmission() <= 30 && (
+                {order.approval_status?.toLowerCase() === "pending" && getHoursSinceSubmission() <= 30 && userRole !== "production" && (
                     <div className="b2bov-edit-notice">
                         Edit window: {Math.max(0, Math.ceil(30 - getHoursSinceSubmission()))} hours remaining
                     </div>
@@ -253,9 +258,11 @@ export default function B2bOrderView() {
 
                 {/* PDF Actions */}
                 <div className="b2bov-actions-bar" style={{ display: "flex", gap: 10, justifyContent: "flex-end", padding: "10px 20px", flexWrap: "wrap" }}>
-                    <button className="b2bov-action-btn" onClick={() => handleDownloadPdf("customer")} disabled={pdfLoading === "customer"} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
-                        {pdfLoading === "customer" ? "Downloading..." : "\uD83D\uDCC4 Customer PDF"}
-                    </button>
+                    {userRole !== "production" && (
+                        <button className="b2bov-action-btn" onClick={() => handleDownloadPdf("customer")} disabled={pdfLoading === "customer"} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
+                            {pdfLoading === "customer" ? "Downloading..." : "\uD83D\uDCC4 Customer PDF"}
+                        </button>
+                    )}
                     <button className="b2bov-action-btn" onClick={() => handleDownloadPdf("warehouse")} disabled={pdfLoading === "warehouse"} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
                         {pdfLoading === "warehouse" ? "Downloading..." : "\uD83D\uDCC4 Warehouse PDF"}
                     </button>
@@ -401,10 +408,16 @@ export default function B2bOrderView() {
                             <label>GST (18%):</label>
                             <span>₹{formatIndianNumber(Math.round(order.taxes || 0))}</span>
                         </div>
+                        {order.markdown_percent > 0 && (
+                            <div className="b2bov-field">
+                                <label>Markdown ({order.markdown_percent}%):</label>
+                                <span style={{ color: "#4caf50" }}>- ₹{formatIndianNumber(Math.round(order.markdown_amount || 0))}</span>
+                            </div>
+                        )}
                         {order.discount_percent > 0 && (
                             <div className="b2bov-field">
-                                <label>Markdown ({order.discount_percent}%):</label>
-                                <span>- ₹{formatIndianNumber(Math.round(order.discount_amount || 0))}</span>
+                                <label>Collector Code ({order.discount_percent}%){order.discount_code ? ` — ${order.discount_code}` : ""}:</label>
+                                <span style={{ color: "#4caf50" }}>- ₹{formatIndianNumber(Math.round(order.discount_amount || 0))}</span>
                             </div>
                         )}
                         <div className="b2bov-field b2bov-field-total">
