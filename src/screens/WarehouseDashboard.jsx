@@ -1307,6 +1307,9 @@ const WarehouseDashboard = () => {
 
                           <div className="wd-dropdown-info">
                             <p><strong className="wd-label">Order Id:</strong> {order.order_no}</p>
+                            {order.is_b2b && order.po_number && (
+                              <p><strong className="wd-label">PO Number:</strong> {order.po_number}</p>
+                            )}
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
 
                             {/* Client & SA Name — responsive row */}
@@ -1549,6 +1552,9 @@ const WarehouseDashboard = () => {
                         .map((order) => (
                           <div className="wd-calendar-order-item" key={order.id}>
                             <p><b>Order No:</b> {order.order_no}</p>
+                            {order.is_b2b && order.po_number && (
+                              <p><b>PO Number:</b> {order.po_number}</p>
+                            )}
                             <p><b>Client Name:</b> {order.delivery_name}</p>
                             <p><b>Status:</b> {order.status || "Pending"}</p>
                           </div>
@@ -1572,8 +1578,8 @@ const WarehouseDashboard = () => {
             </div>
 
             <div className="popup-body"> */}
-              {/* Reason Field */}
-              {/* <div className="wd-qc-field">
+      {/* Reason Field */}
+      {/* <div className="wd-qc-field">
                 <label className="wd-qc-label">Reason for QC Failure *</label>
                 <textarea
                   className="wd-qc-textarea"
@@ -1584,8 +1590,8 @@ const WarehouseDashboard = () => {
                 />
               </div> */}
 
-              {/* Outcome Selection */}
-              {/* <div className="wd-qc-field">
+      {/* Outcome Selection */}
+      {/* <div className="wd-qc-field">
                 <label className="wd-qc-label">Select Outcome *</label>
                 <div className="wd-qc-outcome-btns">
                   <button
@@ -1609,8 +1615,8 @@ const WarehouseDashboard = () => {
                 </div>
               </div> */}
 
-              {/* Re-journey Stage Dropdown (only if rejourney selected) */}
-              {/* {qcFailPopup.outcome === "rejourney" && (
+      {/* Re-journey Stage Dropdown (only if rejourney selected) */}
+      {/* {qcFailPopup.outcome === "rejourney" && (
                 <div className="wd-qc-field">
                   <label className="wd-qc-label">Restart from Stage *</label>
                   <select

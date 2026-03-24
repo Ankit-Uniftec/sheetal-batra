@@ -477,10 +477,15 @@
 
 .b2b-order-search-bar {
   margin: 12px 0 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
-.b2b-order-search-bar input {
-  width: 100%;
+.b2b-order-search-bar input[type="text"] {
+  flex: 1 1 200px;
+  min-width: 180px;
   max-width: 420px;
   padding: 10px 14px;
   border-radius: 8px;
@@ -489,8 +494,18 @@
   outline: none;
 }
 
-.b2b-order-search-bar input:focus {
+.b2b-order-search-bar input[type="text"]:focus {
   border-color: #b79b3d;
+}
+
+.b2b-order-search-bar select,
+.b2b-order-search-bar input[type="date"] {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
 }
 
 .b2b-order-list-scroll {
@@ -1126,26 +1141,139 @@
     gap: 4px;
   }
 }
+
 /* ==================== ENHANCED ALERT STYLES ==================== */
-.b2b-alert-item { padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-.b2b-alert-item:last-child { border-bottom: none; }
-.b2b-alert-top { display: flex; justify-content: space-between; align-items: center; }
-.b2b-rejected-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
-.b2b-alert-reason { font-size: 12px; color: #666; margin: 4px 0; padding: 4px 8px; background: #fafafa; border-radius: 4px; border-left: 2px solid #c62828; }
-.b2b-alert-actions { display: flex; gap: 6px; margin-top: 6px; }
-.b2b-alert-edit-btn { border: none; border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; background: #d5b85a; color: white !important; transition: all 0.2s; }
-.b2b-alert-edit-btn:hover { background: #c9a94e; }
-.b2b-alert-view-btn { border: none; border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; background: #f0f0f0; color: #555; transition: all 0.2s; }
-.b2b-alert-view-btn:hover { background: #e0e0e0; }
+.b2b-alert-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.b2b-alert-item:last-child {
+  border-bottom: none;
+}
+
+.b2b-alert-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.b2b-rejected-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+.b2b-alert-reason {
+  font-size: 12px;
+  color: #666;
+  margin: 4px 0;
+  padding: 4px 8px;
+  background: #fafafa;
+  border-radius: 4px;
+  border-left: 2px solid #c62828;
+}
+
+.b2b-alert-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.b2b-alert-edit-btn {
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #d5b85a;
+  color: white !important;
+  transition: all 0.2s;
+}
+
+.b2b-alert-edit-btn:hover {
+  background: #c9a94e;
+}
+
+.b2b-alert-view-btn {
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #f0f0f0;
+  color: #555;
+  transition: all 0.2s;
+}
+
+.b2b-alert-view-btn:hover {
+  background: #e0e0e0;
+}
 
 /* Urgent Badge */
-.b2b-urgent-badge { font-weight: bold; background: #fbe9e7; color: #e53935; border: 1px solid #e53835a8; padding: 4px 10px; border-radius: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.b2b-urgent-badge {
+  font-weight: bold;
+  background: #fbe9e7;
+  color: #e53935;
+  border: 1px solid #e53835a8;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* Credit Exceeded Badge */
-.b2b-credit-badge { background: #fce4ec; color: #c62828; border: 1px solid #c62828; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.b2b-credit-badge {
+  background: #fce4ec;
+  color: #c62828;
+  border: 1px solid #c62828;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* PDF Button */
-.b2b-order-card-footer { padding: 8px 16px; border-top: 1px solid #f0f0f0; }
-.b2b-pdf-btn { background: none; border: 1px solid #c5a46d; color: #8b7240; padding: 4px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500; }
-.b2b-pdf-btn:hover { background: #fdf6e3; }
-.b2b-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.b2b-order-card-footer {
+  padding: 8px 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.b2b-pdf-btn {
+  background: none;
+  border: 1px solid #c5a46d;
+  color: #8b7240;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.b2b-pdf-btn:hover {
+  background: #fdf6e3;
+}
+
+.b2b-pdf-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.b2b-clear-filters-btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: #e53935;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+}

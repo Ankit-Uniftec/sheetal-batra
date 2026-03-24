@@ -29,6 +29,9 @@ export default function B2bMerchandiserDashboard() {
     const [orderSearch, setOrderSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [typeFilter, setTypeFilter] = useState("all");
+    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
 
@@ -124,11 +127,23 @@ export default function B2bMerchandiserDashboard() {
         }, {});
     }, [orders]);
 
+    const uniqueMerchandisers = useMemo(() => {
+        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        return names.sort();
+    }, [orders]);
+
     // ==================== FILTERED ORDERS ====================
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
         if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter);
         if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
+        if (dateTo) {
+            const endDate = new Date(dateTo);
+            endDate.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
+        }
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
             filtered = filtered.filter(o =>
@@ -137,7 +152,7 @@ export default function B2bMerchandiserDashboard() {
             );
         }
         return filtered;
-    }, [orders, statusFilter, typeFilter, orderSearch, vendorMap]);
+    }, [orders, statusFilter, typeFilter, merchandiserFilter, dateFrom, dateTo, orderSearch, vendorMap]);
 
     const paginatedOrders = useMemo(() => {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -556,10 +571,16 @@ export default function B2bMerchandiserDashboard() {
                 {activeTab === "orders" && (
                     <div className="merch-tab-wrapper">
                         <h2 className="merch-tab-title">All Orders</h2>
-                        <div className="merch-filters-row">
+                        <div className="merch-filters-row" style={{ flexWrap: "wrap" }}>
                             <input type="text" placeholder="Search order #, PO, vendor, merchandiser..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="merch-search-input" />
                             <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
-                            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option></select>
+                            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option></select>
+                            <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Merchandisers</option>{uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}</select>
+                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="merch-filter-select" title="From date" />
+                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="merch-filter-select" title="To date" />
+                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
+                                <button onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
+                            )}
                         </div>
                         <div className="merch-order-list-scroll">
                             {filteredOrders.length === 0 && <p className="merch-muted">No orders match your filters.</p>}
@@ -718,82 +739,82 @@ export default function B2bMerchandiserDashboard() {
                 {activeTab === "calendar" && (() => {
                     const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
                     return (
-                    <div className="merch-calendar-wrapper">
-                        <div className="merch-ios-calendar">
-                            <div className="merch-ios-cal-header">
-                                <button
-                                    className="merch-ios-nav-btn"
-                                    disabled={new Date(calendarDate).getFullYear() === MIN_CALENDAR_DATE.getFullYear() && new Date(calendarDate).getMonth() === MIN_CALENDAR_DATE.getMonth()}
-                                    onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; })}
-                                >{"\u2039"}</button>
-                                <span className="merch-ios-month-year">
-                                    {new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}
-                                </span>
-                                <button className="merch-ios-nav-btn" onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() + 1); return n; })}>{"\u203A"}</button>
+                        <div className="merch-calendar-wrapper">
+                            <div className="merch-ios-calendar">
+                                <div className="merch-ios-cal-header">
+                                    <button
+                                        className="merch-ios-nav-btn"
+                                        disabled={new Date(calendarDate).getFullYear() === MIN_CALENDAR_DATE.getFullYear() && new Date(calendarDate).getMonth() === MIN_CALENDAR_DATE.getMonth()}
+                                        onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; })}
+                                    >{"\u2039"}</button>
+                                    <span className="merch-ios-month-year">
+                                        {new Date(calendarDate).toLocaleString("default", { month: "long", year: "numeric" })}
+                                    </span>
+                                    <button className="merch-ios-nav-btn" onClick={() => setCalendarDate(d => { const n = new Date(d); n.setMonth(n.getMonth() + 1); return n; })}>{"\u203A"}</button>
+                                </div>
+
+                                <div className="merch-ios-days-row">
+                                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                        <div key={day} className="merch-ios-day-label">{day}</div>
+                                    ))}
+                                </div>
+
+                                <div className="merch-ios-date-grid">
+                                    {(() => {
+                                        const year = new Date(calendarDate).getFullYear();
+                                        const month = new Date(calendarDate).getMonth();
+                                        const firstDayOfMonth = new Date(year, month, 1).getDay();
+                                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                        const totalCells = Math.ceil((firstDayOfMonth + daysInMonth) / 7) * 7;
+
+                                        return Array.from({ length: totalCells }).map((_, i) => {
+                                            const date = i - firstDayOfMonth + 1;
+                                            if (date <= 0 || date > daysInMonth) {
+                                                return <div key={i} className="merch-ios-date-cell merch-ios-empty" />;
+                                            }
+                                            const currentDay = new Date(year, month, date);
+                                            const fullDate = formatDate(currentDay);
+                                            const todayDate = formatDate(new Date());
+                                            const isToday = fullDate === todayDate;
+                                            const isSelected = selectedCalendarDate === fullDate;
+                                            const orderCount = ordersByDate[fullDate] || 0;
+
+                                            return (
+                                                <div key={i} className={`merch-ios-date-cell ${isToday ? "merch-ios-today" : ""} ${isSelected ? "merch-ios-selected" : ""}`} onClick={() => setSelectedCalendarDate(fullDate)}>
+                                                    <span className="merch-ios-date-num">{date}</span>
+                                                    {orderCount > 0 && <span className="merch-ios-order-count">{orderCount}</span>}
+                                                </div>
+                                            );
+                                        });
+                                    })()}
+                                </div>
                             </div>
 
-                            <div className="merch-ios-days-row">
-                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-                                    <div key={day} className="merch-ios-day-label">{day}</div>
-                                ))}
-                            </div>
-
-                            <div className="merch-ios-date-grid">
-                                {(() => {
-                                    const year = new Date(calendarDate).getFullYear();
-                                    const month = new Date(calendarDate).getMonth();
-                                    const firstDayOfMonth = new Date(year, month, 1).getDay();
-                                    const daysInMonth = new Date(year, month + 1, 0).getDate();
-                                    const totalCells = Math.ceil((firstDayOfMonth + daysInMonth) / 7) * 7;
-
-                                    return Array.from({ length: totalCells }).map((_, i) => {
-                                        const date = i - firstDayOfMonth + 1;
-                                        if (date <= 0 || date > daysInMonth) {
-                                            return <div key={i} className="merch-ios-date-cell merch-ios-empty" />;
-                                        }
-                                        const currentDay = new Date(year, month, date);
-                                        const fullDate = formatDate(currentDay);
-                                        const todayDate = formatDate(new Date());
-                                        const isToday = fullDate === todayDate;
-                                        const isSelected = selectedCalendarDate === fullDate;
-                                        const orderCount = ordersByDate[fullDate] || 0;
-
-                                        return (
-                                            <div key={i} className={`merch-ios-date-cell ${isToday ? "merch-ios-today" : ""} ${isSelected ? "merch-ios-selected" : ""}`} onClick={() => setSelectedCalendarDate(fullDate)}>
-                                                <span className="merch-ios-date-num">{date}</span>
-                                                {orderCount > 0 && <span className="merch-ios-order-count">{orderCount}</span>}
-                                            </div>
-                                        );
-                                    });
-                                })()}
-                            </div>
+                            {selectedCalendarDate && (
+                                <div className="merch-calendar-orders-section">
+                                    <div className="merch-card-header" style={{ marginBottom: 8 }}>
+                                        <span className="merch-tab-title" style={{ margin: 0 }}>Orders for {selectedCalendarDate} ({orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length})</span>
+                                    </div>
+                                    <div className="merch-calendar-orders-list">
+                                        {orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length === 0 ? (
+                                            <p className="merch-muted">No orders scheduled for this date</p>
+                                        ) : (
+                                            orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).map((order) => (
+                                                <div className="merch-calendar-order-item" key={order.id} onClick={() => navigate(`/b2b-order-view/${order.id}`)} style={{ cursor: "pointer" }}>
+                                                    <p><b>Order No:</b> {order.order_no}</p>
+                                                    <p><b>PO:</b> {order.po_number || "\u2014"}</p>
+                                                    <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
+                                                    <p><b>Status:</b> {order.approval_status || "Pending"}
+                                                        {order.order_flag === "Urgent" && <b style={{ color: "#e53935", marginLeft: 8 }}>{"\u26A0"} Urgent</b>}
+                                                    </p>
+                                                    <p><b>Delivery:</b> {formatDate(order.delivery_date)}</p>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-
-                        {selectedCalendarDate && (
-                            <div className="merch-calendar-orders-section">
-                                <div className="merch-card-header" style={{ marginBottom: 8 }}>
-                                    <span className="merch-tab-title" style={{ margin: 0 }}>Orders for {selectedCalendarDate} ({orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length})</span>
-                                </div>
-                                <div className="merch-calendar-orders-list">
-                                    {orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length === 0 ? (
-                                        <p className="merch-muted">No orders scheduled for this date</p>
-                                    ) : (
-                                        orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).map((order) => (
-                                            <div className="merch-calendar-order-item" key={order.id} onClick={() => navigate(`/b2b-order-view/${order.id}`)} style={{ cursor: "pointer" }}>
-                                                <p><b>Order No:</b> {order.order_no}</p>
-                                                <p><b>PO:</b> {order.po_number || "\u2014"}</p>
-                                                <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
-                                                <p><b>Status:</b> {order.approval_status || "Pending"}
-                                                    {order.order_flag === "Urgent" && <b style={{ color: "#e53935", marginLeft: 8 }}>{"\u26A0"} Urgent</b>}
-                                                </p>
-                                                <p><b>Delivery:</b> {formatDate(order.delivery_date)}</p>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
                     );
                 })()}
 

@@ -85,7 +85,9 @@ export default function B2bOrderDetails() {
 
     const discountPercent = vendorData?.discountPercent || 0;
     const markdownAmount = grandTotal * (discountPercent / 100);
-    const finalTotal = grandTotal - markdownAmount;
+    const collectorDiscount = vendorData?.collectorDiscount || 0;
+    const collectorDiscountAmount = grandTotal * (collectorDiscount / 100);
+    const finalTotal = grandTotal - markdownAmount - collectorDiscountAmount;
 
     const availableCredit = vendorData?.availableCredit || 0;
     const orderType = vendorData?.orderType || "Buyout";
@@ -188,6 +190,9 @@ export default function B2bOrderDetails() {
                         <div className="b2b-od-field-inline"><label>Gross Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(grandTotal))}</span></div>
                         {discountPercent > 0 && (
                             <div className="b2b-od-field-inline"><label>Markdown ({discountPercent}%):</label><span style={{ color: "#4caf50" }}>- {"\u20B9"}{formatIndianNumber(Math.round(markdownAmount))}</span></div>
+                        )}
+                        {collectorDiscount > 0 && (
+                            <div className="b2b-od-field-inline"><label>Collector Code ({collectorDiscount}%):</label><span style={{ color: "#4caf50" }}>- {"\u20B9"}{formatIndianNumber(Math.round(collectorDiscountAmount))}</span></div>
                         )}
                         <div className="b2b-od-final-total-inline"><label>Final Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(finalTotal))}</span></div>
                         <div className="b2b-od-field-inline"><label>Available Credit:</label><span style={{ color: availableCredit <= 0 ? "#c62828" : "#2e7d32" }}>{"\u20B9"}{formatIndianNumber(availableCredit)}</span></div>

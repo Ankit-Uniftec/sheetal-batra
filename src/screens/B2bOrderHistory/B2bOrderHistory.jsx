@@ -36,6 +36,9 @@ export default function B2bOrderHistory() {
     // Filters
     const [statusFilter, setStatusFilter] = useState("all");
     const [typeFilter, setTypeFilter] = useState("all");
+    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
 
     // Pagination
@@ -101,21 +104,39 @@ export default function B2bOrderHistory() {
         fetchData();
     }, [statusFilter, typeFilter]);
 
+    const uniqueMerchandisers = useMemo(() => {
+        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        return names.sort();
+    }, [orders]);
+
     // ==================== FILTERED & PAGINATED ====================
     const filteredOrders = useMemo(() => {
-        if (!searchQuery.trim()) return orders;
-        const q = searchQuery.toLowerCase().trim();
-        return orders.filter((order) => {
-            const item = order.items?.[0] || {};
-            return (
-                order.order_no?.toLowerCase().includes(q) ||
-                order.po_number?.toLowerCase().includes(q) ||
-                order.vendor_name?.toLowerCase().includes(q) ||
-                item.product_name?.toLowerCase().includes(q) ||
-                order.approval_status?.toLowerCase().includes(q)
-            );
-        });
-    }, [orders, searchQuery]);
+        let filtered = [...orders];
+
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
+        if (dateTo) {
+            const endDate = new Date(dateTo);
+            endDate.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
+        }
+
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            filtered = filtered.filter((order) => {
+                const item = order.items?.[0] || {};
+                return (
+                    order.order_no?.toLowerCase().includes(q) ||
+                    order.po_number?.toLowerCase().includes(q) ||
+                    order.vendor_name?.toLowerCase().includes(q) ||
+                    item.product_name?.toLowerCase().includes(q) ||
+                    order.approval_status?.toLowerCase().includes(q)
+                );
+            });
+        }
+
+        return filtered;
+    }, [orders, searchQuery, merchandiserFilter, dateFrom, dateTo]);
 
     const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
     const startIndex = (currentPage - 1) * ordersPerPage;
@@ -214,7 +235,19 @@ export default function B2bOrderHistory() {
                                 <option value="all">All Types</option>
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
+                                <option value="Client Order">Client Order</option>
                             </select>
+                            <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="b2boh-filter-select">
+                                <option value="all">All Merchandisers</option>
+                                {uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                            <label style={{ fontSize: 12, color: "#888", marginTop: 8 }}>From Date</label>
+                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="b2boh-filter-select" />
+                            <label style={{ fontSize: 12, color: "#888", marginTop: 4 }}>To Date</label>
+                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="b2boh-filter-select" />
+                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
+                                <button onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear All Filters</button>
+                            )}
                         </div>
                     </div>
                 </aside>
