@@ -119,14 +119,21 @@ export default function B2bProductionDashboard() {
     const readyForDispatch = useMemo(() => orders.filter(o => getProdStatus(o) === "ready_for_dispatch"), [orders]);
     const dispatched = useMemo(() => orders.filter(o => getProdStatus(o) === "dispatched"), [orders]);
 
-    const stats = useMemo(() => ({
-        total: orders.length,
-        pending: pendingProduction.length,
-        inProd: inProduction.length,
-        ready: readyForDispatch.length,
-        dispatched: dispatched.length,
-        totalValue: orders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-    }), [orders, pendingProduction, inProduction, readyForDispatch, dispatched]);
+    const stats = useMemo(() => {
+        const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
+        return {
+            total: orders.length,
+            salesCount: salesOrders.length,
+            pending: pendingProduction.length,
+            inProd: inProduction.length,
+            ready: readyForDispatch.length,
+            dispatched: dispatched.length,
+            salesValue: salesOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            consignmentValue: consignmentOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            consignmentCount: consignmentOrders.length,
+        };
+    }, [orders, pendingProduction, inProduction, readyForDispatch, dispatched]);
 
     // Calendar orders by delivery date
     const ordersByDate = useMemo(() => {
@@ -317,13 +324,13 @@ export default function B2bProductionDashboard() {
                 {activeTab === "dashboard" && (
                     <>
                         <div className="prod-cell prod-stat-1">
-                            <StatCard title="Alerts" value={stats.pending} change={`Total: ${stats.total}`} highlight={stats.pending > 0} />
+                            <StatCard title="Alerts" value={stats.pending} change={`Sales Orders: ${stats.salesCount}`} highlight={stats.pending > 0} />
                         </div>
                         <div className="prod-cell prod-stat-2">
                             <StatCard title="In Production" value={stats.inProd} change={`Ready: ${stats.ready}`} />
                         </div>
                         <div className="prod-cell prod-stat-3">
-                            <StatCard title="Dispatched" value={stats.dispatched} change={`Total: ${stats.total}`} />
+                            <StatCard title="Dispatched" value={stats.dispatched} change={`Consignment: ${stats.consignmentCount}`} />
                         </div>
 
                         {/* Alerts */}
