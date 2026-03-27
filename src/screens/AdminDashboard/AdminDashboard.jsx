@@ -176,6 +176,7 @@ export default function AdminDashboard() {
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [salespersonTable, setSalespersonTable] = useState([]);
     const [pdfLoading, setPdfLoading] = useState(null);
 
     // Dashboard states
@@ -232,6 +233,7 @@ export default function AdminDashboard() {
     // B2B tab states
     const [b2bSearch, setB2bSearch] = useState("");
     const [b2bPage, setB2bPage] = useState(1);
+    const [b2bMerchandiserFilter, setB2bMerchandiserFilter] = useState("");
 
     // Channel filter for dashboard
     const [channelFilter, setChannelFilter] = useState("all");
@@ -271,12 +273,14 @@ export default function AdminDashboard() {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [ordersRes, productsRes] = await Promise.all([
+            const [ordersRes, productsRes, spRes] = await Promise.all([
                 supabase.from("orders").select("*").order("created_at", { ascending: false }),
                 supabase.from("products").select("*").order("name", { ascending: true }),
+                supabase.from("salesperson").select("saleperson, role"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data);
             if (productsRes.data) setProducts(productsRes.data);
+            if (spRes.data) setSalespersonTable(spRes.data);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
@@ -1211,31 +1215,84 @@ export default function AdminDashboard() {
     // NEW: B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
-        const b2bOrders = orders.filter(o => {
-            return getOrderChannel(o) === "B2B";
-        });
+        const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B");
 
         const dateRange = getDateRange(timeline);
-        const currentB2b = b2bOrders.filter(o => {
+        let currentB2b = allB2bOrders.filter(o => {
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });
 
+        // Merchandiser filter
+        const merchandiserList = salespersonTable.filter(s => s.role === "merchandiser").map(s => s.saleperson).sort();
+        if (b2bMerchandiserFilter) {
+            currentB2b = currentB2b.filter(o =>
+                getOrderSalesperson(o) === b2bMerchandiserFilter
+            );
+        }
+
+        // Order type breakdown
+        const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
+        const consignmentOrders = currentB2b.filter(o => o.b2b_order_type === "Consignment");
+        const clientOrderOrders = currentB2b.filter(o => o.b2b_order_type === "Client Order");
+        const buyoutValue = buyoutOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const consignmentValue = consignmentOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const clientOrderValue = clientOrderOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+
+        // Client sales map
         const clientSales = {};
         currentB2b.forEach(o => {
             const client = o.delivery_name || o.vendor_name || "Unknown";
-            if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
+            if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
             clientSales[client].sales += Number(o.grand_total || 0);
             clientSales[client].orders += 1;
             clientSales[client].advance += Number(o.advance_payment || 0);
             clientSales[client].balance += Math.max(0, Number(o.grand_total || 0) - Number(o.advance_payment || 0));
+            if (o.created_at < clientSales[client].firstSeen) clientSales[client].firstSeen = o.created_at;
         });
 
-        const allClientSales = Object.values(clientSales).sort((a, b) => b.sales - a.sales);
+        // MOM growth: compare current period vs previous same-length period
+        const periodMs = dateRange.end - dateRange.start;
+        const prevStart = new Date(dateRange.start.getTime() - periodMs);
+        const prevEnd = new Date(dateRange.start);
+        const prevB2b = allB2bOrders.filter(o => {
+            const d = new Date(o.created_at);
+            return d >= prevStart && d < prevEnd;
+        });
+        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
         const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const revenueGrowth = prevRevenue > 0 ? ((totalB2bRevenue - prevRevenue) / prevRevenue * 100) : 0;
+        const ordersGrowth = prevB2b.length > 0 ? ((currentB2b.length - prevB2b.length) / prevB2b.length * 100) : 0;
+
+        // New clients this period (first order within date range)
+        const allClientFirstOrders = {};
+        allB2bOrders.forEach(o => {
+            const client = o.delivery_name || o.vendor_name || "Unknown";
+            if (!allClientFirstOrders[client] || o.created_at < allClientFirstOrders[client]) {
+                allClientFirstOrders[client] = o.created_at;
+            }
+        });
+        const newClientsCount = Object.entries(allClientFirstOrders).filter(([, firstOrder]) => {
+            const d = new Date(firstOrder);
+            return d >= dateRange.start && d <= dateRange.end;
+        }).length;
+
+        // Product analysis from B2B orders
+        const productSales = {};
+        currentB2b.forEach(o => {
+            (o.items || []).forEach(item => {
+                const name = item.product_name || "Unknown";
+                if (!productSales[name]) productSales[name] = { name, qty: 0, revenue: 0 };
+                productSales[name].qty += Number(item.quantity || 1);
+                productSales[name].revenue += Number(item.price || 0) * Number(item.quantity || 1);
+            });
+        });
+        const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+
+        const allClientSales = Object.values(clientSales).sort((a, b) => b.sales - a.sales);
         const totalB2bAdvance = currentB2b.reduce((s, o) => s + Number(o.advance_payment || 0), 0);
 
-        // Search
+        // Search filter
         let filteredB2b = allClientSales;
         if (b2bSearch.trim()) {
             const q = b2bSearch.toLowerCase();
@@ -1248,10 +1305,15 @@ export default function AdminDashboard() {
         return {
             totalB2bRevenue, totalB2bOrders: currentB2b.length, totalB2bAdvance,
             totalB2bBalance: totalB2bRevenue - totalB2bAdvance,
+            revenueGrowth, ordersGrowth, newClientsCount,
+            buyoutOrders: buyoutOrders.length, buyoutValue,
+            consignmentOrders: consignmentOrders.length, consignmentValue,
+            clientOrderOrders: clientOrderOrders.length, clientOrderValue,
             currentB2bClients, b2bTotalPages, allClientSales,
             advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
+            merchandiserList, topB2bProducts,
         };
-    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage]);
+    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, b2bMerchandiserFilter, salespersonTable]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: ENHANCED INVENTORY (Delayed deliveries)
@@ -2485,15 +2547,49 @@ export default function AdminDashboard() {
                     {/* ═══════════════════════════════════════════════════════════ */}
                     {activeTab === "b2b_vendor" && (
                         <div className="admin-b2b-tab">
-                            <h2 className="admin-section-title">B2B & Vendor Overview</h2>
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+                            <div className="cmo-tab-header">
+                                <h2 className="admin-section-title">B2B & Vendor Overview</h2>
+                                <div className="cmo-filters-row">
+                                    <div className="cmo-timeline-pills">
+                                        {TIMELINE_OPTIONS.map(opt => (
+                                            <button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`}
+                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="cmo-filters-right">
+                                        {showCustomDatePicker && (
+                                            <div className="cmo-date-range">
+                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
+                                                <span className="cmo-date-sep">→</span>
+                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
+                                            </div>
+                                        )}
+                                        <select className="cmo-compare-select" value={b2bMerchandiserFilter} onChange={(e) => { setB2bMerchandiserFilter(e.target.value); setB2bPage(1); }}>
+                                            <option value="">All Merchandisers</option>
+                                            {b2bStats.merchandiserList.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Summary stat cards */}
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 20 }}>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">B2B Revenue</span>
                                     <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bRevenue.toFixed(0))}</span>
+                                    <GrowthIndicator value={b2bStats.revenueGrowth} />
                                 </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">B2B Orders</span>
                                     <span className="stat-value">{b2bStats.totalB2bOrders}</span>
+                                    <GrowthIndicator value={b2bStats.ordersGrowth} />
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">New Clients</span>
+                                    <span className="stat-value">{b2bStats.newClientsCount}</span>
+                                    <span className="stat-sub">this period</span>
                                 </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Advance Collected</span>
@@ -2503,19 +2599,56 @@ export default function AdminDashboard() {
                                     <span className="stat-label">Balance Pending</span>
                                     <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bBalance.toFixed(0))}</span>
                                 </div>
+                            </div>
+
+                            {/* Buyout vs Consignment vs Client Order */}
+                            <h3 className="admin-subsection-title">Order Type Breakdown</h3>
+                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: 20 }}>
                                 <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Credit Exposure</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Credit limit data pending" />
+                                    <span className="stat-label">Buyout Orders</span>
+                                    <span className="stat-value">{b2bStats.buyoutOrders}</span>
+                                    <span className="stat-sub">₹{formatIndianNumber(b2bStats.buyoutValue.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Client Orders</span>
+                                    <span className="stat-value">{b2bStats.clientOrderOrders}</span>
+                                    <span className="stat-sub">₹{formatIndianNumber(b2bStats.clientOrderValue.toFixed(0))}</span>
+                                </div>
+                                <div className="admin-stat-card overview-card" style={{ borderLeft: '3px solid #9c27b0' }}>
+                                    <span className="stat-label">Consignment</span>
+                                    <span className="stat-value" style={{ color: '#9c27b0' }}>{b2bStats.consignmentOrders}</span>
+                                    <span className="stat-sub" style={{ color: '#9c27b0' }}>₹{formatIndianNumber(b2bStats.consignmentValue.toFixed(0))}</span>
                                 </div>
                             </div>
 
-                            {/* 1. Client-wise Sales */}
+                            {/* Buyout vs Consignment chart */}
+                            {(b2bStats.buyoutOrders + b2bStats.consignmentOrders + b2bStats.clientOrderOrders) > 0 && (
+                                <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
+                                    <h3 className="chart-title">Buyout vs Consignment Mix</h3>
+                                    <ResponsiveContainer width="100%" height={260}>
+                                        <BarChart data={[
+                                            { name: "Buyout", orders: b2bStats.buyoutOrders, value: Math.round(b2bStats.buyoutValue) },
+                                            { name: "Client Order", orders: b2bStats.clientOrderOrders, value: Math.round(b2bStats.clientOrderValue) },
+                                            { name: "Consignment", orders: b2bStats.consignmentOrders, value: Math.round(b2bStats.consignmentValue) },
+                                        ]} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                            <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                                            <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                            <Tooltip formatter={(v, name) => [name === "value" ? `₹${formatIndianNumber(v)}` : v, name === "value" ? "Revenue" : "Orders"]} />
+                                            <Legend />
+                                            <Bar dataKey="value" name="Revenue" fill="#d5b85a" radius={[4, 4, 0, 0]} barSize={48} />
+                                            <Bar dataKey="orders" name="Orders" fill="#8B7355" radius={[4, 4, 0, 0]} barSize={48} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+
+                            {/* Client-wise Sales */}
                             <h3 className="admin-subsection-title">Client-wise Sales</h3>
                             <div className="admin-toolbar">
                                 <div className="admin-search-wrapper">
                                     <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search B2B client..." value={b2bSearch} onChange={(e) => setB2bSearch(e.target.value)} className="admin-search-input" />
+                                    <input type="text" placeholder="Search B2B client..." value={b2bSearch} onChange={(e) => { setB2bSearch(e.target.value); setB2bPage(1); }} className="admin-search-input" />
                                     {b2bSearch && <button className="search-clear" onClick={() => setB2bSearch("")}>×</button>}
                                 </div>
                             </div>
@@ -2547,9 +2680,28 @@ export default function AdminDashboard() {
                                 </div>
                             )}
 
-                            {/* 3. Advance Pending Clients */}
+                            {/* Top B2B Products */}
+                            {b2bStats.topB2bProducts.length > 0 && (
+                                <div style={{ marginTop: 24 }}>
+                                    <h3 className="admin-subsection-title">Product Analysis (B2B Sales)</h3>
+                                    <div className="analytics-chart-card">
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={b2bStats.topB2bProducts} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
+                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: '#555' }} axisLine={false} tickLine={false}
+                                                    tickFormatter={(v) => v.length > 25 ? v.substring(0, 25) + "…" : v} />
+                                                <Tooltip formatter={(v, name) => [name === "revenue" ? `₹${formatIndianNumber(v)}` : v, name === "revenue" ? "Revenue" : "Qty"]} />
+                                                <Bar dataKey="revenue" name="revenue" fill="#d5b85a" radius={[0, 4, 4, 0]} barSize={18} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Advance Pending Clients */}
                             {b2bStats.advancePending.length > 0 && (
-                                <div style={{ marginTop: 20 }}>
+                                <div style={{ marginTop: 24 }}>
                                     <h3 className="admin-subsection-title">⚠️ Advance Pending Clients</h3>
                                     <div className="admin-table-wrapper"><div className="admin-table-container">
                                         <table className="admin-table">
@@ -2568,24 +2720,6 @@ export default function AdminDashboard() {
                                     </div></div>
                                 </div>
                             )}
-
-                            {/* 4. Buyout vs Consignment */}
-                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Buyout vs Consignment Mix</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="Order type classification pending" />
-                                        <span>Buyout and consignment breakdown will appear here</span>
-                                    </div>
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Client Credit Exposure</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="Credit limit tracking pending" />
-                                        <span>Credit utilization per B2B client will appear here</span>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     )}
 

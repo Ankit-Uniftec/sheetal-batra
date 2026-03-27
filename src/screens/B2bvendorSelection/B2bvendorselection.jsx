@@ -71,10 +71,7 @@ export default function B2bVendorSelection() {
     const [collectorApplied, setCollectorApplied] = useState(false);
     const [remarks, setRemarks] = useState("");
 
-    const merchandisers = [
-        { label: "Prastuti Kaushik", value: "Prastuti Kaushik" },
-        { label: "Tanuja Singh", value: "Tanuja Singh" },
-    ];
+    const [merchandisers, setMerchandisers] = useState([]);
 
     // Fetch user role
     useEffect(() => {
@@ -120,6 +117,18 @@ export default function B2bVendorSelection() {
                 console.error("Error restoring vendor data:", e);
             }
         }
+    }, []);
+
+    // Fetch merchandisers from salesperson table
+    useEffect(() => {
+        const fetchMerchandisers = async () => {
+            const { data } = await supabase.from("salesperson").select("saleperson, role");
+            if (data) {
+                const list = data.filter(s => s.role === "merchandiser").map(s => ({ label: s.saleperson, value: s.saleperson }));
+                setMerchandisers(list);
+            }
+        };
+        fetchMerchandisers();
     }, []);
 
     // Save to session

@@ -53,6 +53,13 @@ export default function B2bMerchandiserDashboard() {
     const [calendarDate, setCalendarDate] = useState(() => new Date());
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
+    // Analytics tab
+    const [analyticsTimeline, setAnalyticsTimeline] = useState("monthly");
+    const [analyticsCustomFrom, setAnalyticsCustomFrom] = useState("");
+    const [analyticsCustomTo, setAnalyticsCustomTo] = useState("");
+    const [showAnalyticsCustomPicker, setShowAnalyticsCustomPicker] = useState(false);
+    const [analyticsPage, setAnalyticsPage] = useState(1);
+
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
         try {
@@ -110,13 +117,16 @@ export default function B2bMerchandiserDashboard() {
 
     // ==================== STATS ====================
     const stats = useMemo(() => {
-        const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         const pending = orders.filter(o => o.approval_status === "pending");
         const approved = orders.filter(o => o.approval_status === "approved");
         const rejected = orders.filter(o => o.approval_status === "rejected");
+        const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
+        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         const buyoutValue = orders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-        const consignmentValue = orders.filter(o => o.b2b_order_type === "Consignment").reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-        return { totalRevenue, totalOrders: orders.length, pending, approved, rejected, buyoutValue, consignmentValue };
+        const clientOrderValue = orders.filter(o => o.b2b_order_type === "Client Order").reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        return { salesRevenue, totalOrders: orders.length, salesCount: salesOrders.length, pending, approved, rejected, buyoutValue, clientOrderValue, consignmentValue, consignmentCount: consignmentOrders.length };
     }, [orders]);
 
     const ordersByDate = useMemo(() => {
@@ -131,6 +141,67 @@ export default function B2bMerchandiserDashboard() {
         const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
         return names.sort();
     }, [orders]);
+
+    // ==================== VENDOR GROWTH ANALYTICS ====================
+    const vendorGrowthStats = useMemo(() => {
+        const now = new Date();
+
+        let currentStart, currentEnd, prevStart, prevEnd;
+
+        if (analyticsTimeline === "custom" && analyticsCustomFrom && analyticsCustomTo) {
+            currentStart = new Date(analyticsCustomFrom);
+            currentEnd = new Date(analyticsCustomTo);
+            currentEnd.setHours(23, 59, 59, 999);
+            const periodMs = currentEnd - currentStart;
+            prevStart = new Date(currentStart.getTime() - periodMs);
+            prevEnd = new Date(currentStart);
+        } else {
+            const periodDays = analyticsTimeline === "weekly" ? 7 : analyticsTimeline === "yearly" ? 365 : 30;
+            currentEnd = new Date(now);
+            currentStart = new Date(now);
+            currentStart.setDate(currentStart.getDate() - periodDays);
+            prevEnd = new Date(currentStart);
+            prevStart = new Date(currentStart);
+            prevStart.setDate(prevStart.getDate() - periodDays);
+        }
+
+        const currentOrders = orders.filter(o => {
+            const d = new Date(o.created_at);
+            return d >= currentStart && d <= currentEnd;
+        });
+        const prevOrders = orders.filter(o => {
+            const d = new Date(o.created_at);
+            return d >= prevStart && d < prevEnd;
+        });
+
+        // Aggregate by vendor
+        const vendorData = {};
+        vendors.forEach(v => {
+            vendorData[v.id] = { name: v.store_brand_name, code: v.vendor_code, location: v.location, current: 0, prev: 0, currentOrders: 0, prevOrders: 0 };
+        });
+
+        currentOrders.forEach(o => {
+            if (o.vendor_id && vendorData[o.vendor_id]) {
+                vendorData[o.vendor_id].current += Number(o.grand_total || 0);
+                vendorData[o.vendor_id].currentOrders += 1;
+            }
+        });
+        prevOrders.forEach(o => {
+            if (o.vendor_id && vendorData[o.vendor_id]) {
+                vendorData[o.vendor_id].prev += Number(o.grand_total || 0);
+                vendorData[o.vendor_id].prevOrders += 1;
+            }
+        });
+
+        return Object.values(vendorData)
+            .filter(v => v.current > 0 || v.prev > 0)
+            .map(v => ({
+                ...v,
+                revenueGrowth: v.prev > 0 ? ((v.current - v.prev) / v.prev * 100) : v.current > 0 ? 100 : 0,
+                ordersGrowth: v.prevOrders > 0 ? ((v.currentOrders - v.prevOrders) / v.prevOrders * 100) : v.currentOrders > 0 ? 100 : 0,
+            }))
+            .sort((a, b) => b.current - a.current);
+    }, [orders, vendors, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
 
     // ==================== FILTERED ORDERS ====================
     const filteredOrders = useMemo(() => {
@@ -403,6 +474,7 @@ export default function B2bMerchandiserDashboard() {
                         <a className={`merch-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor Book</a>
                         <a className={`merch-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`merch-menu-item ${activeTab === "consignment" ? "active" : ""}`} onClick={() => { setActiveTab("consignment"); setShowSidebar(false); }}>Consignment</a>
+                        <a className={`merch-menu-item ${activeTab === "analytics" ? "active" : ""}`} onClick={() => { setActiveTab("analytics"); setShowSidebar(false); }}>Analytics</a>
                         <a className="merch-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
@@ -414,7 +486,7 @@ export default function B2bMerchandiserDashboard() {
                             <StatCard title="Pending Approval" value={stats.pending.length} change={`Total: ${stats.totalOrders}`} highlight />
                         </div>
                         <div className="merch-cell merch-stat-2">
-                            <StatCard title="Total Revenue" value={`\u20B9${formatIndianNumber(stats.totalRevenue)}`} change={`Approved: ${stats.approved.length}`} />
+                            <StatCard title="Sales Revenue" value={`\u20B9${formatIndianNumber(stats.salesRevenue)}`} change={`Approved: ${stats.approved.length}`} />
                         </div>
                         <div className="merch-cell merch-stat-3">
                             <StatCard title="Vendors" value={vendors.length} change="Active" />
@@ -426,11 +498,16 @@ export default function B2bMerchandiserDashboard() {
                                 <div className="merch-rev-row">
                                     <div className="merch-rev-item"><span className="merch-rev-title">Buyout</span><span className="merch-rev-val">{`\u20B9${formatIndianNumber(stats.buyoutValue)}`}</span></div>
                                     <div className="merch-rev-divider"></div>
-                                    <div className="merch-rev-item"><span className="merch-rev-title">Consignment</span><span className="merch-rev-val">{`\u20B9${formatIndianNumber(stats.consignmentValue)}`}</span></div>
+                                    <div className="merch-rev-item"><span className="merch-rev-title">Client Order</span><span className="merch-rev-val">{`\u20B9${formatIndianNumber(stats.clientOrderValue)}`}</span></div>
                                     <div className="merch-rev-divider"></div>
                                     <div className="merch-rev-item"><span className="merch-rev-title">Approved</span><span className="merch-rev-val">{stats.approved.length}</span></div>
                                     <div className="merch-rev-divider"></div>
                                     <div className="merch-rev-item"><span className="merch-rev-title">Rejected</span><span className="merch-rev-val merch-red">{stats.rejected.length}</span></div>
+                                </div>
+                                <div className="merch-rev-row" style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #eee" }}>
+                                    <div className="merch-rev-item"><span className="merch-rev-title" style={{ color: "#9c27b0" }}>Consignment Value</span><span className="merch-rev-val" style={{ color: "#9c27b0" }}>{`\u20B9${formatIndianNumber(stats.consignmentValue)}`}</span></div>
+                                    <div className="merch-rev-divider"></div>
+                                    <div className="merch-rev-item"><span className="merch-rev-title" style={{ color: "#9c27b0" }}>Consignment Orders</span><span className="merch-rev-val" style={{ color: "#9c27b0" }}>{stats.consignmentCount}</span></div>
                                 </div>
                             </div>
                         </div>
@@ -736,6 +813,82 @@ export default function B2bMerchandiserDashboard() {
                 )}
 
                 {/* ===== CALENDAR TAB ===== */}
+                {activeTab === "analytics" && (
+                    <div className="merch-tab-wrapper">
+                        <div className="merch-ios-card" style={{ marginBottom: 16 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 600, fontSize: 15 }}>Vendor Growth Analytics</span>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
+                                    {[{ v: "weekly", l: "7 Days" }, { v: "monthly", l: "30 Days" }, { v: "yearly", l: "365 Days" }, { v: "custom", l: "Custom" }].map(opt => (
+                                        <button key={opt.v}
+                                            onClick={() => { setAnalyticsTimeline(opt.v); setShowAnalyticsCustomPicker(opt.v === "custom"); }}
+                                            style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid #d5b85a', background: analyticsTimeline === opt.v ? '#d5b85a' : 'transparent', color: analyticsTimeline === opt.v ? '#fff' : '#d5b85a', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                                            {opt.l}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {showAnalyticsCustomPicker && (
+                                <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                                    <input type="date" value={analyticsCustomFrom} onChange={e => setAnalyticsCustomFrom(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
+                                    <span>→</span>
+                                    <input type="date" value={analyticsCustomTo} onChange={e => setAnalyticsCustomTo(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
+                                </div>
+                            )}
+                        </div>
+
+                        {vendorGrowthStats.length === 0 ? (
+                            <div className="merch-ios-card" style={{ textAlign: 'center', color: '#999', padding: 32 }}>No vendor data for this period</div>
+                        ) : (
+                            <>
+                                <div className="merch-ios-card" style={{ padding: 0, overflow: 'hidden' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                        <thead>
+                                            <tr style={{ background: '#f9f5eb', borderBottom: '2px solid #e8d98a' }}>
+                                                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Vendor</th>
+                                                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Location</th>
+                                                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>This Period</th>
+                                                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>Last Period</th>
+                                                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>Revenue Growth</th>
+                                                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>Orders</th>
+                                                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>Order Growth</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {vendorGrowthStats.slice((analyticsPage - 1) * 15, analyticsPage * 15).map((v, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid #f0e8c8', background: i % 2 === 0 ? '#fff' : '#fdfaf2' }}>
+                                                    <td style={{ padding: '10px 14px', fontWeight: 500 }}>{v.name}<br /><span style={{ fontSize: 11, color: '#999' }}>{v.code}</span></td>
+                                                    <td style={{ padding: '10px 14px', color: '#666' }}>{v.location || '—'}</td>
+                                                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>₹{Number(v.current.toFixed(0)).toLocaleString('en-IN')}</td>
+                                                    <td style={{ padding: '10px 14px', textAlign: 'right', color: '#999' }}>₹{Number(v.prev.toFixed(0)).toLocaleString('en-IN')}</td>
+                                                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                                                        <span style={{ fontWeight: 700, color: v.revenueGrowth >= 0 ? '#2e7d32' : '#c62828' }}>
+                                                            {v.revenueGrowth >= 0 ? '↑' : '↓'} {Math.abs(v.revenueGrowth).toFixed(1)}%
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>{v.currentOrders} <span style={{ color: '#999', fontSize: 11 }}>/ {v.prevOrders}</span></td>
+                                                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                                                        <span style={{ fontWeight: 700, color: v.ordersGrowth >= 0 ? '#2e7d32' : '#c62828' }}>
+                                                            {v.ordersGrowth >= 0 ? '↑' : '↓'} {Math.abs(v.ordersGrowth).toFixed(1)}%
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {vendorGrowthStats.length > 15 && (
+                                    <div className="merch-pagination">
+                                        <button disabled={analyticsPage === 1} onClick={() => setAnalyticsPage(p => p - 1)} className="merch-pagination-btn">← Previous</button>
+                                        <span className="merch-pagination-info">Page {analyticsPage} of {Math.ceil(vendorGrowthStats.length / 15)}</span>
+                                        <button disabled={analyticsPage >= Math.ceil(vendorGrowthStats.length / 15)} onClick={() => setAnalyticsPage(p => p + 1)} className="merch-pagination-btn">Next →</button>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+
                 {activeTab === "calendar" && (() => {
                     const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
                     return (

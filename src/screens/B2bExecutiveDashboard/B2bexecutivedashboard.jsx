@@ -93,13 +93,16 @@ export default function B2bExecutiveDashboard() {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-        const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
+        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         const totalOrders = orders.length;
         const pendingOrders = orders.filter(o => o.approval_status === "pending");
         const thisMonthOrders = orders.filter(o => o.created_at >= monthStart);
         const todayOrders = orders.filter(o => formatDate(o.created_at) === formatDate(new Date()));
 
-        return { totalRevenue, totalOrders, pendingOrders, thisMonthOrders, todayOrders };
+        return { salesRevenue, consignmentValue, consignmentCount: consignmentOrders.length, totalOrders, pendingOrders, thisMonthOrders, todayOrders };
     }, [orders]);
 
     const ordersByDate = useMemo(() => {
@@ -280,10 +283,10 @@ export default function B2bExecutiveDashboard() {
                     <>
                         {/* Row 1: Stat Cards */}
                         <div className="b2b-cell b2b-total-revenue">
-                            <StatCard title="Total Revenue" value={`₹${formatIndianNumber(stats.totalRevenue)}`} change={`This Month: ${stats.thisMonthOrders.length}`} />
+                            <StatCard title="Sales Revenue" value={`₹${formatIndianNumber(stats.salesRevenue)}`} change={`Consignment: ₹${formatIndianNumber(stats.consignmentValue)} (${stats.consignmentCount})`} />
                         </div>
                         <div className="b2b-cell b2b-total-orders">
-                            <StatCard title="Total Orders" value={formatIndianNumber(stats.totalOrders)} change={`Pending: ${stats.pendingOrders.length}`} />
+                            <StatCard title="Sales Orders" value={formatIndianNumber(stats.totalOrders - stats.consignmentCount)} change={`Pending: ${stats.pendingOrders.length}`} />
                         </div>
                         <div className="b2b-cell b2b-total-pending">
                             <StatCard title="Pending Approval" value={formatIndianNumber(stats.pendingOrders.length)} change={`Today: ${stats.todayOrders.length}`} />

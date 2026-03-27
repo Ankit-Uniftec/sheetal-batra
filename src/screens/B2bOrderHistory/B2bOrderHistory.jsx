@@ -179,10 +179,13 @@ export default function B2bOrderHistory() {
 
     // Stats
     const stats = useMemo(() => {
-        const totalRevenue = orders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
+        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         const pendingCount = orders.filter(o => o.approval_status === "pending").length;
         const approvedCount = orders.filter(o => o.approval_status === "approved").length;
-        return { totalRevenue, pendingCount, approvedCount };
+        return { salesRevenue, consignmentValue, consignmentCount: consignmentOrders.length, pendingCount, approvedCount };
     }, [orders]);
 
     if (loading) return <p className="loading">Loading...</p>;
@@ -214,12 +217,16 @@ export default function B2bOrderHistory() {
                     <div className="b2boh-sidebar-card">
                         <h4>Summary</h4>
                         <div className="b2boh-summary-info">
-                            <p className="b2boh-summary-amount">₹{formatIndianNumber(stats.totalRevenue)}</p>
-                            <p className="b2boh-summary-label">Total Revenue</p>
+                            <p className="b2boh-summary-amount">₹{formatIndianNumber(stats.salesRevenue)}</p>
+                            <p className="b2boh-summary-label">Sales Revenue</p>
                         </div>
                         <div className="b2boh-summary-row">
                             <span>Pending: <b>{stats.pendingCount}</b></span>
                             <span>Approved: <b>{stats.approvedCount}</b></span>
+                        </div>
+                        <div className="b2boh-summary-info" style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eee" }}>
+                            <p className="b2boh-summary-amount" style={{ color: "#9c27b0" }}>₹{formatIndianNumber(stats.consignmentValue)}</p>
+                            <p className="b2boh-summary-label">Consignment ({stats.consignmentCount} orders)</p>
                         </div>
                     </div>
                     <div className="b2boh-sidebar-card">
