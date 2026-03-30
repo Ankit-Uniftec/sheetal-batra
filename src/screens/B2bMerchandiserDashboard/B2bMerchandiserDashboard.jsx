@@ -6,9 +6,11 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { usePopup } from "../../components/Popup";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
+    const { showPopup, PopupComponent } = usePopup();
 
     const [activeTab, setActiveTab] = useState("dashboard");
     const [user, setUser] = useState(null);
@@ -231,10 +233,19 @@ export default function B2bMerchandiserDashboard() {
     }, [filteredOrders, currentPage]);
 
     const filteredVendors = useMemo(() => {
-        if (!vendorSearch.trim()) return vendors;
-        const q = vendorSearch.toLowerCase();
-        return vendors.filter(v => v.store_brand_name?.toLowerCase().includes(q) || v.vendor_code?.toLowerCase().includes(q) || v.location?.toLowerCase().includes(q));
-    }, [vendors, vendorSearch]);
+        const myName = profile?.saleperson || "";
+        let list = vendors;
+        if (vendorSearch.trim()) {
+            const q = vendorSearch.toLowerCase();
+            list = list.filter(v => v.store_brand_name?.toLowerCase().includes(q) || v.vendor_code?.toLowerCase().includes(q) || v.location?.toLowerCase().includes(q));
+        }
+        // Starred vendors appear first
+        return [...list].sort((a, b) => {
+            const aStarred = (a.starred_by || []).includes(myName) ? 1 : 0;
+            const bStarred = (b.starred_by || []).includes(myName) ? 1 : 0;
+            return bStarred - aStarred;
+        });
+    }, [vendors, vendorSearch, profile]);
 
     const paginatedVendors = useMemo(() => {
         const start = (vendorPage - 1) * VENDORS_PER_PAGE;
@@ -242,6 +253,25 @@ export default function B2bMerchandiserDashboard() {
     }, [filteredVendors, vendorPage]);
 
     const totalVendorPages = Math.ceil(filteredVendors.length / VENDORS_PER_PAGE);
+
+    const handleToggleStar = async (e, vendor) => {
+        e.stopPropagation();
+        const myName = profile?.saleperson || "";
+        if (!myName) return;
+        const isStarred = (vendor.starred_by || []).includes(myName);
+        const myStarredVendors = vendors.filter(v => (v.starred_by || []).includes(myName));
+        if (!isStarred && myStarredVendors.length >= 5) {
+            showPopup({ title: "Limit Reached", message: "You can only star up to 5 vendors. Unstar one to add another.", type: "warning" });
+            return;
+        }
+        const newStarredBy = isStarred
+            ? (vendor.starred_by || []).filter(n => n !== myName)
+            : [...(vendor.starred_by || []), myName];
+        const { error } = await supabase.from("vendors").update({ starred_by: newStarredBy }).eq("id", vendor.id);
+        if (!error) {
+            setVendors(prev => prev.map(v => v.id === vendor.id ? { ...v, starred_by: newStarredBy } : v));
+        }
+    };
 
     // ==================== APPROVAL ACTIONS ====================
     const handleApprovalAction = async () => {
@@ -448,6 +478,7 @@ export default function B2bMerchandiserDashboard() {
 
     return (
         <div className="merch-dashboard-wrapper">
+            {PopupComponent}
             {/* ===== HEADER ===== */}
             <header className="merch-header">
                 <img src={Logo} alt="logo" className="merch-header-logo" onClick={() => setActiveTab("dashboard")} />
@@ -769,7 +800,12 @@ export default function B2bMerchandiserDashboard() {
                                             {/* Footer action */}
                                             <div className="merch-vc-footer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                 <p className="merch-vc-action">View Orders {"\u2192"}</p>
-                                                <button onClick={(e) => handleEditVendor(vendor, e)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 12 }}>{"\u270E"} Edit</button>
+                                                <div style={{ display: "flex", gap: 8 }}>
+                                                    <button onClick={(e) => handleToggleStar(e, vendor)} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${(vendor.starred_by || []).includes(profile?.saleperson || "") ? "#f9a825" : "#ddd"}`, background: (vendor.starred_by || []).includes(profile?.saleperson || "") ? "#fff8e1" : "#fff", color: (vendor.starred_by || []).includes(profile?.saleperson || "") ? "#f9a825" : "#999", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                                                        {(vendor.starred_by || []).includes(profile?.saleperson || "") ? "\u2605" : "\u2606"}
+                                                    </button>
+                                                    <button onClick={(e) => handleEditVendor(vendor, e)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 12 }}>{"\u270E"} Edit</button>
+                                                </div>
                                             </div>
                                         </div>
                                     );
