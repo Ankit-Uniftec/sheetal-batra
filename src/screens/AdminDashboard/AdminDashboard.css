@@ -1957,3 +1957,29 @@
         font-size: 12px;
     }
 }
+
+.admin-export-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 38px;
+    padding: 0 16px;
+    border: 1px solid #d5b85a;
+    border-radius: 8px;
+    background: #faf6e8;
+    color: #8B7355;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.admin-export-btn:hover {
+    background: #f5ecd0;
+    border-color: #c9a94e;
+}
+
+.admin-export-btn:active {
+    transform: scale(0.97);
+}
