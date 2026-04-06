@@ -909,6 +909,39 @@ export default function AdminDashboard() {
         ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value]
     }));
 
+    const handleExportCSV = () => {
+        if (filteredOrders.length === 0) return;
+        const headers = ["Order No", "Product Name", "Customer Name", "Customer Number", "Customer Email", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Notes", "Order Date", "Delivery Date"];
+        const rows = filteredOrders.map(order => {
+            const item = order.items?.[0] || {};
+            return [
+                order.order_no || "",
+                item.product_name || "",
+                order.delivery_name || "",
+                order.delivery_phone || "",
+                order.delivery_email || order.email || "",
+                item.size || "",
+                order.grand_total || order.net_total || 0,
+                item.top_color?.name || item.color?.name || "",
+                item.bottom_color?.name || "",
+                order.salesperson || "",
+                order.salesperson_store || "",
+                order.status || "",
+                order.notes || order.special_instructions || "",
+                order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
+                order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+        });
+        const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `orders_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     const updateOrderStatus = async (orderId, newStatus) => {
         setStatusUpdating(orderId);
         const updateData = { status: newStatus };
@@ -2825,6 +2858,10 @@ export default function AdminDashboard() {
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="admin-sort-select">
                                     <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="delivery">Delivery Date</option><option value="amount_high">Amount: High to Low</option><option value="amount_low">Amount: Low to High</option>
                                 </select>
+                                <button className="admin-export-btn" onClick={handleExportCSV} title="Export filtered orders to CSV">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                    Export CSV
+                                </button>
                             </div>
 
                             <div className="admin-status-tabs">
