@@ -72,6 +72,10 @@ export default function SALogin() {
       navigate("/inventoryDashboard");
     } else if (userRecord.role === "accounts") {
       navigate("/accounts")
+    } else if (userRecord.role === "gm") {
+      navigate("/gm-dashboard")
+    } else if (userRecord.role === "retail_manager") {
+      navigate("/retail-manager-dashboard");
     } else if (userRecord.role === "admin") {
       navigate("/admin")
     } else if (userRecord.role === "executive") {

@@ -27,6 +27,8 @@ import B2bMerchandiserDashboard from "./screens/B2bMerchandiserDashboard/B2bMerc
 import B2bVendorOrders from "./screens/B2bVendorOrders/B2bVendorOrders";
 import B2bProductionDashboard from "./screens/B2bProductionDashboard/B2bProductionDashboard";
 import ProductionManagerDashboard from "./components/B2B/ProductionManagerDashboard/ProductionManagerDashboard";
+import GMDashboard from "./screens/GMDashboard/GMDashboard";
+import RetailManagerDashboard from "./screens/RetailDashboard/RetailManagerDashboard";
 
 
 function App() {
@@ -61,6 +63,8 @@ function App() {
         <Route path="/b2b-vendor-orders/:vendorId" element={<B2bVendorOrders />} />
         <Route path="/b2b-production-dashboard" element={<B2bProductionDashboard />} />
         <Route path="/production-manager-dashboard" element={<ProductionManagerDashboard />} />
+        <Route path="/gm-dashboard" element={<GMDashboard/>}/>
+        <Route path="/retail-manager-dashboard" element={<RetailManagerDashboard/>}/>
       </Routes>
     </BrowserRouter>
   );
