@@ -29,6 +29,7 @@ import B2bProductionDashboard from "./screens/B2bProductionDashboard/B2bProducti
 import ProductionManagerDashboard from "./components/B2B/ProductionManagerDashboard/ProductionManagerDashboard";
 import GMDashboard from "./screens/GMDashboard/GMDashboard";
 import RetailManagerDashboard from "./screens/RetailDashboard/RetailManagerDashboard";
+import COODashboard from "./screens/COODashboard/COODashboard";
 
 
 function App() {
@@ -65,6 +66,7 @@ function App() {
         <Route path="/production-manager-dashboard" element={<ProductionManagerDashboard />} />
         <Route path="/gm-dashboard" element={<GMDashboard/>}/>
         <Route path="/retail-manager-dashboard" element={<RetailManagerDashboard/>}/>
+        <Route path="/coo-dashboard" element={<COODashboard />} />
       </Routes>
     </BrowserRouter>
   );
