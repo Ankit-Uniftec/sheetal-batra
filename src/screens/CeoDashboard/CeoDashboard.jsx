@@ -1281,7 +1281,8 @@ export default function CEODashboard() {
         // Client sales map
         const clientSales = {};
         currentB2b.forEach(o => {
-            const client = o.delivery_name || o.vendor_name || "Unknown";
+            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
+            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
             clientSales[client].sales += Number(o.grand_total || 0);
             clientSales[client].orders += 1;
@@ -1306,7 +1307,8 @@ export default function CEODashboard() {
         // New clients this period (first order within date range)
         const allClientFirstOrders = {};
         allB2bOrders.forEach(o => {
-            const client = o.delivery_name || o.vendor_name || "Unknown";
+            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
+            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!allClientFirstOrders[client] || o.created_at < allClientFirstOrders[client]) {
                 allClientFirstOrders[client] = o.created_at;
             }
@@ -1352,7 +1354,7 @@ export default function CEODashboard() {
             advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
             merchandiserList, topB2bProducts,
         };
-    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, b2bMerchandiserFilter, salespersonTable]);
+    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, b2bMerchandiserFilter, salespersonTable, vendors]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: ENHANCED INVENTORY (Delayed deliveries)
@@ -1662,7 +1664,7 @@ export default function CEODashboard() {
                     </button>
                     <img src={Logo} alt="Logo" className="admin-logo" onClick={() => navigate("/login")} />
                 </div>
-                <h1 className="admin-title">Sheetal Batra</h1>
+                <h1 className="admin-title">CEO Dashboard</h1>
                 <div className="admin-header-right">
                     <NotificationBell
                         userEmail={currentUserEmail}

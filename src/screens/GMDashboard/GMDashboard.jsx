@@ -462,7 +462,8 @@ export default function GMDashboard() {
 
         const clientSales = {};
         currentB2b.forEach(o => {
-            const client = o.delivery_name || "Unknown";
+            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
+            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
             clientSales[client].sales += Number(o.grand_total || 0);
             clientSales[client].orders += 1;
@@ -505,7 +506,7 @@ export default function GMDashboard() {
             advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
             revenueGrowth: calculateGrowth(totalB2bRevenue, prevRevenue),
         };
-    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage]);
+    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, vendors]);
 
     // ═══════════════════════════════════════════════════════════
     // INVENTORY STATS
@@ -766,9 +767,9 @@ export default function GMDashboard() {
         const rows = filteredOrders.map(order => {
             const item = order.items?.[0] || {};
             return [order.order_no || "", item.product_name || "", order.delivery_name || "", order.delivery_phone || "",
-                item.size || "", order.grand_total || 0, order.salesperson || "", order.salesperson_store || "",
-                order.status || "", order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
-                order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : ""].map(v => `"${String(v).replace(/"/g, '""')}"`);
+            item.size || "", order.grand_total || 0, order.salesperson || "", order.salesperson_store || "",
+            order.status || "", order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
+            order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : ""].map(v => `"${String(v).replace(/"/g, '""')}"`);
         });
         const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
         const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -820,7 +821,7 @@ export default function GMDashboard() {
                 </div>
                 <h1 className="admin-title">GM Dashboard</h1>
                 <div className="admin-header-right">
-                    <NotificationBell userEmail={currentUserEmail} onOrderClick={() => {}} />
+                    <NotificationBell userEmail={currentUserEmail} onOrderClick={() => { }} />
                     <button className="admin-logout-btn" onClick={handleLogout}>Logout</button>
                 </div>
             </header>
