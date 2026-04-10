@@ -109,6 +109,7 @@ export default function COODashboard() {
     const [inventorySearch, setInventorySearch] = useState("");
     const [inventoryPage, setInventoryPage] = useState(1);
     const [variantInventory, setVariantInventory] = useState({});
+    const [expandedProduct, setExpandedProduct] = useState(null);
 
     // Auth
     useEffect(() => {
@@ -143,6 +144,23 @@ export default function COODashboard() {
             if (spRes.data) setSalespersonTable(spRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);
             if (consRes.data) setConsignmentInventory(consRes.data);
+
+            // Fetch LXRTS variant inventory from DB
+            const lxrtsProducts = productsRes.data?.filter(p => p.sync_enabled) || [];
+            if (lxrtsProducts.length > 0) {
+                const { data: allVariants } = await supabase
+                    .from("product_variants")
+                    .select("product_id, size, inventory")
+                    .in("product_id", lxrtsProducts.map(p => p.id));
+                if (allVariants) {
+                    const invMap = {};
+                    allVariants.forEach(v => {
+                        if (!invMap[v.product_id]) invMap[v.product_id] = {};
+                        invMap[v.product_id][v.size] = v.inventory || 0;
+                    });
+                    setVariantInventory(invMap);
+                }
+            }
         } catch (err) { console.error("Error:", err); }
         finally { setLoading(false); }
     };
@@ -183,6 +201,14 @@ export default function COODashboard() {
     const getOrderType = (order) => { if (order.is_alteration) return "alteration"; const item = order.items?.[0]; if (item?.order_type === "Custom" || item?.payment_order_type === "Custom") return "custom"; return "standard"; };
 
     const getLxrtsTotalInventory = (productId) => { const v = variantInventory[productId]; if (!v) return 0; return Object.values(v).reduce((s, q) => s + (q || 0), 0); };
+    const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+    const getProductSizes = (productId) => {
+        const variants = variantInventory[productId];
+        if (!variants) return [];
+        const knownSizes = SIZE_ORDER.filter(s => variants[s] !== undefined);
+        const extraSizes = Object.keys(variants).filter(s => !SIZE_ORDER.includes(s)).sort();
+        return [...knownSizes, ...extraSizes];
+    };
 
     // ═══════════════════════════════════════════════════════════
     // DATE HELPERS
@@ -498,10 +524,20 @@ export default function COODashboard() {
         // Payment mode breakdown
         const modeMap = {};
         period.forEach(o => {
-            const mode = o.payment_mode || "Unknown";
-            if (!modeMap[mode]) modeMap[mode] = { name: mode, count: 0, value: 0 };
-            modeMap[mode].count += 1;
-            modeMap[mode].value += Number(o.grand_total || 0);
+            let modes = [];
+            if (Array.isArray(o.payment_mode)) {
+                modes = o.payment_mode;
+            } else if (typeof o.payment_mode === "string" && o.payment_mode.startsWith("[")) {
+                try { modes = JSON.parse(o.payment_mode); } catch { modes = [{ mode: o.payment_mode }]; }
+            } else {
+                modes = [{ mode: o.payment_mode || "Unknown" }];
+            }
+            modes.forEach(m => {
+                const name = m.mode || m.name || "Unknown";
+                if (!modeMap[name]) modeMap[name] = { name, count: 0, value: 0 };
+                modeMap[name].count += 1;
+                modeMap[name].value += Number(m.amount || 0) || Number(o.grand_total || 0) / modes.length;
+            });
         });
         const byPaymentMode = Object.values(modeMap).sort((a, b) => b.value - a.value);
 
@@ -597,7 +633,7 @@ export default function COODashboard() {
             <header className="admin-header">
                 <div className="admin-header-left"><button className="admin-hamburger" onClick={() => setShowSidebar(!showSidebar)}><span></span><span></span><span></span></button><img src={Logo} alt="Logo" className="admin-logo" onClick={() => navigate("/login")} /></div>
                 <h1 className="admin-title">COO Dashboard</h1>
-                <div className="admin-header-right"><NotificationBell userEmail={currentUserEmail} onOrderClick={() => {}} /><button className="admin-logout-btn" onClick={handleLogout}>Logout</button></div>
+                <div className="admin-header-right"><NotificationBell userEmail={currentUserEmail} onOrderClick={() => { }} /><button className="admin-logout-btn" onClick={handleLogout}>Logout</button></div>
             </header>
 
             <div className="admin-layout">
@@ -664,12 +700,49 @@ export default function COODashboard() {
 
                             {opsStats.exceedingCount > 0 && (<>
                                 <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>{"\u26A0\uFE0F"} Exceeding Delivery Date ({opsStats.exceedingCount})</h3>
-                                <div className="admin-table-wrapper"><div className="admin-table-container"><table className="admin-table">
-                                    <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Delivery Date</th><th>Days Overdue</th><th>Status</th></tr></thead>
-                                    <tbody>{opsStats.exceedingDelivery.map(o => { const overdue = Math.ceil((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24)); return (
-                                        <tr key={o.id}><td><span className="order-id">{o.order_no || "-"}</span></td><td>{o.delivery_name || "-"}</td><td className="product-cell">{o.items?.[0]?.product_name || "-"}</td><td>{formatDate(o.delivery_date)}</td><td style={{ color: '#c62828', fontWeight: 600 }}>{overdue}d</td><td><span className={`status-badge ${o.status}`}>{o.status}</span></td></tr>
-                                    ); })}</tbody>
-                                </table></div></div>
+                                <div className="admin-table-wrapper"><div className="admin-table-container">
+                                    <table className="admin-table">
+                                        <thead><tr><th>Product</th><th>SKU</th><th>Type</th><th>Stock</th></tr></thead>
+                                        <tbody>
+                                            {inventoryStats.currentProducts.length === 0 ? <tr><td colSpan="4" className="no-data">No products found</td></tr> :
+                                                inventoryStats.currentProducts.map(p => {
+                                                    const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+                                                    return (
+                                                        <React.Fragment key={p.id}>
+                                                            <tr className={p.sync_enabled ? "lxrts-row" : ""}>
+                                                                <td className="product-cell">
+                                                                    {p.sync_enabled && <span className="lxrts-badge">LXRTS</span>}
+                                                                    {p.name || "-"}
+                                                                    {p.sync_enabled && (
+                                                                        <button className="expand-btn" onClick={() => setExpandedProduct(expandedProduct === p.id ? null : p.id)}>
+                                                                            {expandedProduct === p.id ? "\u25B2" : "\u25BC"}
+                                                                        </button>
+                                                                    )}
+                                                                </td>
+                                                                <td>{p.sku_id || "-"}</td>
+                                                                <td>{p.sync_enabled ? "LXRTS" : (p.inventory === 9999 ? "MTO" : "Regular")}</td>
+                                                                <td><span className={qty === 0 ? "admin-stock-out" : qty < 5 ? "admin-stock-low" : "admin-stock-ok"}>{qty === 9999 ? "MTO" : qty}</span></td>
+                                                            </tr>
+                                                            {p.sync_enabled && expandedProduct === p.id && (
+                                                                <tr className="variant-row"><td colSpan="4">
+                                                                    <div className="variant-grid">
+                                                                        {getProductSizes(p.id).map(size => (
+                                                                            <div key={size} className="variant-cell">
+                                                                                <span className="variant-size">{size}</span>
+                                                                                <span className={`${(variantInventory[p.id]?.[size] || 0) === 0 ? "admin-stock-out" : (variantInventory[p.id]?.[size] || 0) < 5 ? "admin-stock-low" : "admin-stock-ok"}`}>
+                                                                                    {variantInventory[p.id]?.[size] ?? "..."}
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </td></tr>
+                                                            )}
+                                                        </React.Fragment>
+                                                    );
+                                                })}
+                                        </tbody>
+                                    </table>
+                                </div></div>
                             </>)}
                         </div>
                     )}
@@ -773,6 +846,7 @@ export default function COODashboard() {
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Consignment Stock</span><span className="stat-value">{inventoryStats.consignmentValue} pcs</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Low Stock</span><span className="stat-value" style={{ color: '#ef6c00' }}>{inventoryStats.lowStock}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value" style={{ color: '#c62828' }}>{inventoryStats.outOfStock}</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Active LXRTS</span><span className="stat-value">{products.filter(p => p.sync_enabled).length}</span></div></div>
                             </div>
 
                             <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Products</h3>
@@ -840,9 +914,11 @@ export default function COODashboard() {
 
                             <div className="admin-table-wrapper"><div className="admin-table-container"><table className="admin-table orders-table">
                                 <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Status</th><th>Store</th><th>Date</th><th>Actions</th></tr></thead>
-                                <tbody>{currentOrders.length === 0 ? <tr><td colSpan="9" className="no-data">No orders</td></tr> : currentOrders.map(o => { const urg = getPriority(o) === "urgent"; return (
-                                    <tr key={o.id} className={urg ? "urgent-row" : ""}><td><span className="order-id">{o.order_no || "-"}</span>{urg && <span className="urgent-badge">URGENT</span>}</td><td>{o.delivery_name || "-"}</td><td className="product-cell">{o.items?.[0]?.product_name || "-"}</td><td>{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td><td><span className={`payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o).charAt(0).toUpperCase() + getPaymentStatus(o).slice(1)}</span></td><td><select className="status-select" value={o.status || "pending"} onChange={(e) => updateOrderStatus(o.id, e.target.value)} disabled={statusUpdating === o.id}>{ORDER_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></td><td>{o.salesperson_store || "-"}</td><td>{formatDate(o.created_at)}</td><td><div className="action-buttons"><button className="action-btn pdf" onClick={() => handleGeneratePdf(o)} disabled={pdfLoading === o.id}>{pdfLoading === o.id ? "..." : "PDF"}</button></div></td></tr>
-                                ); })}</tbody>
+                                <tbody>{currentOrders.length === 0 ? <tr><td colSpan="9" className="no-data">No orders</td></tr> : currentOrders.map(o => {
+                                    const urg = getPriority(o) === "urgent"; return (
+                                        <tr key={o.id} className={urg ? "urgent-row" : ""}><td><span className="order-id">{o.order_no || "-"}</span>{urg && <span className="urgent-badge">URGENT</span>}</td><td>{o.delivery_name || "-"}</td><td className="product-cell">{o.items?.[0]?.product_name || "-"}</td><td>{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td><td><span className={`payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o).charAt(0).toUpperCase() + getPaymentStatus(o).slice(1)}</span></td><td><select className="status-select" value={o.status || "pending"} onChange={(e) => updateOrderStatus(o.id, e.target.value)} disabled={statusUpdating === o.id}>{ORDER_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></td><td>{o.salesperson_store || "-"}</td><td>{formatDate(o.created_at)}</td><td><div className="action-buttons"><button className="action-btn pdf" onClick={() => handleGeneratePdf(o)} disabled={pdfLoading === o.id}>{pdfLoading === o.id ? "..." : "PDF"}</button></div></td></tr>
+                                    );
+                                })}</tbody>
                             </table></div></div>
                             {ordersTotalPages > 1 && (<div className="admin-pagination"><button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button><span>Page {ordersPage} of {ordersTotalPages}</span><button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button></div>)}
                         </div>
