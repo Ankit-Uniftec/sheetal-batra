@@ -80,6 +80,8 @@ export default function SALogin() {
       navigate("/admin")
     } else if (userRecord.role === "coo") {
       navigate("/coo-dashboard")
+    } else if (userRecord.role === "ceo") {
+      navigate("/ceo-dashboard")
     } else if (userRecord.role === "executive") {
       const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
       sessionStorage.setItem("currentSalesperson", JSON.stringify({
