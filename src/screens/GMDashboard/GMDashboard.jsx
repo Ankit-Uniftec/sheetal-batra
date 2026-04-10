@@ -162,6 +162,7 @@ export default function GMDashboard() {
     const [inventorySearch, setInventorySearch] = useState("");
     const [inventoryPage, setInventoryPage] = useState(1);
     const [variantInventory, setVariantInventory] = useState({});
+    const [expandedProduct, setExpandedProduct] = useState(null);
     const [lxrtsSyncLoading, setLxrtsSyncLoading] = useState(false);
 
     // Auth & fetch
@@ -218,6 +219,32 @@ export default function GMDashboard() {
     }, []);
 
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+
+    const fetchAllLxrtsInventory = async (lxrtsProducts) => {
+        setLxrtsSyncLoading(true);
+        const inventoryMap = {};
+        await Promise.allSettled(lxrtsProducts.map(async (product) => {
+            try {
+                const response = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-inventory`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` },
+                    body: JSON.stringify({ action: "fetch", product_id: product.id }),
+                });
+                const result = await response.json();
+                if (result.success && result.inventory) inventoryMap[product.id] = result.inventory;
+                else {
+                    const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
+                    if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
+                }
+            } catch (err) {
+                console.error(`Error syncing ${product.name}:`, err);
+                const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
+                if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
+            }
+        }));
+        setVariantInventory(inventoryMap);
+        setLxrtsSyncLoading(false);
+    };
 
     // ═══════════════════════════════════════════════════════════
     // HELPER FUNCTIONS
@@ -278,6 +305,15 @@ export default function GMDashboard() {
         const variants = variantInventory[productId];
         if (!variants) return 0;
         return Object.values(variants).reduce((sum, qty) => sum + (qty || 0), 0);
+    };
+
+    const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+    const getProductSizes = (productId) => {
+        const variants = variantInventory[productId];
+        if (!variants) return [];
+        const knownSizes = SIZE_ORDER.filter(s => variants[s] !== undefined);
+        const extraSizes = Object.keys(variants).filter(s => !SIZE_ORDER.includes(s)).sort();
+        return [...knownSizes, ...extraSizes];
     };
 
     const salespersons = useMemo(() => {
@@ -792,6 +828,12 @@ export default function GMDashboard() {
     useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
     useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
+    useEffect(() => {
+        if (activeTab === "inventory") {
+            const lxrtsProducts = products.filter(p => p.sync_enabled);
+            if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
+        }
+    }, [activeTab, products]);
 
     const handleTimelineChange = (value) => {
         setTimeline(value);
@@ -911,20 +953,44 @@ export default function GMDashboard() {
                             <div className="admin-table-wrapper">
                                 <div className="admin-table-container">
                                     <table className="admin-table">
-                                        <thead><tr><th>SA Name</th><th>Store</th><th className="amount">Revenue</th><th>Orders</th><th>Items</th><th className="amount">Discount</th><th className="amount">Avg Order</th></tr></thead>
+                                        <thead><tr><th>Product</th><th>SKU</th><th>Type</th><th>Stock</th></tr></thead>
                                         <tbody>
-                                            {storePerformanceStats.saBreakdown.length === 0 ? <tr><td colSpan="7" className="no-data">No data</td></tr> :
-                                                storePerformanceStats.saBreakdown.map(sa => (
-                                                    <tr key={sa.name}>
-                                                        <td>{sa.name}</td>
-                                                        <td>{sa.store}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.revenue))}</td>
-                                                        <td>{sa.orders}</td>
-                                                        <td>{sa.items}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.discount))}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.orders > 0 ? sa.revenue / sa.orders : 0))}</td>
-                                                    </tr>
-                                                ))}
+                                            {inventoryStats.currentProducts.length === 0 ? <tr><td colSpan="4" className="no-data">No products found</td></tr> :
+                                                inventoryStats.currentProducts.map(p => {
+                                                    const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+                                                    return (
+                                                        <React.Fragment key={p.id}>
+                                                            <tr className={p.sync_enabled ? "lxrts-row" : ""}>
+                                                                <td className="product-cell">
+                                                                    {p.sync_enabled && <span className="lxrts-badge">LXRTS</span>}
+                                                                    {p.name || "-"}
+                                                                    {p.sync_enabled && (
+                                                                        <button className="expand-btn" onClick={() => setExpandedProduct(expandedProduct === p.id ? null : p.id)}>
+                                                                            {expandedProduct === p.id ? "\u25B2" : "\u25BC"}
+                                                                        </button>
+                                                                    )}
+                                                                </td>
+                                                                <td>{p.sku_id || "-"}</td>
+                                                                <td>{p.sync_enabled ? "LXRTS" : (p.inventory === 9999 ? "MTO" : "Regular")}</td>
+                                                                <td><span className={qty === 0 ? "admin-stock-out" : qty < 5 ? "admin-stock-low" : "admin-stock-ok"}>{qty === 9999 ? "MTO" : qty}</span></td>
+                                                            </tr>
+                                                            {p.sync_enabled && expandedProduct === p.id && (
+                                                                <tr className="variant-row"><td colSpan="4">
+                                                                    <div className="variant-grid">
+                                                                        {getProductSizes(p.id).map(size => (
+                                                                            <div key={size} className="variant-cell">
+                                                                                <span className="variant-size">{size}</span>
+                                                                                <span className={`${(variantInventory[p.id]?.[size] || 0) === 0 ? "admin-stock-out" : (variantInventory[p.id]?.[size] || 0) < 5 ? "admin-stock-low" : "admin-stock-ok"}`}>
+                                                                                    {variantInventory[p.id]?.[size] ?? "..."}
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </td></tr>
+                                                            )}
+                                                        </React.Fragment>
+                                                    );
+                                                })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -1101,6 +1167,7 @@ export default function GMDashboard() {
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Stock</span><span className="stat-value">{formatIndianNumber(inventoryStats.totalInventory)}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Low Stock</span><span className="stat-value" style={{ color: '#ef6c00' }}>{inventoryStats.lowStock}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value" style={{ color: '#c62828' }}>{inventoryStats.outOfStock}</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Active LXRTS</span><span className="stat-value">{products.filter(p => p.sync_enabled).length}</span></div></div>
                             </div>
 
                             {/* Stock vs Sales */}
