@@ -6,6 +6,7 @@ import Logo from "../../../images/logo.png";
 import formatIndianNumber from "../../../utils/formatIndianNumber";
 import formatDate from "../../../utils/formatDate";
 import { usePopup } from "../../../components/Popup";
+import NotificationBell from "../../../components/NotificationBell";
 
 // ==================== MEASUREMENT CONSTANTS ====================
 const CATEGORY_KEY_MAP = {
@@ -39,6 +40,20 @@ const KIDS_SIZE_OPTIONS = [
     "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
     "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
 ];
+
+// ==================== SVG ICONS ====================
+const Icons = {
+    package: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>,
+    gear: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+    warning: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    clock: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e65100" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+    refresh: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+    truck: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+    xCircle: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
+    timer: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M6.38 18.7 4 21"/><path d="M17.64 18.67 20 21"/></svg>,
+    inbox: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>,
+    hourglass: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>,
+};
 
 // ==================== STAT CARD ====================
 const StatCard = ({ title, value, subtitle, highlight, icon }) => (
@@ -81,6 +96,7 @@ export default function ProductionManagerDashboard() {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
+    const [currentUserEmail, setCurrentUserEmail] = useState("");
 
     // Orders tab state
     const [orderSearch, setOrderSearch] = useState("");
@@ -100,6 +116,8 @@ export default function ProductionManagerDashboard() {
     // Priority modal
     const [priorityOrder, setPriorityOrder] = useState(null);
     const [priorityValue, setPriorityValue] = useState("");
+    const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+    const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -123,6 +141,7 @@ export default function ProductionManagerDashboard() {
             }
 
             setUser(user);
+            setCurrentUserEmail(user.email?.toLowerCase() || "");
 
             const [profileResult, ordersResult] = await Promise.all([
                 supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
@@ -172,14 +191,34 @@ export default function ProductionManagerDashboard() {
         return { pending, inProd, dispatched, readyForDispatch };
     }, [orders]);
 
-    // Hardcoded production stats (replace later)
-    const productionMetrics = useMemo(() => ({
-        productionLoad: { active: statusStats.inProd, capacity: 150, percentage: statusStats.inProd > 0 ? Math.min(Math.round((statusStats.inProd / 150) * 100), 100) : 34 },
-        bottlenecks: { count: 3, critical: 1, areas: ["Embroidery", "QC Check", "Packaging"] },
-        staffCapacity: { total: 45, active: 38, onLeave: 7, utilization: 84 },
-        rework: { percentage: 4.2, totalReworks: 12, trend: "down" },
-        dispatchBacklog: { pending: statusStats.readyForDispatch || 8, overdue: 2, avgDelay: "1.5 days" },
-    }), [statusStats]);
+    const productionMetrics = useMemo(() => {
+        const now = new Date();
+        const activeOrders = orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
+        const delayed = activeOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
+        const reworkOrders = orders.filter(o => o.is_rework);
+        const qcFailed = orders.filter(o => o.qc_fail_reason);
+        const reworkPct = orders.length > 0 ? ((reworkOrders.length / orders.length) * 100) : 0;
+        const qcFailRate = orders.length > 0 ? ((qcFailed.length / orders.length) * 100) : 0;
+
+        const stageMap = {};
+        activeOrders.forEach(o => { const stage = o.warehouse_stage || o.status || "unknown"; if (!stageMap[stage]) stageMap[stage] = 0; stageMap[stage]++; });
+        const stuckByStage = Object.entries(stageMap).map(([name, value]) => ({ name: name.replace(/_/g, " "), value })).sort((a, b) => b.value - a.value);
+        const topBottleneck = stuckByStage.length > 0 ? stuckByStage[0].name : "None";
+
+        const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
+        const overdueDispatch = readyNotDispatched.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
+
+        return {
+            productionLoad: { active: statusStats.inProd, percentage: activeOrders.length > 0 ? Math.round((statusStats.inProd / activeOrders.length) * 100) : 0 },
+            bottlenecks: { count: stuckByStage.length, critical: stuckByStage.filter(s => s.value >= 5).length, topBottleneck },
+            rework: { percentage: reworkPct.toFixed(1), totalReworks: reworkOrders.length, trend: reworkPct < 5 ? "down" : "up" },
+            dispatchBacklog: { pending: readyNotDispatched.length, overdue: overdueDispatch.length, avgDelay: delayed.length > 0 ? `${Math.round(delayed.reduce((s, o) => s + (now - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24), 0) / delayed.length)}d` : "0d" },
+            delayed: delayed.length, delayRate: activeOrders.length > 0 ? ((delayed.length / activeOrders.length) * 100).toFixed(1) : "0",
+            qcFailed: qcFailed.length, qcFailRate: qcFailRate.toFixed(1), stuckByStage,
+            avgLeadTime: (() => { let total = 0, count = 0; orders.forEach(o => { if (o.in_production_at && (o.ready_for_dispatch_at || o.delivered_at)) { const days = (new Date(o.ready_for_dispatch_at || o.delivered_at) - new Date(o.in_production_at)) / (1000 * 60 * 60 * 24); if (days > 0 && days < 365) { total += days; count++; } } }); return count > 0 ? (total / count).toFixed(1) : "0"; })(),
+            exceedingDelivery: orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled" && o.delivery_date && new Date(o.delivery_date) < now).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date)),
+        };
+    }, [orders, statusStats]);
 
     const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
 
@@ -537,11 +576,14 @@ export default function ProductionManagerDashboard() {
             <div className={`pm-dashboard-wrapper ${editingOrder || priorityOrder ? "pm-blurred" : ""}`}>
                 {/* ===== HEADER ===== */}
                 <header className="pm-header">
-                    <img src={Logo} alt="logo" className="pm-header-logo" onClick={() => setActiveTab("overview")} />
-                    <div className="pm-header-center"><p className="pm-header-title">Production Manager</p></div>
-                    <div className="pm-header-right">
-                        <button className="pm-header-btn" onClick={handleLogout}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg></button>
+                    <div className="pm-header-left">
                         <div className="pm-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}><div className="pm-bar"></div><div className="pm-bar"></div><div className="pm-bar"></div></div>
+                        <img src={Logo} alt="logo" className="pm-header-logo" onClick={() => setActiveTab("overview")} />
+                    </div>
+                    <h1 className="pm-header-title">Production Manager</h1>
+                    <div className="pm-header-right">
+                        <NotificationBell userEmail={currentUserEmail} onOrderClick={() => {}} />
+                        <button className="pm-header-btn" onClick={handleLogout}>Logout</button>
                     </div>
                 </header>
 
@@ -565,14 +607,14 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "overview" && (
                             <>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStats.total)} subtitle={`B2B: ${channelStats.b2b} | Website: ${channelStats.website} | Store: ${channelStats.store}`} highlight={true} icon="📦" />
-                                    <StatCard title="Production Load" value={`${productionMetrics.productionLoad.percentage}%`} subtitle={`${productionMetrics.productionLoad.active} of ${productionMetrics.productionLoad.capacity} capacity`} icon="⚙️" />
-                                    <StatCard title="Bottlenecks" value={productionMetrics.bottlenecks.count} subtitle={`${productionMetrics.bottlenecks.critical} critical · ${productionMetrics.bottlenecks.areas[0]}`} highlight={productionMetrics.bottlenecks.critical > 0} icon="⚠️" />
+                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStats.total)} subtitle={`B2B: ${channelStats.b2b} | Website: ${channelStats.website} | Store: ${channelStats.store}`} highlight={true} icon={Icons.package} />
+                                    <StatCard title="Production Load" value={`${productionMetrics.productionLoad.percentage}%`} subtitle={`${productionMetrics.productionLoad.active} in production`} icon={Icons.gear} />
+                                    <StatCard title="Bottlenecks" value={productionMetrics.bottlenecks.count} subtitle={`${productionMetrics.bottlenecks.critical} critical ${"\u00B7"} ${productionMetrics.bottlenecks.topBottleneck}`} highlight={productionMetrics.bottlenecks.critical > 0} icon={Icons.warning} />
                                 </div>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Staff Capacity" value={`${productionMetrics.staffCapacity.utilization}%`} subtitle={`${productionMetrics.staffCapacity.active} active / ${productionMetrics.staffCapacity.total} total · ${productionMetrics.staffCapacity.onLeave} on leave`} icon="👥" />
-                                    <StatCard title="Rework %" value={`${productionMetrics.rework.percentage}%`} subtitle={`${productionMetrics.rework.totalReworks} items · Trend: ${productionMetrics.rework.trend === "down" ? "↓ Improving" : "↑ Rising"}`} icon="🔄" />
-                                    <StatCard title="Dispatch Backlog" value={productionMetrics.dispatchBacklog.pending} subtitle={`${productionMetrics.dispatchBacklog.overdue} overdue · Avg delay: ${productionMetrics.dispatchBacklog.avgDelay}`} highlight={productionMetrics.dispatchBacklog.overdue > 0} icon="🚚" />
+                                    <StatCard title="Delayed Orders" value={productionMetrics.delayed} subtitle={`Delay rate: ${productionMetrics.delayRate}%`} highlight={productionMetrics.delayed > 0} icon={Icons.clock} />
+                                    <StatCard title="Rework %" value={`${productionMetrics.rework.percentage}%`} subtitle={`${productionMetrics.rework.totalReworks} items ${"\u00B7"} ${productionMetrics.rework.trend === "down" ? "\u2193 Improving" : "\u2191 Rising"}`} icon={Icons.refresh} />
+                                    <StatCard title="Dispatch Backlog" value={productionMetrics.dispatchBacklog.pending} subtitle={`${productionMetrics.dispatchBacklog.overdue} overdue ${"\u00B7"} Avg: ${productionMetrics.dispatchBacklog.avgDelay}`} highlight={productionMetrics.dispatchBacklog.overdue > 0} icon={Icons.truck} />
                                 </div>
                                 <div className="pm-channel-card">
                                     <p className="pm-card-title">Orders by Channel</p>
@@ -661,8 +703,8 @@ export default function ProductionManagerDashboard() {
                                                 </div>
 
                                                 <div className="pm-order-actions">
-                                                    <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>✏️ Edit Order</button>
-                                                    <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>🏷️ {order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
+                                                    <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
+                                                    <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
                                                     <span className={`pm-recent-status ${getStatusClass(statusLabel)}`} style={{ marginLeft: "auto" }}>{statusLabel}</span>
                                                 </div>
                                             </div>
@@ -680,11 +722,191 @@ export default function ProductionManagerDashboard() {
                             </div>
                         )}
 
-                        {/* ===== PLACEHOLDER TABS ===== */}
-                        {activeTab === "production" && <div className="pm-placeholder-tab"><p className="pm-placeholder-title">Production</p><p className="pm-muted">Production tracking — coming soon</p></div>}
-                        {activeTab === "dispatch" && <div className="pm-placeholder-tab"><p className="pm-placeholder-title">Dispatch</p><p className="pm-muted">Dispatch management — coming soon</p></div>}
-                        {activeTab === "calendar" && <div className="pm-placeholder-tab"><p className="pm-placeholder-title">Calendar</p><p className="pm-muted">Delivery calendar — coming soon</p></div>}
-                        {activeTab === "staff" && <div className="pm-placeholder-tab"><p className="pm-placeholder-title">Staff</p><p className="pm-muted">Staff management — coming soon</p></div>}
+                        {/* ===== PRODUCTION TAB ===== */}
+                        {activeTab === "production" && (
+                            <div className="pm-orders-tab">
+                                <h2 className="pm-tab-title">Production Tracking</h2>
+                                <div className="pm-stats-row-3">
+                                    <StatCard title="In Production" value={statusStats.inProd} icon={Icons.gear} />
+                                    <StatCard title="QC Failures" value={productionMetrics.qcFailed} subtitle={`${productionMetrics.qcFailRate}% fail rate`} highlight={productionMetrics.qcFailed > 0} icon={Icons.xCircle} />
+                                    <StatCard title="Avg Lead Time" value={`${productionMetrics.avgLeadTime}d`} subtitle="Confirmation to QC" icon={Icons.timer} />
+                                </div>
+                                <div className="pm-stats-row-3">
+                                    <StatCard title="Rework" value={productionMetrics.rework.totalReworks} subtitle={`${productionMetrics.rework.percentage}% rate`} icon={Icons.refresh} />
+                                    <StatCard title="Delayed" value={productionMetrics.delayed} subtitle={`${productionMetrics.delayRate}% delay rate`} highlight={productionMetrics.delayed > 0} icon={Icons.warning} />
+                                    <StatCard title="Received (Total)" value={channelStats.total} icon={Icons.inbox} />
+                                </div>
+
+                                {productionMetrics.stuckByStage.length > 0 && (
+                                    <div className="pm-channel-card" style={{ marginTop: 20 }}>
+                                        <p className="pm-card-title">Orders by Stage (Backlog)</p>
+                                        <div className="pm-channel-body">
+                                            {productionMetrics.stuckByStage.map((s, i) => {
+                                                const maxVal = productionMetrics.stuckByStage[0]?.value || 1;
+                                                return (
+                                                    <div className="pm-channel-row" key={i}>
+                                                        <div className="pm-channel-label"><span className="pm-channel-dot" style={{ background: s.value >= 5 ? "#c62828" : "#d5b85a" }}></span><span style={{ textTransform: "capitalize" }}>{s.name}</span></div>
+                                                        <div className="pm-channel-right">
+                                                            <span className="pm-channel-count">{s.value}</span>
+                                                            <div className="pm-channel-bar-bg"><div className="pm-channel-bar-fill" style={{ width: `${(s.value / maxVal) * 100}%`, background: s.value >= 5 ? "#c62828" : "#d5b85a" }}></div></div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {productionMetrics.exceedingDelivery.length > 0 && (
+                                    <div className="pm-channel-card" style={{ marginTop: 20 }}>
+                                        <p className="pm-card-title">{"\u26A0\uFE0F"} Exceeding Delivery Date ({productionMetrics.exceedingDelivery.length})</p>
+                                        <div style={{ overflowX: "auto" }}>
+                                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Delivery</th><th style={{ padding: "8px 10px" }}>Overdue</th><th style={{ padding: "8px 10px" }}>Stage</th></tr></thead>
+                                                <tbody>{productionMetrics.exceedingDelivery.slice(0, 15).map(o => {
+                                                    const overdue = Math.ceil((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
+                                                    return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td><td style={{ padding: "8px 10px", color: "#c62828", fontWeight: 600 }}>{overdue}d</td><td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td></tr>);
+                                                })}</tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ===== DISPATCH TAB ===== */}
+                        {activeTab === "dispatch" && (() => {
+                            const now = new Date();
+                            const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
+                            const recentlyDispatched = orders.filter(o => o.dispatched_at).sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at)).slice(0, 20);
+                            const overdueReady = readyNotDispatched.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
+                            const avgWaitDays = readyNotDispatched.length > 0 ? (readyNotDispatched.reduce((s, o) => s + (now - new Date(o.ready_for_dispatch_at)) / (1000 * 60 * 60 * 24), 0) / readyNotDispatched.length).toFixed(1) : "0";
+                            return (
+                                <div className="pm-orders-tab">
+                                    <h2 className="pm-tab-title">Dispatch Management</h2>
+                                    <div className="pm-stats-row-3">
+                                        <StatCard title="Ready for Dispatch" value={readyNotDispatched.length} highlight={readyNotDispatched.length > 0} icon={Icons.package} />
+                                        <StatCard title="Overdue Dispatch" value={overdueReady.length} subtitle="Past delivery date" highlight={overdueReady.length > 0} icon={Icons.warning} />
+                                        <StatCard title="Avg Wait Time" value={`${avgWaitDays}d`} subtitle="Since ready" icon={Icons.hourglass} />
+                                    </div>
+
+                                    {readyNotDispatched.length > 0 && (
+                                        <div className="pm-channel-card" style={{ marginTop: 20 }}>
+                                            <p className="pm-card-title">Pending Dispatch ({readyNotDispatched.length})</p>
+                                            <div style={{ overflowX: "auto" }}>
+                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Ready Since</th><th style={{ padding: "8px 10px" }}>Delivery Due</th><th style={{ padding: "8px 10px" }}>Wait</th></tr></thead>
+                                                    <tbody>{readyNotDispatched.sort((a, b) => new Date(a.ready_for_dispatch_at) - new Date(b.ready_for_dispatch_at)).map(o => {
+                                                        const waitDays = Math.ceil((now - new Date(o.ready_for_dispatch_at)) / (1000 * 60 * 60 * 24));
+                                                        const isOverdue = o.delivery_date && new Date(o.delivery_date) < now;
+                                                        return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", background: isOverdue ? "#fff8e1" : "transparent" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td><td style={{ padding: "8px 10px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.ready_for_dispatch_at)}</td><td style={{ padding: "8px 10px", color: isOverdue ? "#c62828" : "inherit" }}>{formatDate(o.delivery_date) || "-"}</td><td style={{ padding: "8px 10px", fontWeight: 600, color: waitDays > 3 ? "#c62828" : "#333" }}>{waitDays}d</td></tr>);
+                                                    })}</tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {recentlyDispatched.length > 0 && (
+                                        <div className="pm-channel-card" style={{ marginTop: 20 }}>
+                                            <p className="pm-card-title">Recently Dispatched</p>
+                                            <div style={{ overflowX: "auto" }}>
+                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Dispatched On</th><th style={{ padding: "8px 10px" }}>By</th></tr></thead>
+                                                    <tbody>{recentlyDispatched.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.dispatched_at)}</td><td style={{ padding: "8px 10px" }}>{o.dispatched_by || "-"}</td></tr>))}</tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                        {/* ===== CALENDAR TAB ===== */}
+                        {activeTab === "calendar" && (() => {
+                            const now = new Date();
+                            const year = calendarYear;
+                            const month = calendarMonth;
+                            const daysInMonth = new Date(year, month + 1, 0).getDate();
+                            const firstDay = new Date(year, month, 1).getDay();
+                            const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+                            const goToPrevMonth = () => { if (month === 0) { setCalendarMonth(11); setCalendarYear(year - 1); } else setCalendarMonth(month - 1); };
+                            const goToNextMonth = () => { if (month === 11) { setCalendarMonth(0); setCalendarYear(year + 1); } else setCalendarMonth(month + 1); };
+                            const goToToday = () => { setCalendarMonth(now.getMonth()); setCalendarYear(now.getFullYear()); };
+
+                            const deliveryMap = {};
+                            orders.forEach(o => {
+                                if (o.delivery_date && o.status !== "cancelled") {
+                                    const key = new Date(o.delivery_date).toISOString().split("T")[0];
+                                    if (!deliveryMap[key]) deliveryMap[key] = { total: 0, delivered: 0, pending: 0 };
+                                    deliveryMap[key].total++;
+                                    if (o.status === "delivered" || o.status === "completed") deliveryMap[key].delivered++;
+                                    else deliveryMap[key].pending++;
+                                }
+                            });
+
+                            const cells = [];
+                            for (let i = 0; i < firstDay; i++) cells.push(null);
+                            for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+                            const monthOrders = orders.filter(o => {
+                                if (!o.delivery_date || o.status === "cancelled") return false;
+                                const dd = new Date(o.delivery_date);
+                                return dd.getMonth() === month && dd.getFullYear() === year && o.status !== "delivered" && o.status !== "completed";
+                            }).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date));
+
+                            return (
+                                <div className="pm-orders-tab">
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                                        <h2 className="pm-tab-title" style={{ margin: 0 }}>Delivery Calendar</h2>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <button onClick={goToPrevMonth} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 16 }}>{"\u25C0"}</button>
+                                            <span style={{ fontWeight: 600, fontSize: 16, minWidth: 160, textAlign: "center" }}>{monthNames[month]} {year}</span>
+                                            <button onClick={goToNextMonth} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 16 }}>{"\u25B6"}</button>
+                                            <button onClick={goToToday} style={{ background: "#d5b85a", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600, marginLeft: 4 }}>Today</button>
+                                        </div>
+                                    </div>
+                                    <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+                                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center", marginBottom: 8 }}>
+                                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (<div key={d} style={{ fontSize: 11, fontWeight: 600, color: "#999", padding: "6px 0" }}>{d}</div>))}
+                                        </div>
+                                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                                            {cells.map((day, i) => {
+                                                if (!day) return <div key={`e${i}`} />;
+                                                const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                                                const info = deliveryMap[dateKey];
+                                                const isToday = day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
+                                                const isPast = new Date(dateKey) < new Date(now.toISOString().split("T")[0]);
+                                                return (
+                                                    <div key={day} style={{ border: isToday ? "2px solid #d5b85a" : "1px solid #f0f0f0", borderRadius: 8, padding: "6px 4px", minHeight: 56, background: isToday ? "#faf6e8" : isPast ? "#fafafa" : "#fff" }}>
+                                                        <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#d5b85a" : "#333" }}>{day}</div>
+                                                        {info && (<div style={{ marginTop: 2 }}>
+                                                            {info.pending > 0 && <div style={{ fontSize: 9, background: "#fff3e0", color: "#e65100", borderRadius: 4, padding: "1px 4px", marginTop: 2 }}>{info.pending} due</div>}
+                                                            {info.delivered > 0 && <div style={{ fontSize: 9, background: "#e8f5e9", color: "#2e7d32", borderRadius: 4, padding: "1px 4px", marginTop: 2 }}>{info.delivered} done</div>}
+                                                        </div>)}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    {monthOrders.length > 0 && (
+                                        <div className="pm-channel-card">
+                                            <p className="pm-card-title">Pending Deliveries in {monthNames[month]} {"\u2014"} {monthOrders.length} orders</p>
+                                            <div style={{ overflowX: "auto" }}>
+                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Delivery Date</th><th style={{ padding: "8px 10px" }}>Status</th></tr></thead>
+                                                    <tbody>{monthOrders.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td><td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td><td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td></tr>))}</tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {monthOrders.length === 0 && <p className="pm-muted" style={{ textAlign: "center", padding: 20 }}>No pending deliveries for {monthNames[month]} {year}</p>}
+                                </div>
+                            );
+                        })()}
+
+                        {/* ===== STAFF TAB (no DB tables yet) ===== */}
+                        {activeTab === "staff" && <div className="pm-placeholder-tab"><p className="pm-placeholder-title">Staff</p><p className="pm-muted">Staff capacity & attendance tracking — requires attendance tables (coming soon)</p></div>}
                         {activeTab === "profile" && (
                             <div className="pm-placeholder-tab"><p className="pm-placeholder-title">Profile</p>
                                 {profile && (<div className="pm-profile-box">
