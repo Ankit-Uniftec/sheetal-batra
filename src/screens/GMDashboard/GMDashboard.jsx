@@ -206,23 +206,6 @@ export default function GMDashboard() {
             if (spRes.data) setSalespersonTable(spRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);
             if (consignmentRes.data) setConsignmentInventory(consignmentRes.data);
-
-            // Fetch LXRTS variant inventory from DB
-            const lxrtsProducts = productsRes.data?.filter(p => p.sync_enabled) || [];
-            if (lxrtsProducts.length > 0) {
-                const { data: allVariants } = await supabase
-                    .from("product_variants")
-                    .select("product_id, size, inventory")
-                    .in("product_id", lxrtsProducts.map(p => p.id));
-                if (allVariants) {
-                    const invMap = {};
-                    allVariants.forEach(v => {
-                        if (!invMap[v.product_id]) invMap[v.product_id] = {};
-                        invMap[v.product_id][v.size] = v.inventory || 0;
-                    });
-                    setVariantInventory(invMap);
-                }
-            }
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
@@ -236,6 +219,32 @@ export default function GMDashboard() {
     }, []);
 
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+
+    const fetchAllLxrtsInventory = async (lxrtsProducts) => {
+        setLxrtsSyncLoading(true);
+        const inventoryMap = {};
+        await Promise.allSettled(lxrtsProducts.map(async (product) => {
+            try {
+                const response = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-inventory`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` },
+                    body: JSON.stringify({ action: "fetch", product_id: product.id }),
+                });
+                const result = await response.json();
+                if (result.success && result.inventory) inventoryMap[product.id] = result.inventory;
+                else {
+                    const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
+                    if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
+                }
+            } catch (err) {
+                console.error(`Error syncing ${product.name}:`, err);
+                const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
+                if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
+            }
+        }));
+        setVariantInventory(inventoryMap);
+        setLxrtsSyncLoading(false);
+    };
 
     // ═══════════════════════════════════════════════════════════
     // HELPER FUNCTIONS
@@ -819,6 +828,12 @@ export default function GMDashboard() {
     useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
     useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
+    useEffect(() => {
+        if (activeTab === "inventory") {
+            const lxrtsProducts = products.filter(p => p.sync_enabled);
+            if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
+        }
+    }, [activeTab, products]);
 
     const handleTimelineChange = (value) => {
         setTimeline(value);

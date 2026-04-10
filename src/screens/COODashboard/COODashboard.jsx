@@ -8,6 +8,7 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -109,6 +110,7 @@ export default function COODashboard() {
     const [inventorySearch, setInventorySearch] = useState("");
     const [inventoryPage, setInventoryPage] = useState(1);
     const [variantInventory, setVariantInventory] = useState({});
+    const [lxrtsSyncLoading, setLxrtsSyncLoading] = useState(false);
     const [expandedProduct, setExpandedProduct] = useState(null);
 
     // Auth
@@ -144,23 +146,6 @@ export default function COODashboard() {
             if (spRes.data) setSalespersonTable(spRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);
             if (consRes.data) setConsignmentInventory(consRes.data);
-
-            // Fetch LXRTS variant inventory from DB
-            const lxrtsProducts = productsRes.data?.filter(p => p.sync_enabled) || [];
-            if (lxrtsProducts.length > 0) {
-                const { data: allVariants } = await supabase
-                    .from("product_variants")
-                    .select("product_id, size, inventory")
-                    .in("product_id", lxrtsProducts.map(p => p.id));
-                if (allVariants) {
-                    const invMap = {};
-                    allVariants.forEach(v => {
-                        if (!invMap[v.product_id]) invMap[v.product_id] = {};
-                        invMap[v.product_id][v.size] = v.inventory || 0;
-                    });
-                    setVariantInventory(invMap);
-                }
-            }
         } catch (err) { console.error("Error:", err); }
         finally { setLoading(false); }
     };
@@ -172,6 +157,31 @@ export default function COODashboard() {
     }, []);
 
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+    const fetchAllLxrtsInventory = async (lxrtsProducts) => {
+        setLxrtsSyncLoading(true);
+        const inventoryMap = {};
+        await Promise.allSettled(lxrtsProducts.map(async (product) => {
+            try {
+                const response = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-inventory`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` },
+                    body: JSON.stringify({ action: "fetch", product_id: product.id }),
+                });
+                const result = await response.json();
+                if (result.success && result.inventory) inventoryMap[product.id] = result.inventory;
+                else {
+                    const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
+                    if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
+                }
+            } catch (err) {
+                console.error(`Error syncing ${product.name}:`, err);
+                const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
+                if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
+            }
+        }));
+        setVariantInventory(inventoryMap);
+        setLxrtsSyncLoading(false);
+    };
 
     // ═══════════════════════════════════════════════════════════
     // HELPERS
@@ -619,6 +629,12 @@ export default function COODashboard() {
     // Resets
     useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
     useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
+    useEffect(() => {
+        if (activeTab === "inventory") {
+            const lxrtsProducts = products.filter(p => p.sync_enabled);
+            if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
+        }
+    }, [activeTab, products]);
 
     const handleTimelineChange = (v) => { setTimeline(v); setShowCustomDatePicker(v === "custom"); };
 
