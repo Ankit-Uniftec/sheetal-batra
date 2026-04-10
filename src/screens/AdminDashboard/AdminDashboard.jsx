@@ -178,6 +178,7 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [salespersonTable, setSalespersonTable] = useState([]);
     const [pdfLoading, setPdfLoading] = useState(null);
+    const [vendors, setVendors] = useState([]);
 
     // Dashboard states
     const [recentOrdersCount, setRecentOrdersCount] = useState(10);
@@ -273,14 +274,16 @@ export default function AdminDashboard() {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [ordersRes, productsRes, spRes] = await Promise.all([
+            const [ordersRes, productsRes, spRes, vendorsRes] = await Promise.all([
                 supabase.from("orders").select("*").order("created_at", { ascending: false }),
                 supabase.from("products").select("*").order("name", { ascending: true }),
                 supabase.from("salesperson").select("saleperson, role"),
+                supabase.from("vendors").select("*"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data);
             if (productsRes.data) setProducts(productsRes.data);
             if (spRes.data) setSalespersonTable(spRes.data);
+            if (vendorsRes.data) setVendors(vendorsRes.data);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
@@ -1275,7 +1278,8 @@ export default function AdminDashboard() {
         // Client sales map
         const clientSales = {};
         currentB2b.forEach(o => {
-            const client = o.delivery_name || o.vendor_name || "Unknown";
+            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
+            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
             clientSales[client].sales += Number(o.grand_total || 0);
             clientSales[client].orders += 1;
@@ -1300,7 +1304,8 @@ export default function AdminDashboard() {
         // New clients this period (first order within date range)
         const allClientFirstOrders = {};
         allB2bOrders.forEach(o => {
-            const client = o.delivery_name || o.vendor_name || "Unknown";
+            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
+            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!allClientFirstOrders[client] || o.created_at < allClientFirstOrders[client]) {
                 allClientFirstOrders[client] = o.created_at;
             }
@@ -1346,7 +1351,7 @@ export default function AdminDashboard() {
             advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
             merchandiserList, topB2bProducts,
         };
-    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, b2bMerchandiserFilter, salespersonTable]);
+    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, b2bMerchandiserFilter, salespersonTable, vendors]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: ENHANCED INVENTORY (Delayed deliveries)
