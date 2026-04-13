@@ -118,6 +118,7 @@ export default function GMDashboard() {
     const [consignmentInventory, setConsignmentInventory] = useState([]);
     const [currentUserEmail, setCurrentUserEmail] = useState("");
     const [currentUserName, setCurrentUserName] = useState("");
+    const [currentUserStore, setCurrentUserStore] = useState("");
 
     // UI state
     const [activeTab, setActiveTab] = useState("store_performance");
@@ -173,7 +174,7 @@ export default function GMDashboard() {
 
             const { data: userRecord } = await supabase
                 .from("salesperson")
-                .select("role, saleperson")
+                .select("role, saleperson, store_name")
                 .eq("email", session.user.email?.toLowerCase())
                 .single();
 
@@ -185,6 +186,7 @@ export default function GMDashboard() {
             }
 
             setCurrentUserEmail(session.user.email?.toLowerCase() || "");
+            setCurrentUserStore(userRecord.store_name || "Delhi Store");
             setCurrentUserName(userRecord.saleperson || "");
             fetchAllData();
         };
@@ -1340,7 +1342,22 @@ export default function GMDashboard() {
                         <div className="admin-orders-tab">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                                 <h2 className="admin-section-title">Order Management</h2>
-                                <button className="admin-export-btn" onClick={() => navigate("/order")} style={{ background: '#d5b85a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>
+                                <button className="admin-export-btn" onClick={async () => {
+                                    const { data: { session } } = await supabase.auth.getSession();
+                                    if (session) {
+                                        sessionStorage.setItem("associateSession", JSON.stringify({
+                                            access_token: session.access_token,
+                                            refresh_token: session.refresh_token,
+                                        }));
+                                    }
+                                    sessionStorage.setItem("currentSalesperson", JSON.stringify({
+                                        store: currentUserStore || "Delhi Store",
+                                        name: currentUserName,
+                                        email: currentUserEmail,
+                                    }));
+                                    sessionStorage.setItem("returnDashboard", "/gm-dashboard");
+                                    navigate("/buyerVerification");
+                                }} style={{ background: '#d5b85a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>
                                     + Place Order
                                 </button>
                             </div>

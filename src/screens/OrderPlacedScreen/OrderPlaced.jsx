@@ -34,14 +34,14 @@ export default function OrderPlaced() {
           sessionStorage.setItem("requireVerification", "true");
           sessionStorage.removeItem("associateSession");
           sessionStorage.removeItem("returnToAssociate");
-          navigate("/AssociateDashboard", { replace: true });
+          navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
           return;
         }
       }
-      navigate("/AssociateDashboard", { replace: true });
+      navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
     } catch (e) {
       console.error("Logout restore error", e);
-      navigate("/AssociateDashboard", { replace: true });
+      navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
     }
   };
 
