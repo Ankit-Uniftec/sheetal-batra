@@ -1194,6 +1194,9 @@ const WarehouseDashboard = () => {
                           </div>
 
                           <div className="wd-order-actions">
+                            <span className="wd-product-count-label">
+                              {Array.isArray(order.items) ? order.items.length : 1} Product{(Array.isArray(order.items) ? order.items.length : 1) !== 1 ? "s" : ""}
+                            </span>
                             <button
                               className="wd-pdf-Btn"
                               onClick={() => handleGeneratePdf(order)}
