@@ -143,13 +143,30 @@ export default function ProductionManagerDashboard() {
             setUser(user);
             setCurrentUserEmail(user.email?.toLowerCase() || "");
 
-            const [profileResult, ordersResult] = await Promise.all([
-                supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
-                supabase.from("orders").select("*").order("created_at", { ascending: false })
-            ]);
-
+            const profileResult = await supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle();
             if (profileResult.data) setProfile(profileResult.data);
-            if (ordersResult.data) setOrders(ordersResult.data);
+
+            // Fetch all orders in batches to bypass Supabase 1000-row default limit
+            const PAGE_SIZE = 1000;
+            let allOrders = [];
+            let from = 0;
+            let done = false;
+            while (!done) {
+                const { data, error } = await supabase
+                    .from("orders")
+                    .select("*")
+                    .order("created_at", { ascending: false })
+                    .range(from, from + PAGE_SIZE - 1);
+                if (error) throw error;
+                if (data && data.length > 0) {
+                    allOrders = [...allOrders, ...data];
+                    from += PAGE_SIZE;
+                    if (data.length < PAGE_SIZE) done = true;
+                } else {
+                    done = true;
+                }
+            }
+            setOrders(allOrders);
 
             setLoading(false);
         } catch (err) {
@@ -173,12 +190,10 @@ export default function ProductionManagerDashboard() {
     const channelStats = useMemo(() => {
         const total = orders.length;
         const b2b = orders.filter(o => o.is_b2b === true).length;
-        const lxrts = orders.filter(o => !o.is_b2b && o.order_no?.startsWith("LXRTS")).length;
-        const store = total - b2b - lxrts;
+        const store = total - b2b;
         return {
-            total, b2b, website: lxrts, store: store > 0 ? store : 0,
+            total, b2b, store: store > 0 ? store : 0,
             b2bPct: total > 0 ? Math.round((b2b / total) * 100) : 0,
-            websitePct: total > 0 ? Math.round((lxrts / total) * 100) : 0,
             storePct: total > 0 ? Math.round((store > 0 ? store : 0) / total * 100) : 0,
         };
     }, [orders]);
@@ -200,17 +215,45 @@ export default function ProductionManagerDashboard() {
         const reworkPct = orders.length > 0 ? ((reworkOrders.length / orders.length) * 100) : 0;
         const qcFailRate = orders.length > 0 ? ((qcFailed.length / orders.length) * 100) : 0;
 
-        const stageMap = {};
-        activeOrders.forEach(o => { const stage = o.warehouse_stage || o.status || "unknown"; if (!stageMap[stage]) stageMap[stage] = 0; stageMap[stage]++; });
-        const stuckByStage = Object.entries(stageMap).map(([name, value]) => ({ name: name.replace(/_/g, " "), value })).sort((a, b) => b.value - a.value);
-        const topBottleneck = stuckByStage.length > 0 ? stuckByStage[0].name : "None";
+        // Bottleneck logic — only orders genuinely in production flow
+        // Excludes raw "pending" orders (not yet confirmed, not a production stage)
+        const inFlowOrders = activeOrders.filter(o =>
+            o.warehouse_stage ||
+            o.status === "confirmed" ||
+            o.status === "prepared"
+        );
+
+        const stageData = {};
+        inFlowOrders.forEach(o => {
+            const stage = o.warehouse_stage || o.status || "unknown";
+            if (!stageData[stage]) stageData[stage] = { total: 0, overdue: 0, totalOverdueDays: 0 };
+            stageData[stage].total++;
+            if (o.delivery_date && new Date(o.delivery_date) < now) {
+                const days = Math.ceil((now - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
+                stageData[stage].overdue++;
+                stageData[stage].totalOverdueDays += days;
+            }
+        });
+
+        const stuckByStage = Object.entries(stageData)
+            .map(([name, data]) => ({
+                name: name.replace(/_/g, " "),
+                total: data.total,
+                overdue: data.overdue,
+                avgOverdueDays: data.overdue > 0 ? Math.round(data.totalOverdueDays / data.overdue) : 0,
+                severity: data.overdue > 0 ? "critical" : data.total >= 3 ? "warning" : "normal",
+            }))
+            .sort((a, b) => b.overdue - a.overdue || b.total - a.total);
+
+        const criticalBottlenecks = stuckByStage.filter(s => s.severity === "critical").length;
+        const topBottleneck = stuckByStage[0] || null;
 
         const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
         const overdueDispatch = readyNotDispatched.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
 
         return {
             productionLoad: { active: statusStats.inProd, percentage: activeOrders.length > 0 ? Math.round((statusStats.inProd / activeOrders.length) * 100) : 0 },
-            bottlenecks: { count: stuckByStage.length, critical: stuckByStage.filter(s => s.value >= 5).length, topBottleneck },
+            bottlenecks: { count: criticalBottlenecks, critical: criticalBottlenecks, topBottleneck: topBottleneck?.name || "None", topOverdue: topBottleneck?.overdue || 0, topAvgDays: topBottleneck?.avgOverdueDays || 0 },
             rework: { percentage: reworkPct.toFixed(1), totalReworks: reworkOrders.length, trend: reworkPct < 5 ? "down" : "up" },
             dispatchBacklog: { pending: readyNotDispatched.length, overdue: overdueDispatch.length, avgDelay: delayed.length > 0 ? `${Math.round(delayed.reduce((s, o) => s + (now - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24), 0) / delayed.length)}d` : "0d" },
             delayed: delayed.length, delayRate: activeOrders.length > 0 ? ((delayed.length / activeOrders.length) * 100).toFixed(1) : "0",
@@ -226,8 +269,7 @@ export default function ProductionManagerDashboard() {
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
         if (channelFilter === "b2b") filtered = filtered.filter(o => o.is_b2b === true);
-        else if (channelFilter === "website") filtered = filtered.filter(o => !o.is_b2b && o.order_no?.startsWith("LXRTS"));
-        else if (channelFilter === "store") filtered = filtered.filter(o => !o.is_b2b && !o.order_no?.startsWith("LXRTS"));
+        else if (channelFilter === "store") filtered = filtered.filter(o => !o.is_b2b);
 
         if (statusFilter !== "all") filtered = filtered.filter(o => o.status?.toLowerCase() === statusFilter);
 
@@ -250,8 +292,8 @@ export default function ProductionManagerDashboard() {
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
 
-    const getChannelLabel = (order) => { if (order.is_b2b) return "B2B"; if (order.order_no?.startsWith("LXRTS")) return "Website"; return "Store"; };
-    const getChannelClass = (order) => { if (order.is_b2b) return "pm-channel-b2b"; if (order.order_no?.startsWith("LXRTS")) return "pm-channel-website"; return "pm-channel-store"; };
+    const getChannelLabel = (order) => { if (order.is_b2b) return "B2B"; return "Store"; };
+    const getChannelClass = (order) => { if (order.is_b2b) return "pm-channel-b2b"; return "pm-channel-store"; };
 
     const getStatusLabel = (order) => {
         if (order.production_status === "dispatched" || order.status === "delivered") return "Dispatched";
@@ -607,9 +649,9 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "overview" && (
                             <>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStats.total)} subtitle={`B2B: ${channelStats.b2b} | Website: ${channelStats.website} | Store: ${channelStats.store}`} highlight={true} icon={Icons.package} />
+                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStats.total)} subtitle={`B2B: ${channelStats.b2b} | Store: ${channelStats.store}`} highlight={true} icon={Icons.package} />
                                     <StatCard title="Production Load" value={`${productionMetrics.productionLoad.percentage}%`} subtitle={`${productionMetrics.productionLoad.active} in production`} icon={Icons.gear} />
-                                    <StatCard title="Bottlenecks" value={productionMetrics.bottlenecks.count} subtitle={`${productionMetrics.bottlenecks.critical} critical ${"\u00B7"} ${productionMetrics.bottlenecks.topBottleneck}`} highlight={productionMetrics.bottlenecks.critical > 0} icon={Icons.warning} />
+                                    <StatCard title="Bottlenecks" value={productionMetrics.bottlenecks.count} subtitle={productionMetrics.bottlenecks.count > 0 ? `${productionMetrics.bottlenecks.topBottleneck} · ${productionMetrics.bottlenecks.topOverdue} overdue · avg ${productionMetrics.bottlenecks.topAvgDays}d late` : "No overdue stages"} highlight={productionMetrics.bottlenecks.count > 0} icon={Icons.warning} />
                                 </div>
                                 <div className="pm-stats-row-3">
                                     <StatCard title="Delayed Orders" value={productionMetrics.delayed} subtitle={`Delay rate: ${productionMetrics.delayRate}%`} highlight={productionMetrics.delayed > 0} icon={Icons.clock} />
@@ -619,7 +661,6 @@ export default function ProductionManagerDashboard() {
                                 <div className="pm-channel-card">
                                     <p className="pm-card-title">Orders by Channel</p>
                                     <div className="pm-channel-body">
-                                        <ChannelRow label="Website (Online)" count={channelStats.website} percentage={channelStats.websitePct} color="#1565c0" />
                                         <ChannelRow label="Store (Offline)" count={channelStats.store} percentage={channelStats.storePct} color="#2e7d32" />
                                         <ChannelRow label="B2B" count={channelStats.b2b} percentage={channelStats.b2bPct} color="#d5b85a" />
                                     </div>
@@ -653,7 +694,7 @@ export default function ProductionManagerDashboard() {
                                 <div className="pm-filters-row">
                                     <input type="text" placeholder="Search order #, client, product, PO..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="pm-search-input" />
                                     <select value={channelFilter} onChange={(e) => { setChannelFilter(e.target.value); setCurrentPage(1); }} className="pm-filter-select">
-                                        <option value="all">All Channels</option><option value="b2b">B2B</option><option value="website">Website</option><option value="store">Store</option>
+                                        <option value="all">All Channels</option><option value="b2b">B2B</option><option value="store">Store</option>
                                     </select>
                                     <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="pm-filter-select">
                                         <option value="all">All Statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="prepared">Prepared</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option>
@@ -739,21 +780,44 @@ export default function ProductionManagerDashboard() {
 
                                 {productionMetrics.stuckByStage.length > 0 && (
                                     <div className="pm-channel-card" style={{ marginTop: 20 }}>
-                                        <p className="pm-card-title">Orders by Stage (Backlog)</p>
-                                        <div className="pm-channel-body">
-                                            {productionMetrics.stuckByStage.map((s, i) => {
-                                                const maxVal = productionMetrics.stuckByStage[0]?.value || 1;
-                                                return (
-                                                    <div className="pm-channel-row" key={i}>
-                                                        <div className="pm-channel-label"><span className="pm-channel-dot" style={{ background: s.value >= 5 ? "#c62828" : "#d5b85a" }}></span><span style={{ textTransform: "capitalize" }}>{s.name}</span></div>
-                                                        <div className="pm-channel-right">
-                                                            <span className="pm-channel-count">{s.value}</span>
-                                                            <div className="pm-channel-bar-bg"><div className="pm-channel-bar-fill" style={{ width: `${(s.value / maxVal) * 100}%`, background: s.value >= 5 ? "#c62828" : "#d5b85a" }}></div></div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                        <p className="pm-card-title">Production Stage Bottlenecks</p>
+                                        <div style={{ overflowX: "auto" }}>
+                                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                <thead>
+                                                    <tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left", background: "#fafafa" }}>
+                                                        <th style={{ padding: "10px 12px" }}>Stage</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Total Orders</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Overdue</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Avg Days Late</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {productionMetrics.stuckByStage.map((s, i) => (
+                                                        <tr key={i} style={{ borderBottom: "1px solid #f0f0f0", background: s.severity === "critical" ? "#fff5f5" : s.severity === "warning" ? "#fffde7" : "#fff" }}>
+                                                            <td style={{ padding: "10px 12px", fontWeight: 600, textTransform: "capitalize" }}>{s.name}</td>
+                                                            <td style={{ padding: "10px 12px", textAlign: "center" }}>{s.total}</td>
+                                                            <td style={{ padding: "10px 12px", textAlign: "center", color: s.overdue > 0 ? "#c62828" : "#666", fontWeight: s.overdue > 0 ? 700 : 400 }}>{s.overdue > 0 ? s.overdue : "—"}</td>
+                                                            <td style={{ padding: "10px 12px", textAlign: "center", color: s.avgOverdueDays > 0 ? "#c62828" : "#666" }}>{s.avgOverdueDays > 0 ? `${s.avgOverdueDays}d` : "—"}</td>
+                                                            <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                                                                {s.severity === "critical" && <span style={{ background: "#ffebee", color: "#c62828", borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>🔴 Critical</span>}
+                                                                {s.severity === "warning" && <span style={{ background: "#fffde7", color: "#f57f17", borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>🟡 Watch</span>}
+                                                                {s.severity === "normal" && <span style={{ background: "#e8f5e9", color: "#2e7d32", borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>🟢 OK</span>}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         </div>
+                                        <p style={{ fontSize: 11, color: "#999", marginTop: 10, padding: "0 4px" }}>
+                                            {"🔴 Critical = stage has overdue orders · 🟡 Watch = 3+ orders piling up · 🟢 OK = on track"}
+                                        </p>
+                                    </div>
+                                )}
+                                {productionMetrics.stuckByStage.length === 0 && (
+                                    <div className="pm-channel-card" style={{ marginTop: 20, textAlign: "center", padding: 32 }}>
+                                        <p style={{ color: "#2e7d32", fontWeight: 600, fontSize: 15 }}>{"✅ No production bottlenecks detected"}</p>
+                                        <p className="pm-muted" style={{ marginTop: 6 }}>All in-flow orders are on track</p>
                                     </div>
                                 )}
 
