@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import "./ProductionManagerDashboard.css";
@@ -55,7 +55,16 @@ const Icons = {
     hourglass: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>,
 };
 
-// ==================== STAT CARD ====================
+// ==================== STATUS TABS ====================
+const STATUS_TABS = [
+    { value: "all", label: "All Orders" },
+    { value: "unfulfilled", label: "Unfulfilled" },
+    { value: "completed", label: "Completed" },
+    { value: "delivered", label: "Delivered" },
+    { value: "cancelled", label: "Cancelled" },
+];
+
+
 const StatCard = ({ title, value, subtitle, highlight, icon }) => (
     <div className={`pm-stat-card-inner ${highlight ? "pm-stat-highlight" : ""}`}>
         <div className="pm-stat-top-row">
@@ -101,8 +110,12 @@ export default function ProductionManagerDashboard() {
     // Orders tab state
     const [orderSearch, setOrderSearch] = useState("");
     const [channelFilter, setChannelFilter] = useState("all");
-    const [statusFilter, setStatusFilter] = useState("all");
+    const [statusTab, setStatusTab] = useState("all");
+    const [sortBy, setSortBy] = useState("newest");
+    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "" });
+    const [openDropdown, setOpenDropdown] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
+    const dropdownRef = useRef(null);
     const ORDERS_PER_PAGE = 20;
 
     // Edit modal state
@@ -186,7 +199,94 @@ export default function ProductionManagerDashboard() {
         fetchColors();
     }, []);
 
-    // ==================== COMPUTED STATS ====================
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handleClick = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpenDropdown(null); };
+        document.addEventListener("mousedown", handleClick);
+        return () => document.removeEventListener("mousedown", handleClick);
+    }, []);
+
+    // Reset page when filters change
+    useEffect(() => { setCurrentPage(1); }, [orderSearch, statusTab, channelFilter, filters, sortBy]);
+
+    // ==================== HELPER FUNCTIONS ====================
+    const getPaymentStatus = (order) => {
+        const paid = Number(order.amount_paid || 0);
+        const total = Number(order.grand_total || order.net_total || 0);
+        if (paid <= 0) return "unpaid";
+        if (paid >= total) return "paid";
+        return "partial";
+    };
+
+    const getPriority = (order) => order.priority || "normal";
+
+    const salespersons = useMemo(() => {
+        const spSet = new Set();
+        orders.forEach(o => { if (o.salesperson && o.salesperson.trim()) spSet.add(o.salesperson.trim()); });
+        return Array.from(spSet).sort();
+    }, [orders]);
+
+    const toggleFilter = (category, value) => setFilters(prev => ({
+        ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value]
+    }));
+
+    const removeFilter = (type, value) => {
+        if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+        else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
+        else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
+        else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
+    };
+
+    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "" });
+
+    const appliedFilters = useMemo(() => {
+        const chips = [];
+        if (filters.dateFrom || filters.dateTo) {
+            const label = filters.dateFrom && filters.dateTo ? `${filters.dateFrom} to ${filters.dateTo}` : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
+            chips.push({ type: "date", label });
+        }
+        if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `₹${(filters.minPrice / 1000).toFixed(0)}K - ₹${(filters.maxPrice / 1000).toFixed(0)}K` });
+        filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p === "unpaid" ? "Unpaid (COD)" : p.charAt(0).toUpperCase() + p.slice(1) }));
+        filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
+        filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
+        if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
+        return chips;
+    }, [filters]);
+
+    const handleExportCSV = () => {
+        if (filteredOrders.length === 0) return;
+        const headers = ["Order No", "Product Name", "Customer Name", "Customer Phone", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Priority", "Notes", "Order Date", "Delivery Date"];
+        const rows = filteredOrders.map(order => {
+            const item = order.items?.[0] || {};
+            return [
+                order.order_no || "",
+                item.product_name || "",
+                order.delivery_name || "",
+                order.delivery_phone || "",
+                item.size || "",
+                order.grand_total || 0,
+                item.top_color?.name || "",
+                item.bottom_color?.name || "",
+                order.salesperson || "",
+                order.salesperson_store || "",
+                order.status || "",
+                order.priority || "normal",
+                order.notes || "",
+                order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
+                order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+        });
+        const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `production_orders_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+
     const channelStats = useMemo(() => {
         const total = orders.length;
         const b2b = orders.filter(o => o.is_b2b === true).length;
@@ -266,22 +366,67 @@ export default function ProductionManagerDashboard() {
     const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
 
     // ==================== FILTERED + PAGINATED ORDERS ====================
+    const filteredByStatus = useMemo(() => {
+        return orders.filter(o => {
+            if (channelFilter === "b2b" && !o.is_b2b) return false;
+            if (channelFilter === "store" && o.is_b2b) return false;
+            const status = o.status?.toLowerCase();
+            switch (statusTab) {
+                case "unfulfilled": return status !== "completed" && status !== "delivered" && status !== "cancelled";
+                case "completed": return status === "completed";
+                case "delivered": return status === "delivered";
+                case "cancelled": return status === "cancelled";
+                default: return true;
+            }
+        });
+    }, [orders, statusTab, channelFilter]);
+
     const filteredOrders = useMemo(() => {
-        let filtered = [...orders];
-        if (channelFilter === "b2b") filtered = filtered.filter(o => o.is_b2b === true);
-        else if (channelFilter === "store") filtered = filtered.filter(o => !o.is_b2b);
-
-        if (statusFilter !== "all") filtered = filtered.filter(o => o.status?.toLowerCase() === statusFilter);
-
+        let result = filteredByStatus;
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
-            filtered = filtered.filter(o => {
+            result = result.filter(o => {
                 const productName = o.items?.[0]?.product_name || "";
                 return (o.order_no || "").toLowerCase().includes(q) || (o.delivery_name || "").toLowerCase().includes(q) || (o.delivery_phone || "").toLowerCase().includes(q) || (o.po_number || "").toLowerCase().includes(q) || productName.toLowerCase().includes(q);
             });
         }
-        return filtered;
-    }, [orders, channelFilter, statusFilter, orderSearch]);
+        if (filters.dateFrom || filters.dateTo) {
+            result = result.filter(o => {
+                const d = new Date(o.created_at);
+                if (filters.dateFrom && d < new Date(filters.dateFrom)) return false;
+                if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false;
+                return true;
+            });
+        }
+        if (filters.minPrice > 0 || filters.maxPrice < 500000) {
+            result = result.filter(o => { const t = o.grand_total || 0; return t >= filters.minPrice && t <= filters.maxPrice; });
+        }
+        if (filters.payment.length > 0) result = result.filter(o => filters.payment.includes(getPaymentStatus(o)));
+        if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
+        if (filters.store.length > 0) result = result.filter(o => filters.store.includes(o.salesperson_store));
+        if (filters.salesperson) result = result.filter(o => o.salesperson === filters.salesperson);
+        result = [...result].sort((a, b) => {
+            switch (sortBy) {
+                case "oldest": return new Date(a.created_at) - new Date(b.created_at);
+                case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
+                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
+                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                default: return new Date(b.created_at) - new Date(a.created_at);
+            }
+        });
+        return result;
+    }, [filteredByStatus, orderSearch, filters, sortBy]);
+
+    const orderTabCounts = useMemo(() => {
+        const base = channelFilter === "b2b" ? orders.filter(o => o.is_b2b) : channelFilter === "store" ? orders.filter(o => !o.is_b2b) : orders;
+        return {
+            all: base.length,
+            unfulfilled: base.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length,
+            completed: base.filter(o => o.status?.toLowerCase() === "completed").length,
+            delivered: base.filter(o => o.status?.toLowerCase() === "delivered").length,
+            cancelled: base.filter(o => o.status?.toLowerCase() === "cancelled").length,
+        };
+    }, [orders, channelFilter]);
 
     const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
     const paginatedOrders = useMemo(() => {
@@ -603,7 +748,7 @@ export default function ProductionManagerDashboard() {
                         <div className="pm-edit-form">
                             <div className="pm-edit-field"><label>Priority Level</label>
                                 <select value={priorityValue} onChange={(e) => setPriorityValue(e.target.value)}>
-                                    <option value="">Normal</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option>
+                                    <option value="">Normal</option><option value="urgent">Urgent</option>
                                 </select>
                             </div>
                             <div className="pm-edit-actions">
@@ -690,16 +835,152 @@ export default function ProductionManagerDashboard() {
                         {/* ===== ALL ORDERS TAB ===== */}
                         {activeTab === "orders" && (
                             <div className="pm-orders-tab">
-                                <h2 className="pm-tab-title">All Orders ({filteredOrders.length})</h2>
-                                <div className="pm-filters-row">
-                                    <input type="text" placeholder="Search order #, client, product, PO..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="pm-search-input" />
-                                    <select value={channelFilter} onChange={(e) => { setChannelFilter(e.target.value); setCurrentPage(1); }} className="pm-filter-select">
-                                        <option value="all">All Channels</option><option value="b2b">B2B</option><option value="store">Store</option>
+
+                                {/* Row 1: Title + Export */}
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                                    <h2 className="pm-tab-title" style={{ margin: 0 }}>All Orders</h2>
+                                    <button onClick={handleExportCSV} style={{ display: "flex", alignItems: "center", gap: 6, background: "#d5b85a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                        Export CSV
+                                    </button>
+                                </div>
+
+                                {/* Row 2: Search + Channel + Sort */}
+                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                                    <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
+                                        <input type="text" placeholder="Search order #, client, product, PO..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="pm-search-input" style={{ paddingLeft: 32, width: "100%", boxSizing: "border-box" }} />
+                                        <svg style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.4 }} xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
+                                    </div>
+                                    <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="pm-filter-select" style={{ flex: "0 0 auto" }}>
+                                        <option value="all">All Channels</option>
+                                        <option value="b2b">B2B</option>
+                                        <option value="store">Store</option>
                                     </select>
-                                    <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="pm-filter-select">
-                                        <option value="all">All Statuses</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="prepared">Prepared</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option>
+                                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="pm-filter-select" style={{ flex: "0 0 auto" }}>
+                                        <option value="newest">Newest First</option>
+                                        <option value="oldest">Oldest First</option>
+                                        <option value="delivery">Delivery Date</option>
+                                        <option value="amount_high">Amount: High to Low</option>
+                                        <option value="amount_low">Amount: Low to High</option>
                                     </select>
                                 </div>
+
+                                {/* Row 3: Status Tabs */}
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                                    {STATUS_TABS.map(tab => (
+                                        <button key={tab.value} onClick={() => setStatusTab(tab.value)} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", fontSize: 13, cursor: "pointer", fontWeight: statusTab === tab.value ? 700 : 400, background: statusTab === tab.value ? "#d5b85a" : "#fff", color: statusTab === tab.value ? "#fff" : "#555", borderColor: statusTab === tab.value ? "#d5b85a" : "#ddd" }}>
+                                            {tab.label} <span style={{ marginLeft: 4, background: statusTab === tab.value ? "rgba(255,255,255,0.3)" : "#f0f0f0", color: statusTab === tab.value ? "#fff" : "#666", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{orderTabCounts[tab.value]}</span>
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Row 4: Filter Bar (all inline) */}
+                                <div ref={dropdownRef} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                                    {/* Date Range */}
+                                    <div style={{ position: "relative" }}>
+                                        <button className={`pm-filter-select ${(filters.dateFrom || filters.dateTo) ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")} style={{ cursor: "pointer" }}>Date Range {"\u25BE"}</button>
+                                        {openDropdown === "date" && (
+                                            <div className="pm-dropdown-panel">
+                                                <div className="pm-dropdown-title">Select Date Range</div>
+                                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                                    <input type="date" value={filters.dateFrom} onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))} style={{ padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6, fontSize: 13 }} />
+                                                    <span>to</span>
+                                                    <input type="date" value={filters.dateTo} onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))} style={{ padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6, fontSize: 13 }} />
+                                                </div>
+                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Price */}
+                                    <div style={{ position: "relative" }}>
+                                        <button className={`pm-filter-select ${(filters.minPrice > 0 || filters.maxPrice < 500000) ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")} style={{ cursor: "pointer" }}>Price {"\u25BE"}</button>
+                                        {openDropdown === "price" && (
+                                            <div className="pm-dropdown-panel">
+                                                <div className="pm-dropdown-title">Order Value</div>
+                                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: 4, border: "1px solid #ddd", borderRadius: 6, padding: "4px 8px" }}><span style={{ color: "#888" }}>{"₹"}</span><input type="number" value={filters.minPrice} onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 1000) }))} style={{ width: 80, border: "none", outline: "none", fontSize: 13 }} /></div>
+                                                    <span>to</span>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: 4, border: "1px solid #ddd", borderRadius: 6, padding: "4px 8px" }}><span style={{ color: "#888" }}>{"₹"}</span><input type="number" value={filters.maxPrice} onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 1000) }))} style={{ width: 80, border: "none", outline: "none", fontSize: 13 }} /></div>
+                                                </div>
+                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Payment */}
+                                    <div style={{ position: "relative" }}>
+                                        <button className={`pm-filter-select ${filters.payment.length > 0 ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")} style={{ cursor: "pointer" }}>Payment {"\u25BE"}</button>
+                                        {openDropdown === "payment" && (
+                                            <div className="pm-dropdown-panel">
+                                                <div className="pm-dropdown-title">Payment Status</div>
+                                                {["paid", "partial", "unpaid"].map(opt => (
+                                                    <label key={opt} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
+                                                        <input type="checkbox" checked={filters.payment.includes(opt)} onChange={() => toggleFilter("payment", opt)} />
+                                                        <span>{opt === "unpaid" ? "Unpaid (COD)" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                                                    </label>
+                                                ))}
+                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Priority */}
+                                    <div style={{ position: "relative" }}>
+                                        <button className={`pm-filter-select ${filters.priority.length > 0 ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")} style={{ cursor: "pointer" }}>Priority {"\u25BE"}</button>
+                                        {openDropdown === "priority" && (
+                                            <div className="pm-dropdown-panel">
+                                                <div className="pm-dropdown-title">Priority</div>
+                                                {["normal", "urgent"].map(opt => (
+                                                    <label key={opt} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
+                                                        <input type="checkbox" checked={filters.priority.includes(opt)} onChange={() => toggleFilter("priority", opt)} />
+                                                        <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                                                    </label>
+                                                ))}
+                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Store */}
+                                    <div style={{ position: "relative" }}>
+                                        <button className={`pm-filter-select ${filters.store.length > 0 ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "store" ? null : "store")} style={{ cursor: "pointer" }}>Store {"\u25BE"}</button>
+                                        {openDropdown === "store" && (
+                                            <div className="pm-dropdown-panel">
+                                                <div className="pm-dropdown-title">Store</div>
+                                                {["Delhi Store", "Ludhiana Store", "B2B"].map(opt => (
+                                                    <label key={opt} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
+                                                        <input type="checkbox" checked={filters.store.includes(opt)} onChange={() => toggleFilter("store", opt)} />
+                                                        <span>{opt}</span>
+                                                    </label>
+                                                ))}
+                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Salesperson */}
+                                    <select className="pm-filter-select" value={filters.salesperson || ""} onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}>
+                                        <option value="">All Salespersons</option>
+                                        {salespersons.map(sp => <option key={sp} value={sp}>{sp}</option>)}
+                                    </select>
+                                </div>
+
+                                {/* Applied Filter Chips */}
+                                {appliedFilters.length > 0 && (
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                                        <span style={{ fontSize: 12, color: "#888", alignSelf: "center" }}>Applied:</span>
+                                        {appliedFilters.map((chip, i) => (
+                                            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#fff8e1", border: "1px solid #d5b85a", borderRadius: 12, padding: "3px 10px", fontSize: 12, color: "#8a6d00" }}>
+                                                {chip.label}
+                                                <button onClick={() => removeFilter(chip.type, chip.value)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8a6d00", fontSize: 14, padding: 0, lineHeight: 1 }}>{"×"}</button>
+                                            </span>
+                                        ))}
+                                        <button onClick={clearAllFilters} style={{ background: "none", border: "1px solid #ccc", borderRadius: 12, padding: "3px 10px", fontSize: 12, cursor: "pointer", color: "#666" }}>Clear All</button>
+                                    </div>
+                                )}
+
+                                <div style={{ fontSize: 13, color: "#888", marginBottom: 10 }}>Showing {filteredOrders.length} orders</div>
 
                                 <div className="pm-order-list-scroll">
                                     {filteredOrders.length === 0 && <p className="pm-muted" style={{ textAlign: "center", padding: 40 }}>No orders found.</p>}

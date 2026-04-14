@@ -1314,13 +1314,6 @@
 
 .wd-order-dropdown.wd-urgent-order {
   border-left: 4px solid #f44336;
-  background: linear-gradient(to right, #ffebee 0%, #fff 10%);
-  animation: urgent-pulse 2s infinite;
-}
-
-@keyframes urgent-pulse {
-  0%, 100% { box-shadow: 0 2px 8px rgba(244, 67, 54, 0.2); }
-  50% { box-shadow: 0 2px 16px rgba(244, 67, 54, 0.4); }
 }
 
 /* Order Header Row */
@@ -1344,17 +1337,6 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  align-items: center;
-}
-
-.wd-product-count-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #555;
-  background: #f0f0f0;
-  padding: 4px 10px;
-  border-radius: 12px;
-  white-space: nowrap;
 }
 
 /* Badges */

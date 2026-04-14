@@ -286,7 +286,7 @@ const WarehouseDashboard = () => {
 
   // Get priority of an order
   const getPriority = (order) => {
-    if (order.is_urgent || order.order_flag === "Urgent" || order.alteration_status === "upcoming_occasion") {
+    if (order.is_urgent || order.order_flag === "Urgent" || order.alteration_status === "upcoming_occasion" || order.priority === "urgent") {
       return "urgent";
     }
     return "normal";
@@ -1154,7 +1154,7 @@ const WarehouseDashboard = () => {
                   currentOrders.map((order) => {
                     const firstItem = Array.isArray(order.items) ? order.items[0] || {} : order.items || {};
                     const isAlteration = order.is_alteration;
-                    const isUrgent = order.alteration_status === "upcoming_occasion" || order.is_urgent;
+                    const isUrgent = order.alteration_status === "upcoming_occasion" || order.is_urgent || order.order_flag === "Urgent" || order.priority === "urgent";
 
                     return (
                       <div
@@ -1194,9 +1194,6 @@ const WarehouseDashboard = () => {
                           </div>
 
                           <div className="wd-order-actions">
-                            <span className="wd-product-count-label">
-                              {Array.isArray(order.items) ? order.items.length : 1} Product{(Array.isArray(order.items) ? order.items.length : 1) !== 1 ? "s" : ""}
-                            </span>
                             <button
                               className="wd-pdf-Btn"
                               onClick={() => handleGeneratePdf(order)}
