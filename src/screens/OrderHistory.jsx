@@ -1075,6 +1075,7 @@ export default function OrderHistory() {
       delivery_pincode: order.delivery_pincode || "",
       mode_of_delivery: order.mode_of_delivery || "",
       isKids: item.isKids || item.category === "Kids" || false,
+      order_notes: order.order_notes || "",
     });
 
     // Set measurements from the item
@@ -1170,6 +1171,7 @@ export default function OrderHistory() {
         delivery_state: editFormData.delivery_state,
         delivery_pincode: editFormData.delivery_pincode,
         mode_of_delivery: editFormData.mode_of_delivery,
+        order_notes: editFormData.order_notes,
         updated_at: new Date().toISOString(),
         warehouse_url: null,
         warehouse_urls: null,
@@ -1426,6 +1428,19 @@ export default function OrderHistory() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Order Notes */}
+              <div className="oh-modal-field full" style={{ marginTop: '15px' }}>
+                <label>Order Notes</label>
+                <textarea
+                  className="oh-textarea"
+                  placeholder="Add notes for this order..."
+                  value={editFormData.order_notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, order_notes: e.target.value })}
+                  rows={3}
+                  style={{ minHeight: '80px' }}
+                />
               </div>
             </div>
             <div className="oh-modal-footer">

@@ -612,12 +612,10 @@ export default function OrderDetails() {
     if (isAdvanceBelowMinimum) {
       const minPercentLabel = isCustomOrder ? "50%" : "25%";
       showPopup({
-        title: "Minimum Advance Requirement",
-        message: `The entered amount is below the minimum advance of ₹${formatIndianNumber(pricing.minAdvanceAmount)} (${minPercentLabel})`,
-        type: "confirm",
-        confirmText: "Continue",
-        cancelText: "Cancel",
-        onConfirm: proceedWithOrder,
+        title: "Minimum Advance Required",
+        message: `Cannot proceed — advance payment must be at least ₹${formatIndianNumber(pricing.minAdvanceAmount)} (${minPercentLabel} of net payable). Please collect the minimum advance before continuing.`,
+        type: "warning",
+        confirmText: "OK",
       });
       return;
     }
