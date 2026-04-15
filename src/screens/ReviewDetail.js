@@ -275,6 +275,28 @@ export default function ReviewDetail() {
       throw new Error("Failed to generate order number. Please try again.");
     }
 
+    // 3.5️⃣ DUPLICATE CHECK — prevent double submission
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: recentDupe } = await supabase
+      .from("orders")
+      .select("id, order_no")
+      .eq("user_id", order.user_id)
+      .eq("grand_total", normalizedOrder.grand_total)
+      .gte("created_at", twoMinutesAgo)
+      .limit(1);
+
+    if (recentDupe && recentDupe.length > 0) {
+      showPopup({
+        title: "Duplicate Order",
+        message: `An identical order (${recentDupe[0].order_no}) was just placed. Please check before placing again.`,
+        type: "warning",
+        confirmText: "OK",
+      });
+      setLoading(false);
+      setShowSignature(false);
+      return;
+    }
+
     // 4️⃣ INSERT ORDER
     const { data: insertedOrder, error: insertError } = await supabase
       .from("orders")
@@ -907,20 +929,23 @@ export default function ReviewDetail() {
             <h3>Sign Below</h3>
             <SignatureCanvas penColor="black" ref={setSigPad} canvasProps={{ width: 500, height: 200, className: "sig-canvas" }} />
             <div className="sig-buttons">
-              <button style={{ color: "white" }} onClick={() => sigPad.clear()}>Clear</button>
-              <button style={{ color: "white" }} onClick={saveSignatureAndContinue}>Save & Continue</button>
+              <button style={{ color: "white" }} onClick={() => sigPad.clear()} disabled={loading}>Clear</button>
+              <button style={{ color: "white" }} onClick={saveSignatureAndContinue} disabled={loading}>
+                {loading ? "Placing..." : "Save & Continue"}
+              </button>
               <button
                 style={{
                   color: "white",
-                  background: "#d5b85a",
+                  background: loading ? "#ccc" : "#d5b85a",
                   border: "none",
                   padding: "10px 20px",
                   borderRadius: "4px",
-                  cursor: "pointer"
+                  cursor: loading ? "not-allowed" : "pointer"
                 }}
                 onClick={handleAutoSignature}
+                disabled={loading}
               >
-                Auto
+                {loading ? "Placing..." : "Auto"}
               </button>
             </div>
             <button className="close-modal" onClick={() => setShowSignature(false)}>✖</button>
