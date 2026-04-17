@@ -7,6 +7,7 @@ import formatIndianNumber from "../../../utils/formatIndianNumber";
 import formatDate from "../../../utils/formatDate";
 import { usePopup } from "../../../components/Popup";
 import NotificationBell from "../../../components/NotificationBell";
+import { downloadWarehousePdf } from "../../../utils/pdfUtils";
 
 // ==================== MEASUREMENT CONSTANTS ====================
 const CATEGORY_KEY_MAP = {
@@ -53,6 +54,12 @@ const Icons = {
     timer: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M6.38 18.7 4 21"/><path d="M17.64 18.67 20 21"/></svg>,
     inbox: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>,
     hourglass: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>,
+    rupee: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>,
+    trendingUp: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
+    trendingDown: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>,
+    rotate: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
+    tag: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
+    wallet: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>,
 };
 
 // ==================== STATUS TABS ====================
@@ -131,6 +138,19 @@ export default function ProductionManagerDashboard() {
     const [priorityValue, setPriorityValue] = useState("");
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
     const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+    const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+    const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
+
+    // Delivery Report state
+    const [drDateFrom, setDrDateFrom] = useState(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        return d.toISOString().split("T")[0];
+    });
+    const [drDateTo, setDrDateTo] = useState(() => new Date().toISOString().split("T")[0]);
+    const [drChannel, setDrChannel] = useState("all");
+    const [drBucket, setDrBucket] = useState("all");
+    const [drSearch, setDrSearch] = useState("");
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -255,14 +275,13 @@ export default function ProductionManagerDashboard() {
 
     const handleExportCSV = () => {
         if (filteredOrders.length === 0) return;
-        const headers = ["Order No", "Product Name", "Customer Name", "Customer Phone", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Priority", "Notes", "Order Date", "Delivery Date"];
+        const headers = ["Order No", "Product Name", "Customer Name", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Priority", "Notes", "Order Date", "Delivery Date"];
         const rows = filteredOrders.map(order => {
             const item = order.items?.[0] || {};
             return [
                 order.order_no || "",
                 item.product_name || "",
                 order.delivery_name || "",
-                order.delivery_phone || "",
                 item.size || "",
                 order.grand_total || 0,
                 item.top_color?.name || "",
@@ -284,6 +303,68 @@ export default function ProductionManagerDashboard() {
         a.download = `production_orders_${new Date().toISOString().slice(0, 10)}.csv`;
         a.click();
         URL.revokeObjectURL(url);
+    };
+
+    // Mark an order as complete (delivered) — triggered from production tab
+    const handleMarkComplete = async (order, e) => {
+        if (e) e.stopPropagation();
+        const confirmed = await new Promise((resolve) => {
+            showPopup({
+                type: "confirm",
+                title: "Mark as Complete",
+                message: `Mark order ${order.order_no} as delivered? This will finalise the order.`,
+                confirmText: "Yes, Mark Complete",
+                cancelText: "Cancel",
+                onConfirm: () => resolve(true),
+                onCancel: () => resolve(false),
+            });
+        });
+        if (!confirmed) return;
+        try {
+            setActionLoading(order.id);
+            const { error } = await supabase
+                .from("orders")
+                .update({
+                    status: "delivered",
+                    production_status: "dispatched",
+                    delivered_at: new Date().toISOString(),
+                    dispatched_at: order.dispatched_at || new Date().toISOString(),
+                    dispatched_by: order.dispatched_by || currentUserEmail,
+                })
+                .eq("id", order.id);
+            if (error) throw error;
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", production_status: "dispatched", delivered_at: new Date().toISOString() } : o));
+            showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as complete.` });
+        } catch (err) {
+            console.error("Mark complete error:", err);
+            showPopup({ type: "error", title: "Failed", message: err.message || "Could not update order" });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    // Open warehouse PDF in a new tab (generates on-the-fly if not yet created).
+    // PM only ever sees the warehouse PDF, never the customer PDF.
+    const handleViewWarehousePdf = async (order, e) => {
+        if (e) e.stopPropagation();
+        if (warehousePdfLoading === order.id) return;
+        try {
+            setWarehousePdfLoading(order.id);
+            const result = await downloadWarehousePdf(order, null, false);
+            if (!result) {
+                showPopup({ type: "error", title: "PDF Failed", message: "Could not open or generate the warehouse PDF. Please try again." });
+                return;
+            }
+            // If we just generated fresh URLs, reflect them in local state so
+            // subsequent clicks skip regeneration.
+            const cleanUrls = Array.isArray(result) ? result : [result];
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, warehouse_urls: cleanUrls, warehouse_url: cleanUrls[0] } : o));
+        } catch (err) {
+            console.error("Warehouse PDF error:", err);
+            showPopup({ type: "error", title: "PDF Failed", message: err.message || "Could not generate the warehouse PDF." });
+        } finally {
+            setWarehousePdfLoading(null);
+        }
     };
 
 
@@ -364,6 +445,82 @@ export default function ProductionManagerDashboard() {
     }, [orders, statusStats]);
 
     const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
+
+    // ==================== SALES & REVENUE METRICS ====================
+    const salesMetrics = useMemo(() => {
+        const now = new Date();
+        const currMonth = now.getMonth();
+        const currYear = now.getFullYear();
+        const prevMonth = currMonth === 0 ? 11 : currMonth - 1;
+        const prevMonthYear = currMonth === 0 ? currYear - 1 : currYear;
+
+        // Revenue counted only on delivered/completed orders (non-cancelled)
+        const isRevenue = (o) => (o.status === "delivered" || o.status === "completed") && o.status !== "cancelled";
+
+        let revenueMonthly = 0;
+        let revenueYearly = 0;
+        let revenuePrevMonth = 0;
+
+        orders.forEach(o => {
+            if (!isRevenue(o)) return;
+            const dateStr = o.delivered_at || o.created_at;
+            if (!dateStr) return;
+            const d = new Date(dateStr);
+            if (d.getFullYear() === currYear) {
+                revenueYearly += Number(o.grand_total || 0);
+                if (d.getMonth() === currMonth) revenueMonthly += Number(o.grand_total || 0);
+            }
+            if (d.getMonth() === prevMonth && d.getFullYear() === prevMonthYear) {
+                revenuePrevMonth += Number(o.grand_total || 0);
+            }
+        });
+
+        const salesGrowthPct = revenuePrevMonth > 0
+            ? (((revenueMonthly - revenuePrevMonth) / revenuePrevMonth) * 100).toFixed(1)
+            : (revenueMonthly > 0 ? "100.0" : "0.0");
+
+        // Pending + Delayed (exclude cancelled/delivered/completed)
+        const openOrders = orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
+        const pendingCount = openOrders.length;
+        const delayedCount = openOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now).length;
+
+        // Returns & Exchanges
+        const returnedOrders = orders.filter(o => o.return_reason || (o.returned_items && Array.isArray(o.returned_items) && o.returned_items.length > 0) || o.status === "returned");
+        const exchangeOrders = orders.filter(o => o.exchange_requested_at || o.exchange_reason);
+        const deliveredCount = orders.filter(isRevenue).length;
+        const returnRate = deliveredCount > 0 ? ((returnedOrders.length / deliveredCount) * 100).toFixed(1) : "0.0";
+
+        // Refunded amount (sum of grand_total for orders with refund_status processed/completed)
+        const refundedAmount = orders
+            .filter(o => {
+                const rs = (o.refund_status || "").toLowerCase();
+                return rs === "processed" || rs === "completed" || rs === "refunded" || rs === "paid";
+            })
+            .reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+
+        // Top selling product — count by items[].product_name across delivered/completed orders
+        const productCount = {};
+        orders.forEach(o => {
+            if (!isRevenue(o)) return;
+            (o.items || []).forEach(item => {
+                const name = item.product_name;
+                if (!name) return;
+                productCount[name] = (productCount[name] || 0) + Number(item.quantity || 1);
+            });
+        });
+        const topProductEntry = Object.entries(productCount).sort((a, b) => b[1] - a[1])[0];
+        const topProduct = topProductEntry ? { name: topProductEntry[0], count: topProductEntry[1] } : { name: "—", count: 0 };
+
+        return {
+            revenueMonthly, revenueYearly, revenuePrevMonth,
+            salesGrowthPct,
+            pendingCount, delayedCount,
+            returnCount: returnedOrders.length, returnRate,
+            exchangeCount: exchangeOrders.length,
+            refundedAmount,
+            topProduct,
+        };
+    }, [orders]);
 
     // ==================== FILTERED + PAGINATED ORDERS ====================
     const filteredByStatus = useMemo(() => {
@@ -782,6 +939,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders <span className="pm-badge-count">{orders.length}</span></a>
                             <a className={`pm-menu-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</a>
                             <a className={`pm-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
+                            <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                             <a className={`pm-menu-item ${activeTab === "staff" ? "active" : ""}`} onClick={() => { setActiveTab("staff"); setShowSidebar(false); }}>Staff</a>
                             <a className={`pm-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>Profile</a>
@@ -793,6 +951,54 @@ export default function ProductionManagerDashboard() {
                         {/* ===== OVERVIEW TAB ===== */}
                         {activeTab === "overview" && (
                             <>
+                                {/* ===== BUSINESS METRICS SECTION ===== */}
+                                <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Business Performance</p>
+                                <div className="pm-stats-row-3">
+                                    <StatCard
+                                        title={`Revenue (${new Date().toLocaleString("en-US", { month: "short" })} ${new Date().getFullYear()})`}
+                                        value={`\u20B9${formatIndianNumber(Math.round(salesMetrics.revenueMonthly))}`}
+                                        subtitle={`Yearly: \u20B9${formatIndianNumber(Math.round(salesMetrics.revenueYearly))}`}
+                                        highlight={true}
+                                        icon={Icons.rupee}
+                                    />
+                                    <StatCard
+                                        title="Monthly Sales Growth"
+                                        value={`${Number(salesMetrics.salesGrowthPct) >= 0 ? "+" : ""}${salesMetrics.salesGrowthPct}%`}
+                                        subtitle={`Prev month: \u20B9${formatIndianNumber(Math.round(salesMetrics.revenuePrevMonth))}`}
+                                        icon={Number(salesMetrics.salesGrowthPct) >= 0 ? Icons.trendingUp : Icons.trendingDown}
+                                    />
+                                    <StatCard
+                                        title="Pending / Delayed Orders"
+                                        value={`${salesMetrics.pendingCount} / ${salesMetrics.delayedCount}`}
+                                        subtitle={salesMetrics.delayedCount > 0 ? `${salesMetrics.delayedCount} past delivery date` : "All on track"}
+                                        highlight={salesMetrics.delayedCount > 0}
+                                        icon={Icons.clock}
+                                    />
+                                </div>
+                                <div className="pm-stats-row-3">
+                                    <StatCard
+                                        title="Return Rate"
+                                        value={`${salesMetrics.returnRate}%`}
+                                        subtitle={`${salesMetrics.returnCount} returns \u00B7 ${salesMetrics.exchangeCount} exchanges`}
+                                        highlight={Number(salesMetrics.returnRate) > 5}
+                                        icon={Icons.rotate}
+                                    />
+                                    <StatCard
+                                        title="Refunded Amount"
+                                        value={`\u20B9${formatIndianNumber(Math.round(salesMetrics.refundedAmount))}`}
+                                        subtitle="Total processed refunds"
+                                        icon={Icons.wallet}
+                                    />
+                                    <StatCard
+                                        title="Top Selling Product"
+                                        value={salesMetrics.topProduct.count > 0 ? salesMetrics.topProduct.count : "\u2014"}
+                                        subtitle={salesMetrics.topProduct.name.length > 28 ? salesMetrics.topProduct.name.slice(0, 28) + "\u2026" : salesMetrics.topProduct.name}
+                                        icon={Icons.tag}
+                                    />
+                                </div>
+
+                                {/* ===== PRODUCTION METRICS SECTION ===== */}
+                                <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Production Overview</p>
                                 <div className="pm-stats-row-3">
                                     <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStats.total)} subtitle={`B2B: ${channelStats.b2b} | Store: ${channelStats.store}`} highlight={true} icon={Icons.package} />
                                     <StatCard title="Production Load" value={`${productionMetrics.productionLoad.percentage}%`} subtitle={`${productionMetrics.productionLoad.active} in production`} icon={Icons.gear} />
@@ -1010,6 +1216,7 @@ export default function ProductionManagerDashboard() {
                                                     <div className="pm-product-details">
                                                         <div className="pm-product-name"><span className="pm-order-label">Product:</span><span className="pm-ovalue">{item.product_name || "—"}</span></div>
                                                         <div className="pm-product-name"><span className="pm-order-label">Client:</span><span className="pm-ovalue">{order.delivery_name || "—"}</span></div>
+                                                        <div className="pm-product-name"><span className="pm-order-label">SA Name:</span><span className="pm-ovalue">{order.salesperson || "—"}{order.salesperson_store ? ` (${order.salesperson_store})` : ""}</span></div>
                                                         <div className="pm-odetails-grid">
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Amount:</span><span className="pm-ovalue">₹{formatIndianNumber(order.grand_total || 0)}</span></div>
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Qty:</span><span className="pm-ovalue">{order.total_quantity || 1}</span></div>
@@ -1107,10 +1314,35 @@ export default function ProductionManagerDashboard() {
                                         <p className="pm-card-title">{"\u26A0\uFE0F"} Exceeding Delivery Date ({productionMetrics.exceedingDelivery.length})</p>
                                         <div style={{ overflowX: "auto" }}>
                                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                                                <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Delivery</th><th style={{ padding: "8px 10px" }}>Overdue</th><th style={{ padding: "8px 10px" }}>Stage</th></tr></thead>
+                                                <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Delivery</th><th style={{ padding: "8px 10px" }}>Overdue</th><th style={{ padding: "8px 10px" }}>Stage</th><th style={{ padding: "8px 10px", textAlign: "center" }}>Actions</th></tr></thead>
                                                 <tbody>{productionMetrics.exceedingDelivery.slice(0, 15).map(o => {
                                                     const overdue = Math.ceil((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
-                                                    return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td><td style={{ padding: "8px 10px", color: "#c62828", fontWeight: 600 }}>{overdue}d</td><td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td></tr>);
+                                                    const isBusy = actionLoading === o.id;
+                                                    return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                        <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
+                                                        <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
+                                                        <td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td>
+                                                        <td style={{ padding: "8px 10px", color: "#c62828", fontWeight: 600 }}>{overdue}d</td>
+                                                        <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                        <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
+                                                            <button
+                                                                onClick={(e) => handleMarkComplete(o, e)}
+                                                                disabled={isBusy}
+                                                                className="pm-action-btn pm-action-complete"
+                                                                title="Mark this order as delivered"
+                                                            >
+                                                                {isBusy ? "..." : "\u2713 Complete"}
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => handleViewWarehousePdf(o, e)}
+                                                                disabled={warehousePdfLoading === o.id}
+                                                                className="pm-action-btn pm-action-view"
+                                                                title="View warehouse PDF (generates if missing)"
+                                                            >
+                                                                {warehousePdfLoading === o.id ? "Generating..." : `\uD83D\uDCC4 View PDF`}
+                                                            </button>
+                                                        </td>
+                                                    </tr>);
                                                 })}</tbody>
                                             </table>
                                         </div>
@@ -1166,6 +1398,343 @@ export default function ProductionManagerDashboard() {
                             );
                         })()}
 
+                        {/* ===== DELIVERY REPORT TAB ===== */}
+                        {activeTab === "delivery_report" && (() => {
+                            const now = new Date();
+                            const todayStr = now.toISOString().split("T")[0];
+
+                            // Date range filter — applied to delivery_date for open orders, delivered_at for completed
+                            const fromDate = drDateFrom ? new Date(drDateFrom + "T00:00:00") : null;
+                            const toDate = drDateTo ? new Date(drDateTo + "T23:59:59") : null;
+
+                            // Channel filter
+                            const channelMatch = (o) => {
+                                if (drChannel === "all") return true;
+                                if (drChannel === "b2b") return !!o.is_b2b;
+                                if (drChannel === "store") return !o.is_b2b;
+                                return true;
+                            };
+
+                            // Bucketing helper: days = how late (negative = on-time)
+                            const bucketOf = (daysLate) => {
+                                if (daysLate <= 0) return "ontime";
+                                if (daysLate <= 2) return "0_2";
+                                if (daysLate <= 7) return "2_7";
+                                if (daysLate <= 14) return "7_14";
+                                return "14_plus";
+                            };
+
+                            // ==================== COMPLETED ORDERS (historical) ====================
+                            // Delivered/Completed orders — compare delivered_at (or updated_at fallback) vs delivery_date
+                            const completedRows = [];
+                            orders.forEach(o => {
+                                if (o.status !== "delivered" && o.status !== "completed") return;
+                                if (!o.delivery_date) return;
+                                if (!channelMatch(o)) return;
+
+                                const actualDeliveryStr = o.delivered_at || o.updated_at;
+                                if (!actualDeliveryStr) return;
+                                const actualDate = new Date(actualDeliveryStr);
+                                // Apply date range against actual delivery date
+                                if (fromDate && actualDate < fromDate) return;
+                                if (toDate && actualDate > toDate) return;
+
+                                const promisedDate = new Date(o.delivery_date);
+                                // normalize to midnight for day diff
+                                const promisedMid = new Date(promisedDate.getFullYear(), promisedDate.getMonth(), promisedDate.getDate());
+                                const actualMid = new Date(actualDate.getFullYear(), actualDate.getMonth(), actualDate.getDate());
+                                const daysLate = Math.round((actualMid - promisedMid) / (1000 * 60 * 60 * 24));
+                                const bucket = bucketOf(daysLate);
+
+                                completedRows.push({
+                                    order: o,
+                                    actualDelivery: actualDate,
+                                    promisedDate,
+                                    daysLate,
+                                    bucket,
+                                    isOpen: false,
+                                });
+                            });
+
+                            // ==================== OPEN ORDERS (currently running late) ====================
+                            const openRows = [];
+                            orders.forEach(o => {
+                                if (o.status === "delivered" || o.status === "completed" || o.status === "cancelled") return;
+                                if (!o.delivery_date) return;
+                                if (!channelMatch(o)) return;
+
+                                const promisedDate = new Date(o.delivery_date);
+                                const promisedMid = new Date(promisedDate.getFullYear(), promisedDate.getMonth(), promisedDate.getDate());
+                                const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                                const daysLate = Math.round((todayMid - promisedMid) / (1000 * 60 * 60 * 24));
+                                if (daysLate <= 0) return; // still within promise
+                                const bucket = bucketOf(daysLate);
+
+                                // For open orders, apply date range against delivery_date
+                                if (fromDate && promisedDate < fromDate) return;
+                                if (toDate && promisedDate > toDate) return;
+
+                                openRows.push({
+                                    order: o,
+                                    actualDelivery: null,
+                                    promisedDate,
+                                    daysLate,
+                                    bucket,
+                                    isOpen: true,
+                                });
+                            });
+
+                            // ==================== SUMMARY COUNTS (completed orders only) ====================
+                            const summary = {
+                                ontime: completedRows.filter(r => r.bucket === "ontime").length,
+                                b0_2: completedRows.filter(r => r.bucket === "0_2").length,
+                                b2_7: completedRows.filter(r => r.bucket === "2_7").length,
+                                b7_14: completedRows.filter(r => r.bucket === "7_14").length,
+                                b14_plus: completedRows.filter(r => r.bucket === "14_plus").length,
+                            };
+                            const totalCompleted = completedRows.length;
+                            const ontimePct = totalCompleted > 0 ? ((summary.ontime / totalCompleted) * 100).toFixed(1) : "0.0";
+
+                            // ==================== FILTER BY BUCKET + SEARCH ====================
+                            const applyBucketAndSearch = (rows) => {
+                                let r = rows;
+                                if (drBucket !== "all") r = r.filter(x => x.bucket === drBucket);
+                                if (drSearch.trim()) {
+                                    const q = drSearch.toLowerCase();
+                                    r = r.filter(x => (x.order.order_no || "").toLowerCase().includes(q) ||
+                                        (x.order.delivery_name || "").toLowerCase().includes(q) ||
+                                        (x.order.salesperson || "").toLowerCase().includes(q) ||
+                                        ((x.order.items?.[0]?.product_name) || "").toLowerCase().includes(q));
+                                }
+                                return r;
+                            };
+
+                            const filteredCompleted = applyBucketAndSearch(completedRows).sort((a, b) => b.daysLate - a.daysLate);
+                            const filteredOpen = applyBucketAndSearch(openRows).sort((a, b) => b.daysLate - a.daysLate);
+
+                            // ==================== BUCKET STYLING ====================
+                            const bucketStyle = (b) => {
+                                switch (b) {
+                                    case "ontime": return { bg: "#e8f5e9", fg: "#2e7d32", label: "On-time" };
+                                    case "0_2": return { bg: "#fffde7", fg: "#f57f17", label: "0\u20132d late" };
+                                    case "2_7": return { bg: "#fff3e0", fg: "#e65100", label: "2\u20137d late" };
+                                    case "7_14": return { bg: "#ffebee", fg: "#c62828", label: "7\u201314d late" };
+                                    case "14_plus": return { bg: "#b71c1c", fg: "#fff", label: "14+d critical" };
+                                    default: return { bg: "#f5f5f5", fg: "#333", label: b };
+                                }
+                            };
+
+                            // ==================== EXPORT ====================
+                            const handleDrExport = () => {
+                                const rows = [...filteredCompleted, ...filteredOpen];
+                                if (rows.length === 0) {
+                                    showPopup({ type: "info", title: "Nothing to export", message: "No orders match the current filters." });
+                                    return;
+                                }
+                                const headers = ["Order No", "Type", "Customer", "SA Name", "Store", "Channel", "Product", "Size", "Amount", "Order Date", "Promised Delivery", "Actual Delivery", "Days Late", "Bucket", "Status"];
+                                const csvRows = rows.map(r => {
+                                    const o = r.order;
+                                    const item = o.items?.[0] || {};
+                                    return [
+                                        o.order_no || "",
+                                        r.isOpen ? "Open (Running Late)" : "Completed",
+                                        o.delivery_name || "",
+                                        o.salesperson || "",
+                                        o.salesperson_store || "",
+                                        o.is_b2b ? "B2B" : "Store",
+                                        item.product_name || "",
+                                        item.size || "",
+                                        o.grand_total || 0,
+                                        o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
+                                        o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
+                                        r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "Not yet delivered",
+                                        r.daysLate <= 0 ? "On-time" : r.daysLate,
+                                        bucketStyle(r.bucket).label,
+                                        o.status || "",
+                                    ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+                                });
+                                const csv = [headers.join(","), ...csvRows.map(r => r.join(","))].join("\n");
+                                const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `delivery_report_${todayStr}.csv`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            };
+
+                            // ==================== BUCKET CARD ====================
+                            const BucketCard = ({ title, value, bucketKey, highlight, subtitle }) => {
+                                const active = drBucket === bucketKey;
+                                const style = bucketStyle(bucketKey === "all" ? "ontime" : bucketKey);
+                                return (
+                                    <div
+                                        onClick={() => setDrBucket(active ? "all" : bucketKey)}
+                                        style={{
+                                            cursor: "pointer",
+                                            background: "#fff",
+                                            border: active ? `2px solid ${style.fg}` : "1px solid #e0e0e0",
+                                            borderRadius: 12,
+                                            padding: "14px 16px",
+                                            transition: "all 0.15s",
+                                            boxShadow: active ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                                        }}
+                                    >
+                                        <p style={{ fontSize: 12, color: "#666", margin: 0, fontWeight: 500 }}>{title}</p>
+                                        <p style={{ fontSize: 24, fontWeight: 700, margin: "6px 0 2px", color: highlight ? style.fg : "#333" }}>{value}</p>
+                                        {subtitle && <p style={{ fontSize: 11, color: "#999", margin: 0 }}>{subtitle}</p>}
+                                    </div>
+                                );
+                            };
+
+                            return (
+                                <div className="pm-orders-tab">
+                                    <h2 className="pm-tab-title">Delivery Report</h2>
+
+                                    {/* ===== CONTROLS ===== */}
+                                    <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>From</label>
+                                            <input type="date" value={drDateFrom} onChange={(e) => setDrDateFrom(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13 }} />
+                                        </div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>To</label>
+                                            <input type="date" value={drDateTo} onChange={(e) => setDrDateTo(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13 }} />
+                                        </div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Channel</label>
+                                            <select value={drChannel} onChange={(e) => setDrChannel(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff" }}>
+                                                <option value="all">All Channels</option>
+                                                <option value="store">Store</option>
+                                                <option value="b2b">B2B</option>
+                                            </select>
+                                        </div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 200px", minWidth: 180 }}>
+                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Search</label>
+                                            <input type="text" value={drSearch} onChange={(e) => setDrSearch(e.target.value)} placeholder="Order no, customer, SA, product..." style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13 }} />
+                                        </div>
+                                        <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignSelf: "flex-end" }}>
+                                            {drBucket !== "all" && (
+                                                <button onClick={() => setDrBucket("all")} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "7px 12px", cursor: "pointer", fontSize: 12 }}>Clear bucket</button>
+                                            )}
+                                            <button onClick={handleDrExport} style={{ display: "flex", alignItems: "center", gap: 6, background: "#2e7d32", color: "#fff", border: "none", borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                                Export CSV
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* ===== HEADLINE KPI ===== */}
+                                    <div style={{ background: "linear-gradient(135deg, #faf6e8 0%, #fff 100%)", border: "1px solid #d5b85a", borderRadius: 12, padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+                                        <div>
+                                            <p style={{ fontSize: 12, color: "#8B7355", margin: 0, fontWeight: 600 }}>ON-TIME DELIVERY RATE</p>
+                                            <p style={{ fontSize: 32, fontWeight: 700, margin: "4px 0 0", color: Number(ontimePct) >= 80 ? "#2e7d32" : Number(ontimePct) >= 60 ? "#e65100" : "#c62828" }}>{ontimePct}%</p>
+                                            <p style={{ fontSize: 11, color: "#666", margin: "2px 0 0" }}>{summary.ontime} of {totalCompleted} completed orders on-time</p>
+                                        </div>
+                                        <div style={{ textAlign: "right" }}>
+                                            <p style={{ fontSize: 12, color: "#8B7355", margin: 0, fontWeight: 600 }}>CURRENTLY RUNNING LATE</p>
+                                            <p style={{ fontSize: 32, fontWeight: 700, margin: "4px 0 0", color: openRows.length > 0 ? "#c62828" : "#2e7d32" }}>{openRows.length}</p>
+                                            <p style={{ fontSize: 11, color: "#666", margin: "2px 0 0" }}>open orders past delivery date</p>
+                                        </div>
+                                    </div>
+
+                                    {/* ===== BUCKET CARDS ===== */}
+                                    <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Completed Orders by Delay Bucket (click to filter)</p>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
+                                        <BucketCard title="On-time" value={summary.ontime} bucketKey="ontime" highlight={true} />
+                                        <BucketCard title="0–2 days late" value={summary.b0_2} bucketKey="0_2" highlight={summary.b0_2 > 0} />
+                                        <BucketCard title="2–7 days late" value={summary.b2_7} bucketKey="2_7" highlight={summary.b2_7 > 0} />
+                                        <BucketCard title="7–14 days late" value={summary.b7_14} bucketKey="7_14" highlight={summary.b7_14 > 0} />
+                                        <BucketCard title="14+ days critical" value={summary.b14_plus} bucketKey="14_plus" highlight={summary.b14_plus > 0} />
+                                    </div>
+
+                                    {/* ===== OPEN ORDERS RUNNING LATE ===== */}
+                                    {filteredOpen.length > 0 && (
+                                        <div className="pm-channel-card" style={{ marginBottom: 20, borderLeft: "4px solid #c62828" }}>
+                                            <p className="pm-card-title">{"\uD83D\uDD25"} Open Orders Running Late ({filteredOpen.length})</p>
+                                            <div style={{ overflowX: "auto" }}>
+                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left", background: "#fafafa" }}>
+                                                        <th style={{ padding: "10px 12px" }}>Order</th>
+                                                        <th style={{ padding: "10px 12px" }}>Customer</th>
+                                                        <th style={{ padding: "10px 12px" }}>SA</th>
+                                                        <th style={{ padding: "10px 12px" }}>Product</th>
+                                                        <th style={{ padding: "10px 12px" }}>Promised</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Days Late</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Bucket</th>
+                                                        <th style={{ padding: "10px 12px" }}>Stage</th>
+                                                    </tr></thead>
+                                                    <tbody>{filteredOpen.slice(0, 100).map(r => {
+                                                        const o = r.order;
+                                                        const style = bucketStyle(r.bucket);
+                                                        return (
+                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                                <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{o.delivery_name || "-"}</td>
+                                                                <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
+                                                                <td style={{ padding: "8px 12px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{formatDate(o.delivery_date)}</td>
+                                                                <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "#c62828" }}>{r.daysLate}d</td>
+                                                                <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                                                                    <span style={{ background: style.bg, color: style.fg, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{style.label}</span>
+                                                                </td>
+                                                                <td style={{ padding: "8px 12px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                            </tr>
+                                                        );
+                                                    })}</tbody>
+                                                </table>
+                                            </div>
+                                            {filteredOpen.length > 100 && <p style={{ fontSize: 11, color: "#999", marginTop: 8, textAlign: "center" }}>Showing top 100 of {filteredOpen.length} {"\u2014"} use filters to narrow</p>}
+                                        </div>
+                                    )}
+
+                                    {/* ===== COMPLETED ORDERS ===== */}
+                                    <div className="pm-channel-card">
+                                        <p className="pm-card-title">Completed Deliveries ({filteredCompleted.length}{drBucket !== "all" ? ` \u00B7 filtered to ${bucketStyle(drBucket).label}` : ""})</p>
+                                        {filteredCompleted.length === 0 ? (
+                                            <p className="pm-muted" style={{ textAlign: "center", padding: 20 }}>No completed orders match the current filters</p>
+                                        ) : (
+                                            <div style={{ overflowX: "auto" }}>
+                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left", background: "#fafafa" }}>
+                                                        <th style={{ padding: "10px 12px" }}>Order</th>
+                                                        <th style={{ padding: "10px 12px" }}>Customer</th>
+                                                        <th style={{ padding: "10px 12px" }}>SA</th>
+                                                        <th style={{ padding: "10px 12px" }}>Product</th>
+                                                        <th style={{ padding: "10px 12px" }}>Order Date</th>
+                                                        <th style={{ padding: "10px 12px" }}>Promised</th>
+                                                        <th style={{ padding: "10px 12px" }}>Delivered</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Days Late</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Bucket</th>
+                                                    </tr></thead>
+                                                    <tbody>{filteredCompleted.slice(0, 200).map(r => {
+                                                        const o = r.order;
+                                                        const style = bucketStyle(r.bucket);
+                                                        return (
+                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                                <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{o.delivery_name || "-"}</td>
+                                                                <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
+                                                                <td style={{ padding: "8px 12px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{formatDate(o.created_at)}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{formatDate(o.delivery_date)}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "-"}</td>
+                                                                <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: r.daysLate <= 0 ? "#2e7d32" : "#c62828" }}>{r.daysLate <= 0 ? "\u2713" : `${r.daysLate}d`}</td>
+                                                                <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                                                                    <span style={{ background: style.bg, color: style.fg, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{style.label}</span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}</tbody>
+                                                </table>
+                                                {filteredCompleted.length > 200 && <p style={{ fontSize: 11, color: "#999", marginTop: 8, textAlign: "center" }}>Showing top 200 of {filteredCompleted.length} {"\u2014"} use filters or export for full list</p>}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {/* ===== CALENDAR TAB ===== */}
                         {activeTab === "calendar" && (() => {
                             const now = new Date();
@@ -1175,9 +1744,17 @@ export default function ProductionManagerDashboard() {
                             const firstDay = new Date(year, month, 1).getDay();
                             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-                            const goToPrevMonth = () => { if (month === 0) { setCalendarMonth(11); setCalendarYear(year - 1); } else setCalendarMonth(month - 1); };
-                            const goToNextMonth = () => { if (month === 11) { setCalendarMonth(0); setCalendarYear(year + 1); } else setCalendarMonth(month + 1); };
-                            const goToToday = () => { setCalendarMonth(now.getMonth()); setCalendarYear(now.getFullYear()); };
+                            const goToPrevMonth = () => { setSelectedCalendarDate(null); if (month === 0) { setCalendarMonth(11); setCalendarYear(year - 1); } else setCalendarMonth(month - 1); };
+                            const goToNextMonth = () => { setSelectedCalendarDate(null); if (month === 11) { setCalendarMonth(0); setCalendarYear(year + 1); } else setCalendarMonth(month + 1); };
+                            const goToToday = () => { setSelectedCalendarDate(null); setCalendarMonth(now.getMonth()); setCalendarYear(now.getFullYear()); };
+                            const jumpToDate = (e) => {
+                                const v = e.target.value; // YYYY-MM-DD
+                                if (!v) return;
+                                const d = new Date(v);
+                                setCalendarMonth(d.getMonth());
+                                setCalendarYear(d.getFullYear());
+                                setSelectedCalendarDate(v);
+                            };
 
                             const deliveryMap = {};
                             orders.forEach(o => {
@@ -1197,18 +1774,77 @@ export default function ProductionManagerDashboard() {
                             const monthOrders = orders.filter(o => {
                                 if (!o.delivery_date || o.status === "cancelled") return false;
                                 const dd = new Date(o.delivery_date);
-                                return dd.getMonth() === month && dd.getFullYear() === year && o.status !== "delivered" && o.status !== "completed";
+                                return dd.getMonth() === month && dd.getFullYear() === year;
                             }).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date));
+
+                            // Selected-day orders (if a date has been clicked)
+                            const selectedDayOrders = selectedCalendarDate ? orders.filter(o => {
+                                if (!o.delivery_date || o.status === "cancelled") return false;
+                                return new Date(o.delivery_date).toISOString().split("T")[0] === selectedCalendarDate;
+                            }).sort((a, b) => (a.order_no || "").localeCompare(b.order_no || "")) : [];
+
+                            // Export handler — exports the current visible scope
+                            const handleCalendarExport = () => {
+                                const scope = selectedCalendarDate ? selectedDayOrders : monthOrders;
+                                if (scope.length === 0) {
+                                    showPopup({ type: "info", title: "Nothing to export", message: "No deliveries in the selected range." });
+                                    return;
+                                }
+                                const headers = ["Order No", "Customer Name", "Product", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Stage", "Priority", "Notes", "Order Date", "Delivery Date"];
+                                const rows = scope.map(o => {
+                                    const it = o.items?.[0] || {};
+                                    return [
+                                        o.order_no || "",
+                                        o.delivery_name || "",
+                                        it.product_name || "",
+                                        it.size || "",
+                                        o.grand_total || 0,
+                                        it.top_color?.name || "",
+                                        it.bottom_color?.name || "",
+                                        o.salesperson || "",
+                                        o.salesperson_store || "",
+                                        o.status || "",
+                                        (o.warehouse_stage || o.status || "").replace(/_/g, " "),
+                                        o.priority || "normal",
+                                        o.notes || "",
+                                        o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
+                                        o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
+                                    ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+                                });
+                                const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+                                const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                const label = selectedCalendarDate ? selectedCalendarDate : `${monthNames[month]}_${year}`;
+                                a.download = `delivery_calendar_${label}.csv`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            };
+
+                            // Date input value (YYYY-MM-DD) for jump-to
+                            const jumpValue = selectedCalendarDate || `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
                             return (
                                 <div className="pm-orders-tab">
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
                                         <h2 className="pm-tab-title" style={{ margin: 0 }}>Delivery Calendar</h2>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                                             <button onClick={goToPrevMonth} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 16 }}>{"\u25C0"}</button>
-                                            <span style={{ fontWeight: 600, fontSize: 16, minWidth: 160, textAlign: "center" }}>{monthNames[month]} {year}</span>
+                                            <span style={{ fontWeight: 600, fontSize: 16, minWidth: 140, textAlign: "center" }}>{monthNames[month]} {year}</span>
                                             <button onClick={goToNextMonth} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 16 }}>{"\u25B6"}</button>
-                                            <button onClick={goToToday} style={{ background: "#d5b85a", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600, marginLeft: 4 }}>Today</button>
+                                            <input
+                                                type="date"
+                                                value={jumpValue}
+                                                onChange={jumpToDate}
+                                                style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, cursor: "pointer" }}
+                                                title="Jump to any date"
+                                            />
+                                            <button onClick={goToToday} style={{ background: "#d5b85a", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Today</button>
+                                            <button onClick={handleCalendarExport} style={{ display: "flex", alignItems: "center", gap: 6, background: "#2e7d32", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                                Export
+                                            </button>
                                         </div>
                                     </div>
                                     <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 12, padding: 16, marginBottom: 20 }}>
@@ -1222,9 +1858,25 @@ export default function ProductionManagerDashboard() {
                                                 const info = deliveryMap[dateKey];
                                                 const isToday = day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
                                                 const isPast = new Date(dateKey) < new Date(now.toISOString().split("T")[0]);
+                                                const isSelected = selectedCalendarDate === dateKey;
+                                                const hasOrders = !!info;
                                                 return (
-                                                    <div key={day} style={{ border: isToday ? "2px solid #d5b85a" : "1px solid #f0f0f0", borderRadius: 8, padding: "6px 4px", minHeight: 56, background: isToday ? "#faf6e8" : isPast ? "#fafafa" : "#fff" }}>
-                                                        <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#d5b85a" : "#333" }}>{day}</div>
+                                                    <div
+                                                        key={day}
+                                                        onClick={() => setSelectedCalendarDate(isSelected ? null : dateKey)}
+                                                        style={{
+                                                            border: isSelected ? "2px solid #2e7d32" : isToday ? "2px solid #d5b85a" : "1px solid #f0f0f0",
+                                                            borderRadius: 8,
+                                                            padding: "6px 4px",
+                                                            minHeight: 56,
+                                                            background: isSelected ? "#e8f5e9" : isToday ? "#faf6e8" : isPast ? "#fafafa" : "#fff",
+                                                            cursor: "pointer",
+                                                            transition: "all 0.15s",
+                                                        }}
+                                                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = hasOrders ? "#fff8e1" : "#f5f5f5"; }}
+                                                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = isToday ? "#faf6e8" : isPast ? "#fafafa" : "#fff"; }}
+                                                    >
+                                                        <div style={{ fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? "#2e7d32" : isToday ? "#d5b85a" : "#333" }}>{day}</div>
                                                         {info && (<div style={{ marginTop: 2 }}>
                                                             {info.pending > 0 && <div style={{ fontSize: 9, background: "#fff3e0", color: "#e65100", borderRadius: 4, padding: "1px 4px", marginTop: 2 }}>{info.pending} due</div>}
                                                             {info.delivered > 0 && <div style={{ fontSize: 9, background: "#e8f5e9", color: "#2e7d32", borderRadius: 4, padding: "1px 4px", marginTop: 2 }}>{info.delivered} done</div>}
@@ -1233,19 +1885,59 @@ export default function ProductionManagerDashboard() {
                                                 );
                                             })}
                                         </div>
+                                        <p style={{ fontSize: 11, color: "#999", marginTop: 10, textAlign: "center" }}>Click any date to see its deliveries {"\u00B7"} Use the date picker to jump to any month/year</p>
                                     </div>
-                                    {monthOrders.length > 0 && (
+
+                                    {/* ===== SELECTED DAY PANEL ===== */}
+                                    {selectedCalendarDate && (
+                                        <div className="pm-channel-card" style={{ marginBottom: 20, borderLeft: "4px solid #2e7d32" }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+                                                <p className="pm-card-title" style={{ margin: 0 }}>{"\uD83D\uDCC5"} Deliveries on {formatDate(selectedCalendarDate)} {"\u2014"} {selectedDayOrders.length} orders</p>
+                                                <button onClick={() => setSelectedCalendarDate(null)} style={{ background: "transparent", border: "1px solid #ddd", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>Clear</button>
+                                            </div>
+                                            {selectedDayOrders.length > 0 ? (
+                                                <div style={{ overflowX: "auto" }}>
+                                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                                                        <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left", background: "#fafafa" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Amount</th><th style={{ padding: "8px 10px" }}>Stage</th><th style={{ padding: "8px 10px" }}>Status</th></tr></thead>
+                                                        <tbody>{selectedDayOrders.map(o => (
+                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                                <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
+                                                                <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
+                                                                <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
+                                                                <td style={{ padding: "8px 10px" }}>{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
+                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{o.status || "-"}</td>
+                                                            </tr>
+                                                        ))}</tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <p className="pm-muted" style={{ textAlign: "center", padding: 14 }}>No deliveries scheduled for this date</p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* ===== FULL MONTH TABLE (only shown when no date selected) ===== */}
+                                    {!selectedCalendarDate && monthOrders.length > 0 && (
                                         <div className="pm-channel-card">
-                                            <p className="pm-card-title">Pending Deliveries in {monthNames[month]} {"\u2014"} {monthOrders.length} orders</p>
+                                            <p className="pm-card-title">All Deliveries in {monthNames[month]} {"\u2014"} {monthOrders.length} orders</p>
                                             <div style={{ overflowX: "auto" }}>
                                                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                                                     <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Delivery Date</th><th style={{ padding: "8px 10px" }}>Status</th></tr></thead>
-                                                    <tbody>{monthOrders.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td><td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td><td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td></tr>))}</tbody>
+                                                    <tbody>{monthOrders.map(o => (
+                                                        <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                            <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
+                                                            <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
+                                                            <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
+                                                            <td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td>
+                                                            <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                        </tr>
+                                                    ))}</tbody>
                                                 </table>
                                             </div>
                                         </div>
                                     )}
-                                    {monthOrders.length === 0 && <p className="pm-muted" style={{ textAlign: "center", padding: 20 }}>No pending deliveries for {monthNames[month]} {year}</p>}
+                                    {!selectedCalendarDate && monthOrders.length === 0 && <p className="pm-muted" style={{ textAlign: "center", padding: 20 }}>No deliveries for {monthNames[month]} {year}</p>}
                                 </div>
                             );
                         })()}
