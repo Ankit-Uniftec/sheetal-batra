@@ -317,3 +317,46 @@
     font-size: 13px;
     box-sizing: border-box;
 }
+/* ==================== PRODUCTION TAB ACTION BUTTONS ==================== */
+.pm-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin: 0 3px;
+    white-space: nowrap;
+}
+.pm-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.pm-action-complete {
+    background: #2e7d32;
+    color: #fff;
+}
+.pm-action-complete:hover:not(:disabled) {
+    background: #1b5e20;
+}
+.pm-action-view {
+    background: #faf6e8;
+    color: #8B7355;
+    border: 1px solid #d5b85a;
+}
+.pm-action-view:hover {
+    background: #f5ecd0;
+    border-color: #c9a94e;
+}
+
+@media (max-width: 767px) {
+    .pm-action-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+        margin: 2px 2px;
+    }
+}

@@ -97,6 +97,7 @@ const checkEmptyFields = (obj, prefix = "") => {
 // ========== END DEBUG HELPERS ==========
 
 export default function ReviewDetail() {
+  const isSubmitting = React.useRef(false);
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
   const location = useLocation();
@@ -119,7 +120,8 @@ export default function ReviewDetail() {
   // const loyaltyPointsRedeemed = Number(order?.loyalty_points_redeemed) || 0;
   // const loyaltyDiscount = Number(order?.loyalty_discount) || 0;
 
-  const pricing = { discountPercent, discountAmount, netPayable, remaining, storeCreditUsed, 
+  const pricing = {
+    discountPercent, discountAmount, netPayable, remaining, storeCreditUsed,
     // loyaltyPointsRedeemed, loyaltyDiscount 
   };
 
@@ -128,7 +130,12 @@ export default function ReviewDetail() {
   // ============================================================
   // SHARED: Process order after signature URL is obtained
   // ============================================================
+
   const processOrderWithSignature = async (signatureUrl) => {
+    // ✅ Prevent double submission
+    if (isSubmitting.current) return;
+    isSubmitting.current = true;
+
     // ✅ BLOCK if no salesperson data
     if (!order.salesperson && !order.salesperson_email) {
       const spSession = sessionStorage.getItem("currentSalesperson");
@@ -275,26 +282,42 @@ export default function ReviewDetail() {
       throw new Error("Failed to generate order number. Please try again.");
     }
 
-    // 3.5️⃣ DUPLICATE CHECK — prevent double submission
-    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    const { data: recentDupe } = await supabase
+    // 3.5️⃣ DUPLICATE CHECK — prevent back/reload double submission
+    const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+    const { data: recentOrders } = await supabase
       .from("orders")
-      .select("id, order_no")
+      .select("id, order_no, grand_total, items")
       .eq("user_id", order.user_id)
-      .eq("grand_total", normalizedOrder.grand_total)
-      .gte("created_at", twoMinutesAgo)
-      .limit(1);
+      .gte("created_at", thirtySecondsAgo)
+      .limit(3);
 
-    if (recentDupe && recentDupe.length > 0) {
-      showPopup({
-        title: "Duplicate Order",
-        message: `An identical order (${recentDupe[0].order_no}) was just placed. Please check before placing again.`,
-        type: "warning",
-        confirmText: "OK",
+    if (recentOrders && recentOrders.length > 0) {
+      const currentItem = normalizedOrder.items?.[0] || order.items?.[0] || {};
+      const isDupe = recentOrders.some(recent => {
+        if (Number(recent.grand_total) !== Number(normalizedOrder.grand_total)) return false;
+        const recentItem = recent.items?.[0] || {};
+        return (
+          recentItem.product_name === currentItem.product_name &&
+          recentItem.top === currentItem.top &&
+          recentItem.bottom === currentItem.bottom &&
+          recentItem.top_color?.name === currentItem.top_color?.name &&
+          recentItem.bottom_color?.name === currentItem.bottom_color?.name &&
+          recentItem.size === currentItem.size
+        );
       });
-      setLoading(false);
-      setShowSignature(false);
-      return;
+
+      if (isDupe) {
+        const match = recentOrders[0];
+        showPopup({
+          title: "Order Already Placed",
+          message: `Your order (${match.order_no}) was already placed successfully.`,
+          type: "warning",
+          confirmText: "OK",
+        });
+        setLoading(false);
+        setShowSignature(false);
+        return;
+      }
     }
 
     // 4️⃣ INSERT ORDER

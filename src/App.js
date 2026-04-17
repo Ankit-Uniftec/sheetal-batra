@@ -31,6 +31,7 @@ import GMDashboard from "./screens/GMDashboard/GMDashboard";
 import RetailManagerDashboard from "./screens/RetailDashboard/RetailManagerDashboard";
 import COODashboard from "./screens/COODashboard/COODashboard";
 import CEODashboard from "./screens/CeoDashboard/CeoDashboard";
+import StoreManagerDashboard from "./screens/StoreManagerDashboard/StoreManagerDashboard";
 
 
 function App() {
@@ -69,6 +70,7 @@ function App() {
         <Route path="/retail-manager-dashboard" element={<RetailManagerDashboard/>}/>
         <Route path="/coo-dashboard" element={<COODashboard />} />
         <Route path="/ceo-dashboard" element={<CEODashboard/>}/>
+        <Route path="/store-manager-dashboard" element={<StoreManagerDashboard/>}/>
       </Routes>
     </BrowserRouter>
   );

@@ -457,13 +457,13 @@ export default function OrderDetailPage() {
           )}
         </div>
         <div className="odp-summary-right">
-          <button
+          {/* <button
             className="odp-pdf-btn"
             onClick={() => handlePrintPdf("customer")}
             disabled={pdfLoading === "customer"}
           >
             {pdfLoading === "customer" ? "..." : "📄 Customer PDF"}
-          </button>
+          </button> */}
           <button
             className="odp-pdf-btn secondary"
             onClick={() => handlePrintPdf("warehouse")}

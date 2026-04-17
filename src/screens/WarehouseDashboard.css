@@ -1737,6 +1737,16 @@
   color: #d5b85a;
 }
 
+.wd-product-count-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  background: #f0f0f0;
+  padding: 4px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
 
 /* ==============================================
    RESPONSIVE BREAKPOINTS
