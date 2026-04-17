@@ -97,6 +97,7 @@ const checkEmptyFields = (obj, prefix = "") => {
 // ========== END DEBUG HELPERS ==========
 
 export default function ReviewDetail() {
+  const isSubmitting = React.useRef(false);
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
   const location = useLocation();
@@ -129,7 +130,12 @@ export default function ReviewDetail() {
   // ============================================================
   // SHARED: Process order after signature URL is obtained
   // ============================================================
+
   const processOrderWithSignature = async (signatureUrl) => {
+    // ✅ Prevent double submission
+    if (isSubmitting.current) return;
+    isSubmitting.current = true;
+
     // ✅ BLOCK if no salesperson data
     if (!order.salesperson && !order.salesperson_email) {
       const spSession = sessionStorage.getItem("currentSalesperson");

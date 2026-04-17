@@ -1202,16 +1202,15 @@ export default function OrderHistory() {
   };
 
   const handleBack = () => {
-    // Clean up SA flags from sessionStorage
     sessionStorage.removeItem("oh_saEmail");
     sessionStorage.removeItem("oh_readOnly");
     sessionStorage.removeItem("oh_isServices");
-    if (fromAssociate) navigate("/AssociateDashboard");
+    if (fromAssociate) navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard");
     else navigate(-1);
   };
 
   const handleLogout = async () => {
-    navigate("/AssociateDashboard", { replace: true });
+    navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
   };
 
   // Download all attachments

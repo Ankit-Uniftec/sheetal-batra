@@ -365,7 +365,7 @@ export default function OrderDetails() {
           type: "error",
           confirmText: "Ok",
         });
-        navigate("/AssociateDashboard", { replace: true });
+        navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
         return;
       }
 
@@ -949,12 +949,12 @@ export default function OrderDetails() {
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate("/AssociateDashboard", { replace: true });
+        navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
       } else {
         // No saved session - just navigate back
         console.log("⚠️ No saved session found");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate("/AssociateDashboard", { replace: true });
+        navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
       }
     } catch (e) {
       console.error("Logout error", e);
