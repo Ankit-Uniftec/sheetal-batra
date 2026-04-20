@@ -169,6 +169,9 @@
 .pm-edit-btn:hover:not(:disabled) { background: #c9a94e; }
 .pm-priority-btn { background: #f5f5f5; color: #333 !important; border: 1px solid #ddd; }
 .pm-priority-btn:hover:not(:disabled) { border-color: #d5b85a; background: #faf6e8; }
+.pm-complete-btn { background: #2e7d32; color: white !important; }
+.pm-complete-btn:hover:not(:disabled) { background: #256628; }
+.pm-complete-btn:disabled { background: #e0e0e0; color: #888 !important; }
 
 /* Pagination */
 .pm-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 20px; padding: 10px 0; }
@@ -351,6 +354,51 @@
 .pm-action-view:hover {
     background: #f5ecd0;
     border-color: #c9a94e;
+}
+
+/* ==================== TOP SELLERS CHARTS ==================== */
+.pm-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.pm-chart-card {
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 18px 18px 12px;
+    transition: box-shadow 0.2s;
+}
+
+.pm-chart-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.pm-chart-title {
+    font-family: "Athleas", serif !important;
+    font-size: 14px;
+    font-weight: 600;
+    color: #8B7355 !important;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f0ece2;
+    letter-spacing: 0.2px;
+}
+
+.pm-chart-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+    font-style: italic;
+}
+
+@media (max-width: 1100px) {
+    .pm-charts-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 767px) {

@@ -6,6 +6,8 @@ import "./InventoryDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
+import WarehouseTab from "./WarehouseTab";
+import StockExchangeTab from "./StockExchangeTab";
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
@@ -13,6 +15,10 @@ const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL"
 export default function InventoryDashboard() {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
+
+  // ==================== SIDEBAR & TABS ====================
+  const [activeTab, setActiveTab] = useState("inventory");
+  const [showSidebar, setShowSidebar] = useState(false);
 
   // ==================== EXISTING STATES ====================
   const [products, setProducts] = useState([]);
@@ -508,11 +514,29 @@ export default function InventoryDashboard() {
           <button className="inv-logout-btn" onClick={handleLogout}>
             Logout
           </button>
+          <div className="inv-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
+            <div className="inv-bar"></div>
+            <div className="inv-bar"></div>
+            <div className="inv-bar"></div>
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="inv-content">
+      {/* Layout with Sidebar */}
+      <div className={`inv-layout ${showSidebar ? "inv-sidebar-open" : ""}`}>
+        <aside className={`inv-sidebar ${showSidebar ? "open" : ""}`}>
+          <nav className="inv-menu">
+            <a className={`inv-menu-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</a>
+            <a className={`inv-menu-item ${activeTab === "warehouses" ? "active" : ""}`} onClick={() => { setActiveTab("warehouses"); setShowSidebar(false); }}>Warehouses</a>
+            <a className={`inv-menu-item ${activeTab === "exchanges" ? "active" : ""}`} onClick={() => { setActiveTab("exchanges"); setShowSidebar(false); }}>Stock Exchange</a>
+            <a className="inv-menu-item inv-menu-logout" onClick={handleLogout}>Log Out</a>
+          </nav>
+        </aside>
+
+        {/* Main Content */}
+        <div className="inv-content">
+        {/* ==================== INVENTORY TAB ==================== */}
+        {activeTab === "inventory" && (<>
         {/* LXRTS Sync Banner */}
         {lxrtsSyncLoading && (
           <div className="inv-sync-banner">
@@ -940,6 +964,15 @@ export default function InventoryDashboard() {
             </button>
           </div>
         )}
+        </>)}
+
+        {/* ==================== WAREHOUSES TAB ==================== */}
+        {activeTab === "warehouses" && <WarehouseTab />}
+
+        {/* ==================== STOCK EXCHANGE TAB ==================== */}
+        {activeTab === "exchanges" && <StockExchangeTab />}
+
+      </div>
       </div>
 
       {/* Back Button */}
