@@ -29,105 +29,114 @@ export default function SALogin() {
 
     setLoading(true);
 
-    const { data: authData, error: authError } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-    setLoading(false);
+      if (authError) {
+        showPopup({
+          title: "Invalid Credentials",
+          message: "Please enter valid credentials.",
+          type: "warning",
+          confirmText: "Ok",
+        })
+        return;
+      }
 
-    if (authError) {
+      const { data: userRecord, error: roleError } = await supabase
+        .from("salesperson")
+        .select("role")
+        .eq("email", email)
+        .single();
+
+      if (roleError || !userRecord) {
+        showPopup({
+          title: "Role not found",
+          message: "Could not determine your role. Please contact admin.",
+          type: "error",
+          confirmText: "Ok",
+        })
+        return;
+      }
+
+      if (userRecord.role === "salesperson" || userRecord.role === "sa_services") {
+        localStorage.setItem("sp_email", email.trim());
+        navigate("/AssociateDashboard");
+      } else if (userRecord.role === "warehouse") {
+        navigate("/warehouseDashboard");
+      } else if (userRecord.role === "inventory") {
+        navigate("/inventoryDashboard");
+      } else if (userRecord.role === "accounts") {
+        navigate("/accounts")
+      } else if (userRecord.role === "gm") {
+        navigate("/gm-dashboard")
+      } else if (userRecord.role === "retail_manager") {
+        navigate("/retail-manager-dashboard");
+      } else if (userRecord.role === "admin") {
+        navigate("/admin")
+      } else if (userRecord.role === "coo") {
+        navigate("/coo-dashboard")
+      } else if (userRecord.role === "ceo") {
+        navigate("/ceo-dashboard")
+      } else if (userRecord.role === "store_manager") {
+        navigate("/store-manager-dashboard");
+      } else if (userRecord.role === "executive") {
+        const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+          store: prof?.store || prof?.store_name || "B2B",
+          name: prof?.full_name || "",
+          email: email.trim(),
+        }));
+        navigate("/b2b-executive-dashboard")
+      } else if (userRecord.role === "merchandiser") {
+        const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+          store: prof?.store || prof?.store_name || "B2B",
+          name: prof?.full_name || "",
+          email: email.trim(),
+        }));
+        navigate("/b2b-merchandiser-dashboard")
+      } else if (userRecord.role === "production") {
+        const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+          store: prof?.store || prof?.store_name || "B2B",
+          name: prof?.full_name || "",
+          email: email.trim(),
+        }));
+        navigate("/b2b-production-dashboard")
+      } else if (userRecord.role === "production_manager") {
+        const { data: sp } = await supabase
+          .from("salesperson")
+          .select("name, store")
+          .eq("email", email.trim())
+          .single();
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+          store: sp?.store || "All",
+          name: sp?.name || "",
+          email: email.trim(),
+        }));
+        navigate("/production-manager-dashboard");
+      } else {
+        showPopup({
+          title: "Unknown role",
+          message: "Access is Denied.",
+          type: "warning",
+          confirmText: "Ok",
+        })
+      }
+    } catch (err) {
+      console.error("Login failed:", err);
       showPopup({
-        title: "Invalid Credentials",
-        message: "Please enter valid credentials.",
-        type: "warning",
-        confirmText: "Ok",
-      })
-      return;
-    }
-
-    const { data: userRecord } = await supabase
-      .from("salesperson")
-      .select("role")
-      .eq("email", email)
-      .single();
-
-    if (!userRecord) {
-      showPopup({
-        title: "Role not found ",
-        message: "",
+        title: "Something went wrong",
+        message: "An unexpected error occurred. Please try again.",
         type: "error",
         confirmText: "Ok",
       })
-      return;
-    }
-
-    if (userRecord.role === "salesperson" || userRecord.role === "sa_services") {
-      localStorage.setItem("sp_email", email.trim());
-      navigate("/AssociateDashboard");
-    } else if (userRecord.role === "warehouse") {
-      navigate("/warehouseDashboard");
-    } else if (userRecord.role === "inventory") {
-      navigate("/inventoryDashboard");
-    } else if (userRecord.role === "accounts") {
-      navigate("/accounts")
-    } else if (userRecord.role === "gm") {
-      navigate("/gm-dashboard")
-    } else if (userRecord.role === "retail_manager") {
-      navigate("/retail-manager-dashboard");
-    } else if (userRecord.role === "admin") {
-      navigate("/admin")
-    } else if (userRecord.role === "coo") {
-      navigate("/coo-dashboard")
-    } else if (userRecord.role === "ceo") {
-      navigate("/ceo-dashboard")
-    } else if (userRecord.role === "store_manager") {
-    navigate("/store-manager-dashboard");
-    } else if (userRecord.role === "executive") {
-      const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
-      sessionStorage.setItem("currentSalesperson", JSON.stringify({
-        store: prof?.store || prof?.store_name || "B2B",
-        name: prof?.full_name || "",
-        email: email.trim(),
-      }));
-      navigate("/b2b-executive-dashboard")
-    } else if (userRecord.role === "merchandiser") {
-      const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
-      sessionStorage.setItem("currentSalesperson", JSON.stringify({
-        store: prof?.store || prof?.store_name || "B2B",
-        name: prof?.full_name || "",
-        email: email.trim(),
-      }));
-      navigate("/b2b-merchandiser-dashboard")
-    } else if (userRecord.role === "production") {
-      const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
-      sessionStorage.setItem("currentSalesperson", JSON.stringify({
-        store: prof?.store || prof?.store_name || "B2B",
-        name: prof?.full_name || "",
-        email: email.trim(),
-      }));
-      navigate("/b2b-production-dashboard")
-    } else if (userRecord.role === "production_manager") {
-      const { data: sp } = await supabase
-        .from("salesperson")
-        .select("name, store")
-        .eq("email", email.trim())
-        .single();
-      sessionStorage.setItem("currentSalesperson", JSON.stringify({
-        store: sp?.store || "All",
-        name: sp?.name || "",
-        email: email.trim(),
-      }));
-      navigate("/production-manager-dashboard");
-
-    } else {
-      showPopup({
-        title: "Unknown role",
-        message: "Access is Denied.",
-        type: "warning",
-        confirmText: "Ok",
-      })
+    } finally {
+      setLoading(false);
     }
   };
 

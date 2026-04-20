@@ -179,7 +179,6 @@ export default function GMDashboard() {
                 .single();
 
             if (!userRecord || userRecord.role !== "gm") {
-                console.log("\u274C Access denied - not a GM");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;
@@ -1348,6 +1347,7 @@ export default function GMDashboard() {
                                         sessionStorage.setItem("associateSession", JSON.stringify({
                                             access_token: session.access_token,
                                             refresh_token: session.refresh_token,
+                                            user: { email: session.user?.email },
                                         }));
                                     }
                                     sessionStorage.setItem("currentSalesperson", JSON.stringify({

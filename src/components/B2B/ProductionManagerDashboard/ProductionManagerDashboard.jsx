@@ -729,7 +729,7 @@ export default function ProductionManagerDashboard() {
                         await supabase.storage.from("invoices").remove([`orders/${orderNo}_warehouse_${i + 1}.pdf`]);
                     }
                 }
-            } catch (err) { console.log("PDF cleanup error:", err); }
+            } catch (err) { /* PDF cleanup failed */ }
 
             const { error } = await supabase.from("orders").update(updatePayload).eq("id", editingOrder.id);
             if (error) throw error;

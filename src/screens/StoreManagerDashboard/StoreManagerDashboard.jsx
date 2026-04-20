@@ -109,7 +109,6 @@ export default function StoreManagerDashboard() {
                 .single();
 
             if (!userRecord || userRecord.role !== "store_manager") {
-                console.log("\u274C Access denied - not a store_manager");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;
@@ -742,6 +741,7 @@ export default function StoreManagerDashboard() {
                                         sessionStorage.setItem("associateSession", JSON.stringify({
                                             access_token: session.access_token,
                                             refresh_token: session.refresh_token,
+                                            user: { email: session.user?.email },
                                         }));
                                     }
                                     sessionStorage.setItem("currentSalesperson", JSON.stringify({

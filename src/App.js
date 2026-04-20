@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import OtpVerification from "./screens/OtpVerification";
 import OtpDialogBox from "./screens/OtpDialogBox";
 import CustomerDetailForm from "./screens/CustomerDetailForm";
@@ -9,8 +9,7 @@ import SALogin from "./screens/SALogin";
 import AssociateDashboard from "./screens/AssociateDashboard";
 import WarehouseDashboard from "./screens/WarehouseDashboard";
 import OrderHistory from "./screens/OrderHistory";
-import { Navigate } from "react-router-dom";
-import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced"
+import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced";
 import EditOrder from "./screens/EditOrder/EditOrder";
 import InventoryDashboard from "./screens/InventoryDashboard/InventoryDashboard";
 import AccountsDashboard from "./screens/AccountsDashboard/AccountsDashboard";
@@ -32,45 +31,52 @@ import RetailManagerDashboard from "./screens/RetailDashboard/RetailManagerDashb
 import COODashboard from "./screens/COODashboard/COODashboard";
 import CEODashboard from "./screens/CeoDashboard/CeoDashboard";
 import StoreManagerDashboard from "./screens/StoreManagerDashboard/StoreManagerDashboard";
+import PrivateRoute from "./components/PrivateRoute";
 
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public routes */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<SALogin />} />
         <Route path="/buyerVerification" element={<OtpVerification />} />
         <Route path="/otp" element={<OtpDialogBox />} />
-        <Route path="/userinfo" element={<CustomerDetailForm />} />
-        <Route path="/product" element={<ProductForm />} />
-        <Route path="/confirmDetail" element={<OrderDetails />} />
-        <Route path="/orderDetail" element={<ReviewDetail />} />
-        <Route path="/AssociateDashboard" element={<AssociateDashboard />} />
-        <Route path="/warehouseDashboard" element={<WarehouseDashboard />} />
-        <Route path="/orderHistory" element={<OrderHistory />} />
-        <Route path="order-placed" element={<OrderPlaced />} />
-        <Route path="/edit-order" element={<EditOrder />} />
-        <Route path="/inventoryDashboard" element={<InventoryDashboard />} />
-        <Route path="/accounts" element={<AccountsDashboard />} />
-        <Route path="/order/:orderId" element={<OrderDetailPage />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/b2b-executive-dashboard" element={<B2bExecutiveDashboard />} />
-        <Route path="/b2b-vendor-selection" element={<B2BVendorSelection />} />
-        <Route path="/b2b-product-form" element={<B2bProductForm />} />
-        <Route path="/b2b-order-details" element={<B2bOrderDetails />} />
-        <Route path="/b2b-review-order" element={<B2bReviewOrder />} />
-        <Route path="/b2b-order-view/:id" element={<B2bOrderView />} />
-        <Route path="/b2b-order-history" element={<B2bOrderHistory />} />
-        <Route path="/b2b-merchandiser-dashboard" element={<B2bMerchandiserDashboard />} />
-        <Route path="/b2b-vendor-orders/:vendorId" element={<B2bVendorOrders />} />
-        <Route path="/b2b-production-dashboard" element={<B2bProductionDashboard />} />
-        <Route path="/production-manager-dashboard" element={<ProductionManagerDashboard />} />
-        <Route path="/gm-dashboard" element={<GMDashboard/>}/>
-        <Route path="/retail-manager-dashboard" element={<RetailManagerDashboard/>}/>
-        <Route path="/coo-dashboard" element={<COODashboard />} />
-        <Route path="/ceo-dashboard" element={<CEODashboard/>}/>
-        <Route path="/store-manager-dashboard" element={<StoreManagerDashboard/>}/>
+
+        {/* Protected routes */}
+        <Route path="/userinfo" element={<PrivateRoute><CustomerDetailForm /></PrivateRoute>} />
+        <Route path="/product" element={<PrivateRoute><ProductForm /></PrivateRoute>} />
+        <Route path="/confirmDetail" element={<PrivateRoute><OrderDetails /></PrivateRoute>} />
+        <Route path="/orderDetail" element={<PrivateRoute><ReviewDetail /></PrivateRoute>} />
+        <Route path="/AssociateDashboard" element={<PrivateRoute><AssociateDashboard /></PrivateRoute>} />
+        <Route path="/warehouseDashboard" element={<PrivateRoute><WarehouseDashboard /></PrivateRoute>} />
+        <Route path="/orderHistory" element={<PrivateRoute><OrderHistory /></PrivateRoute>} />
+        <Route path="order-placed" element={<PrivateRoute><OrderPlaced /></PrivateRoute>} />
+        <Route path="/edit-order" element={<PrivateRoute><EditOrder /></PrivateRoute>} />
+        <Route path="/inventoryDashboard" element={<PrivateRoute><InventoryDashboard /></PrivateRoute>} />
+        <Route path="/accounts" element={<PrivateRoute><AccountsDashboard /></PrivateRoute>} />
+        <Route path="/order/:orderId" element={<PrivateRoute><OrderDetailPage /></PrivateRoute>} />
+        <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+        <Route path="/b2b-executive-dashboard" element={<PrivateRoute><B2bExecutiveDashboard /></PrivateRoute>} />
+        <Route path="/b2b-vendor-selection" element={<PrivateRoute><B2BVendorSelection /></PrivateRoute>} />
+        <Route path="/b2b-product-form" element={<PrivateRoute><B2bProductForm /></PrivateRoute>} />
+        <Route path="/b2b-order-details" element={<PrivateRoute><B2bOrderDetails /></PrivateRoute>} />
+        <Route path="/b2b-review-order" element={<PrivateRoute><B2bReviewOrder /></PrivateRoute>} />
+        <Route path="/b2b-order-view/:id" element={<PrivateRoute><B2bOrderView /></PrivateRoute>} />
+        <Route path="/b2b-order-history" element={<PrivateRoute><B2bOrderHistory /></PrivateRoute>} />
+        <Route path="/b2b-merchandiser-dashboard" element={<PrivateRoute><B2bMerchandiserDashboard /></PrivateRoute>} />
+        <Route path="/b2b-vendor-orders/:vendorId" element={<PrivateRoute><B2bVendorOrders /></PrivateRoute>} />
+        <Route path="/b2b-production-dashboard" element={<PrivateRoute><B2bProductionDashboard /></PrivateRoute>} />
+        <Route path="/production-manager-dashboard" element={<PrivateRoute><ProductionManagerDashboard /></PrivateRoute>} />
+        <Route path="/gm-dashboard" element={<PrivateRoute><GMDashboard /></PrivateRoute>} />
+        <Route path="/retail-manager-dashboard" element={<PrivateRoute><RetailManagerDashboard /></PrivateRoute>} />
+        <Route path="/coo-dashboard" element={<PrivateRoute><COODashboard /></PrivateRoute>} />
+        <Route path="/ceo-dashboard" element={<PrivateRoute><CEODashboard /></PrivateRoute>} />
+        <Route path="/store-manager-dashboard" element={<PrivateRoute><StoreManagerDashboard /></PrivateRoute>} />
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

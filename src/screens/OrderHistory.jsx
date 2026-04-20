@@ -981,7 +981,11 @@ export default function OrderHistory() {
       // Save current associate session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        sessionStorage.setItem("associateSession", JSON.stringify(session));
+        sessionStorage.setItem("associateSession", JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          user: { email: session.user?.email },
+        }));
       }
       sessionStorage.setItem("returnToAssociate", "true");
       sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
@@ -1142,24 +1146,20 @@ export default function OrderHistory() {
       // Delete old PDF files from storage to force regeneration
       try {
         const orderNo = editingOrder.order_no;
-        console.log("🗑️ Deleting PDFs for order:", orderNo);
-
         if (orderNo) {
           // Delete customer PDF
           const customerPath = `orders/${orderNo}_customer.pdf`;
-          const { error: custErr } = await supabase.storage.from("invoices").remove([customerPath]);
-          if (custErr) console.log("❌ Customer PDF delete error:", custErr);
+          await supabase.storage.from("invoices").remove([customerPath]);
 
           // Delete warehouse PDFs
           const items = editingOrder.items || [];
           for (let i = 0; i < items.length; i++) {
             const whPath = `orders/${orderNo}_warehouse_${i + 1}.pdf`;
-            const { error: whErr } = await supabase.storage.from("invoices").remove([whPath]);
-            if (whErr) console.log("❌ Warehouse PDF delete error:", whErr);
+            await supabase.storage.from("invoices").remove([whPath]);
           }
         }
       } catch (err) {
-        console.log("PDF cleanup error:", err);
+        /* PDF cleanup failed */
       }
 
       // Save to database

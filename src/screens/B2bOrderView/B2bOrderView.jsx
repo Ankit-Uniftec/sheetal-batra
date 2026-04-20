@@ -63,7 +63,6 @@ export default function B2bOrderView() {
 
                 const allowedRoles = ["executive", "merchandiser", "production"];
                 if (!profile?.role || !allowedRoles.includes(profile.role)) {
-                    console.log("❌ Access denied - not a B2B user");
                     await supabase.auth.signOut();
                     navigate("/login", { replace: true });
                     return;

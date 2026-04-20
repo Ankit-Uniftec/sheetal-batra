@@ -79,7 +79,6 @@ export default function B2bMerchandiserDashboard() {
                 .single();
 
             if (!roleCheck || roleCheck.role !== "merchandiser") {
-                console.log("❌ Access denied - not a merchandiser");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;

@@ -55,7 +55,6 @@ export default function AccountsDashboard() {
         .single();
 
       if (!userRecord || userRecord.role !== "accounts") {
-        console.log("❌ Access denied - not an accounts user");
         await supabase.auth.signOut();
         navigate("/login", { replace: true });
         return;

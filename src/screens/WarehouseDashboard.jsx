@@ -260,7 +260,6 @@ const WarehouseDashboard = () => {
         .single();
 
       if (!userRecord || userRecord.role !== "warehouse") {
-        console.log("❌ Access denied - not a warehouse user");
         await supabase.auth.signOut();
         navigate("/login", { replace: true });
         return;

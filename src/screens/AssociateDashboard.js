@@ -240,7 +240,6 @@ export default function Dashboard() {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user?.email) {
-          console.log('❌ No user - stopping load');
           setLoading(false);
           return;
         }
@@ -253,7 +252,6 @@ export default function Dashboard() {
 
         // ✅ Role check - only salesperson and sa_services users allowed
         if (!spData || (spData.role !== "salesperson" && spData.role !== "sa_services")) {
-          console.log("❌ Access denied - not a salesperson");
           await supabase.auth.signOut();
           navigate("/login", { replace: true });
           return;
@@ -1512,7 +1510,11 @@ export default function Dashboard() {
             }
 
             const { data: { session } } = await supabase.auth.getSession();
-            if (session) sessionStorage.setItem("associateSession", JSON.stringify(session));
+            if (session) sessionStorage.setItem("associateSession", JSON.stringify({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+              user: { email: session.user?.email },
+            }));
             sessionStorage.setItem("returnToAssociate", "true");
             sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
 

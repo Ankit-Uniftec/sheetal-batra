@@ -115,7 +115,6 @@ export default function InventoryDashboard() {
             }
           } else {
             // Fallback: read from product_variants if Shopify fails
-            console.warn(`Shopify sync failed for ${product.name}, using database fallback`);
             const { data: variants } = await supabase
               .from("product_variants")
               .select("size, inventory")

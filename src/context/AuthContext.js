@@ -9,20 +9,31 @@ export const AuthProvider = ({ children }) => {
 
   // Load the session on first load
   useEffect(() => {
-    const getSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      setUser(data?.session?.user ?? null);
-      setLoading(false);
-    };
-
-    getSession();
-
-    // Listen for auth changes (login, logout, refresh)
+    // Set up listener first to avoid race condition
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user ?? null);
+        setLoading(false);
       }
     );
+
+    // Then check current session
+    const getSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error("Failed to get session:", error);
+        }
+        setUser(data?.session?.user ?? null);
+      } catch (err) {
+        console.error("Session retrieval failed:", err);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    getSession();
 
     return () => listener.subscription.unsubscribe();
   }, []);

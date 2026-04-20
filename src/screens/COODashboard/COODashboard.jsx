@@ -120,7 +120,6 @@ export default function COODashboard() {
             if (!session) { navigate("/login", { replace: true }); return; }
             const { data: userRecord } = await supabase.from("salesperson").select("role, saleperson").eq("email", session.user.email?.toLowerCase()).single();
             if (!userRecord || userRecord.role !== "coo") {
-                console.log("\u274C Access denied - not COO");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;
