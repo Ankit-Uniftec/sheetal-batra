@@ -8,6 +8,9 @@ import formatDate from "../../../utils/formatDate";
 import { usePopup } from "../../../components/Popup";
 import NotificationBell from "../../../components/NotificationBell";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
+const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
 
 // ==================== MEASUREMENT CONSTANTS ====================
 const CATEGORY_KEY_MAP = {
@@ -522,6 +525,71 @@ export default function ProductionManagerDashboard() {
         };
     }, [orders]);
 
+    // ==================== TOP PRODUCT / COLOR / SIZE BY STORE ====================
+    const topByStore = useMemo(() => {
+        const isRevenue = (o) => (o.status === "delivered" || o.status === "completed") && o.status !== "cancelled";
+
+        const getStore = (o) => {
+            if (o.is_b2b) return "B2B";
+            const s = (o.salesperson_store || "").trim();
+            return s || "Other";
+        };
+
+        const storeSet = new Set();
+        orders.forEach(o => { if (isRevenue(o)) storeSet.add(getStore(o)); });
+        const storeList = Array.from(storeSet);
+
+        const productMap = {};
+        const colorMap = {};
+        const sizeMap = {};
+
+        orders.forEach(o => {
+            if (!isRevenue(o)) return;
+            const store = getStore(o);
+            (o.items || []).forEach(item => {
+                const qty = Number(item.quantity || 1);
+
+                const pname = item.product_name;
+                if (pname) {
+                    if (!productMap[pname]) productMap[pname] = { name: pname };
+                    productMap[pname][store] = (productMap[pname][store] || 0) + qty;
+                }
+
+                const topColor = typeof item.top_color === "object" ? item.top_color?.name : item.top_color;
+                const bottomColor = typeof item.bottom_color === "object" ? item.bottom_color?.name : item.bottom_color;
+                const fallbackColor = typeof item.color === "object" ? item.color?.name : item.color;
+                const color = topColor || fallbackColor || bottomColor;
+                if (color) {
+                    if (!colorMap[color]) colorMap[color] = { name: color };
+                    colorMap[color][store] = (colorMap[color][store] || 0) + qty;
+                }
+
+                const size = item.size;
+                if (size) {
+                    if (!sizeMap[size]) sizeMap[size] = { name: size };
+                    sizeMap[size][store] = (sizeMap[size][store] || 0) + qty;
+                }
+            });
+        });
+
+        const totalOf = (entry) => storeList.reduce((sum, s) => sum + (entry[s] || 0), 0);
+
+        const topProducts = Object.values(productMap).sort((a, b) => totalOf(b) - totalOf(a)).slice(0, 6);
+        const topColors = Object.values(colorMap).sort((a, b) => totalOf(b) - totalOf(a)).slice(0, 6);
+
+        const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+        const topSizes = Object.values(sizeMap).sort((a, b) => {
+            const ai = SIZE_ORDER.indexOf(a.name);
+            const bi = SIZE_ORDER.indexOf(b.name);
+            if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+        });
+
+        return { stores: storeList, topProducts, topColors, topSizes };
+    }, [orders]);
+
     // ==================== FILTERED + PAGINATED ORDERS ====================
     const filteredByStatus = useMemo(() => {
         return orders.filter(o => {
@@ -729,7 +797,7 @@ export default function ProductionManagerDashboard() {
                         await supabase.storage.from("invoices").remove([`orders/${orderNo}_warehouse_${i + 1}.pdf`]);
                     }
                 }
-            } catch (err) { console.log("PDF cleanup error:", err); }
+            } catch (err) { /* PDF cleanup failed */ }
 
             const { error } = await supabase.from("orders").update(updatePayload).eq("id", editingOrder.id);
             if (error) throw error;
@@ -989,12 +1057,97 @@ export default function ProductionManagerDashboard() {
                                         subtitle="Total processed refunds"
                                         icon={Icons.wallet}
                                     />
-                                    <StatCard
-                                        title="Top Selling Product"
-                                        value={salesMetrics.topProduct.count > 0 ? salesMetrics.topProduct.count : "\u2014"}
-                                        subtitle={salesMetrics.topProduct.name.length > 28 ? salesMetrics.topProduct.name.slice(0, 28) + "\u2026" : salesMetrics.topProduct.name}
-                                        icon={Icons.tag}
-                                    />
+                                </div>
+
+                                {/* ===== TOP SELLING CHARTS BY STORE ===== */}
+                                <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Top Sellers by Store</p>
+                                <div className="pm-charts-grid">
+                                    {/* Top Products */}
+                                    <div className="pm-chart-card">
+                                        <p className="pm-chart-title">Top Selling Products</p>
+                                        {topByStore.topProducts.length === 0 ? (
+                                            <p className="pm-chart-empty">No delivered orders yet</p>
+                                        ) : (
+                                            <ResponsiveContainer width="100%" height={320}>
+                                                <BarChart data={topByStore.topProducts} margin={{ top: 10, right: 20, left: 0, bottom: 70 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                    <XAxis
+                                                        dataKey="name"
+                                                        interval={0}
+                                                        tick={{ fontSize: 10, fill: "#555" }}
+                                                        angle={-30}
+                                                        textAnchor="end"
+                                                        height={70}
+                                                        tickFormatter={(v) => v.length > 18 ? v.substring(0, 18) + "\u2026" : v}
+                                                    />
+                                                    <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                    <Tooltip
+                                                        contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }}
+                                                        cursor={{ fill: "rgba(213, 184, 90, 0.08)" }}
+                                                    />
+                                                    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                                                    {topByStore.stores.map((store, i) => (
+                                                        <Bar key={store} dataKey={store} fill={PM_CHART_COLORS[i % PM_CHART_COLORS.length]} radius={[4, 4, 0, 0]} barSize={18} />
+                                                    ))}
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        )}
+                                    </div>
+
+                                    {/* Top Colors */}
+                                    <div className="pm-chart-card">
+                                        <p className="pm-chart-title">Top Selling Colors</p>
+                                        {topByStore.topColors.length === 0 ? (
+                                            <p className="pm-chart-empty">No delivered orders yet</p>
+                                        ) : (
+                                            <ResponsiveContainer width="100%" height={320}>
+                                                <BarChart data={topByStore.topColors} margin={{ top: 10, right: 20, left: 0, bottom: 50 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                    <XAxis
+                                                        dataKey="name"
+                                                        interval={0}
+                                                        tick={{ fontSize: 11, fill: "#555" }}
+                                                        angle={-20}
+                                                        textAnchor="end"
+                                                        height={50}
+                                                    />
+                                                    <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                    <Tooltip
+                                                        contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }}
+                                                        cursor={{ fill: "rgba(213, 184, 90, 0.08)" }}
+                                                    />
+                                                    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                                                    {topByStore.stores.map((store, i) => (
+                                                        <Bar key={store} dataKey={store} fill={PM_CHART_COLORS[i % PM_CHART_COLORS.length]} radius={[4, 4, 0, 0]} barSize={18} />
+                                                    ))}
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        )}
+                                    </div>
+
+                                    {/* Top Sizes */}
+                                    <div className="pm-chart-card">
+                                        <p className="pm-chart-title">Top Selling Sizes</p>
+                                        {topByStore.topSizes.length === 0 ? (
+                                            <p className="pm-chart-empty">No delivered orders yet</p>
+                                        ) : (
+                                            <ResponsiveContainer width="100%" height={320}>
+                                                <BarChart data={topByStore.topSizes} margin={{ top: 10, right: 20, left: 0, bottom: 30 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#555" }} />
+                                                    <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                    <Tooltip
+                                                        contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }}
+                                                        cursor={{ fill: "rgba(213, 184, 90, 0.08)" }}
+                                                    />
+                                                    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                                                    {topByStore.stores.map((store, i) => (
+                                                        <Bar key={store} dataKey={store} fill={PM_CHART_COLORS[i % PM_CHART_COLORS.length]} radius={[4, 4, 0, 0]} barSize={22} />
+                                                    ))}
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* ===== PRODUCTION METRICS SECTION ===== */}
@@ -1234,6 +1387,17 @@ export default function ProductionManagerDashboard() {
                                                 <div className="pm-order-actions">
                                                     <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
                                                     <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
+                                                    <button
+                                                        className="pm-action-btn pm-complete-btn"
+                                                        disabled={order.status === "completed" || order.status === "delivered" || order.status === "cancelled" || actionLoading === order.id}
+                                                        onClick={(e) => handleMarkComplete(order, e)}
+                                                    >
+                                                        {order.status === "delivered" ? "Delivered" :
+                                                            order.status === "completed" ? "Completed" :
+                                                                order.status === "cancelled" ? "Cancelled" :
+                                                                    actionLoading === order.id ? "Marking..." :
+                                                                        "Mark as Completed"}
+                                                    </button>
                                                     {/* <span className={`pm-recent-status ${getStatusClass(statusLabel)}`} style={{ marginLeft: "auto" }}>{statusLabel}</span> */}
                                                 </div>
                                             </div>

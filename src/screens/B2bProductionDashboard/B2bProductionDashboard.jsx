@@ -73,7 +73,6 @@ export default function B2bProductionDashboard() {
                 .single();
 
             if (!roleCheck || roleCheck.role !== "production") {
-                console.log("❌ Access denied - not a production user");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;

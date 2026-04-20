@@ -65,7 +65,6 @@ export default function B2bReviewOrder() {
             // ✅ Block non-B2B users from B2B review
             const allowedRoles = ["executive", "merchandiser", "production"];
             if (!spData2?.role || !allowedRoles.includes(spData2.role)) {
-                console.log("❌ Access denied - not a B2B user");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;
@@ -240,7 +239,6 @@ export default function B2bReviewOrder() {
                         submitted_by: user?.email || "unknown",
                         submitted_at: new Date().toISOString(),
                     }], { onConflict: "order_id" }).then(({ error }) => {
-                        if (error) console.warn("Failed to update approval record:", error);
                     });
                 }
             } else {
@@ -284,7 +282,6 @@ export default function B2bReviewOrder() {
                             submitted_by: user?.email || "unknown",
                             submitted_at: new Date().toISOString(),
                         }]);
-                    if (approvalError) console.warn("Failed to create approval record:", approvalError);
                 }
             }
 

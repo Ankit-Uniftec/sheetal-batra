@@ -102,7 +102,6 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
                     filter: `recipient_email=eq.${userEmail}`,
                 },
                 (payload) => {
-                    console.log("🔔 New notification received:", payload);
                     fetchNotifications();
                 }
             )

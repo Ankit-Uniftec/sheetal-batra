@@ -151,7 +151,6 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
 
       const freshUrl = `${urlData?.publicUrl}?t=${Date.now()}`;
       warehouseUrls.push(freshUrl);
-      console.log(`✅ Warehouse PDF ${i + 1} generated fresh`);
     }
 
     // Update order with PDF URLs (clean, without cache buster)
@@ -279,13 +278,9 @@ export const generateAllPdfs = async (order, setLoading = null) => {
 
   // ========== CUSTOMER PDF ==========
   try {
-    console.log("📄 Generating Customer PDF for order:", order.order_no);
-
     const customerPdfBlob = await pdf(
       <CustomerOrderPdf order={orderData} logoUrl={logoUrl} />
     ).toBlob();
-
-    console.log("📤 Uploading Customer PDF...");
 
     const { error: uploadError } = await supabase.storage
       .from("invoices")
@@ -302,7 +297,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
         .getPublicUrl(`orders/${order.order_no}_customer.pdf`);
 
       customerUrl = customerUrlData?.publicUrl;
-      console.log("✅ Customer PDF uploaded:", customerUrl);
     }
   } catch (customerError) {
     console.error("❌ Customer PDF generation failed:", customerError);
@@ -312,8 +306,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
   for (let i = 0; i < totalItems; i++) {
     try {
       const item = items[i];
-      console.log(`📄 Generating Warehouse PDF ${i + 1} for:`, item.product_name);
-
       const pdfBlob = await pdf(
         <WarehouseOrderPdf
           order={orderData}
@@ -323,8 +315,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
           logoUrl={logoUrl}
         />
       ).toBlob();
-
-      console.log(`📤 Uploading Warehouse PDF ${i + 1}...`);
 
       const filename = `orders/${order.order_no}_warehouse_${i + 1}.pdf`;
 
@@ -344,7 +334,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
           .getPublicUrl(filename);
 
         warehouseUrls.push(urlData?.publicUrl);
-        console.log(`✅ Warehouse PDF ${i + 1} uploaded`);
       }
     } catch (warehouseError) {
       console.error(`❌ Warehouse PDF ${i + 1} generation failed:`, warehouseError);
@@ -367,8 +356,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
     }
 
     if (Object.keys(updateData).length > 0) {
-      console.log("📝 Updating order with URLs:", updateData);
-
       const { error: updateError } = await supabase
         .from("orders")
         .update(updateData)
@@ -376,11 +363,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
 
       if (updateError) {
         console.error("❌ Database update failed:", updateError);
-      } else {
-        console.log("✅ Order updated with PDF URLs");
       }
-    } else {
-      console.log("⚠️ No PDF URLs to update in database");
     }
   } catch (dbError) {
     console.error("❌ Database update error:", dbError);
@@ -413,7 +396,6 @@ export const clearPdfUrls = async (orderId) => {
       return false;
     }
 
-    console.log("✅ PDF URLs cleared for order:", orderId);
     return true;
   } catch (err) {
     console.error("Error clearing PDF URLs:", err);

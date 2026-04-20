@@ -264,7 +264,6 @@ export const sendNotification = async (type, options = {}) => {
             }
         }
 
-        console.log(`✅ Notification sent: ${type} → ${uniqueRecipients.length} recipients`);
         return notification;
 
     } catch (err) {

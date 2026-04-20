@@ -158,7 +158,6 @@ export default function RetailManagerDashboard() {
                 .single();
 
             if (!userRecord || userRecord.role !== "retail_manager") {
-                console.log("\u274C Access denied - not a retail_manager");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;

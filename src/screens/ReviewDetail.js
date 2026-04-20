@@ -151,7 +151,6 @@ export default function ReviewDetail() {
     }
     const emptyFields = checkEmptyFields(order);
     if (emptyFields.length > 0) {
-      console.log("⚠️ Found empty fields that might cause PDF issues:");
     }
 
     setLoadingMessage("Validating order data...");
@@ -244,7 +243,6 @@ export default function ReviewDetail() {
         }
 
       } catch (e) {
-        console.warn("Could not recover salesperson data:", e);
       }
     } else {
       // Even if we have salesperson data, normalize email to lowercase
@@ -342,9 +340,7 @@ export default function ReviewDetail() {
     if (draftId) {
       try {
         await supabase.from("draft_orders").delete().eq("id", draftId);
-        console.log("✅ Draft deleted after order placement");
       } catch (err) {
-        console.log("Draft deletion error:", err);
       }
     }
 
@@ -439,7 +435,6 @@ export default function ReviewDetail() {
         console.error("❌ Measurement save exception:", err);
       }
     } else {
-      console.log("ℹ️ No measurements to save");
     }
 
     // 5️⃣.2 DEDUCT STORE CREDIT
@@ -465,7 +460,6 @@ export default function ReviewDetail() {
         console.error("❌ Store credit exception:", err);
       }
     } else {
-      console.log("ℹ️ No store credit used in this order");
     }
 
     // 5️⃣.3 LOYALTY POINTS: Award + Deduct
@@ -544,7 +538,6 @@ export default function ReviewDetail() {
               console.error(`   ❌ Variant update error:`, updateError);
             }
           } else {
-            console.warn(`   ⚠️ No variant found for size ${item.size}`);
           }
 
           // Shopify sync

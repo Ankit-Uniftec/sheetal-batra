@@ -972,8 +972,6 @@ export default function ProductForm() {
       const draftData = location.state.draftData;
       const draftId = location.state.draftId;
 
-      console.log("📝 Loading draft data:", draftId);
-
       // Set the draft ID so we can delete it after order placement
       setCurrentDraftId(draftId);
 
@@ -1279,7 +1277,6 @@ export default function ProductForm() {
         if (data && data.measurements) {
           setCustomerSavedMeasurements(data.measurements);
         } else {
-          console.log("No saved measurements found for customer");
           setCustomerSavedMeasurements(null);
         }
         setMeasurementsLoaded(true);
@@ -1385,7 +1382,6 @@ export default function ProductForm() {
           }
         } else {
           // Fallback to database if Shopify sync fails
-          console.warn("Shopify sync failed, falling back to database:", result.error);
 
           const { data: variants, error } = await supabase
             .from("product_variants")
@@ -1583,7 +1579,6 @@ export default function ProductForm() {
   useEffect(() => {
     // Skip auto-fill if data was just restored from sessionStorage
     if (isRestoredRef.current) {
-      console.log("Skipping auto-fill - data restored from session");
       return;
     }
     if (!selectedSize || !selectedProduct) return;
@@ -2109,7 +2104,6 @@ export default function ProductForm() {
             salespersonName = spData.saleperson;
           }
         } catch (e) {
-          console.log("Could not get salesperson info:", e);
         }
       }
 
@@ -2449,7 +2443,6 @@ export default function ProductForm() {
         navigate("/AssociateDashboard", { replace: true });
       } else {
         // No saved session - just navigate back
-        console.log("⚠️ No saved session found");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         navigate("/AssociateDashboard", { replace: true });
       }

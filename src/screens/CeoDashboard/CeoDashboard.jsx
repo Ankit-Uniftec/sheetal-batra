@@ -260,7 +260,6 @@ export default function CEODashboard() {
                 .single();
 
             if (!userRecord || userRecord.role !== "ceo") {
-                console.log("❌ Access denied - not CEO");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;

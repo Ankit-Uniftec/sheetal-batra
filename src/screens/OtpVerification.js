@@ -173,7 +173,6 @@ export default function OtpVerification() {
             return;
           }
         } else {
-          console.log("Auto-signin failed:", result.error);
           // Fallback to Spur WhatsApp OTP
           setStatusMessage("Sending OTP via WhatsApp...");
         }

@@ -87,7 +87,6 @@ export default function B2bVendorSelection() {
             // ✅ Only allow B2B roles (executive, merchandiser, production)
             const allowedRoles = ["executive", "merchandiser", "production"];
             if (!sp?.role || !allowedRoles.includes(sp.role)) {
-                console.log("❌ Access denied - not a B2B user");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;

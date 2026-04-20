@@ -380,13 +380,10 @@ export default function OrderDetails() {
 
             // If emails don't match, the salesperson data is stale (different associate)
             if (associateEmail && spData.email && associateEmail.toLowerCase() !== spData.email.toLowerCase()) {
-              console.warn("Salesperson mismatch - clearing stale data");
               sessionStorage.removeItem("currentSalesperson");
               return; // Don't set stale salesperson data
             }
           }
-
-          console.log(spData.store);
 
           setSelectedSP({
             saleperson: spData.name,
@@ -540,7 +537,6 @@ export default function OrderDetails() {
         const savedSP = sessionStorage.getItem("currentSalesperson");
         if (savedSP) spFallback = JSON.parse(savedSP);
       } catch (e) {
-        console.warn("Failed to parse currentSalesperson from sessionStorage");
       }
     }
 
@@ -952,7 +948,6 @@ export default function OrderDetails() {
         navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
       } else {
         // No saved session - just navigate back
-        console.log("⚠️ No saved session found");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
         navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
       }

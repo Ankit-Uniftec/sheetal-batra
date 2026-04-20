@@ -259,7 +259,6 @@ export default function AdminDashboard() {
                 .single();
 
             if (!userRecord || userRecord.role !== "admin") {
-                console.log("❌ Access denied - not an admin");
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;

@@ -51,7 +51,6 @@ export default function B2bExecutiveDashboard() {
                     .single();
 
                 if (!roleCheck || roleCheck.role !== "executive") {
-                    console.log("❌ Access denied - not an executive");
                     await supabase.auth.signOut();
                     navigate("/login", { replace: true });
                     return;
