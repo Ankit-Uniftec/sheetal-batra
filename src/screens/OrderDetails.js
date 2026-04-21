@@ -593,6 +593,26 @@ export default function OrderDetails() {
 
   // CONTINUE TO NEXT SCREEN
   const confirmOrder = () => {
+    // Validate delivery address when Home Delivery is selected
+    if (order.mode_of_delivery === "Home Delivery") {
+      if (!deliveryAddress.trim() || !deliveryCity.trim() || !deliveryState.trim() || !deliveryPincode.trim() || !deliveryCountry.trim()) {
+        showPopup({
+          title: "Delivery Address Required",
+          message: "Please fill all delivery address fields (address, city, state, pincode, country).",
+          type: "warning",
+        });
+        return;
+      }
+      if (deliveryPincode.length !== 6) {
+        showPopup({
+          title: "Invalid Pincode",
+          message: "Pincode must be 6 digits.",
+          type: "warning",
+        });
+        return;
+      }
+    }
+
     if (!billingSame) {
       if (!billingAddress || !billingCity || !billingState || !billingPincode) {
         showPopup({
