@@ -336,6 +336,20 @@ export default function ReviewDetail() {
       throw new Error("Order insert failed");
     }
 
+    // 4.5️⃣ GENERATE ORDER COMPONENTS (for barcode tracking)
+    try {
+      const { generateOrderComponents } = await import("../utils/barcodeService");
+      const orderForComponents = {
+        ...insertedOrder,
+        items: normalizedOrder.items || order.items || [],
+      };
+      const components = await generateOrderComponents(orderForComponents);
+      console.log(`✅ Generated ${components.length} components for barcode tracking`);
+    } catch (compError) {
+      console.error("❌ Component generation failed (non-blocking):", compError);
+      // Non-blocking — order is already placed, components can be created later
+    }
+
     // Delete draft if this was from a draft order
     if (draftId) {
       try {

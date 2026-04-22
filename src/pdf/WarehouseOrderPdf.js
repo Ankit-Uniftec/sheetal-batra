@@ -108,7 +108,7 @@ const getMeasurementLabel = (key) => {
 const warehouseStyles = StyleSheet.create({
   page: {
     padding: 40,
-    paddingBottom: 120,
+    paddingBottom: 160,
     fontFamily: "Helvetica",
     fontSize: 10,
     backgroundColor: "#FFFFFF",
@@ -406,15 +406,18 @@ const warehouseStyles = StyleSheet.create({
 
   bottomBarcodes: {
     position: "absolute",
-    bottom: 40,
+    bottom: 20,
     left: 40,
     right: 40,
     flexDirection: "row",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    gap: 8,
   },
   barcodeItem: {
     alignItems: "center",
-    width: "30%",
+    width: "31%",
+    marginBottom: 4,
   },
   barcodeItemLabel: {
     fontSize: 10,
@@ -707,7 +710,7 @@ const AlterationInfoBox = ({ order }) => (
  * Warehouse PDF Document - ONE PDF PER PRODUCT
  * Now supports both regular orders and alteration orders
  */
-const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl }) => {
+const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl, masterBarcodeImage = null, componentBarcodes = [] }) => {
   if (!order || !item) {
     console.error("WarehouseOrderPdf received undefined order or item.");
     return (
@@ -735,9 +738,13 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
           </View>
           <View style={warehouseStyles.barcodeSection}>
             <Text style={warehouseStyles.barcodeLabel}>Master</Text>
-            <View style={warehouseStyles.barcodePlaceholder}>
-              <Text style={warehouseStyles.barcodeText}> </Text>
-            </View>
+            {masterBarcodeImage ? (
+              <Image src={masterBarcodeImage} style={{ width: 150, height: 60 }} />
+            ) : (
+              <View style={warehouseStyles.barcodePlaceholder}>
+                <Text style={warehouseStyles.barcodeText}>{order.order_no || " "}</Text>
+              </View>
+            )}
           </View>
         </View>
         {/* Title Row with Product Indicator */}
@@ -848,11 +855,28 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
 
         <MeasurementsDisplay measurements={item.measurements} />
 
-        {/* Bottom Barcodes */}
+        {/* Bottom Barcodes — dynamic per component */}
         <View style={warehouseStyles.bottomBarcodes} fixed>
-          <BarcodePlaceholder label="Top" />
-          <BarcodePlaceholder label="Bottom" />
-          <BarcodePlaceholder label="Extra" />
+          {componentBarcodes && componentBarcodes.length > 0 ? (
+            componentBarcodes.map((comp, idx) => (
+              <View key={idx} style={warehouseStyles.barcodeItem}>
+                <Text style={warehouseStyles.barcodeItemLabel}>{comp.label}</Text>
+                {comp.image ? (
+                  <Image src={comp.image} style={{ width: "100%", height: 50 }} />
+                ) : (
+                  <View style={warehouseStyles.barcodeItemBox}>
+                    <Text style={warehouseStyles.barcodeText}>{comp.barcode}</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          ) : (
+            <>
+              <BarcodePlaceholder label="Top" />
+              <BarcodePlaceholder label="Bottom" />
+              <BarcodePlaceholder label="Extra" />
+            </>
+          )}
         </View>
       </Page>
     </Document>
