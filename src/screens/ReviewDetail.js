@@ -281,7 +281,8 @@ export default function ReviewDetail() {
     }
 
     // 3.5️⃣ DUPLICATE CHECK — prevent back/reload double submission
-    const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+    const istNow = Date.now() + (5.5 * 60 * 60 * 1000);
+    const thirtySecondsAgo = new Date(istNow - 30 * 1000).toISOString().slice(0, 19).replace('T', ' ')
     const { data: recentOrders } = await supabase
       .from("orders")
       .select("id, order_no, grand_total, items")
