@@ -802,6 +802,29 @@ export default function ProductForm() {
         // Recalculate order_type after update
         updated.order_type = getItemOrderType(updated);
         updated.payment_order_type = getItemPaymentOrderType(updated);
+
+        // Recalculate price when additionals change
+        if (patch.additionals !== undefined) {
+          const product = products.find((p) => p.id === updated.product_id);
+          if (product) {
+            let basePrice = isPrivateSA ? 0 : Number(product.base_price || 0);
+
+            // Kids discount
+            if (updated.isKids && updated.size && KIDS_DISCOUNT_PERCENT[updated.size]) {
+              basePrice = basePrice - (basePrice * KIDS_DISCOUNT_PERCENT[updated.size] / 100);
+            }
+
+            // Add additionals
+            (updated.additionals || []).forEach((add) => {
+              if (add.name && add.name.trim() !== "") {
+                basePrice += Number(add.price || 0);
+              }
+            });
+
+            updated.price = Math.round(basePrice);
+          }
+        }
+
         return updated;
       })
     );
@@ -1862,21 +1885,30 @@ export default function ProductForm() {
       });
     }
     // Add additionals prices
-    if (b.additionals && b.additionals.length > 0) {
-      b.additionals.forEach(additional => {
-        if (additional.name && additional.name.trim() !== "") {
-          itemTotal += Number(additional.price || 0);
-        }
-      });
-    }
+    // if (b.additionals && b.additionals.length > 0) {
+    //   b.additionals.forEach(additional => {
+    //     if (additional.name && additional.name.trim() !== "") {
+    //       itemTotal += Number(additional.price || 0);
+    //     }
+    //   });
+    // }
     return a + itemTotal;
   }, 0);
 
   const liveQuantity = quantity + selectedExtrasWithColors.length;
 
+  const isPrivateSA = (() => {
+    try {
+      const sp = JSON.parse(sessionStorage.getItem("currentSalesperson") || "{}");
+      return sp.designation === "Private SA";
+    } catch { return false; }
+  })();
+
   // CHANGE #1: Get base price without extras (for product display)
   const getBasePrice = () => {
     if (!selectedProduct) return 0;
+
+    if (isPrivateSA) return 0;
 
     // For LXRTS: use variant price based on selected size
     let price = 0;
@@ -2934,18 +2966,27 @@ export default function ProductForm() {
 
                             <div className="field" style={{ maxWidth: 200 }}>
                               <label>Price (₹)</label>
-                              <span className="input-line" style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                // background: '#f5f5f5',
-                                cursor: 'not-allowed'
-                              }}>
-                                {formatIndianNumber(item.price ?? 0)}
-                              </span>
+                              {isPrivateSA ? (
+                                <input
+                                  type="number"
+                                  className="input-line"
+                                  value={item.price ?? 0}
+                                  onChange={(e) => updateItem(item._id, { price: Number(e.target.value) || 0 })}
+                                  min={0}
+                                />
+                              ) : (
+                                <span className="input-line" style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  cursor: 'not-allowed'
+                                }}>
+                                  {formatIndianNumber(item.price ?? 0)}
+                                </span>
+                              )}
                             </div>
 
                             <div className="field" style={{ maxWidth: 200 }}>
-                              <label>Delivery Date*</label>
+                              {/* <label>Delivery Date*</label> */}
                               <input
                                 type="date"
                                 className="input-line"
@@ -2960,7 +3001,7 @@ export default function ProductForm() {
                             </div>
 
                             <div className="field" style={{ maxWidth: 200 }}>
-                              <label>Delivery Location</label>
+                              {/* <label>Delivery Location</label> */}
                               <SearchableSelect
                                 options={[
                                   { label: "Home Delivery", value: "Home Delivery" },
@@ -2981,7 +3022,7 @@ export default function ProductForm() {
                           {/* ROW 6: Notes */}
                           <div className="row">
                             <div className="field full-width-field">
-                              <label>Notes:</label>
+                              {/* <label>Notes:</label> */}
                               <textarea
                                 className="input-line"
                                 placeholder="Add notes for this product item..."
@@ -3024,7 +3065,11 @@ export default function ProductForm() {
                 {selectedProduct && (
                   <p className="product-price">
                     Price:{" "}
-                    <strong>₹{formatIndianNumber(getBasePrice())}</strong>
+                    {isPrivateSA ? (
+                      <strong>₹0 (editable after adding)</strong>
+                    ) : (
+                      <strong>₹{formatIndianNumber(getBasePrice())}</strong>
+                    )}
                     {isSyncProduct && selectedSize && localInventory[selectedSize] !== undefined && (
                       <span className="inventory-badge">
                         {" "}| Stock: {localInventory[selectedSize]}
