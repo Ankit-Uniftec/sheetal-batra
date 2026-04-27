@@ -802,6 +802,29 @@ export default function ProductForm() {
         // Recalculate order_type after update
         updated.order_type = getItemOrderType(updated);
         updated.payment_order_type = getItemPaymentOrderType(updated);
+
+        // Recalculate price when additionals change
+        if (patch.additionals !== undefined) {
+          const product = products.find((p) => p.id === updated.product_id);
+          if (product) {
+            let basePrice = isPrivateSA ? 0 : Number(product.base_price || 0);
+
+            // Kids discount
+            if (updated.isKids && updated.size && KIDS_DISCOUNT_PERCENT[updated.size]) {
+              basePrice = basePrice - (basePrice * KIDS_DISCOUNT_PERCENT[updated.size] / 100);
+            }
+
+            // Add additionals
+            (updated.additionals || []).forEach((add) => {
+              if (add.name && add.name.trim() !== "") {
+                basePrice += Number(add.price || 0);
+              }
+            });
+
+            updated.price = Math.round(basePrice);
+          }
+        }
+
         return updated;
       })
     );
@@ -1862,21 +1885,29 @@ export default function ProductForm() {
       });
     }
     // Add additionals prices
-    if (b.additionals && b.additionals.length > 0) {
-      b.additionals.forEach(additional => {
-        if (additional.name && additional.name.trim() !== "") {
-          itemTotal += Number(additional.price || 0);
-        }
-      });
-    }
+    // if (b.additionals && b.additionals.length > 0) {
+    //   b.additionals.forEach(additional => {
+    //     if (additional.name && additional.name.trim() !== "") {
+    //       itemTotal += Number(additional.price || 0);
+    //     }
+    //   });
+    // }
     return a + itemTotal;
   }, 0);
 
   const liveQuantity = quantity + selectedExtrasWithColors.length;
 
+  const isPrivateSA = (() => {
+    try {
+      const sp = JSON.parse(sessionStorage.getItem("currentSalesperson") || "{}");
+      return sp.designation === "Private SA";
+    } catch { return false; }
+  })();
+
   // CHANGE #1: Get base price without extras (for product display)
   const getBasePrice = () => {
     if (!selectedProduct) return 0;
+    if (isPrivateSA) return 0;
 
     // For LXRTS: use variant price based on selected size
     let price = 0;
@@ -3024,7 +3055,11 @@ export default function ProductForm() {
                 {selectedProduct && (
                   <p className="product-price">
                     Price:{" "}
-                    <strong>₹{formatIndianNumber(getBasePrice())}</strong>
+                    {isPrivateSA ? (
+                      <strong>₹0 (editable after adding)</strong>
+                    ) : (
+                      <strong>₹{formatIndianNumber(getBasePrice())}</strong>
+                    )}
                     {isSyncProduct && selectedSize && localInventory[selectedSize] !== undefined && (
                       <span className="inventory-badge">
                         {" "}| Stock: {localInventory[selectedSize]}

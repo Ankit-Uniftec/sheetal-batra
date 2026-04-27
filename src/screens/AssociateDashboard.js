@@ -633,6 +633,7 @@ export default function Dashboard() {
         email: salesperson.email,
         phone: salesperson.phone,
         store: salesperson.store_name,
+        designation: salesperson.designation || "",
       }));
     }
 
@@ -664,6 +665,7 @@ export default function Dashboard() {
         email: salesperson.email,
         phone: salesperson.phone,
         store: salesperson.store_name,
+        designation: salesperson.designation || "",
       }));
     }
 
@@ -1524,6 +1526,7 @@ export default function Dashboard() {
               email: salesperson.email,
               phone: salesperson.phone,
               store: salesperson.store_name,
+              designation: salesperson.designation || "",
             }));
 
             navigate("/buyerVerification", { state: { fromAssociate: true } });
