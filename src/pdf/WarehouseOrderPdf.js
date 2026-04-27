@@ -722,8 +722,8 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
   const isAlteration = order.is_alteration;
   const isUrgent = order.alteration_status === "upcoming_occasion" || order.is_urgent;
   const itemDeliveryDate = order.delivery_date;
-  const notes = [item.notes, order.comments, order.delivery_notes]
-    .filter(n => n && n.trim() !== "")
+  const notes = [...new Set([item.notes, order.comments, order.delivery_notes]
+    .filter(n => n && n.trim() !== ""))]
     .join(" | ");
   const hasNotes = notes && notes.trim() !== "";
 
