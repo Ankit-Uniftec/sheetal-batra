@@ -26,17 +26,19 @@ export const PRODUCTION_STAGES = [
   { value: "dry_cleaning_completed", label: "Dry Cleaning Completed", step: 7, color: "#00bcd4", optional: true },
   { value: "trims_in_progress", label: "Trims In-Progress", step: 8, color: "#009688", maxDays: 1 },
   { value: "trims_completed", label: "Trims Completed", step: 8, color: "#009688" },
-  { value: "cutting_stitching_in_progress", label: "Cutting & Stitching In-Progress", step: 9, color: "#ff9800", maxDays: 2 },
-  { value: "cutting_stitching_completed", label: "Cutting & Stitching Completed", step: 9, color: "#ff9800" },
-  { value: "hemming_in_progress", label: "Hemming In-Progress", step: 10, color: "#ff5722", maxDays: 1 },
-  { value: "hemming_completed", label: "Hemming Completed", step: 10, color: "#ff5722" },
-  { value: "finishing_in_progress", label: "Finishing In-Progress", step: 11, color: "#607d8b", maxDays: 1 },
-  { value: "finishing_completed", label: "Finishing Completed", step: 11, color: "#607d8b" },
-  { value: "qc_in_progress", label: "QC In-Progress", step: 12, color: "#f44336", maxDays: 1 },
-  { value: "qc_passed", label: "QC Passed", step: 12, color: "#4caf50" },
-  { value: "qc_failed", label: "QC Failed", step: 12, color: "#d32f2f" },
-  { value: "packaging_dispatch", label: "Packaging & Dispatch", step: 13, color: "#2e7d32", maxDays: 1 },
-  { value: "dispatched", label: "Dispatched", step: 13, color: "#1b5e20" },
+  { value: "cutting_in_progress", label: "Cutting In-Progress", step: 9, color: "#ff9800", maxDays: 1 },
+  { value: "cutting_completed", label: "Cutting Completed", step: 9, color: "#ff9800" },
+  { value: "stitching_in_progress", label: "Stitching In-Progress", step: 10, color: "#ef6c00", maxDays: 2 },
+  { value: "stitching_completed", label: "Stitching Completed", step: 10, color: "#ef6c00" },
+  { value: "hemming_in_progress", label: "Hemming In-Progress", step: 11, color: "#ff5722", maxDays: 1 },
+  { value: "hemming_completed", label: "Hemming Completed", step: 11, color: "#ff5722" },
+  { value: "finishing_in_progress", label: "Finishing In-Progress", step: 12, color: "#607d8b", maxDays: 1 },
+  { value: "finishing_completed", label: "Finishing Completed", step: 12, color: "#607d8b" },
+  { value: "qc_in_progress", label: "QC In-Progress", step: 13, color: "#f44336", maxDays: 1 },
+  { value: "qc_passed", label: "QC Passed", step: 13, color: "#4caf50" },
+  { value: "qc_failed", label: "QC Failed", step: 13, color: "#d32f2f" },
+  { value: "packaging_dispatch", label: "Packaging & Dispatch", step: 14, color: "#2e7d32", maxDays: 1 },
+  { value: "dispatched", label: "Dispatched", step: 14, color: "#1b5e20" },
   { value: "disposed", label: "Disposed", step: 0, color: "#424242" },
   { value: "scrapped", label: "Scrapped", step: 0, color: "#616161" },
 ];
@@ -49,24 +51,26 @@ export const REJOURNEY_STAGES = [
   { value: "embroidery_in_progress", label: "Embroidery" },
   { value: "dry_cleaning_in_progress", label: "Dry Cleaning" },
   { value: "trims_in_progress", label: "Trims" },
-  { value: "cutting_stitching_in_progress", label: "Cutting & Stitching" },
+  { value: "cutting_in_progress", label: "Cutting" },
+  { value: "stitching_in_progress", label: "Stitching" },
   { value: "hemming_in_progress", label: "Hemming" },
   { value: "finishing_in_progress", label: "Finishing" },
 ];
 
 // Scan stations — each maps to the stage it transitions TO
 export const SCAN_STATIONS = [
-  { value: "cloth_issue", label: "Cloth Issue (Gulshan)", toStage: "cloth_issued", step: 2 },
-  { value: "pattern_cutting", label: "Pattern Cutting", toStage: "pattern_cutting_in_progress", step: 4 },
-  { value: "pattern_printing", label: "Pattern Printing (Raju)", toStage: "pattern_printing_in_progress", step: 5 },
-  { value: "embroidery", label: "Embroidery", toStage: "embroidery_in_progress", step: 6 },
-  { value: "trims", label: "Trims", toStage: "trims_in_progress", step: 8 },
-  { value: "cutting_stitching", label: "Cutting & Stitching (Aarif)", toStage: "cutting_stitching_in_progress", step: 9 },
-  { value: "hemming", label: "Hemming", toStage: "hemming_in_progress", step: 10 },
-  { value: "finishing", label: "Finishing", toStage: "finishing_in_progress", step: 11 },
-  { value: "qc", label: "Quality Check", toStage: "qc_in_progress", step: 12 },
-  { value: "packaging", label: "Packaging & Dispatch", toStage: "packaging_dispatch", step: 13 },
-  { value: "security_gate", label: "Security Gate", toStage: null, step: 0 },
+  { value: "cloth_issue", label: "Cloth Issue", inStage: "cloth_issued", outStage: null, step: 2 },
+  { value: "pattern_cutting", label: "Pattern Cutting", inStage: "pattern_cutting_in_progress", outStage: "pattern_cutting_completed", step: 4 },
+  { value: "pattern_printing", label: "Pattern Printing", inStage: "pattern_printing_in_progress", outStage: "pattern_printing_completed", step: 5 },
+  { value: "embroidery", label: "Embroidery", inStage: "embroidery_in_progress", outStage: "embroidery_completed", step: 6 },
+  { value: "trims", label: "Trims", inStage: "trims_in_progress", outStage: "trims_completed", step: 8 },
+  { value: "cutting", label: "Cutting", inStage: "cutting_in_progress", outStage: "cutting_completed", step: 9 },
+  { value: "stitching", label: "Stitching", inStage: "stitching_in_progress", outStage: "stitching_completed", step: 10 },
+  { value: "hemming", label: "Hemming", inStage: "hemming_in_progress", outStage: "hemming_completed", step: 11 },
+  { value: "finishing", label: "Finishing", inStage: "finishing_in_progress", outStage: "finishing_completed", step: 12 },
+  { value: "qc", label: "Quality Check", inStage: "qc_in_progress", outStage: null, step: 13 },
+  { value: "packaging", label: "Packaging & Dispatch", inStage: "packaging_dispatch", outStage: null, step: 14 },
+  { value: "security_gate", label: "Security Gate", inStage: null, outStage: null, step: 0 },
 ];
 
 // ============================================================
@@ -371,6 +375,35 @@ export async function recordOverride({
 
   if (error) throw error;
   return data;
+}
+
+// ============================================================
+// SA-FRIENDLY STAGE LABELS
+// SA Dashboard shows simplified status, not full warehouse stages
+// ============================================================
+export function getSAStageLabel(stageValue) {
+  if (!stageValue || stageValue === "order_received") return "Order Received";
+  if (stageValue === "dispatched") return "Completed & Dispatched";
+  if (stageValue === "packaging_dispatch") return "Ready for Dispatch";
+  if (stageValue === "qc_passed") return "QC Passed";
+  if (stageValue === "qc_failed") return "QC Failed";
+  if (stageValue === "qc_in_progress") return "Quality Check";
+  if (stageValue === "disposed") return "Disposed";
+  if (stageValue === "scrapped") return "Scrapped";
+  // Everything between cloth_issued and finishing_completed = In Production
+  return "In Production";
+}
+
+export function getSAStageColor(stageValue) {
+  if (!stageValue || stageValue === "order_received") return "#9e9e9e";
+  if (stageValue === "dispatched") return "#1b5e20";
+  if (stageValue === "packaging_dispatch") return "#2e7d32";
+  if (stageValue === "qc_passed") return "#4caf50";
+  if (stageValue === "qc_failed") return "#d32f2f";
+  if (stageValue === "qc_in_progress") return "#f44336";
+  if (stageValue === "disposed") return "#424242";
+  if (stageValue === "scrapped") return "#616161";
+  return "#3f51b5";
 }
 
 // ============================================================

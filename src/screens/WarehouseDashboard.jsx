@@ -7,6 +7,9 @@ import formatDate from "../utils/formatDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import NotificationBell from "../components/NotificationBell";
+import ScanStation from "../components/ScanStation";
+import "../components/ScanStation.css";
+import { getStageLabel, getStageColor } from "../utils/barcodeService";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -121,6 +124,10 @@ const WarehouseDashboard = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const [attachmentLoading, setAttachmentLoading] = useState(null);
+
+  // Component tracking per order
+  const [orderComponentsMap, setOrderComponentsMap] = useState({});
+  const [componentLoadingMap, setComponentLoadingMap] = useState({});
 
   // QC Fail Popup state
   // const [qcFailPopup, setQcFailPopup] = useState({
@@ -241,6 +248,27 @@ const WarehouseDashboard = () => {
       setOrders(filtered);
     }
     setLoading(false);
+  };
+
+  // Fetch components for a specific order
+  const fetchComponentsForOrder = async (orderId) => {
+    if (orderComponentsMap[orderId] || componentLoadingMap[orderId]) return;
+
+    setComponentLoadingMap(prev => ({ ...prev, [orderId]: true }));
+    try {
+      const { data, error } = await supabase
+        .from("order_components")
+        .select("id, barcode, component_type, component_label, current_stage, is_active, qc_status, is_delayed, re_journey_count, is_outside_wh, vendor_name")
+        .eq("order_id", orderId)
+        .order("component_type", { ascending: true });
+
+      if (!error && data) {
+        setOrderComponentsMap(prev => ({ ...prev, [orderId]: data }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch components:", err);
+    }
+    setComponentLoadingMap(prev => ({ ...prev, [orderId]: false }));
   };
 
   useEffect(() => {
@@ -752,6 +780,17 @@ const WarehouseDashboard = () => {
   const startIndex = (currentPage - 1) * ordersPerPage;
   const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
 
+  // Auto-fetch components for visible orders
+  useEffect(() => {
+    if (currentOrders && currentOrders.length > 0) {
+      currentOrders.forEach(order => {
+        if (!orderComponentsMap[order.id] && !componentLoadingMap[order.id]) {
+          fetchComponentsForOrder(order.id);
+        }
+      });
+    }
+  }, [currentOrders]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusTab, filters, sortBy]);
@@ -837,6 +876,10 @@ const WarehouseDashboard = () => {
             <a className={`wd-menu-item ${activeTab === "calendar" ? "active" : ""}`}
               onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>
               Calendar
+            </a>
+            <a className={`wd-menu-item ${activeTab === "scan" ? "active" : ""}`}
+              onClick={() => { setActiveTab("scan"); setShowSidebar(false); }}>
+              Scan Station
             </a>
             <a className="wd-menu-item" onClick={handleLogout}>Log Out</a>
           </nav>
@@ -1363,69 +1406,55 @@ const WarehouseDashboard = () => {
                               <p><strong className="wd-label">Delivery Date:</strong> {getWarehouseDate(order.delivery_date, order.created_at)}</p>
                             </div>
 
-                            {/* Warehouse Stage Dropdown - for non-alteration orders */}
+                            {/* Component Stage Tracker */}
                             {!isAlteration && (
-                              <button
-                                className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""} `}
-                                disabled={
-                                  order.status === "completed" ||
-                                  order.status === "delivered" ||
-                                  order.status === "cancelled"
-                                }
-                                onClick={() => markAsCompleted(order.id)}
-                              >
-                                {order.status === "completed" ? "Completed" :
-                                  order.status === "delivered" ? "Delivered" :
-                                    order.status === "cancelled" ? "Cancelled" :
-                                      "Mark as Completed"}
-                              </button>
-                              // <div className="wd-stage-section">
-                              //   <div className="wd-stage-row">
-                              //     <strong className="wd-label">Production Stage:</strong>
-                              //     {order.is_rework && (
-                              //       <span className="wd-badge wd-badge-rework">REWORK</span>
-                              //     )}
-                              //     {order.rejourney_count > 0 && (
-                              //       <span className="wd-rejourney-count">Re-journey: {order.rejourney_count}</span>
-                              //     )}
-                              //   </div>
-                              //   {order.status === "cancelled" ? (
-                              //     <div className="wd-stage-badge" style={{ background: "#ffebee", color: "#c62828", border: "1px solid #ffcdd2" }}>
-                              //       Cancelled
-                              //     </div>
-                              //   ) : order.warehouse_stage === "disposed" ? (
-                              //     <div className="wd-stage-badge" style={{ background: "#ffebee", color: "#c62828", border: "1px solid #ffcdd2" }}>
-                              //       Disposed
-                              //     </div>
-                              //   ) : order.warehouse_stage === "scrapped" ? (
-                              //     <div className="wd-stage-badge" style={{ background: "#fff3e0", color: "#e65100", border: "1px solid #ffcc80" }}>
-                              //       Scrapped
-                              //     </div>
-                              //   ) : (order.status === "completed" || order.status === "delivered") ? (
-                              //     <div className="wd-stage-badge" style={{ background: "#e8f5e9", color: "#2e7d32", border: "1px solid #c8e6c9" }}>
-                              //       {getStageInfo(order.warehouse_stage).label}
-                              //     </div>
-                              //   ) : (
-                              //     <select
-                              //       className="wd-stage-select"
-                              //       value={order.warehouse_stage || "order_received"}
-                              //       onChange={(e) => updateWarehouseStage(order.id, order.order_no, e.target.value)}
-                              //       disabled={stageUpdating === order.id}
-                              //       style={{ borderColor: getStageInfo(order.warehouse_stage || "order_received").color }}
-                              //     >
-                              //       {WAREHOUSE_STAGES.map((stage) => (
-                              //         <option key={stage.value} value={stage.value}>
-                              //           {stage.label}
-                              //         </option>
-                              //       ))}
-                              //     </select>
-                              //   )}
-                              //   {order.qc_fail_reason && (
-                              //     <p className="wd-qc-fail-note">
-                              //       <strong>Last QC Fail:</strong> {order.qc_fail_reason}
-                              //     </p>
-                              //   )}
-                              // </div>
+                              <div className="wd-component-tracker">
+                                {order.status === "cancelled" ? (
+                                  <div className="wd-order-status-badge wd-status-cancelled">Cancelled</div>
+                                ) : componentLoadingMap[order.id] ? (
+                                  <p className="wd-comp-loading">Loading stages...</p>
+                                ) : orderComponentsMap[order.id] && orderComponentsMap[order.id].length > 0 ? (
+                                  <>
+                                    <div className="wd-comp-list">
+                                      {orderComponentsMap[order.id].map(comp => (
+                                        <div key={comp.id} className={`wd-comp-row ${comp.is_delayed ? "wd-comp-delayed" : ""}`}>
+                                          <div className="wd-comp-left">
+                                            <span className="wd-comp-barcode">{comp.barcode}</span>
+                                            <span className="wd-comp-label">{comp.component_label || comp.component_type}</span>
+                                          </div>
+                                          <div className="wd-comp-right">
+                                            {comp.is_outside_wh && (
+                                              <span className="wd-comp-vendor-tag">At Vendor</span>
+                                            )}
+                                            {comp.re_journey_count > 0 && (
+                                              <span className="wd-comp-rework-tag">Rework {comp.re_journey_count}</span>
+                                            )}
+                                            <span
+                                              className="wd-comp-stage-badge"
+                                              style={{ backgroundColor: getStageColor(comp.current_stage) }}
+                                            >
+                                              {getStageLabel(comp.current_stage)}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {order.status === "completed" && (
+                                      <div className="wd-order-status-badge wd-status-completed">All Dispatched</div>
+                                    )}
+                                    {order.status === "delivered" && (
+                                      <div className="wd-order-status-badge wd-status-delivered">Delivered</div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="wd-order-status-badge wd-status-pending">
+                                    {order.status === "completed" ? "Completed" :
+                                      order.status === "delivered" ? "Delivered" :
+                                        order.status === "pending" ? "Order Received" :
+                                          "Awaiting Production"}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1566,6 +1595,9 @@ const WarehouseDashboard = () => {
                 </div>
               )}
             </div>
+          )}
+          {activeTab === "scan" && (
+            <ScanStation currentUserEmail={currentUserEmail} />
           )}
         </div>
       </div>

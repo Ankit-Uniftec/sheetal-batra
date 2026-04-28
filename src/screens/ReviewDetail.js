@@ -322,7 +322,7 @@ export default function ReviewDetail() {
     // 4️⃣ INSERT ORDER
     const { data: insertedOrder, error: insertError } = await supabase
       .from("orders")
-      .insert({ ...orderDataToInsert, order_no: orderNo })
+      .insert({ ...orderDataToInsert, order_no: orderNo, status: "order_received" })
       .select()
       .single();
 

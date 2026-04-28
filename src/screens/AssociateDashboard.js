@@ -8,6 +8,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
+import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 
 // Time calculation helpers
@@ -37,6 +38,7 @@ export default function Dashboard() {
   const [pdfLoading, setPdfLoading] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
+  const [orderComponentsMap, setOrderComponentsMap] = useState({});
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [enteredPassword, setEnteredPassword] = useState("");
@@ -192,6 +194,22 @@ export default function Dashboard() {
     }
     setShowPasswordModal(false);
     setPasswordError("");
+  };
+
+  const fetchComponentsForOrder = async (orderId) => {
+    if (orderComponentsMap[orderId]) return;
+    try {
+      const { data, error } = await supabase
+        .from("order_components")
+        .select("id, barcode, component_type, component_label, current_stage, is_active, is_delayed, re_journey_count")
+        .eq("order_id", orderId)
+        .order("component_type", { ascending: true });
+      if (!error && data) {
+        setOrderComponentsMap(prev => ({ ...prev, [orderId]: data }));
+      }
+    } catch (err) {
+      console.error("Component fetch error:", err);
+    }
   };
 
   // ✅ OPTIMIZED: Extract clients from orders (no extra DB query)
@@ -1092,7 +1110,7 @@ export default function Dashboard() {
                         </div>
                         <div className="ad-header-actions">
                           <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
-                            {order.status || "Pending"}
+                            {order.status === "pending" ? "Order Received" : order.status || "Order Received"}
                           </div>
                           {/* <div className={`ad-warehouse-stage-badge ${(order.warehouse_stage === "disposed" || order.warehouse_stage === "scrapped") ? "ad-stage-alert" : ""}`}>
                             {order.is_rework && <span className="ad-rework-dot"></span>}
@@ -1273,6 +1291,38 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
+
+                      {/* Component Progress Tracker */}
+                      {!order.is_alteration && (() => {
+                        if (!orderComponentsMap[order.id]) {
+                          fetchComponentsForOrder(order.id);
+                        }
+                        const comps = orderComponentsMap[order.id];
+                        if (!comps || comps.length === 0) return null;
+                        return (
+                          <div style={{ padding: "10px 16px", borderTop: "1px solid #f0f0f0" }}>
+                            <p style={{ fontSize: 12, fontWeight: 600, color: "#999", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Production Status</p>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                              {comps.map(comp => (
+                                <div key={comp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: comp.is_delayed ? "#fff8f0" : "#f9f9f9", borderRadius: 6, borderLeft: comp.is_delayed ? "3px solid #e65100" : "none" }}>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                    <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 600, color: "#333" }}>{comp.barcode}</span>
+                                    <span style={{ fontSize: 10, color: "#999" }}>{comp.component_label || comp.component_type}</span>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    {comp.re_journey_count > 0 && (
+                                      <span style={{ fontSize: 9, fontWeight: 600, color: "#c62828", background: "#ffebee", padding: "1px 6px", borderRadius: 8 }}>Rework {comp.re_journey_count}</span>
+                                    )}
+                                    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600, color: "#fff", backgroundColor: getSAStageColor(comp.current_stage), whiteSpace: "nowrap" }}>
+                                      {getSAStageLabel(comp.current_stage)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {own && canMarkDelivered(order) && (
                         <div className="ad-order-actions">
