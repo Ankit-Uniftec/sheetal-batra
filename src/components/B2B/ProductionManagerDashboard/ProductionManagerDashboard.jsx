@@ -996,7 +996,21 @@ export default function ProductionManagerDashboard() {
                     </div>
                     <h1 className="pm-header-title">Production Manager</h1>
                     <div className="pm-header-right">
-                        <NotificationBell userEmail={currentUserEmail} onOrderClick={() => { }} />
+                        <NotificationBell
+                            userEmail={currentUserEmail}
+                            onOrderClick={(orderId, orderNo) => {
+                                // Switch to overrides tab and search for the order
+                                setActiveTab("overrides");
+                                setTimeout(() => {
+                                    // Try to find and populate the search field
+                                    const searchInput = document.querySelector('.pm-override-input-row input');
+                                    if (searchInput) {
+                                        searchInput.value = orderNo || '';
+                                        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    }
+                                }, 300);
+                            }}
+                        />
                         <button className="pm-header-btn" onClick={handleLogout}>Logout</button>
                     </div>
                 </header>

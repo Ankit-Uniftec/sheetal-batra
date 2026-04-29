@@ -110,6 +110,13 @@ export default function ReviewDetail() {
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
 
+  const isPrivateSA = (() => {
+    try {
+      const sp = JSON.parse(sessionStorage.getItem("currentSalesperson") || "{}");
+      return sp.designation === "Private SA";
+    } catch { return false; }
+  })();
+
   const totalAmount = Number(order?.grand_total) || 0;
   const advancePayment = Number(order?.advance_payment) || 0;
   const discountPercent = Number(order?.discount_percent) || 0;
@@ -372,31 +379,89 @@ export default function ReviewDetail() {
 
       // Send WhatsApp with Customer PDF
       if (pdfUrls?.customer_url) {
-        try {
-          const response = await fetch(
-            `${config.SUPABASE_URL}/functions/v1/spur-whatsapp`,
-            {
+        if (isPrivateSA) {
+          // Private SA: ask before sending, handle navigation in callbacks
+          const doNavigate = () => {
+            sessionStorage.removeItem("screen4FormData");
+            sessionStorage.removeItem("screen6FormData");
+            navigate("/order-placed", {
+              state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
+              replace: true,
+            });
+          };
+
+          // Send notifications before showing popup (non-blocking)
+          try {
+            const items = normalizedOrder.items || order.items || [];
+            const source = items.some(i => i.sync_enabled) ? "Shopify" : order.is_b2b ? "B2B" : "Offline";
+            const notifAttachments = [];
+            if (insertedOrder.customer_url) notifAttachments.push({ type: "order_pdf", url: insertedOrder.customer_url });
+            if (insertedOrder.warehouse_urls?.length) insertedOrder.warehouse_urls.forEach(url => notifAttachments.push({ type: "order_pdf", url }));
+            sendNotification(NOTIFICATION_TYPES.ORDER_PLACED, {
+              orderId: insertedOrder.id, orderNo: insertedOrder.order_no,
+              metadata: { client_name: normalizedOrder.delivery_name, is_urgent: normalizedOrder.is_urgent || false, source, store: normalizedOrder.salesperson_store },
+              attachments: notifAttachments,
+            }).catch(err => console.error("Notification error:", err));
+          } catch (e) { }
+
+          // Save measurements
+          if (order.save_measurements && order.measurements_to_save) {
+            try {
+              await supabase.from("customer_measurements").insert({
+                customer_id: order.user_id, measurements: order.measurements_to_save,
+                order_id: insertedOrder.id, created_at: new Date().toISOString(),
+              });
+            } catch (err) { console.error("Measurement save error:", err); }
+          }
+
+          // Deduct store credit
+          if (order.store_credit_used && order.store_credit_used > 0) {
+            try {
+              const updateData = { store_credit: order.store_credit_remaining || 0 };
+              if (!order.store_credit_remaining || order.store_credit_remaining <= 0) updateData.store_credit_expiry = null;
+              await supabase.from("profiles").update(updateData).eq("id", order.user_id);
+            } catch (err) { console.error("Credit error:", err); }
+          }
+
+          setLoading(false);
+          showPopup({
+            type: "confirm",
+            title: "Send PDF to Client?",
+            message: "Do you want to send the order PDF to the client via WhatsApp?",
+            confirmText: "Yes, Send",
+            cancelText: "No, Skip",
+            onConfirm: async () => {
+              try {
+                await fetch(`${config.SUPABASE_URL}/functions/v1/spur-whatsapp`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "apikey": config.SUPABASE_KEY, "Authorization": `Bearer ${config.SUPABASE_KEY}` },
+                  body: JSON.stringify({
+                    customerName: orderWithItems.delivery_name, customerPhone: orderWithItems.delivery_phone,
+                    customerCountry: orderWithItems.delivery_country || "India", pdfUrl: pdfUrls.customer_url,
+                  }),
+                });
+              } catch (err) { console.error("WhatsApp error:", err); }
+              doNavigate();
+            },
+            onCancel: () => doNavigate(),
+          });
+          return; // STOP HERE — popup handles the rest
+        } else {
+          // Regular SA: send automatically
+          try {
+            await fetch(`${config.SUPABASE_URL}/functions/v1/spur-whatsapp`, {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "apikey": config.SUPABASE_KEY,
-                "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-              },
+              headers: { "Content-Type": "application/json", "apikey": config.SUPABASE_KEY, "Authorization": `Bearer ${config.SUPABASE_KEY}` },
               body: JSON.stringify({
-                customerName: orderWithItems.delivery_name,
-                customerPhone: orderWithItems.delivery_phone,
-                customerCountry: orderWithItems.delivery_country || "India",
-                pdfUrl: pdfUrls.customer_url,
+                customerName: orderWithItems.delivery_name, customerPhone: orderWithItems.delivery_phone,
+                customerCountry: orderWithItems.delivery_country || "India", pdfUrl: pdfUrls.customer_url,
               }),
-            }
-          );
-        } catch (err) {
-          console.error("❌ WhatsApp error:", err);
+            });
+          } catch (err) { console.error("WhatsApp error:", err); }
         }
       }
     } catch (pdfError) {
       console.error("❌ PDF generation failed:", pdfError);
-      // Continue anyway - order is already placed
     }
 
     // 5️⃣.05 SEND NOTIFICATION — Order Placed (#13)

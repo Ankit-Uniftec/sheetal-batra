@@ -853,8 +853,20 @@ const WarehouseDashboard = () => {
           <NotificationBell
             userEmail={currentUserEmail}
             onOrderClick={(orderId, orderNo) => {
-              const el = document.querySelector(`[data-order-id="${orderId}"]`);
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              // Switch to orders tab
+              setActiveTab("orders");
+              // Clear filters to ensure order is visible
+              setStatusTab("all");
+              setSearchQuery(orderNo || "");
+              // Scroll after a short delay for render
+              setTimeout(() => {
+                const el = document.querySelector(`[data-order-id="${orderId}"]`);
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  el.style.outline = '2px solid #d5b85a';
+                  setTimeout(() => { el.style.outline = ''; }, 3000);
+                }
+              }, 300);
             }}
           />
         </div>
@@ -1201,6 +1213,7 @@ const WarehouseDashboard = () => {
                     return (
                       <div
                         key={order.id}
+                        data-order-id={order.id}
                         className={`wd-order-dropdown ${isAlteration ? "wd-alteration-order" : ""} ${isUrgent ? "wd-urgent-order" : ""}`}
                       >
                         {/* Order Header with Badges */}

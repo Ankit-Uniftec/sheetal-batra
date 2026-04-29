@@ -207,7 +207,7 @@ export async function fetchOrderComponents(orderId) {
 export async function fetchComponentByBarcode(barcode) {
   const { data, error } = await supabase
     .from("order_components")
-    .select("*, orders(order_no, delivery_name, delivery_date, salesperson, status)")
+    .select("*, orders(order_no, delivery_name, delivery_date, salesperson, salesperson_email, status)")
     .eq("barcode", barcode)
     .single();
 

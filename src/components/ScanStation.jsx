@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
+import { usePopup } from "../components/Popup";
 import { supabase } from "../lib/supabaseClient";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import {
@@ -21,6 +22,8 @@ import {
 // SCAN STATION COMPONENT
 // ============================================================
 const ScanStation = ({ currentUserEmail }) => {
+    const { showPopup, PopupComponent } = usePopup();
+
     // Station selection
     const [selectedStation, setSelectedStation] = useState(null);
 
@@ -347,15 +350,15 @@ const ScanStation = ({ currentUserEmail }) => {
 
         // Fail submission
         if (!qcPopup.failReason.trim()) {
-            alert("Please enter a fail reason");
+            showPopup({ title: "Required", message: "Please enter a fail reason", type: "warning", confirmText: "OK" });
             return;
         }
         if (!qcPopup.outcome) {
-            alert("Please select an outcome (Dispose / Scrap / Re-journey)");
+            showPopup({ title: "Required", message: "Please select an outcome (Dispose / Scrap / Re-journey)", type: "warning", confirmText: "OK" });
             return;
         }
         if (qcPopup.outcome === "rejourney" && !qcPopup.rejourneyStage) {
-            alert("Please select which stage to restart from");
+            showPopup({ title: "Required", message: "Please select which stage to restart from", type: "warning", confirmText: "OK" });
             return;
         }
 
@@ -385,7 +388,34 @@ const ScanStation = ({ currentUserEmail }) => {
                 });
 
                 if (result.alert_manish) {
-                    alert("⚠️ ALERT: This component has failed QC 3+ times. Manish Batra has been notified.");
+                    showPopup({
+                        title: "Re-journey Alert",
+                        message: "This component has failed QC 3+ times. Manish Batra has been notified.",
+                        type: "warning",
+                        confirmText: "OK",
+                    });
+                }
+
+                // Notify SA who placed the order
+                try {
+                    const { sendNotification, NOTIFICATION_TYPES } = await import("../utils/notificationService");
+                    const comp = await fetchComponentByBarcode(qcPopup.barcode);
+                    const saEmail = comp?.orders?.salesperson_email || comp?.orders?.salesperson;
+
+                    await sendNotification(NOTIFICATION_TYPES.REJOURNEY_ALERT, {
+                        orderId: comp.order_id,
+                        orderNo: comp.order_no,
+                        metadata: {
+                            barcode: qcPopup.barcode,
+                            component_label: selectedComponent?.component_label || selectedComponent?.component_type,
+                            rejourney_stage: getStageLabel(qcPopup.rejourneyStage),
+                            fail_reason: qcPopup.failReason,
+                            rejourney_count: result.rejourney_count,
+                        },
+                        extraRecipients: saEmail ? [{ email: saEmail.toLowerCase(), channel: "in_app" }] : [],
+                    });
+                } catch (notifErr) {
+                    console.error("Re-journey notification failed:", notifErr);
                 }
 
                 setTodayStats(prev => ({ ...prev, scanned: prev.scanned + 1, failed: prev.failed + 1 }));
@@ -407,7 +437,7 @@ const ScanStation = ({ currentUserEmail }) => {
         if (!securityPopup.barcode) return;
 
         if (securityPopup.scanType === "exit" && !securityPopup.vendorName.trim()) {
-            alert("Please enter vendor name");
+            showPopup({ title: "Required", message: "Please enter vendor name", type: "warning", confirmText: "OK" });
             return;
         }
 
@@ -445,7 +475,7 @@ const ScanStation = ({ currentUserEmail }) => {
     // ============================================================
     const handleActivationSubmit = async () => {
         if (activationPopup.selectedIds.length === 0) {
-            alert("Please select at least one component to activate");
+            showPopup({ title: "Required", message: "Please select at least one component to activate", type: "warning", confirmText: "OK" });
             return;
         }
 
@@ -552,6 +582,7 @@ const ScanStation = ({ currentUserEmail }) => {
     // ============================================================
     return (
         <div className="wd-scan-station">
+            {PopupComponent}
             {/* Station Selector */}
             {!selectedStation ? (
                 <div className="wd-station-selector">
