@@ -365,14 +365,7 @@ const WarehouseDashboard = () => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((order) => {
-        const item = order.items?.[0] || {};
-        return (
-          order.order_no?.toLowerCase().includes(query) ||
-          item.product_name?.toLowerCase().includes(query) ||
-          order.delivery_name?.toLowerCase().includes(query) ||
-          order.delivery_phone?.includes(query) ||
-          order.salesperson?.toLowerCase().includes(query)
-        );
+        return order.order_no?.toLowerCase().includes(query);
       });
     }
 
