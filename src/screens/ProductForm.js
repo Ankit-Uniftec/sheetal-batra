@@ -1907,7 +1907,15 @@ export default function ProductForm() {
   // CHANGE #1: Get base price without extras (for product display)
   const getBasePrice = () => {
     if (!selectedProduct) return 0;
-    if (isPrivateSA) return 0;
+    if (isPrivateSA) {
+      let price = 0;
+      selectedAdditionals.forEach((additional) => {
+        if (additional.name && additional.name.trim() !== "") {
+          price += Number(additional.price || 0);
+        }
+      });
+      return Math.round(price);
+    }
 
     // For LXRTS: use variant price based on selected size
     let price = 0;
@@ -2976,7 +2984,7 @@ export default function ProductForm() {
                             </div>
 
                             <div className="field" style={{ maxWidth: 200 }}>
-                              <label>Delivery Date*</label>
+                              {/* <label>Delivery Date*</label> */}
                               <input
                                 type="date"
                                 className="input-line"
@@ -2991,7 +2999,7 @@ export default function ProductForm() {
                             </div>
 
                             <div className="field" style={{ maxWidth: 200 }}>
-                              <label>Delivery Location</label>
+                              {/* <label>Delivery Location</label> */}
                               <SearchableSelect
                                 options={[
                                   { label: "Home Delivery", value: "Home Delivery" },
@@ -3012,7 +3020,7 @@ export default function ProductForm() {
                           {/* ROW 6: Notes */}
                           <div className="row">
                             <div className="field full-width-field">
-                              <label>Notes:</label>
+                              {/* <label>Notes:</label> */}
                               <textarea
                                 className="input-line"
                                 placeholder="Add notes for this product item..."
@@ -3055,11 +3063,7 @@ export default function ProductForm() {
                 {selectedProduct && (
                   <p className="product-price">
                     Price:{" "}
-                    {isPrivateSA ? (
-                      <strong>₹0 (editable after adding)</strong>
-                    ) : (
-                      <strong>₹{formatIndianNumber(getBasePrice())}</strong>
-                    )}
+                    <strong>₹{formatIndianNumber(getBasePrice())}</strong>
                     {isSyncProduct && selectedSize && localInventory[selectedSize] !== undefined && (
                       <span className="inventory-badge">
                         {" "}| Stock: {localInventory[selectedSize]}

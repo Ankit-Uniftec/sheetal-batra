@@ -347,13 +347,19 @@ export default function StoreManagerDashboard() {
                     (getOrderSalesperson(o) || "").toLowerCase().includes(q);
             });
         }
+        const getOrderNum = (no) => {
+            const clean = (no || "").replace(/-[A-Z]\d*$/, "");
+            const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
+            if (!match) return 0;
+            return parseInt(match[2] + match[1] + match[3]);
+        };
         result = [...result].sort((a, b) => {
             switch (sortBy) {
-                case "oldest": return new Date(a.created_at) - new Date(b.created_at);
+                case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
                 case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
                 case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
                 case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
-                default: return new Date(b.created_at) - new Date(a.created_at);
+                default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
             }
         });
         return result;
