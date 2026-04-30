@@ -98,8 +98,9 @@ export default function CustomerDetailForm() {
 
     setLoading(true);
 
-    const normalizedPhone =
-      "+91" + phoneNumber.replace(/\D/g, "").slice(-10);
+    const normalizedPhone = phoneNumber.startsWith("+") 
+      ? "+" + phoneNumber.replace(/\D/g, "") 
+      : "+91" + phoneNumber.replace(/\D/g, "").slice(-10);
 
     const { error } = await supabase.from("profiles").upsert({
       id: user.id,
