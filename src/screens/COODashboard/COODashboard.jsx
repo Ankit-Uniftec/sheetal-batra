@@ -586,7 +586,21 @@ export default function COODashboard() {
         if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
         if (filters.store.length > 0) result = result.filter(o => filters.store.includes(o.salesperson_store));
         if (filters.salesperson) result = result.filter(o => getOrderSalesperson(o) === filters.salesperson);
-        result = [...result].sort((a, b) => { switch (sortBy) { case "oldest": return new Date(a.created_at) - new Date(b.created_at); case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0); case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0); case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0); default: return new Date(b.created_at) - new Date(a.created_at); } });
+        const getOrderNum = (no) => {
+            const clean = (no || "").replace(/-[A-Z]\d*$/, "");
+            const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
+            if (!match) return 0;
+            return parseInt(match[2] + match[1] + match[3]);
+        };
+        result = [...result].sort((a, b) => {
+            switch (sortBy) {
+                case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
+                case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
+                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
+                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
+            }
+        });
         return result;
     }, [filteredByStatus, orderSearch, filters, sortBy]);
 
