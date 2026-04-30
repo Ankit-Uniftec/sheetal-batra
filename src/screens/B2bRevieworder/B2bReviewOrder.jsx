@@ -193,7 +193,6 @@ export default function B2bReviewOrder() {
                 delivery_address: deliveryAddress,
                 items: items,
                 comments: [remarks, orderNotes].filter(Boolean).join("\n\n"),
-                order_notes: orderNotes || "",
                 delivery_notes: orderNotes || "",
                 subtotal: subtotal,
                 taxes: taxes,

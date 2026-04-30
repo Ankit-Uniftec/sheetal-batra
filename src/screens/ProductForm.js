@@ -1908,7 +1908,15 @@ export default function ProductForm() {
   const getBasePrice = () => {
     if (!selectedProduct) return 0;
 
-    if (isPrivateSA) return 0;
+    if (isPrivateSA) {
+      let price = 0;
+      selectedAdditionals.forEach((additional) => {
+        if (additional.name && additional.name.trim() !== "") {
+          price += Number(additional.price || 0);
+        }
+      });
+      return Math.round(price);
+    }
 
     // For LXRTS: use variant price based on selected size
     let price = 0;
@@ -2966,23 +2974,13 @@ export default function ProductForm() {
 
                             <div className="field" style={{ maxWidth: 200 }}>
                               <label>Price (₹)</label>
-                              {isPrivateSA ? (
-                                <input
-                                  type="number"
-                                  className="input-line"
-                                  value={item.price ?? 0}
-                                  onChange={(e) => updateItem(item._id, { price: Number(e.target.value) || 0 })}
-                                  min={0}
-                                />
-                              ) : (
-                                <span className="input-line" style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  cursor: 'not-allowed'
-                                }}>
-                                  {formatIndianNumber(item.price ?? 0)}
-                                </span>
-                              )}
+                              <span className="input-line" style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                cursor: 'not-allowed'
+                              }}>
+                                {formatIndianNumber(item.price ?? 0)}
+                              </span>
                             </div>
 
                             <div className="field" style={{ maxWidth: 200 }}>
@@ -3065,11 +3063,7 @@ export default function ProductForm() {
                 {selectedProduct && (
                   <p className="product-price">
                     Price:{" "}
-                    {isPrivateSA ? (
-                      <strong>₹0 (editable after adding)</strong>
-                    ) : (
-                      <strong>₹{formatIndianNumber(getBasePrice())}</strong>
-                    )}
+                    <strong>₹{formatIndianNumber(getBasePrice())}</strong>
                     {isSyncProduct && selectedSize && localInventory[selectedSize] !== undefined && (
                       <span className="inventory-badge">
                         {" "}| Stock: {localInventory[selectedSize]}

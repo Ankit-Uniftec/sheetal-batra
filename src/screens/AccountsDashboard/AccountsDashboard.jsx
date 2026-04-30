@@ -30,7 +30,14 @@ export default function AccountsDashboard() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      const getOrderNum = (no) => {
+        const clean = (no || "").replace(/-[A-Z]\d*$/, "");
+        const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
+        if (!match) return 0;
+        return parseInt(match[2] + match[1] + match[3]);
+      };
+      const sorted = (data || []).sort((a, b) => getOrderNum(b.order_no) - getOrderNum(a.order_no));
+      setOrders(sorted);
     } catch (err) {
       console.error("Error fetching orders:", err);
     } finally {
