@@ -81,6 +81,10 @@ export default function SALogin() {
         navigate("/coo-dashboard")
       } else if (userRecord.role === "ceo") {
         navigate("/ceo-dashboard")
+      } else if (userRecord.role === "ceo_assistant") {
+        navigate("/ceo-assistant-dashboard")
+      } else if (userRecord.role === "assistant_cmo") {
+        navigate("/assistant-cmo-dashboard")
       } else if (userRecord.role === "store_manager") {
         navigate("/store-manager-dashboard");
       } else if (userRecord.role === "executive") {

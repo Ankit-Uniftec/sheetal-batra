@@ -10,6 +10,7 @@ export const NOTIFICATION_TYPES = {
     ORDER_CANCELLED: "order_cancelled",         // #21
     QC_REWORK: "qc_rework",                     // #18
     ALTERATION_CREATED: "alteration_created",   // #19
+    REJOURNEY_ALERT: "rejourney_alert",         // SA alert when their order's component goes to re-journey
 
     // Scheduled triggers (created by cron)
     ORDER_DELAYED_T1: "order_delayed_t1",       // #14
@@ -43,6 +44,10 @@ const RECIPIENT_MAP = {
         { designation: "Production Manager", channel: "both" },
         { designation: "Offline Production Head", channel: "both" },
         { designation: "Offline Production Assistant", channel: "both" },
+    ],
+    [NOTIFICATION_TYPES.REJOURNEY_ALERT]: [
+        { designation: "Offline Production Head", channel: "in_app" },
+        // + SA who placed the order (added dynamically via extraRecipients)
     ],
     [NOTIFICATION_TYPES.QC_REWORK]: [
         { designation: "Production Manager", channel: "in_app" },
@@ -96,6 +101,11 @@ const TEMPLATES = {
     [NOTIFICATION_TYPES.DELIVERY_DUE_TODAY]: (meta) => ({
         title: "Delivery Due Today",
         message: `Delivery Due Today — ${meta.order_no}`,
+        priority: "urgent",
+    }),
+    [NOTIFICATION_TYPES.REJOURNEY_ALERT]: (meta) => ({
+        title: "QC Failed — Re-journey",
+        message: `${meta.component_label || "Component"} (${meta.barcode}) sent back to ${meta.rejourney_stage || "earlier stage"} — Order ${meta.order_no}`,
         priority: "urgent",
     }),
     [NOTIFICATION_TYPES.QC_REWORK]: (meta) => ({

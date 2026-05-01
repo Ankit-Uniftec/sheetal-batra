@@ -8,6 +8,10 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 
+// TEMP (prod): set to false to hide all barcodes and force single-page PDF.
+// Re-enable when barcode workflow is ready in production.
+const SHOW_BARCODES = false;
+
 // Define colors locally
 const COLORS = {
   gold: "#D4AF37",
@@ -108,7 +112,7 @@ const getMeasurementLabel = (key) => {
 const warehouseStyles = StyleSheet.create({
   page: {
     padding: 40,
-    paddingBottom: 120,
+    paddingBottom: 160,
     fontFamily: "Helvetica",
     fontSize: 10,
     backgroundColor: "#FFFFFF",
@@ -406,15 +410,18 @@ const warehouseStyles = StyleSheet.create({
 
   bottomBarcodes: {
     position: "absolute",
-    bottom: 40,
+    bottom: 20,
     left: 40,
     right: 40,
     flexDirection: "row",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    gap: 8,
   },
   barcodeItem: {
     alignItems: "center",
-    width: "30%",
+    width: "31%",
+    marginBottom: 4,
   },
   barcodeItemLabel: {
     fontSize: 10,
@@ -707,7 +714,7 @@ const AlterationInfoBox = ({ order }) => (
  * Warehouse PDF Document - ONE PDF PER PRODUCT
  * Now supports both regular orders and alteration orders
  */
-const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl }) => {
+const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl, masterBarcodeImage = null, componentBarcodes = [] }) => {
   if (!order || !item) {
     console.error("WarehouseOrderPdf received undefined order or item.");
     return (
@@ -729,134 +736,225 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
 
   return (
     <Document>
-      <Page size="A4" style={warehouseStyles.page}>
-        {/* Header Row - Logo and Master Barcode */}
-        <View style={warehouseStyles.headerRow}>
-          <View style={warehouseStyles.logoSection}>
-            {logoUrl && <Image src={logoUrl} style={warehouseStyles.logo} />}
-          </View>
-          <View style={warehouseStyles.barcodeSection}>
-            <Text style={warehouseStyles.barcodeLabel}>Master</Text>
-            <View style={warehouseStyles.barcodePlaceholder}>
-              <Text style={warehouseStyles.barcodeText}> </Text>
+      {/* If we have component barcodes, one page per component (disabled in prod via SHOW_BARCODES) */}
+      {SHOW_BARCODES && componentBarcodes && componentBarcodes.length > 0 ? (
+        componentBarcodes.map((comp, compIdx) => (
+          <Page key={compIdx} size="A4" style={warehouseStyles.page}>
+            {/* Header Row - Logo and Master Barcode */}
+            <View style={warehouseStyles.headerRow}>
+              <View style={warehouseStyles.logoSection}>
+                {logoUrl && <Image src={logoUrl} style={warehouseStyles.logo} />}
+              </View>
+              <View style={warehouseStyles.barcodeSection}>
+                <Text style={warehouseStyles.barcodeLabel}>Master</Text>
+                {masterBarcodeImage ? (
+                  <Image src={masterBarcodeImage} style={{ width: 150, height: 60 }} />
+                ) : (
+                  <View style={warehouseStyles.barcodePlaceholder}>
+                    <Text style={warehouseStyles.barcodeText}>{order.order_no || " "}</Text>
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
-        </View>
-        {/* Title Row with Product Indicator */}
-        <View style={warehouseStyles.titleRow}>
-          <Text style={isAlteration ? warehouseStyles.titleAlteration : warehouseStyles.title}>
-            {isAlteration ? "Alteration Order Copy" : order.is_gifting ? "Gift - Warehouse Order Copy" : "Warehouse Order Copy"}
-          </Text>
-          <Text style={warehouseStyles.productIndicator}>
-            Product {itemIndex + 1} of {totalItems}
-          </Text>
-        </View>
 
-        {/* Gifting Order Banner */}
-        {order.is_gifting && (
-          <View style={warehouseStyles.giftingBanner}>
-            <Text style={warehouseStyles.giftingBannerText}>🎁 GIFTING ORDER</Text>
-            {order.gift_recipient_name && (
-              <Text style={warehouseStyles.giftingRecipientText}>
-                Gift For: {order.gift_recipient_name}
+            {/* Title Row with Product & Component Indicator */}
+            <View style={warehouseStyles.titleRow}>
+              <Text style={isAlteration ? warehouseStyles.titleAlteration : warehouseStyles.title}>
+                {isAlteration ? "Alteration Order Copy" : order.is_gifting ? "Gift - Warehouse Order Copy" : "Warehouse Order Copy"}
               </Text>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={warehouseStyles.productIndicator}>
+                  Product {itemIndex + 1} of {totalItems}
+                </Text>
+                <Text style={{ fontSize: 12, fontFamily: "Helvetica-Bold", color: COLORS.gold, marginTop: 2 }}>
+                  {comp.label} ({compIdx + 1} of {componentBarcodes.length})
+                </Text>
+              </View>
+            </View>
+
+            {/* Gifting Order Banner */}
+            {order.is_gifting && (
+              <View style={warehouseStyles.giftingBanner}>
+                <Text style={warehouseStyles.giftingBannerText}>🎁 GIFTING ORDER</Text>
+                {order.gift_recipient_name && (
+                  <Text style={warehouseStyles.giftingRecipientText}>
+                    Gift For: {order.gift_recipient_name}
+                  </Text>
+                )}
+              </View>
             )}
-          </View>
-        )}
 
-        {/* Parent Order Reference (for alterations) */}
-        {isAlteration && order.parent_order_no && (
-          <View style={warehouseStyles.parentOrderRef}>
-            <Text style={warehouseStyles.parentOrderLabel}>Original Order:</Text>
-            <Text style={warehouseStyles.parentOrderValue}>{order.parent_order_no}</Text>
-          </View>
-        )}
-
-        {/* Alteration Info Box (for alterations) */}
-        {isAlteration && <AlterationInfoBox order={order} />}
-
-        {/* Order Info Grid */}
-        <View style={warehouseStyles.infoGrid}>
-          <View style={warehouseStyles.infoColumn}>
-            <InfoRow
-              label="Order ID:"
-              value={order.order_no || order.order_id}
-            />
-            <InfoRow
-              label="DELIVERY TO:"
-              value={order.delivery_location || order.delivery_city || order.mode_of_delivery}
-            />
-            <InfoRow
-              label="CLIENT NAME:"
-              value={order.delivery_name}
-            />
-            <InfoRow
-              label="DELIVERY DATE:"
-              value={getWarehouseDate(itemDeliveryDate, order.created_at)}
-              highlight={!isUrgent}
-              urgent={isUrgent}
-            />
-            <InfoRow
-              label="ORDER PRIORITY:"
-              value={isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL")}
-              urgent={isUrgent}
-            />
-          </View>
-
-          <View style={warehouseStyles.infoColumn}>
-            <InfoRow
-              label="ORDER DATE:"
-              value={formatDate(order.created_at)}
-            />
-            {order.is_gifting && order.gift_recipient_name && (
-              <InfoRow
-                label="GIFT RECIPIENT:"
-                value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`}
-              />
+            {/* Parent Order Reference (for alterations) */}
+            {isAlteration && order.parent_order_no && (
+              <View style={warehouseStyles.parentOrderRef}>
+                <Text style={warehouseStyles.parentOrderLabel}>Original Order:</Text>
+                <Text style={warehouseStyles.parentOrderValue}>{order.parent_order_no}</Text>
+              </View>
             )}
-            <InfoRow
-              label="SALES ASSOCIATE:"
-              value={order.salesperson}
-            />
-            <InfoRow
-              label="ORDER TYPE:"
-              value={isAlteration ? "ALTERATION" : (item.order_type || order.order_type || "Standard")}
-            />
-          </View>
-        </View>
 
-        {/* Product Details Section */}
-        <SectionBar title="Product Details" isAlteration={isAlteration} />
-        <ProductItem item={item} />
+            {/* Alteration Info Box (for alterations) */}
+            {isAlteration && <AlterationInfoBox order={order} />}
 
-        {/* Notes Section */}
-        {hasNotes && (
-          <View style={warehouseStyles.commentsSection}>
-            <Text style={warehouseStyles.commentsLabel}>Notes:</Text>
-            <View style={warehouseStyles.commentsBox}>
-              <Text style={warehouseStyles.commentsText}>
-                {notes}
+            {/* Order Info Grid */}
+            <View style={warehouseStyles.infoGrid}>
+              <View style={warehouseStyles.infoColumn}>
+                <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
+                <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
+                <InfoRow label="CLIENT NAME:" value={order.delivery_name} />
+                <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />
+                <InfoRow label="ORDER PRIORITY:" value={isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL")} urgent={isUrgent} />
+              </View>
+              <View style={warehouseStyles.infoColumn}>
+                <InfoRow label="ORDER DATE:" value={formatDate(order.created_at)} />
+                {order.is_gifting && order.gift_recipient_name && (
+                  <InfoRow label="GIFT RECIPIENT:" value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`} />
+                )}
+                <InfoRow label="SALES ASSOCIATE:" value={order.salesperson} />
+                <InfoRow label="ORDER TYPE:" value={isAlteration ? "ALTERATION" : (item.order_type || order.order_type || "Standard")} />
+              </View>
+            </View>
+
+            {/* Product Details Section */}
+            <SectionBar title="Product Details" isAlteration={isAlteration} />
+            <ProductItem item={item} />
+
+            {/* Notes Section */}
+            {hasNotes && (
+              <View style={warehouseStyles.commentsSection}>
+                <Text style={warehouseStyles.commentsLabel}>Notes:</Text>
+                <View style={warehouseStyles.commentsBox}>
+                  <Text style={warehouseStyles.commentsText}>{notes}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Measurements Section */}
+            <View style={warehouseStyles.measurementsBar}>
+              <Text style={warehouseStyles.sectionTitle}>
+                {isAlteration ? "Updated Measurements" : "Measurements"}
               </Text>
             </View>
+            <MeasurementsDisplay measurements={item.measurements} />
+
+            {/* Single Component Barcode at bottom */}
+            <View style={warehouseStyles.bottomBarcodes} fixed>
+              <View style={{ alignItems: "center", width: "100%" }}>
+                <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 8, color: COLORS.gold }}>
+                  {comp.label}
+                </Text>
+                {comp.image ? (
+                  <Image src={comp.image} style={{ width: 200, height: 60 }} />
+                ) : (
+                  <View style={warehouseStyles.barcodeItemBox}>
+                    <Text style={warehouseStyles.barcodeText}>{comp.barcode}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Page>
+        ))
+      ) : (
+        /* Fallback: single page with placeholder barcodes (for old orders without components) */
+        <Page size="A4" style={warehouseStyles.page}>
+          {/* Header Row - Logo and Master Barcode */}
+          <View style={warehouseStyles.headerRow}>
+            <View style={warehouseStyles.logoSection}>
+              {logoUrl && <Image src={logoUrl} style={warehouseStyles.logo} />}
+            </View>
+            {SHOW_BARCODES && (
+              <View style={warehouseStyles.barcodeSection}>
+                <Text style={warehouseStyles.barcodeLabel}>Master</Text>
+                <View style={warehouseStyles.barcodePlaceholder}>
+                  <Text style={warehouseStyles.barcodeText}>{order.order_no || " "}</Text>
+                </View>
+              </View>
+            )}
           </View>
-        )}
 
-        {/* Measurements Section */}
-        <View style={warehouseStyles.measurementsBar}>
-          <Text style={warehouseStyles.sectionTitle}>
-            {isAlteration ? "Updated Measurements" : "Measurements"}
-          </Text>
-        </View>
+          {/* Title Row */}
+          <View style={warehouseStyles.titleRow}>
+            <Text style={isAlteration ? warehouseStyles.titleAlteration : warehouseStyles.title}>
+              {isAlteration ? "Alteration Order Copy" : order.is_gifting ? "Gift - Warehouse Order Copy" : "Warehouse Order Copy"}
+            </Text>
+            <Text style={warehouseStyles.productIndicator}>
+              Product {itemIndex + 1} of {totalItems}
+            </Text>
+          </View>
 
-        <MeasurementsDisplay measurements={item.measurements} />
+          {/* Gifting Order Banner */}
+          {order.is_gifting && (
+            <View style={warehouseStyles.giftingBanner}>
+              <Text style={warehouseStyles.giftingBannerText}>🎁 GIFTING ORDER</Text>
+              {order.gift_recipient_name && (
+                <Text style={warehouseStyles.giftingRecipientText}>
+                  Gift For: {order.gift_recipient_name}
+                </Text>
+              )}
+            </View>
+          )}
 
-        {/* Bottom Barcodes */}
-        <View style={warehouseStyles.bottomBarcodes} fixed>
-          <BarcodePlaceholder label="Top" />
-          <BarcodePlaceholder label="Bottom" />
-          <BarcodePlaceholder label="Extra" />
-        </View>
-      </Page>
+          {/* Parent Order Reference (for alterations) */}
+          {isAlteration && order.parent_order_no && (
+            <View style={warehouseStyles.parentOrderRef}>
+              <Text style={warehouseStyles.parentOrderLabel}>Original Order:</Text>
+              <Text style={warehouseStyles.parentOrderValue}>{order.parent_order_no}</Text>
+            </View>
+          )}
+
+          {/* Alteration Info Box */}
+          {isAlteration && <AlterationInfoBox order={order} />}
+
+          {/* Order Info Grid */}
+          <View style={warehouseStyles.infoGrid}>
+            <View style={warehouseStyles.infoColumn}>
+              <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
+              <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
+              <InfoRow label="CLIENT NAME:" value={order.delivery_name} />
+              <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />
+              <InfoRow label="ORDER PRIORITY:" value={isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL")} urgent={isUrgent} />
+            </View>
+            <View style={warehouseStyles.infoColumn}>
+              <InfoRow label="ORDER DATE:" value={formatDate(order.created_at)} />
+              {order.is_gifting && order.gift_recipient_name && (
+                <InfoRow label="GIFT RECIPIENT:" value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`} />
+              )}
+              <InfoRow label="SALES ASSOCIATE:" value={order.salesperson} />
+              <InfoRow label="ORDER TYPE:" value={isAlteration ? "ALTERATION" : (item.order_type || order.order_type || "Standard")} />
+            </View>
+          </View>
+
+          {/* Product Details */}
+          <SectionBar title="Product Details" isAlteration={isAlteration} />
+          <ProductItem item={item} />
+
+          {/* Notes */}
+          {hasNotes && (
+            <View style={warehouseStyles.commentsSection}>
+              <Text style={warehouseStyles.commentsLabel}>Notes:</Text>
+              <View style={warehouseStyles.commentsBox}>
+                <Text style={warehouseStyles.commentsText}>{notes}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Measurements */}
+          <View style={warehouseStyles.measurementsBar}>
+            <Text style={warehouseStyles.sectionTitle}>
+              {isAlteration ? "Updated Measurements" : "Measurements"}
+            </Text>
+          </View>
+          <MeasurementsDisplay measurements={item.measurements} />
+
+          {/* Fallback bottom barcodes (disabled in prod via SHOW_BARCODES) */}
+          {SHOW_BARCODES && (
+            <View style={warehouseStyles.bottomBarcodes} fixed>
+              <BarcodePlaceholder label="Top" />
+              <BarcodePlaceholder label="Bottom" />
+              <BarcodePlaceholder label="Extra" />
+            </View>
+          )}
+        </Page>
+      )}
     </Document>
   );
 };

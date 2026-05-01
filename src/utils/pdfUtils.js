@@ -3,6 +3,8 @@ import { supabase } from "../lib/supabaseClient";
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
 import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
 import Logo from "../images/logo.png";
+import { generateOrderBarcodeImages } from "./barcodeImageUtils";
+import { fetchOrderComponents } from "./barcodeService";
 
 /**
  * Generate and download Customer PDF
@@ -114,14 +116,32 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
     const warehouseUrls = [];
 
     // Generate one PDF per product
+    // Fetch components and generate barcode images
+    let components = [];
+    let barcodeData = { masterBarcode: null, componentBarcodes: [] };
+    try {
+      components = await fetchOrderComponents(order.id);
+      if (components && components.length > 0) {
+        barcodeData = generateOrderBarcodeImages(order.order_no, components);
+      }
+    } catch (err) {
+      console.warn("Barcode generation skipped:", err.message);
+    }
+
     for (let i = 0; i < totalItems; i++) {
       const item = items[i];
       const filename = `orders/${order.order_no}_warehouse_${i + 1}.pdf`;
 
-      // ✅ SKIP storage check - always regenerate when URLs were null
-      // This ensures we use the latest order data
+      // Filter component barcodes for this specific item
+      const itemBarcodes = barcodeData.componentBarcodes.filter(
+        (cb) => {
+          // Match components that belong to this item index
+          const comp = (components || []).find(c => c.barcode === cb.barcode);
+          return comp ? comp.item_index === i : false;
+        }
+      );
 
-      // Generate fresh PDF for this item
+      // Generate fresh PDF for this item with barcodes
       const pdfBlob = await pdf(
         <WarehouseOrderPdf
           order={order}
@@ -129,6 +149,8 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
           itemIndex={i}
           totalItems={totalItems}
           logoUrl={logoUrl}
+          masterBarcodeImage={barcodeData.masterBarcode}
+          componentBarcodes={itemBarcodes}
         />
       ).toBlob();
 
@@ -205,7 +227,24 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
     const logoUrl = new URL(Logo, window.location.origin).href;
     const item = items[productIndex];
 
-    // Generate PDF for this item
+    // Fetch components and generate barcode images
+    let components = [];
+    let barcodeData = { masterBarcode: null, componentBarcodes: [] };
+    try {
+      components = await fetchOrderComponents(order.id);
+      if (components && components.length > 0) {
+        barcodeData = generateOrderBarcodeImages(order.order_no, components);
+      }
+    } catch (err) {
+      console.warn("Barcode generation skipped:", err.message);
+    }
+
+    const itemBarcodes = barcodeData.componentBarcodes.filter((cb) => {
+      const comp = components.find(c => c.barcode === cb.barcode);
+      return comp ? comp.item_index === productIndex : false;
+    });
+
+    // Generate PDF for this item with barcodes
     const pdfBlob = await pdf(
       <WarehouseOrderPdf
         order={order}
@@ -213,6 +252,8 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
         itemIndex={productIndex}
         totalItems={totalItems}
         logoUrl={logoUrl}
+        masterBarcodeImage={barcodeData.masterBarcode}
+        componentBarcodes={itemBarcodes}
       />
     ).toBlob();
 
@@ -302,10 +343,30 @@ export const generateAllPdfs = async (order, setLoading = null) => {
     console.error("❌ Customer PDF generation failed:", customerError);
   }
 
+  // ========== FETCH COMPONENTS & GENERATE BARCODES ==========
+  let barcodeData = { masterBarcode: null, componentBarcodes: [] };
+  let components = [];
+  try {
+    components = await fetchOrderComponents(order.id);
+    if (components && components.length > 0) {
+      barcodeData = generateOrderBarcodeImages(order.order_no, components);
+    }
+  } catch (err) {
+    console.warn("Barcode generation skipped:", err.message);
+  }
+
   // ========== WAREHOUSE PDFs ==========
   for (let i = 0; i < totalItems; i++) {
     try {
       const item = items[i];
+      console.log(`📄 Generating Warehouse PDF ${i + 1} for:`, item.product_name);
+
+      // Filter barcodes for this item
+      const itemBarcodes = barcodeData.componentBarcodes.filter((cb) => {
+        const comp = components.find(c => c.barcode === cb.barcode);
+        return comp ? comp.item_index === i : false;
+      });
+
       const pdfBlob = await pdf(
         <WarehouseOrderPdf
           order={orderData}
@@ -313,6 +374,8 @@ export const generateAllPdfs = async (order, setLoading = null) => {
           itemIndex={i}
           totalItems={totalItems}
           logoUrl={logoUrl}
+          masterBarcodeImage={barcodeData.masterBarcode}
+          componentBarcodes={itemBarcodes}
         />
       ).toBlob();
 

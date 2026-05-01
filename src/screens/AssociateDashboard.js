@@ -8,6 +8,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
+import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 
 // Time calculation helpers
@@ -37,6 +38,7 @@ export default function Dashboard() {
   const [pdfLoading, setPdfLoading] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
+  const [orderComponentsMap, setOrderComponentsMap] = useState({});
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [enteredPassword, setEnteredPassword] = useState("");
@@ -192,6 +194,22 @@ export default function Dashboard() {
     }
     setShowPasswordModal(false);
     setPasswordError("");
+  };
+
+  const fetchComponentsForOrder = async (orderId) => {
+    if (orderComponentsMap[orderId]) return;
+    try {
+      const { data, error } = await supabase
+        .from("order_components")
+        .select("id, barcode, component_type, component_label, current_stage, is_active, is_delayed, re_journey_count")
+        .eq("order_id", orderId)
+        .order("component_type", { ascending: true });
+      if (!error && data) {
+        setOrderComponentsMap(prev => ({ ...prev, [orderId]: data }));
+      }
+    } catch (err) {
+      console.error("Component fetch error:", err);
+    }
   };
 
   // ✅ OPTIMIZED: Extract clients from orders (no extra DB query)
@@ -770,10 +788,11 @@ export default function Dashboard() {
   };
 
   // Check permissions
-  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36 && order.status?.toLowerCase() === "pending";
+  const isOrderReceivedStatus = (s) => { const st = s?.toLowerCase(); return st === "pending" || st === "order_received"; };
+  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36 && isOrderReceivedStatus(order.status);
   const canCancel = (order) => {
     const hoursSince = getHoursSinceOrder(order.created_at);
-    return hoursSince <= 24 && order.status?.toLowerCase() === "pending";
+    return hoursSince <= 24 && isOrderReceivedStatus(order.status);
   };
   const canExchangeReturn = (order) => {
     const isDelivered = order.status?.toLowerCase() === "delivered";
@@ -794,6 +813,7 @@ export default function Dashboard() {
       case "cancelled": return "ad-status-cancelled";
       case "exchange_return": return "ad-status-exchange";
       case "processing": return "ad-status-processing";
+      case "completed": return "ad-status-delivered";
       default: return "ad-status-active";
     }
   };
@@ -947,8 +967,17 @@ export default function Dashboard() {
           <div className="ad-header-right">
             <NotificationBell
               userEmail={salesperson?.email || ""}
-              onOrderClick={(orderId) => {
-                // Could navigate to order details in future
+              onOrderClick={(orderId, orderNo) => {
+                setActiveTab("orders");
+                setOrderSearch(orderNo || "");
+                setTimeout(() => {
+                  const el = document.querySelector(`[data-order-id="${orderId}"]`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.style.outline = '2px solid #d5b85a';
+                    setTimeout(() => { el.style.outline = ''; }, 3000);
+                  }
+                }, 300);
               }}
             />
             <button className="ad-header-btn" onClick={handleLogout}>
@@ -1053,7 +1082,7 @@ export default function Dashboard() {
                         <div className="ad-order-item" key={o.id}>
                           <p><b>Order No:</b> {o.order_no}</p>
                           <p><b>Client Name:</b> {o.delivery_name}</p>
-                          <p><b>Status:</b> {o.status || "Pending"}</p>
+                          <p><b>Status:</b> {(!o.status || o.status === "pending") ? "Order Received" : o.status === "order_received" ? "Order Received" : o.status}</p>
                           <p><b>Delivery Date:</b> {formatDate(o.delivery_date)}</p>
                         </div>
                       ))
@@ -1098,6 +1127,7 @@ export default function Dashboard() {
                   return (
                     <div
                       key={order.id}
+                      data-order-id={order.id}
                       className={`ad-order-card ${!own ? "ad-order-card-readonly" : ""}`}
                       onClick={() => viewCustomerOrders(order)}
                       style={{ cursor: 'pointer' }}
@@ -1125,7 +1155,16 @@ export default function Dashboard() {
                         </div>
                         <div className="ad-header-actions">
                           <div className={`ad-order-status-badge ${getStatusBadgeClass(order.status)}`}>
-                            {order.status || "Pending"}
+                            {(() => {
+                              const s = order.status?.toLowerCase();
+                              if (!s || s === "pending") return "Order Received";
+                              if (s === "order_received") return "Order Received";
+                              if (s === "completed") return "Completed & Dispatched";
+                              if (s === "delivered") return "Delivered";
+                              if (s === "cancelled") return "Cancelled";
+                              if (s === "exchange_return") return "Exchange/Return";
+                              return order.status;
+                            })()}
                           </div>
                           {/* <div className={`ad-warehouse-stage-badge ${(order.warehouse_stage === "disposed" || order.warehouse_stage === "scrapped") ? "ad-stage-alert" : ""}`}>
                             {order.is_rework && <span className="ad-rework-dot"></span>}
@@ -1307,6 +1346,58 @@ export default function Dashboard() {
                         </div>
                       </div>
 
+                      {/* TEMP (prod): Production Status (barcode-derived) hidden — re-enable when scan flow is ready.
+                      {!order.is_alteration && (() => {
+                        if (!orderComponentsMap[order.id]) {
+                          fetchComponentsForOrder(order.id);
+                        }
+                        const comps = orderComponentsMap[order.id];
+                        if (!comps || comps.length === 0) return null;
+
+                        // Calculate overall status
+                        const total = comps.length;
+                        const dispatched = comps.filter(c => c.current_stage === "dispatched").length;
+                        const qcPassed = comps.filter(c => c.current_stage === "qc_passed" || c.current_stage === "packaging_dispatch").length;
+                        const inProduction = comps.filter(c => !["order_received", "dispatched", "disposed", "scrapped", "qc_passed", "packaging_dispatch"].includes(c.current_stage)).length;
+                        const hasDelayed = comps.some(c => c.is_delayed);
+                        const hasRework = comps.some(c => c.re_journey_count > 0);
+
+                        let overallLabel = "Order Received";
+                        let overallColor = "#9e9e9e";
+
+                        if (dispatched === total) {
+                          overallLabel = "Completed & Dispatched";
+                          overallColor = "#1b5e20";
+                        } else if (qcPassed + dispatched === total) {
+                          overallLabel = "Ready for Dispatch";
+                          overallColor = "#2e7d32";
+                        } else if (inProduction > 0) {
+                          overallLabel = "In Production";
+                          overallColor = "#3f51b5";
+                        }
+
+                        return (
+                          <div style={{ padding: "10px 16px", borderTop: "1px solid #f0f0f0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: "#999", textTransform: "uppercase", letterSpacing: 0.5 }}>Production:</span>
+                              <span style={{ display: "inline-block", padding: "3px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600, color: "#fff", backgroundColor: overallColor }}>
+                                {overallLabel}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              {hasRework && (
+                                <span style={{ fontSize: 10, fontWeight: 600, color: "#c62828", background: "#ffebee", padding: "2px 8px", borderRadius: 10 }}>Rework</span>
+                              )}
+                              {hasDelayed && (
+                                <span style={{ fontSize: 10, fontWeight: 600, color: "#e65100", background: "#fff3e0", padding: "2px 8px", borderRadius: 10 }}>Delayed</span>
+                              )}
+                              <span style={{ fontSize: 11, color: "#999" }}>{dispatched}/{total} done</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      */}
+
                       {own && canMarkDelivered(order) && (
                         <div className="ad-order-actions">
                           <button
@@ -1451,7 +1542,7 @@ export default function Dashboard() {
                             {isServices && !isOwnOrder(order) && (
                               <p><b>SA:</b> {order.salesperson || "—"}</p>
                             )}
-                            <p><b>Status:</b> {order.status || "Pending"}</p>
+                            <p><b>Status:</b> {(!order.status || order.status === "pending") ? "Order Received" : order.status === "order_received" ? "Order Received" : order.status}</p>
                             <p><b>Delivery Date:</b> {formatDate(order.delivery_date)}</p>
                           </div>
                         ))

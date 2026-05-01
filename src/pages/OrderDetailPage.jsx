@@ -57,7 +57,8 @@ function StatusBadge({ status }) {
       case "delivered": return "delivered";
       case "cancelled": return "cancelled";
       case "revoked": return "cancelled";
-      case "pending": return "pending";
+      case "pending":
+      case "order_received": return "pending";
       case "in_production": return "in-production";
       case "ready": return "ready";
       case "shipped": return "shipped";
@@ -70,7 +71,8 @@ function StatusBadge({ status }) {
       case "delivered": return "Delivered";
       case "cancelled": return "Cancelled";
       case "revoked": return "Revoked";
-      case "pending": return "Pending";
+      case "pending":
+      case "order_received": return "Order Received";
       case "in_production": return "In Production";
       case "ready": return "Ready";
       case "shipped": return "Shipped";
@@ -125,6 +127,7 @@ export default function OrderDetailPage() {
   const { orderId } = useParams();
 
   const fromAssociate = location.state?.fromAssociate;
+  const fromProductionManager = location.state?.fromProductionManager;
   const customerFromState = location.state?.customer;
 
   const [order, setOrder] = useState(null);
@@ -217,7 +220,8 @@ export default function OrderDetailPage() {
     
     // Calculate if Edit would be available
     const hoursSinceOrder = (new Date() - new Date(order.created_at)) / (1000 * 60 * 60);
-    const isPending = order.status?.toLowerCase() === "pending";
+    const status = order.status?.toLowerCase();
+    const isPending = status === "pending" || status === "order_received";
     const editIsAvailable = hoursSinceOrder <= 36 && isPending;
     
     // Alteration is available when Edit is NOT available
@@ -322,7 +326,7 @@ export default function OrderDetailPage() {
         alteration_attachments: alterationData.attachments || [],
 
         // Status
-        status: "pending",
+        status: "order_received",
         created_at: new Date().toISOString(),
       };
 
@@ -382,9 +386,13 @@ export default function OrderDetailPage() {
 
   // Navigation
   const handleBack = () => {
-    if (fromAssociate) {
-      navigate("/orderHistory", { 
-        state: { fromAssociate: true, customer: customerFromState } 
+    if (fromProductionManager) {
+      navigate("/production-manager-dashboard", {
+        state: { activeTab: "orders", highlightOrderId: order?.id || null }
+      });
+    } else if (fromAssociate) {
+      navigate("/orderHistory", {
+        state: { fromAssociate: true, customer: customerFromState }
       });
     } else {
       navigate(-1);
@@ -781,8 +789,6 @@ export default function OrderDetailPage() {
         </section>
       </div>
 
-      {/* Floating Back Button */}
-      <button className="odp-floating-back" onClick={handleBack}>←</button>
     </div>
   );
 }

@@ -78,11 +78,8 @@ const formatDateTime = (dateStr) => {
 
 // Output: "02.02.2026  15:30:00" (correct IST)
 
-const formatPhone = (phone) => {
-  if (!phone) return '';
-  const cleaned = phone.replace(/^\+?91\s?/, '');
-  return `+91 ${cleaned}`;
-};
+// Use the shared formatter — handles all country codes correctly (Indian + international).
+const formatPhone = (phone) => formatPhoneNumber(phone);
 
 // Get color name from color object
 const getColorName = (color) => {

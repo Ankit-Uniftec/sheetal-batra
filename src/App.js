@@ -31,6 +31,8 @@ import RetailManagerDashboard from "./screens/RetailDashboard/RetailManagerDashb
 import COODashboard from "./screens/COODashboard/COODashboard";
 import CEODashboard from "./screens/CeoDashboard/CeoDashboard";
 import StoreManagerDashboard from "./screens/StoreManagerDashboard/StoreManagerDashboard";
+import CeoAssistantDashboard from "./screens/CeoAssistantDashboard/CeoAssistantDashboard";
+import AssistantCmoDashboard from "./screens/AssistantCmoDashboard/AssistantCmoDashboard";
 import PrivateRoute from "./components/PrivateRoute";
 
 
@@ -74,6 +76,8 @@ function App() {
         <Route path="/coo-dashboard" element={<PrivateRoute><COODashboard /></PrivateRoute>} />
         <Route path="/ceo-dashboard" element={<PrivateRoute><CEODashboard /></PrivateRoute>} />
         <Route path="/store-manager-dashboard" element={<PrivateRoute><StoreManagerDashboard /></PrivateRoute>} />
+        <Route path="/ceo-assistant-dashboard" element={<PrivateRoute><CeoAssistantDashboard /></PrivateRoute>} />
+        <Route path="/assistant-cmo-dashboard" element={<PrivateRoute><AssistantCmoDashboard /></PrivateRoute>} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/login" replace />} />
