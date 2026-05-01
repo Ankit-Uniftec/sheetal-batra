@@ -295,7 +295,40 @@ export default function Dashboard() {
           const ownOrders = isServicesUser
             ? ordersData.filter(o => o.salesperson_email?.toLowerCase() === user.email.toLowerCase())
             : ordersData;
-          extractClientsFromOrders(ownOrders);
+          // Fetch SA's draft orders
+          const { data: draftsData } = await supabase
+            .from("draft_orders")
+            .select("customer_id")
+            .eq("salesperson_email", user.email.toLowerCase());
+
+          // Get draft customer profiles and merge into client extraction
+          if (draftsData && draftsData.length > 0) {
+            const draftCustomerIds = [...new Set(draftsData.map(d => d.customer_id).filter(Boolean))];
+            const { data: draftProfiles } = await supabase
+              .from("profiles")
+              .select("id, full_name, phone, email, gender, dob")
+              .in("id", draftCustomerIds);
+
+            if (draftProfiles) {
+              const draftClients = draftProfiles.map(p => ({
+                name: p.full_name,
+                email: p.email,
+                phone: p.phone,
+                user_id: p.id,
+              }));
+              // Merge with order clients
+              extractClientsFromOrders([...ownOrders, ...draftClients.map(c => ({
+                user_id: c.user_id,
+                delivery_name: c.name,
+                delivery_email: c.email,
+                delivery_phone: c.phone,
+              }))]);
+            } else {
+              extractClientsFromOrders(ownOrders);
+            }
+          } else {
+            extractClientsFromOrders(ownOrders);
+          }
         }
 
         setLoading(false);

@@ -482,20 +482,24 @@ export default function OrderHistory() {
   // 1. Edit - within 36 hrs, Pending only
   const canEdit = (order) => {
     const hoursSince = getHoursSinceOrder(order.created_at);
-    return hoursSince <= 36 && order.status?.toLowerCase() === "pending";
+    const status = order.status?.toLowerCase();
+    return hoursSince <= 36 && (status === "pending" || status === "order_received");
   };
 
   // 2. Cancel - within 24 hrs, Pending only
   const canCancel = (order) => {
     const hoursSince = getHoursSinceOrder(order.created_at);
-    return hoursSince <= 24 && order.status?.toLowerCase() === "pending";
+    const status = order.status?.toLowerCase();
+    return hoursSince <= 24 && (status === "pending" || status === "order_received");
   };
 
   // 3. Revoke - after 24 hrs, Pending only (replaces Cancel)
   const canRevoke = (order) => {
     const hoursSince = getHoursSinceOrder(order.created_at);
-    return hoursSince > 24 && order.status?.toLowerCase() === "pending";
+    const status = order.status?.toLowerCase();
+    return hoursSince > 24 && (status === "pending" || status === "order_received");
   };
+
 
   // 4. Check if within 72 hrs post delivery
   const isWithin72HrsPostDelivery = (order) => {
