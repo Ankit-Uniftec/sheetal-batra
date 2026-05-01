@@ -6,8 +6,9 @@ import "./InventoryDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
-import WarehouseTab from "./WarehouseTab";
-import StockExchangeTab from "./StockExchangeTab";
+// TEMP (prod): warehouse + stock exchange tabs hidden — re-enable when feature is ready
+// import WarehouseTab from "./WarehouseTab";
+// import StockExchangeTab from "./StockExchangeTab";
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
@@ -527,8 +528,10 @@ export default function InventoryDashboard() {
         <aside className={`inv-sidebar ${showSidebar ? "open" : ""}`}>
           <nav className="inv-menu">
             <a className={`inv-menu-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</a>
+            {/* TEMP (prod): warehouse + stock exchange tabs hidden — re-enable when feature is ready
             <a className={`inv-menu-item ${activeTab === "warehouses" ? "active" : ""}`} onClick={() => { setActiveTab("warehouses"); setShowSidebar(false); }}>Warehouses</a>
             <a className={`inv-menu-item ${activeTab === "exchanges" ? "active" : ""}`} onClick={() => { setActiveTab("exchanges"); setShowSidebar(false); }}>Stock Exchange</a>
+            */}
             <a className="inv-menu-item inv-menu-logout" onClick={handleLogout}>Log Out</a>
           </nav>
         </aside>
@@ -966,11 +969,10 @@ export default function InventoryDashboard() {
         )}
         </>)}
 
-        {/* ==================== WAREHOUSES TAB ==================== */}
+        {/* TEMP (prod): warehouse + stock exchange tabs hidden — re-enable when feature is ready
         {activeTab === "warehouses" && <WarehouseTab />}
-
-        {/* ==================== STOCK EXCHANGE TAB ==================== */}
         {activeTab === "exchanges" && <StockExchangeTab />}
+        */}
 
       </div>
       </div>

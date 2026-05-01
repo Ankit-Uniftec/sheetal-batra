@@ -109,6 +109,10 @@ export default function ReviewDetail() {
   const [loadingMessage, setLoadingMessage] = useState("Placing order...");
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
+  // Whether to send the order PDF to the client via WhatsApp.
+  // Regular SA: always true (asked before signature only for Private SA).
+  // Stored as a ref so it doesn't trigger re-renders mid-flow.
+  const sendPdfRef = React.useRef(true);
 
   const isPrivateSA = (() => {
     try {
@@ -132,17 +136,46 @@ export default function ReviewDetail() {
     // loyaltyPointsRedeemed, loyaltyDiscount 
   };
 
-  const handlePlaceOrder = () => setShowSignature(true);
+  const handlePlaceOrder = () => {
+    if (isPrivateSA) {
+      // Ask BEFORE signature whether to send PDF to client. Decide once, then
+      // proceed normally — no post-insert popup, no duplicate-insert race.
+      showPopup({
+        type: "confirm",
+        title: "Send PDF to Client?",
+        message: "Do you want to send the order PDF to the client via WhatsApp after placing the order?",
+        confirmText: "Yes, Send",
+        cancelText: "No, Skip",
+        onConfirm: () => {
+          sendPdfRef.current = true;
+          setShowSignature(true);
+        },
+        onCancel: () => {
+          sendPdfRef.current = false;
+          setShowSignature(true);
+        },
+      });
+      return;
+    }
+    // Regular SA: always send PDF
+    sendPdfRef.current = true;
+    setShowSignature(true);
+  };
 
   // ============================================================
   // SHARED: Process order after signature URL is obtained
   // ============================================================
 
   const processOrderWithSignature = async (signatureUrl) => {
-    // ✅ Prevent double submission
+    // ✅ Prevent double submission — once an insert succeeds, the lock stays held
+    // for the rest of this component's lifecycle (orderInsertSucceeded). For
+    // pre-insert failures (validation, network), the lock is released in finally
+    // so the user can retry.
     if (isSubmitting.current) return;
     isSubmitting.current = true;
+    let orderInsertSucceeded = false;
 
+    try {
     // ✅ BLOCK if no salesperson data
     if (!order.salesperson && !order.salesperson_email) {
       const spSession = sessionStorage.getItem("currentSalesperson");
@@ -153,6 +186,8 @@ export default function ReviewDetail() {
           type: "error",
           confirmText: "Ok",
         });
+        setLoading(false);
+        setShowSignature(false);
         return;
       }
     }
@@ -266,7 +301,81 @@ export default function ReviewDetail() {
     setLoadingMessage("Saving order...");
 
     // Remove measurement saving flags from order data
-    const { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;
+    let { save_measurements, measurements_to_save, store_credit_remaining, ...orderDataToInsert } = normalizedOrder;
+
+    // ============================================================
+    // PRIVATE ORDER GUARD — defense in depth
+    // ============================================================
+    // The client may report `isPrivateSA = true` (read from sessionStorage), but
+    // sessionStorage is tamper-able. Before trusting that, re-fetch the SA's
+    // designation from the database using their email. Only if the DB confirms
+    // "Private SA" do we treat this as a private order. This prevents:
+    //  - A non-Private SA spoofing a private (₹0) order
+    //  - A regular order's monetary fields leaking into a private order
+    let isConfirmedPrivateOrder = false;
+    if (isPrivateSA) {
+      // Client claims Private SA — verify it against the DB before accepting.
+      if (!normalizedOrder.salesperson_email) {
+        showPopup({
+          title: "Cannot Verify Private Order",
+          message: "Salesperson email is missing — cannot confirm this is a private order. Please log in again from the dashboard.",
+          type: "error",
+          confirmText: "OK",
+        });
+        setLoading(false);
+        setShowSignature(false);
+        return;
+      }
+      try {
+        const { data: spRow, error: spErr } = await supabase
+          .from("salesperson")
+          .select("designation")
+          .eq("email", normalizedOrder.salesperson_email.toLowerCase())
+          .single();
+        if (spErr) throw spErr;
+        isConfirmedPrivateOrder = spRow?.designation === "Private SA";
+      } catch (err) {
+        // Lookup failed (network/RLS) — fail closed: do not place a private order without confirming permission
+        console.error("Could not verify SA designation:", err);
+        showPopup({
+          title: "Verification Failed",
+          message: "Could not verify private-order permission. Please retry — if the problem continues, log in again.",
+          type: "error",
+          confirmText: "OK",
+        });
+        setLoading(false);
+        setShowSignature(false);
+        return;
+      }
+
+      if (!isConfirmedPrivateOrder) {
+        // Client said Private SA but DB disagrees — block the order outright.
+        // Accepting it would let a regular SA spoof a private-order flag via tampered sessionStorage.
+        console.warn("Private SA flag mismatch: sessionStorage said yes, DB said no. Blocking order.");
+        showPopup({
+          title: "Order Blocked",
+          message: "Your account is not configured for private orders. Please re-login from the dashboard and try again.",
+          type: "error",
+          confirmText: "OK",
+        });
+        setLoading(false);
+        setShowSignature(false);
+        return;
+      }
+    }
+
+    if (isConfirmedPrivateOrder) {
+      // Confirmed Private SA — flag the order so it's auditable later.
+      // Note: monetary fields are NOT zeroed here. Private orders zero out only
+      // the product's BASE price (handled in ProductForm.js); extras and the
+      // SA's "additional customizations" line items still carry their real
+      // prices and roll up into grand_total. Forcing all amounts to 0 here
+      // would erase the SA's pricing for those add-ons.
+      orderDataToInsert.is_private_order = true;
+    } else {
+      // Explicitly mark non-private orders as such for clear audit trail
+      orderDataToInsert.is_private_order = false;
+    }
 
     setLoadingMessage("Generating invoice PDFs...");
 
@@ -344,6 +453,10 @@ export default function ReviewDetail() {
       throw new Error("Order insert failed");
     }
 
+    // ✅ ORDER PERSISTED — from this point on, never allow another insert attempt
+    // for this component instance. The lock will not be released by `finally` below.
+    orderInsertSucceeded = true;
+
     // 4.5️⃣ GENERATE ORDER COMPONENTS (for barcode tracking)
     try {
       const { generateOrderComponents } = await import("../utils/barcodeService");
@@ -377,88 +490,22 @@ export default function ReviewDetail() {
     try {
       const pdfUrls = await generateAllPdfs(orderWithItems);
 
-      // Send WhatsApp with Customer PDF
-      if (pdfUrls?.customer_url) {
-        if (isPrivateSA) {
-          // Private SA: ask before sending, handle navigation in callbacks
-          const doNavigate = () => {
-            sessionStorage.removeItem("screen4FormData");
-            sessionStorage.removeItem("screen6FormData");
-            navigate("/order-placed", {
-              state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
-              replace: true,
-            });
-          };
-
-          // Send notifications before showing popup (non-blocking)
-          try {
-            const items = normalizedOrder.items || order.items || [];
-            const source = items.some(i => i.sync_enabled) ? "Shopify" : order.is_b2b ? "B2B" : "Offline";
-            const notifAttachments = [];
-            if (insertedOrder.customer_url) notifAttachments.push({ type: "order_pdf", url: insertedOrder.customer_url });
-            if (insertedOrder.warehouse_urls?.length) insertedOrder.warehouse_urls.forEach(url => notifAttachments.push({ type: "order_pdf", url }));
-            sendNotification(NOTIFICATION_TYPES.ORDER_PLACED, {
-              orderId: insertedOrder.id, orderNo: insertedOrder.order_no,
-              metadata: { client_name: normalizedOrder.delivery_name, is_urgent: normalizedOrder.is_urgent || false, source, store: normalizedOrder.salesperson_store },
-              attachments: notifAttachments,
-            }).catch(err => console.error("Notification error:", err));
-          } catch (e) { }
-
-          // Save measurements
-          if (order.save_measurements && order.measurements_to_save) {
-            try {
-              await supabase.from("customer_measurements").insert({
-                customer_id: order.user_id, measurements: order.measurements_to_save,
-                order_id: insertedOrder.id, created_at: new Date().toISOString(),
-              });
-            } catch (err) { console.error("Measurement save error:", err); }
-          }
-
-          // Deduct store credit
-          if (order.store_credit_used && order.store_credit_used > 0) {
-            try {
-              const updateData = { store_credit: order.store_credit_remaining || 0 };
-              if (!order.store_credit_remaining || order.store_credit_remaining <= 0) updateData.store_credit_expiry = null;
-              await supabase.from("profiles").update(updateData).eq("id", order.user_id);
-            } catch (err) { console.error("Credit error:", err); }
-          }
-
-          setLoading(false);
-          showPopup({
-            type: "confirm",
-            title: "Send PDF to Client?",
-            message: "Do you want to send the order PDF to the client via WhatsApp?",
-            confirmText: "Yes, Send",
-            cancelText: "No, Skip",
-            onConfirm: async () => {
-              try {
-                await fetch(`${config.SUPABASE_URL}/functions/v1/spur-whatsapp`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "apikey": config.SUPABASE_KEY, "Authorization": `Bearer ${config.SUPABASE_KEY}` },
-                  body: JSON.stringify({
-                    customerName: orderWithItems.delivery_name, customerPhone: orderWithItems.delivery_phone,
-                    customerCountry: orderWithItems.delivery_country || "India", pdfUrl: pdfUrls.customer_url,
-                  }),
-                });
-              } catch (err) { console.error("WhatsApp error:", err); }
-              doNavigate();
-            },
-            onCancel: () => doNavigate(),
+      // Send WhatsApp with Customer PDF — sendPdfRef.current is decided BEFORE
+      // the signature step (asked for Private SA, defaulted to true for regular SA).
+      // No post-insert popup, single straight-line path through the rest of the function.
+      if (pdfUrls?.customer_url && sendPdfRef.current) {
+        try {
+          await fetch(`${config.SUPABASE_URL}/functions/v1/spur-whatsapp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "apikey": config.SUPABASE_KEY, "Authorization": `Bearer ${config.SUPABASE_KEY}` },
+            body: JSON.stringify({
+              customerName: orderWithItems.delivery_name,
+              customerPhone: orderWithItems.delivery_phone,
+              customerCountry: orderWithItems.delivery_country || "India",
+              pdfUrl: pdfUrls.customer_url,
+            }),
           });
-          return; // STOP HERE — popup handles the rest
-        } else {
-          // Regular SA: send automatically
-          try {
-            await fetch(`${config.SUPABASE_URL}/functions/v1/spur-whatsapp`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "apikey": config.SUPABASE_KEY, "Authorization": `Bearer ${config.SUPABASE_KEY}` },
-              body: JSON.stringify({
-                customerName: orderWithItems.delivery_name, customerPhone: orderWithItems.delivery_phone,
-                customerCountry: orderWithItems.delivery_country || "India", pdfUrl: pdfUrls.customer_url,
-              }),
-            });
-          } catch (err) { console.error("WhatsApp error:", err); }
-        }
+        } catch (err) { console.error("WhatsApp error:", err); }
       }
     } catch (pdfError) {
       console.error("❌ PDF generation failed:", pdfError);
@@ -684,6 +731,15 @@ export default function ReviewDetail() {
       state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
       replace: true,
     });
+    } finally {
+      // Release the lock ONLY if the order was not yet inserted. If insert
+      // succeeded, keep the lock held forever (for this component instance) so
+      // post-insert side-effects (PDFs, popup callbacks) cannot trigger a
+      // duplicate insert.
+      if (!orderInsertSucceeded) {
+        isSubmitting.current = false;
+      }
+    }
   };
 
   // ============================================================

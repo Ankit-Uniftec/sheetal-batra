@@ -815,7 +815,7 @@ export default function StoreManagerDashboard() {
                                                     <td className="sm-product-cell">{o.items?.[0]?.product_name || "-"}</td>
                                                     <td className="amount">{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
                                                     <td><span className={`sm-payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o)}</span></td>
-                                                    <td><span className={`sm-status-badge ${(o.status || "pending")}`}>{o.status || "pending"}</span></td>
+                                                    <td><span className={`sm-status-badge ${(o.status === "pending" ? "order_received" : (o.status || "order_received"))}`}>{o.status === "pending" ? "Order Received" : (o.status === "order_received" ? "Order Received" : (o.status || "Order Received"))}</span></td>
                                                     <td>{getOrderSalesperson(o) || "-"}</td>
                                                     <td>{formatDate(o.created_at)}</td>
                                                     <td>

@@ -7,13 +7,14 @@ import formatDate from "../utils/formatDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import NotificationBell from "../components/NotificationBell";
-import ScanStation from "../components/ScanStation";
-import "../components/ScanStation.css";
+// TEMP (prod): scan station hidden — re-enable when barcode flow is ready
+// import ScanStation from "../components/ScanStation";
+// import "../components/ScanStation.css";
 import { getStageLabel, getStageColor } from "../utils/barcodeService";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
-  { value: "pending", label: "Pending", color: "#ff9800" },
+  { value: "order_received", label: "Order Received", color: "#ff9800" },
   { value: "in_production", label: "In Production", color: "#2196f3" },
   { value: "ready", label: "Ready", color: "#4caf50" },
   { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
@@ -240,8 +241,10 @@ const WarehouseDashboard = () => {
       .select("*")
       .order("created_at", { ascending: false });
     if (!error) {
-      // B2B orders only visible after merchandiser approval
       const filtered = (data || []).filter(o => {
+        // Private orders are not visible in warehouse — handled outside warehouse flow
+        if (o.is_private_order) return false;
+        // B2B orders only visible after merchandiser approval
         if (o.is_b2b) return o.approval_status === "approved";
         return true;
       });
@@ -889,10 +892,12 @@ const WarehouseDashboard = () => {
               onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>
               Calendar
             </a>
+            {/* TEMP (prod): Scan Station tab hidden — re-enable when barcode flow is ready
             <a className={`wd-menu-item ${activeTab === "scan" ? "active" : ""}`}
               onClick={() => { setActiveTab("scan"); setShowSidebar(false); }}>
               Scan Station
             </a>
+            */}
             <a className="wd-menu-item" onClick={handleLogout}>Log Out</a>
           </nav>
         </aside>
@@ -1301,7 +1306,7 @@ const WarehouseDashboard = () => {
                                 <span className="wd-alt-label">Status:</span>
                                 <select
                                   className="wd-status-select"
-                                  value={order.status || "pending"}
+                                  value={order.status === "pending" ? "order_received" : (order.status || "order_received")}
                                   onChange={(e) => updateAlterationStatus(order.id, e.target.value)}
                                   disabled={statusUpdating === order.id}
                                   style={{ borderColor: getStatusColor(order.status) }}
@@ -1419,7 +1424,7 @@ const WarehouseDashboard = () => {
                               <p><strong className="wd-label">Delivery Date:</strong> {getWarehouseDate(order.delivery_date, order.created_at)}</p>
                             </div>
 
-                            {/* Component Stage Tracker */}
+                            {/* TEMP (prod): barcode component tracker hidden — re-enable when scan flow is ready.
                             {!isAlteration && (
                               <div className="wd-component-tracker">
                                 {order.status === "cancelled" ? (
@@ -1463,10 +1468,39 @@ const WarehouseDashboard = () => {
                                   <div className="wd-order-status-badge wd-status-pending">
                                     {order.status === "completed" ? "Completed" :
                                       order.status === "delivered" ? "Delivered" :
-                                        order.status === "pending" ? "Order Received" :
+                                        (order.status === "pending" || order.status === "order_received") ? "Order Received" :
                                           "Awaiting Production"}
                                   </div>
                                 )}
+                              </div>
+                            )}
+                            */}
+
+                            {/* Simple status badge + Mark as Complete (used while scan flow is disabled) */}
+                            {!isAlteration && (
+                              <div className="wd-component-tracker">
+                                <div className={`wd-order-status-badge ${
+                                  order.status === "cancelled" ? "wd-status-cancelled" :
+                                  order.status === "completed" ? "wd-status-completed" :
+                                  order.status === "delivered" ? "wd-status-delivered" :
+                                  "wd-status-pending"
+                                }`}>
+                                  {order.status === "cancelled" ? "Cancelled" :
+                                    order.status === "completed" ? "Completed" :
+                                      order.status === "delivered" ? "Delivered" :
+                                        (order.status === "pending" || order.status === "order_received") ? "Order Received" :
+                                          "Awaiting Production"}
+                                </div>
+                                <button
+                                  className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""}`}
+                                  disabled={order.status === "completed" || order.status === "delivered" || order.status === "cancelled"}
+                                  onClick={() => markAsCompleted(order.id)}
+                                >
+                                  {order.status === "completed" ? "Completed" :
+                                    order.status === "delivered" ? "Delivered" :
+                                      order.status === "cancelled" ? "Cancelled" :
+                                        "Mark as Completed"}
+                                </button>
                               </div>
                             )}
                           </div>
@@ -1600,7 +1634,7 @@ const WarehouseDashboard = () => {
                               <p><b>PO Number:</b> {order.po_number}</p>
                             )}
                             <p><b>Client Name:</b> {order.delivery_name}</p>
-                            <p><b>Status:</b> {order.status || "Pending"}</p>
+                            <p><b>Status:</b> {order.status === "pending" || order.status === "order_received" || !order.status ? "Order Received" : order.status}</p>
                           </div>
                         ))
                     )}
@@ -1609,9 +1643,11 @@ const WarehouseDashboard = () => {
               )}
             </div>
           )}
+          {/* TEMP (prod): Scan Station hidden — re-enable when barcode flow is ready
           {activeTab === "scan" && (
             <ScanStation currentUserEmail={currentUserEmail} />
           )}
+          */}
         </div>
       </div>
 

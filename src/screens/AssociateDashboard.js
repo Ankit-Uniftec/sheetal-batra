@@ -788,10 +788,11 @@ export default function Dashboard() {
   };
 
   // Check permissions
-  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36 && order.status?.toLowerCase() === "pending";
+  const isOrderReceivedStatus = (s) => { const st = s?.toLowerCase(); return st === "pending" || st === "order_received"; };
+  const canEdit = (order) => getHoursSinceOrder(order.created_at) <= 36 && isOrderReceivedStatus(order.status);
   const canCancel = (order) => {
     const hoursSince = getHoursSinceOrder(order.created_at);
-    return hoursSince <= 24 && order.status?.toLowerCase() === "pending";
+    return hoursSince <= 24 && isOrderReceivedStatus(order.status);
   };
   const canExchangeReturn = (order) => {
     const isDelivered = order.status?.toLowerCase() === "delivered";
@@ -1345,7 +1346,7 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Production Status — SA simplified view */}
+                      {/* TEMP (prod): Production Status (barcode-derived) hidden — re-enable when scan flow is ready.
                       {!order.is_alteration && (() => {
                         if (!orderComponentsMap[order.id]) {
                           fetchComponentsForOrder(order.id);
@@ -1395,6 +1396,7 @@ export default function Dashboard() {
                           </div>
                         );
                       })()}
+                      */}
 
                       {own && canMarkDelivered(order) && (
                         <div className="ad-order-actions">

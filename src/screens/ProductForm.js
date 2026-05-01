@@ -647,7 +647,6 @@ export default function ProductForm() {
 
     const defaultTop = product.default_top || product.top_options?.[0] || "";
     const defaultBottom = product.default_bottom || product.bottom_options?.[0] || "";
-    const defaultColorName = product.default_color || "";
 
     // Check if top changed
     if (item.top && item.top !== defaultTop) return "Custom";
@@ -655,11 +654,7 @@ export default function ProductForm() {
     // Check if bottom changed
     if (item.bottom && item.bottom !== defaultBottom) return "Custom";
 
-    // Check if top color changed
-    if (item.top_color?.name && item.top_color.name !== defaultColorName) return "Custom";
-
-    // Check if bottom color changed
-    if (item.bottom_color?.name && item.bottom_color.name !== defaultColorName) return "Custom";
+    // Color changes do NOT make the order Custom (per business rule).
 
     // ✅ Check if additionals are added
     if (item.additionals && item.additionals.length > 0) {
@@ -707,12 +702,10 @@ export default function ProductForm() {
 
     const defaultTop = product.default_top || product.top_options?.[0] || "";
     const defaultBottom = product.default_bottom || product.bottom_options?.[0] || "";
-    const defaultColorName = product.default_color || "";
 
     if (item.top && item.top !== defaultTop) return "Custom";
     if (item.bottom && item.bottom !== defaultBottom) return "Custom";
-    if (item.top_color?.name && item.top_color.name !== defaultColorName) return "Custom";
-    if (item.bottom_color?.name && item.bottom_color.name !== defaultColorName) return "Custom";
+    // Color changes do NOT make the order Custom (per business rule) — does not affect 25%/50% advance.
 
     if (item.additionals && item.additionals.length > 0) {
       const hasValidAdditional = item.additionals.some(
@@ -1965,7 +1958,6 @@ export default function ProductForm() {
 
     const defaultTop = selectedProduct.default_top || selectedProduct.top_options?.[0] || "";
     const defaultBottom = selectedProduct.default_bottom || selectedProduct.bottom_options?.[0] || "";
-    const defaultColorName = selectedProduct.default_color || "";
 
     // Check if top changed from default
     if (selectedTop && selectedTop !== defaultTop) return "Custom";
@@ -1973,11 +1965,7 @@ export default function ProductForm() {
     // Check if bottom changed from default
     if (selectedBottom && selectedBottom !== defaultBottom) return "Custom";
 
-    // Check if top color changed from default
-    if (selectedTopColor?.name && selectedTopColor.name !== defaultColorName) return "Custom";
-
-    // Check if bottom color changed from default
-    if (selectedBottomColor?.name && selectedBottomColor.name !== defaultColorName) return "Custom";
+    // Color changes do NOT make the order Custom (per business rule).
 
     // ✅ Check if additionals are added
     if (selectedAdditionals && selectedAdditionals.length > 0) {
@@ -2023,12 +2011,10 @@ export default function ProductForm() {
 
     const defaultTop = selectedProduct.default_top || selectedProduct.top_options?.[0] || "";
     const defaultBottom = selectedProduct.default_bottom || selectedProduct.bottom_options?.[0] || "";
-    const defaultColorName = selectedProduct.default_color || "";
 
     if (selectedTop && selectedTop !== defaultTop) return "Custom";
     if (selectedBottom && selectedBottom !== defaultBottom) return "Custom";
-    if (selectedTopColor?.name && selectedTopColor.name !== defaultColorName) return "Custom";
-    if (selectedBottomColor?.name && selectedBottomColor.name !== defaultColorName) return "Custom";
+    // Color changes do NOT make the order Custom (per business rule) — does not affect 25%/50% advance.
 
     if (selectedAdditionals && selectedAdditionals.length > 0) {
       const hasValidAdditional = selectedAdditionals.some(

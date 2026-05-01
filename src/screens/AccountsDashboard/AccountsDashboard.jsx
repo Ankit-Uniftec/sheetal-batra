@@ -115,7 +115,7 @@ export default function AccountsDashboard() {
           shipping_charges: itemIndex === 0 ? (order.shipping_charge || 0) : 0,
           cod_charges: itemIndex === 0 ? (order.cod_charge || 0) : 0,
           quantity: quantity,
-          status: order.status || "pending",
+          status: order.status || "order_received",
           delivery_date: item.delivery_date || order.delivery_date,
           reason: order.cancellation_reason || order.exchange_reason || "—",
           type: "product",
@@ -150,7 +150,7 @@ export default function AccountsDashboard() {
             shipping_charges: 0,
             cod_charges: 0,
             quantity: quantity,
-            status: order.status || "pending",
+            status: order.status || "order_received",
             delivery_date: item.delivery_date || order.delivery_date,
             reason: order.cancellation_reason || order.exchange_reason || "—",
             type: "extra",
@@ -190,7 +190,7 @@ export default function AccountsDashboard() {
     }
 
     if (statusFilter) {
-      filtered = filtered.filter((item) => item.status === statusFilter);
+      filtered = filtered.filter((item) => (item.status === "pending" ? "order_received" : item.status) === statusFilter);
     }
 
     return filtered;
@@ -491,7 +491,7 @@ export default function AccountsDashboard() {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="">All</option>
-                <option value="pending">Pending</option>
+                <option value="order_received">Order Received</option>
                 <option value="delivered">Delivered</option>
                 <option value="cancelled">Cancelled</option>
                 <option value="exchange_return">Exchange/Return</option>

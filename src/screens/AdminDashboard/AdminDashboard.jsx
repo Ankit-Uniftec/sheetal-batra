@@ -16,7 +16,7 @@ import {
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
-    { value: "pending", label: "Pending", color: "#ff9800" },
+    { value: "order_received", label: "Order Received", color: "#ff9800" },
     { value: "in_production", label: "In Production", color: "#2196f3" },
     { value: "ready", label: "Ready", color: "#4caf50" },
     { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
@@ -986,7 +986,7 @@ export default function AdminDashboard() {
                     gross_value: Math.round(grossValue * 100) / 100, discount: Math.round(productDiscount * 100) / 100,
                     taxable_value: Math.round(taxableValue * 100) / 100, gst: Math.round(gst * 100) / 100,
                     invoice_value: Math.round(invoiceValue * 100) / 100, quantity,
-                    status: order.status || "pending", delivery_date: item.delivery_date || order.delivery_date,
+                    status: order.status || "order_received", delivery_date: item.delivery_date || order.delivery_date,
                     store: order.salesperson_store || "-", payment_mode: order.payment_mode || "-",
                 });
             });
@@ -1003,7 +1003,7 @@ export default function AdminDashboard() {
         }
         if (accountsDateFrom) result = result.filter(item => new Date(item.order_date) >= new Date(accountsDateFrom));
         if (accountsDateTo) result = result.filter(item => new Date(item.order_date) <= new Date(accountsDateTo + "T23:59:59"));
-        if (accountsStatus) result = result.filter(item => item.status === accountsStatus);
+        if (accountsStatus) result = result.filter(item => (item.status === "pending" ? "order_received" : item.status) === accountsStatus);
         if (accountsStore) result = result.filter(item => item.store === accountsStore);
         if (accountsSA) result = result.filter(item => item.sa_name === accountsSA);
         return result;
@@ -2985,7 +2985,7 @@ export default function AdminDashboard() {
                                                             <td>₹{formatIndianNumber(order.grand_total || 0)}</td>
                                                             <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
                                                             <td>
-                                                                <select className="status-select" value={order.status || "pending"} onChange={(e) => updateOrderStatus(order.id, e.target.value)} disabled={statusUpdating === order.id}>
+                                                                <select className="status-select" value={order.status === "pending" ? "order_received" : (order.status || "order_received")} onChange={(e) => updateOrderStatus(order.id, e.target.value)} disabled={statusUpdating === order.id}>
                                                                     {ORDER_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                                                                 </select>
                                                             </td>
@@ -3034,7 +3034,7 @@ export default function AdminDashboard() {
                                 </div>
                                 <select className="cmo-compare-select" value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
                                     <option value="">All Status</option>
-                                    <option value="pending">Pending</option><option value="in_production">In Production</option><option value="ready">Ready</option>
+                                    <option value="order_received">Order Received</option><option value="in_production">In Production</option><option value="ready">Ready</option>
                                     <option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
                                 </select>
                                 <select className="cmo-compare-select" value={accountsStore} onChange={(e) => setAccountsStore(e.target.value)}>

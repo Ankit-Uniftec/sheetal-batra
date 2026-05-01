@@ -521,7 +521,7 @@ export default function EditOrder() {
             <div className="eo-field">
               <label>Status:</label>
               <span className={`eo-order-status ${order.status?.toLowerCase()}`}>
-                {order.status || "Pending"}
+                {order.status === "pending" || order.status === "order_received" || !order.status ? "Order Received" : order.status}
               </span>
             </div>
           </div>

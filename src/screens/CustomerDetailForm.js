@@ -98,9 +98,21 @@ export default function CustomerDetailForm() {
 
     setLoading(true);
 
-    const normalizedPhone = phoneNumber.startsWith("+") 
-      ? "+" + phoneNumber.replace(/\D/g, "") 
-      : "+91" + phoneNumber.replace(/\D/g, "").slice(-10);
+    // Normalize: keep country code intact. Only fall back to +91 when the input
+    // looks like a bare 10-digit Indian number (legacy data). Never silently
+    // drop digits from international numbers.
+    let normalizedPhone;
+    if (phoneNumber.startsWith("+")) {
+      normalizedPhone = "+" + phoneNumber.replace(/\D/g, "");
+    } else {
+      const digits = phoneNumber.replace(/\D/g, "");
+      if (digits.length === 10) {
+        normalizedPhone = "+91" + digits;
+      } else {
+        // Already includes country code without "+" — preserve all digits
+        normalizedPhone = "+" + digits;
+      }
+    }
 
     const { error } = await supabase.from("profiles").upsert({
       id: user.id,

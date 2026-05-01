@@ -2705,6 +2705,11 @@
   margin-top: 12px;
   border-top: 1px solid #eee;
   padding-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .wd-comp-loading {

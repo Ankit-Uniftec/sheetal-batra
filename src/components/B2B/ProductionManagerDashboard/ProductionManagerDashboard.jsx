@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import "./ProductionManagerDashboard.css";
 import Logo from "../../../images/logo.png";
@@ -109,9 +109,12 @@ const ChannelRow = ({ label, count, percentage, color }) => (
 
 export default function ProductionManagerDashboard() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { showPopup, PopupComponent } = usePopup();
 
-    const [activeTab, setActiveTab] = useState("overview");
+    // Restore tab from navigation state (e.g. when returning from order detail)
+    const [activeTab, setActiveTab] = useState(location.state?.activeTab || "overview");
+    const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -233,6 +236,17 @@ export default function ProductionManagerDashboard() {
 
     // Reset page when filters change
     useEffect(() => { setCurrentPage(1); }, [orderSearch, statusTab, channelFilter, filters, sortBy]);
+
+    // When highlighted order is set (e.g. from navigation state), scroll to it once orders are loaded
+    useEffect(() => {
+        if (!highlightOrderId || loading || orders.length === 0) return;
+        const t = setTimeout(() => {
+            const card = document.querySelector(`[data-order-id="${highlightOrderId}"]`);
+            if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+        const clearT = setTimeout(() => setHighlightOrderId(null), 4000);
+        return () => { clearTimeout(t); clearTimeout(clearT); };
+    }, [highlightOrderId, loading, orders.length]);
 
     // ==================== HELPER FUNCTIONS ====================
     const getPaymentStatus = (order) => {
@@ -385,7 +399,7 @@ export default function ProductionManagerDashboard() {
     }, [orders]);
 
     const statusStats = useMemo(() => {
-        const pending = orders.filter(o => o.status === "pending" || o.status === "confirmed").length;
+        const pending = orders.filter(o => o.status === "pending" || o.status === "order_received" || o.status === "confirmed").length;
         const inProd = orders.filter(o => o.status === "prepared" || o.production_status === "in_production").length;
         const dispatched = orders.filter(o => o.status === "delivered" || o.production_status === "dispatched").length;
         const readyForDispatch = orders.filter(o => o.production_status === "ready_for_dispatch").length;
@@ -742,7 +756,7 @@ export default function ProductionManagerDashboard() {
             delivery_state: order.delivery_state || "",
             delivery_pincode: order.delivery_pincode || "",
             mode_of_delivery: order.mode_of_delivery || "",
-            status: order.status || "pending",
+            status: order.status || "order_received",
             production_status: order.production_status || "",
             priority: order.priority || "",
             notes: order.notes || "",
@@ -1006,16 +1020,17 @@ export default function ProductionManagerDashboard() {
                         <NotificationBell
                             userEmail={currentUserEmail}
                             onOrderClick={(orderId, orderNo) => {
-                                // Switch to overrides tab and search for the order
-                                setActiveTab("overrides");
+                                // Switch to All Orders tab, highlight + scroll to the order card
+                                setActiveTab("orders");
+                                setOrderSearch(orderNo || "");
+                                setCurrentPage(1);
+                                setHighlightOrderId(orderId);
                                 setTimeout(() => {
-                                    // Try to find and populate the search field
-                                    const searchInput = document.querySelector('.pm-override-input-row input');
-                                    if (searchInput) {
-                                        searchInput.value = orderNo || '';
-                                        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                    }
-                                }, 300);
+                                    const card = document.querySelector(`[data-order-id="${orderId}"]`);
+                                    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+                                }, 350);
+                                // Auto-clear highlight after a few seconds
+                                setTimeout(() => setHighlightOrderId(null), 4000);
                             }}
                         />
                         <button className="pm-header-btn" onClick={handleLogout}>Logout</button>
@@ -1374,7 +1389,7 @@ export default function ProductionManagerDashboard() {
                                         const statusLabel = getStatusLabel(order);
 
                                         return (
-                                            <div key={order.id} className="pm-order-card" onClick={() => viewOrderDetails(order)} style={{ cursor: "pointer" }}>
+                                            <div key={order.id} data-order-id={order.id} className={`pm-order-card ${highlightOrderId === order.id ? "pm-order-card-highlight" : ""}`} onClick={() => viewOrderDetails(order)} style={{ cursor: "pointer" }}>
                                                 <div className="pm-order-header">
                                                     <div className="pm-oheader-info">
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">ORDER NO</span><span className="pm-oheader-value">{order.order_no || "—"}</span></div>
@@ -1383,7 +1398,7 @@ export default function ProductionManagerDashboard() {
                                                     </div>
                                                     <div className="pm-oheader-actions">
                                                         <span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span>
-                                                        <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{order.status || "Pending"}</div>
+                                                        <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{order.status === "pending" ? "Order Received" : (order.status === "order_received" ? "Order Received" : (order.status || "Order Received"))}</div>
                                                         {order.priority && <span className={`pm-priority-tag pm-priority-${order.priority}`}>{order.priority === "urgent" ? "🔴" : order.priority === "high" ? "🟠" : "🟢"} {order.priority}</span>}
                                                     </div>
                                                 </div>
@@ -1511,7 +1526,7 @@ export default function ProductionManagerDashboard() {
                                                         <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                         <td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td>
                                                         <td style={{ padding: "8px 10px", color: "#c62828", fontWeight: 600 }}>{overdue}d</td>
-                                                        <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                        <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
                                                         <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                                                             <button
                                                                 onClick={(e) => handleMarkComplete(o, e)}
@@ -1866,7 +1881,7 @@ export default function ProductionManagerDashboard() {
                                                                 <td style={{ padding: "8px 12px", textAlign: "center" }}>
                                                                     <span style={{ background: style.bg, color: style.fg, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{style.label}</span>
                                                                 </td>
-                                                                <td style={{ padding: "8px 12px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                                <td style={{ padding: "8px 12px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
                                                             </tr>
                                                         );
                                                     })}</tbody>
@@ -2093,7 +2108,7 @@ export default function ProductionManagerDashboard() {
                                                                 <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
                                                                 <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                                 <td style={{ padding: "8px 10px" }}>{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
-                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
                                                                 <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{o.status || "-"}</td>
                                                             </tr>
                                                         ))}</tbody>
@@ -2118,7 +2133,7 @@ export default function ProductionManagerDashboard() {
                                                             <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
                                                             <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                             <td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td>
-                                                            <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || o.status || "pending").replace(/_/g, " ")}</td>
+                                                            <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
                                                         </tr>
                                                     ))}</tbody>
                                                 </table>

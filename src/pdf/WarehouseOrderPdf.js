@@ -8,6 +8,10 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 
+// TEMP (prod): set to false to hide all barcodes and force single-page PDF.
+// Re-enable when barcode workflow is ready in production.
+const SHOW_BARCODES = false;
+
 // Define colors locally
 const COLORS = {
   gold: "#D4AF37",
@@ -732,8 +736,8 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
 
   return (
     <Document>
-      {/* If we have component barcodes, one page per component */}
-      {componentBarcodes && componentBarcodes.length > 0 ? (
+      {/* If we have component barcodes, one page per component (disabled in prod via SHOW_BARCODES) */}
+      {SHOW_BARCODES && componentBarcodes && componentBarcodes.length > 0 ? (
         componentBarcodes.map((comp, compIdx) => (
           <Page key={compIdx} size="A4" style={warehouseStyles.page}>
             {/* Header Row - Logo and Master Barcode */}
@@ -857,12 +861,14 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             <View style={warehouseStyles.logoSection}>
               {logoUrl && <Image src={logoUrl} style={warehouseStyles.logo} />}
             </View>
-            <View style={warehouseStyles.barcodeSection}>
-              <Text style={warehouseStyles.barcodeLabel}>Master</Text>
-              <View style={warehouseStyles.barcodePlaceholder}>
-                <Text style={warehouseStyles.barcodeText}>{order.order_no || " "}</Text>
+            {SHOW_BARCODES && (
+              <View style={warehouseStyles.barcodeSection}>
+                <Text style={warehouseStyles.barcodeLabel}>Master</Text>
+                <View style={warehouseStyles.barcodePlaceholder}>
+                  <Text style={warehouseStyles.barcodeText}>{order.order_no || " "}</Text>
+                </View>
               </View>
-            </View>
+            )}
           </View>
 
           {/* Title Row */}
@@ -939,12 +945,14 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
           </View>
           <MeasurementsDisplay measurements={item.measurements} />
 
-          {/* Fallback bottom barcodes */}
-          <View style={warehouseStyles.bottomBarcodes} fixed>
-            <BarcodePlaceholder label="Top" />
-            <BarcodePlaceholder label="Bottom" />
-            <BarcodePlaceholder label="Extra" />
-          </View>
+          {/* Fallback bottom barcodes (disabled in prod via SHOW_BARCODES) */}
+          {SHOW_BARCODES && (
+            <View style={warehouseStyles.bottomBarcodes} fixed>
+              <BarcodePlaceholder label="Top" />
+              <BarcodePlaceholder label="Bottom" />
+              <BarcodePlaceholder label="Extra" />
+            </View>
+          )}
         </Page>
       )}
     </Document>

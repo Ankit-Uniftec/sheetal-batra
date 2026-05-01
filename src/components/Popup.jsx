@@ -21,6 +21,7 @@ export default function Popup({
   message = "",
   type = "info",
   onConfirm,
+  onCancel,
   confirmText,
   cancelText = "Cancel",
   showCancel = false,
@@ -35,9 +36,16 @@ export default function Popup({
     onClose();
   };
 
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+    }
+    onClose();
+  };
+
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) {
-      onClose();
+      handleCancel();
     }
   };
 
@@ -74,7 +82,7 @@ export default function Popup({
 
         <div className="popup-actions">
           {(showCancel || type === "confirm") && (
-            <button className="popup-btn popup-btn-cancel" onClick={onClose}>
+            <button className="popup-btn popup-btn-cancel" onClick={handleCancel}>
               {cancelText}
             </button>
           )}
@@ -103,6 +111,7 @@ export function usePopup() {
     message: "",
     type: "info",
     onConfirm: null,
+    onCancel: null,
     confirmText: "OK",
     cancelText: "",
     showCancel: false,
@@ -115,6 +124,7 @@ export function usePopup() {
       message: options.message || "",
       type: options.type || "info",
       onConfirm: options.onConfirm || null,
+      onCancel: options.onCancel || null,
       confirmText: options.confirmText || "OK",
       cancelText: options.cancelText || "Cancel",
       showCancel: options.showCancel || options.type === "confirm",
@@ -133,6 +143,7 @@ export function usePopup() {
       message={popupState.message}
       type={popupState.type}
       onConfirm={popupState.onConfirm}
+      onCancel={popupState.onCancel}
       confirmText={popupState.confirmText}
       cancelText={popupState.cancelText}
       showCancel={popupState.showCancel}

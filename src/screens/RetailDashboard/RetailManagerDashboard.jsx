@@ -1323,8 +1323,8 @@ export default function RetailManagerDashboard() {
                                                             </span>
                                                         </td>
                                                         <td>
-                                                            <span className={`rm-status-badge ${(order.status || "pending").replace(" ", "_")}`}>
-                                                                {(order.status || "pending").charAt(0).toUpperCase() + (order.status || "pending").slice(1).replace("_", " ")}
+                                                            <span className={`rm-status-badge ${(order.status === "pending" ? "order_received" : (order.status || "order_received")).replace(" ", "_")}`}>
+                                                                {(order.status === "pending" || order.status === "order_received" || !order.status) ? "Order Received" : (order.status.charAt(0).toUpperCase() + order.status.slice(1).replace("_", " "))}
                                                             </span>
                                                         </td>
                                                         <td>{order.salesperson_store || "-"}</td>

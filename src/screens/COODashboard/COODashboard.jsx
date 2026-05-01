@@ -15,7 +15,7 @@ import {
 } from "recharts";
 
 const ORDER_STATUS_OPTIONS = [
-    { value: "pending", label: "Pending", color: "#ff9800" },
+    { value: "order_received", label: "Order Received", color: "#ff9800" },
     { value: "in_production", label: "In Production", color: "#2196f3" },
     { value: "ready", label: "Ready", color: "#4caf50" },
     { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
