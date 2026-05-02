@@ -5,6 +5,7 @@ import "./AdminDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import formatPhoneNumber from "../../utils/formatPhoneNumber";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
@@ -230,6 +231,11 @@ export default function AdminDashboard() {
     const [clientsPage, setClientsPage] = useState(1);
     const [clientsSortBy, setClientsSortBy] = useState("totalSpend");
     const [clientsStoreFilter, setClientsStoreFilter] = useState("");
+
+    // Client Book tab states
+    const [clientBookSearch, setClientBookSearch] = useState("");
+    const [clientBookPage, setClientBookPage] = useState(1);
+    const CLIENT_BOOK_PAGE_SIZE = 25;
 
     // B2B tab states
     const [b2bSearch, setB2bSearch] = useState("");
@@ -1253,6 +1259,92 @@ export default function AdminDashboard() {
     }, [orders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy, clientsStoreFilter]);
 
     // ═══════════════════════════════════════════════════════════
+    // CLIENT BOOK — flat directory of every customer with their connected SA(s)
+    // ═══════════════════════════════════════════════════════════
+    const clientBook = useMemo(() => {
+        // Group orders by customer. Use phone as primary key, fallback to email so
+        // customers without phones still appear once.
+        const map = {};
+        orders.forEach((o) => {
+            const phone = (o.delivery_phone || o.phone || "").trim();
+            const email = (o.delivery_email || o.email || "").trim().toLowerCase();
+            const key = phone || email;
+            if (!key) return;
+
+            if (!map[key]) {
+                map[key] = {
+                    name: o.delivery_name || "—",
+                    phone,
+                    email,
+                    saSet: new Set(),
+                    orderCount: 0,
+                    lastOrderAt: o.created_at,
+                };
+            }
+            const c = map[key];
+            // Prefer most-recent non-empty name/email when there are multiple
+            if (o.delivery_name && c.name === "—") c.name = o.delivery_name;
+            if (email && !c.email) c.email = email;
+            const sa = (getOrderSalesperson(o) || "").trim();
+            if (sa) c.saSet.add(sa);
+            c.orderCount += 1;
+            if (o.created_at && new Date(o.created_at) > new Date(c.lastOrderAt)) {
+                c.lastOrderAt = o.created_at;
+            }
+        });
+
+        const all = Object.values(map).map((c) => ({
+            ...c,
+            sas: Array.from(c.saSet).sort(),
+        }));
+
+        // Search filter (name / phone / email / any SA name)
+        const q = clientBookSearch.trim().toLowerCase();
+        const filtered = q
+            ? all.filter((c) =>
+                c.name.toLowerCase().includes(q) ||
+                c.phone.toLowerCase().includes(q) ||
+                c.email.toLowerCase().includes(q) ||
+                c.sas.some((s) => s.toLowerCase().includes(q))
+            )
+            : all;
+
+        const sorted = filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+        const totalPages = Math.max(1, Math.ceil(sorted.length / CLIENT_BOOK_PAGE_SIZE));
+        const safePage = Math.min(clientBookPage, totalPages);
+        const start = (safePage - 1) * CLIENT_BOOK_PAGE_SIZE;
+        const pageRows = sorted.slice(start, start + CLIENT_BOOK_PAGE_SIZE);
+
+        return { all: sorted, pageRows, totalPages, safePage, totalCount: sorted.length };
+    }, [orders, clientBookSearch, clientBookPage]);
+
+    // Reset to page 1 when the search changes
+    useEffect(() => { setClientBookPage(1); }, [clientBookSearch]);
+
+    // CSV export for the entire (filtered) client book
+    const handleExportClientBook = () => {
+        if (clientBook.all.length === 0) return;
+        const headers = ["Client Name", "Phone", "Email", "Connected SA(s)", "Total Orders", "Last Order Date"];
+        const rows = clientBook.all.map((c) => [
+            c.name,
+            c.phone,
+            c.email,
+            c.sas.join("; "),
+            c.orderCount,
+            c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("en-GB") : "",
+        ].map((v) => `"${String(v).replace(/"/g, '""')}"`));
+        const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+        const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `client_book_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // ═══════════════════════════════════════════════════════════
     // NEW: B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
@@ -1543,6 +1635,7 @@ export default function AdminDashboard() {
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
+                        <button className={`admin-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
                         {/* <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button> */}
                     </nav>
                 </aside>
@@ -3089,8 +3182,117 @@ export default function AdminDashboard() {
                     )}
 
                     {/* ═══════════════════════════════════════════════════ */}
-                    {/* CLIENTS TAB */}
+                    {/* CLIENT BOOK TAB */}
                     {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "client_book" && (
+                        <div className="admin-clients-tab">
+                            <h2 className="admin-section-title">Client Book</h2>
+
+                            <div className="admin-toolbar">
+                                <div className="admin-search-wrapper">
+                                    <span className="search-icon">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name, phone, email or SA…"
+                                        value={clientBookSearch}
+                                        onChange={(e) => setClientBookSearch(e.target.value)}
+                                        className="admin-search-input"
+                                    />
+                                    {clientBookSearch && (
+                                        <button className="search-clear" onClick={() => setClientBookSearch("")}>×</button>
+                                    )}
+                                </div>
+                                <div style={{ flex: 1 }} />
+                                <span style={{ color: "#888", fontSize: 13, marginRight: 8 }}>
+                                    {clientBook.totalCount} client{clientBook.totalCount === 1 ? "" : "s"}
+                                </span>
+                                <button
+                                    className="admin-export-btn"
+                                    onClick={handleExportClientBook}
+                                    disabled={clientBook.totalCount === 0}
+                                    title="Export the entire (filtered) client book to CSV"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                    Export CSV
+                                </button>
+                            </div>
+
+                            <div className="admin-table-container">
+                                <div className="admin-table-wrapper">
+                                    <table className="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Client Name</th>
+                                                <th>Phone</th>
+                                                <th>Email</th>
+                                                <th>Connected SA(s)</th>
+                                                <th className="amount">Orders</th>
+                                                <th>Last Order</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {clientBook.pageRows.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={6} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
+                                                        {clientBookSearch ? "No clients match your search." : "No clients yet."}
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                clientBook.pageRows.map((c, i) => (
+                                                    <tr key={`${c.phone || c.email || i}`}>
+                                                        <td><strong>{c.name}</strong></td>
+                                                        <td>{c.phone ? formatPhoneNumber(c.phone) : "—"}</td>
+                                                        <td>{c.email || "—"}</td>
+                                                        <td>
+                                                            {c.sas.length === 0 ? (
+                                                                <span style={{ color: "#aaa" }}>—</span>
+                                                            ) : (
+                                                                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                                                    {c.sas.map((sa) => (
+                                                                        <span
+                                                                            key={sa}
+                                                                            style={{
+                                                                                background: "#f5f0e8",
+                                                                                color: "#8B7355",
+                                                                                padding: "2px 8px",
+                                                                                borderRadius: 10,
+                                                                                fontSize: 12,
+                                                                                fontWeight: 500,
+                                                                            }}
+                                                                        >
+                                                                            {sa}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="amount">{c.orderCount}</td>
+                                                        <td>{c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("en-GB") : "—"}</td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {clientBook.totalPages > 1 && (
+                                <div className="acc-pagination">
+                                    <button
+                                        onClick={() => setClientBookPage((p) => Math.max(1, p - 1))}
+                                        disabled={clientBook.safePage === 1}
+                                    >Prev</button>
+                                    <span>Page {clientBook.safePage} of {clientBook.totalPages}</span>
+                                    <button
+                                        onClick={() => setClientBookPage((p) => Math.min(clientBook.totalPages, p + 1))}
+                                        disabled={clientBook.safePage === clientBook.totalPages}
+                                    >Next</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                 </main>
             </div>
