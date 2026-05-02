@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./AssistantCmoDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -87,7 +88,7 @@ export default function AssistantCmoDashboard() {
     setLoading(true);
     try {
       const [ordersRes, productsRes, profilesRes, consRes] = await Promise.all([
-        supabase.from("orders").select("*").order("created_at", { ascending: false }),
+        fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
         supabase.from("products").select("*").order("name", { ascending: true }),
         supabase.from("profiles").select("id, full_name, email, dob, loyalty_points, created_at"),
         supabase.from("consignment_inventory").select("*"),
