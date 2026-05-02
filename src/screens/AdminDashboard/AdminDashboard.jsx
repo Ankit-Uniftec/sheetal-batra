@@ -3269,9 +3269,6 @@ export default function AdminDashboard() {
                                     {clientBook.noOrdersCount > 0 && !clientBookOnlyWithOrders && !clientBookSearch && (
                                         <> · {clientBook.withOrdersCount} with orders, {clientBook.noOrdersCount} without</>
                                     )}
-                                    {clientBook.abandonedCount > 0 && (
-                                        <> · <span title="Profiles with no name, email, or orders — likely abandoned signups">{clientBook.abandonedCount} abandoned hidden</span></>
-                                    )}
                                 </span>
                                 <button
                                     className="admin-export-btn"
