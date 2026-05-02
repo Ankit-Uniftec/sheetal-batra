@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import "./WarehouseDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { fetchAllRows } from "../utils/fetchAllRows";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
@@ -236,10 +237,10 @@ const WarehouseDashboard = () => {
   };
 
   const fetchOrders = async () => {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Paginate past Supabase's default 1000-row cap so warehouse can see all orders
+    const { data, error } = await fetchAllRows("orders", (q) =>
+      q.select("*").order("created_at", { ascending: false })
+    );
     if (!error) {
       const filtered = (data || []).filter(o => {
         // Private orders are not visible in warehouse — handled outside warehouse flow
