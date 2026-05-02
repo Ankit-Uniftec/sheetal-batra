@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./StoreManagerDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -126,7 +127,7 @@ export default function StoreManagerDashboard() {
         setLoading(true);
         try {
             const [ordersRes, productsRes, spRes] = await Promise.all([
-                supabase.from("orders").select("*").order("created_at", { ascending: false }),
+                fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 supabase.from("products").select("*").order("name", { ascending: true }),
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
             ]);

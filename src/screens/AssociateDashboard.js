@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import "./AssociateDashboard.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { fetchAllRows } from "../utils/fetchAllRows";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
@@ -279,14 +280,15 @@ export default function Dashboard() {
         localStorage.setItem("sp_email", user.email);
 
         // Step 2: Fetch orders - sa_services gets ALL orders, regular SA gets only their own
+        // Paginate past Supabase's default 1000-row cap so sa_services can see 2000+ orders.
         const isServicesUser = spData.role === "sa_services";
-        let ordersQuery = supabase.from("orders").select("*").order("created_at", { ascending: false });
-
-        if (!isServicesUser) {
-          ordersQuery = ordersQuery.eq("salesperson_email", user.email.toLowerCase());
-        }
-
-        const { data: ordersData } = await ordersQuery;
+        const { data: ordersData } = await fetchAllRows("orders", (q) => {
+          let query = q.select("*").order("created_at", { ascending: false });
+          if (!isServicesUser) {
+            query = query.eq("salesperson_email", user.email.toLowerCase());
+          }
+          return query;
+        });
 
         if (ordersData) {
           setOrders(ordersData);
