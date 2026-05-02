@@ -180,6 +180,7 @@ export default function AdminDashboard() {
     const [salespersonTable, setSalespersonTable] = useState([]);
     const [pdfLoading, setPdfLoading] = useState(null);
     const [vendors, setVendors] = useState([]);
+    const [profiles, setProfiles] = useState([]);
 
     // Dashboard states
     const [recentOrdersCount, setRecentOrdersCount] = useState(10);
@@ -235,6 +236,7 @@ export default function AdminDashboard() {
     // Client Book tab states
     const [clientBookSearch, setClientBookSearch] = useState("");
     const [clientBookPage, setClientBookPage] = useState(1);
+    const [clientBookOnlyWithOrders, setClientBookOnlyWithOrders] = useState(false);
     const CLIENT_BOOK_PAGE_SIZE = 25;
 
     // B2B tab states
@@ -279,16 +281,18 @@ export default function AdminDashboard() {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [ordersRes, productsRes, spRes, vendorsRes] = await Promise.all([
+            const [ordersRes, productsRes, spRes, vendorsRes, profilesRes] = await Promise.all([
                 supabase.from("orders").select("*").order("created_at", { ascending: false }),
                 supabase.from("products").select("*").order("name", { ascending: true }),
                 supabase.from("salesperson").select("saleperson, role"),
                 supabase.from("vendors").select("*"),
+                supabase.from("profiles").select("id, full_name, phone, email, created_at"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data);
             if (productsRes.data) setProducts(productsRes.data);
             if (spRes.data) setSalespersonTable(spRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);
+            if (profilesRes.data) setProfiles(profilesRes.data);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
@@ -1259,68 +1263,106 @@ export default function AdminDashboard() {
     }, [orders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy, clientsStoreFilter]);
 
     // ═══════════════════════════════════════════════════════════
-    // CLIENT BOOK — flat directory of every customer with their connected SA(s)
+    // CLIENT BOOK — flat directory using PROFILES as source of truth, joined
+    // with orders for the connected SA(s). Profiles with no orders still appear
+    // (their SA column is empty); a toggle hides them.
     // ═══════════════════════════════════════════════════════════
     const clientBook = useMemo(() => {
-        // Group orders by customer. Use phone as primary key, fallback to email so
-        // customers without phones still appear once.
-        const map = {};
+        // Build an index of orders keyed by phone AND user_id so we can match a
+        // profile via either signal.
+        const orderIndex = {}; // key -> { sas:Set, orderCount, lastOrderAt }
+        const addToIndex = (key, order) => {
+            if (!key) return;
+            if (!orderIndex[key]) orderIndex[key] = { sas: new Set(), orderCount: 0, lastOrderAt: null };
+            const entry = orderIndex[key];
+            const sa = (getOrderSalesperson(order) || "").trim();
+            if (sa) entry.sas.add(sa);
+            entry.orderCount += 1;
+            if (order.created_at && (!entry.lastOrderAt || new Date(order.created_at) > new Date(entry.lastOrderAt))) {
+                entry.lastOrderAt = order.created_at;
+            }
+        };
         orders.forEach((o) => {
             const phone = (o.delivery_phone || o.phone || "").trim();
-            const email = (o.delivery_email || o.email || "").trim().toLowerCase();
-            const key = phone || email;
-            if (!key) return;
-
-            if (!map[key]) {
-                map[key] = {
-                    name: o.delivery_name || "—",
-                    phone,
-                    email,
-                    saSet: new Set(),
-                    orderCount: 0,
-                    lastOrderAt: o.created_at,
-                };
-            }
-            const c = map[key];
-            // Prefer most-recent non-empty name/email when there are multiple
-            if (o.delivery_name && c.name === "—") c.name = o.delivery_name;
-            if (email && !c.email) c.email = email;
-            const sa = (getOrderSalesperson(o) || "").trim();
-            if (sa) c.saSet.add(sa);
-            c.orderCount += 1;
-            if (o.created_at && new Date(o.created_at) > new Date(c.lastOrderAt)) {
-                c.lastOrderAt = o.created_at;
-            }
+            if (phone) addToIndex(`phone:${phone}`, o);
+            if (o.user_id) addToIndex(`uid:${o.user_id}`, o);
         });
 
-        const all = Object.values(map).map((c) => ({
-            ...c,
-            sas: Array.from(c.saSet).sort(),
-        }));
+        // Walk profiles. For each one, look up its orders by user_id then phone.
+        const all = profiles.map((p) => {
+            const phone = (p.phone || "").trim();
+            const email = (p.email || "").trim().toLowerCase();
+            const byUid = p.id ? orderIndex[`uid:${p.id}`] : null;
+            const byPhone = phone ? orderIndex[`phone:${phone}`] : null;
+
+            // Merge if both keys hit (different orders may use either)
+            const sas = new Set();
+            let orderCount = 0;
+            let lastOrderAt = null;
+            [byUid, byPhone].forEach((src) => {
+                if (!src) return;
+                src.sas.forEach((s) => sas.add(s));
+                orderCount += src.orderCount;
+                if (src.lastOrderAt && (!lastOrderAt || new Date(src.lastOrderAt) > new Date(lastOrderAt))) {
+                    lastOrderAt = src.lastOrderAt;
+                }
+            });
+            // If both keys matched the SAME orders we'd be double-counting; this
+            // is rare (would require both phone+user_id on one order). For most
+            // accuracy, prefer uid count when present, else phone count.
+            if (byUid && byPhone) {
+                orderCount = Math.max(byUid.orderCount, byPhone.orderCount);
+            }
+
+            return {
+                id: p.id,
+                name: (p.full_name || "").trim() || "—",
+                phone,
+                email,
+                sas: Array.from(sas).sort(),
+                orderCount,
+                lastOrderAt,
+            };
+        });
+
+        // Apply "show only with orders" toggle
+        let filtered = clientBookOnlyWithOrders ? all.filter((c) => c.orderCount > 0) : all;
 
         // Search filter (name / phone / email / any SA name)
         const q = clientBookSearch.trim().toLowerCase();
-        const filtered = q
-            ? all.filter((c) =>
+        if (q) {
+            filtered = filtered.filter((c) =>
                 c.name.toLowerCase().includes(q) ||
                 c.phone.toLowerCase().includes(q) ||
                 c.email.toLowerCase().includes(q) ||
                 c.sas.some((s) => s.toLowerCase().includes(q))
-            )
-            : all;
+            );
+        }
 
         const sorted = filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+        const withOrdersCount = all.filter((c) => c.orderCount > 0).length;
+        const noOrdersCount = all.length - withOrdersCount;
 
         const totalPages = Math.max(1, Math.ceil(sorted.length / CLIENT_BOOK_PAGE_SIZE));
         const safePage = Math.min(clientBookPage, totalPages);
         const start = (safePage - 1) * CLIENT_BOOK_PAGE_SIZE;
         const pageRows = sorted.slice(start, start + CLIENT_BOOK_PAGE_SIZE);
 
-        return { all: sorted, pageRows, totalPages, safePage, totalCount: sorted.length };
-    }, [orders, clientBookSearch, clientBookPage]);
+        return {
+            all: sorted,
+            pageRows,
+            totalPages,
+            safePage,
+            totalCount: sorted.length,
+            allProfilesCount: all.length,
+            withOrdersCount,
+            noOrdersCount,
+        };
+    }, [profiles, orders, clientBookSearch, clientBookPage, clientBookOnlyWithOrders]);
 
-    // Reset to page 1 when the search changes
-    useEffect(() => { setClientBookPage(1); }, [clientBookSearch]);
+    // Reset to page 1 when the search or toggle changes
+    useEffect(() => { setClientBookPage(1); }, [clientBookSearch, clientBookOnlyWithOrders]);
 
     // CSV export for the entire (filtered) client book
     const handleExportClientBook = () => {
@@ -3204,9 +3246,20 @@ export default function AdminDashboard() {
                                         <button className="search-clear" onClick={() => setClientBookSearch("")}>×</button>
                                     )}
                                 </div>
+                                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#555", cursor: "pointer", whiteSpace: "nowrap" }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={clientBookOnlyWithOrders}
+                                        onChange={(e) => setClientBookOnlyWithOrders(e.target.checked)}
+                                    />
+                                    Only with orders
+                                </label>
                                 <div style={{ flex: 1 }} />
                                 <span style={{ color: "#888", fontSize: 13, marginRight: 8 }}>
-                                    {clientBook.totalCount} client{clientBook.totalCount === 1 ? "" : "s"}
+                                    {clientBook.totalCount} of {clientBook.allProfilesCount}
+                                    {clientBook.noOrdersCount > 0 && !clientBookOnlyWithOrders && !clientBookSearch && (
+                                        <> · {clientBook.withOrdersCount} with orders, {clientBook.noOrdersCount} without</>
+                                    )}
                                 </span>
                                 <button
                                     className="admin-export-btn"
