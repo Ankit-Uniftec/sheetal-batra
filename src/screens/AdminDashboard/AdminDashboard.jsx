@@ -1325,8 +1325,15 @@ export default function AdminDashboard() {
             };
         });
 
+        // Hide "abandoned signups" — profiles created via OTP that never completed
+        // the customer detail form (no name, no email) AND never placed an order.
+        // These rows have no useful data to display.
+        const isAbandoned = (c) => c.name === "—" && !c.email && c.orderCount === 0;
+        const abandonedCount = all.filter(isAbandoned).length;
+        const visible = all.filter((c) => !isAbandoned(c));
+
         // Apply "show only with orders" toggle
-        let filtered = clientBookOnlyWithOrders ? all.filter((c) => c.orderCount > 0) : all;
+        let filtered = clientBookOnlyWithOrders ? visible.filter((c) => c.orderCount > 0) : visible;
 
         // Search filter (name / phone / email / any SA name)
         const q = clientBookSearch.trim().toLowerCase();
@@ -1341,8 +1348,8 @@ export default function AdminDashboard() {
 
         const sorted = filtered.sort((a, b) => a.name.localeCompare(b.name));
 
-        const withOrdersCount = all.filter((c) => c.orderCount > 0).length;
-        const noOrdersCount = all.length - withOrdersCount;
+        const withOrdersCount = visible.filter((c) => c.orderCount > 0).length;
+        const noOrdersCount = visible.length - withOrdersCount;
 
         const totalPages = Math.max(1, Math.ceil(sorted.length / CLIENT_BOOK_PAGE_SIZE));
         const safePage = Math.min(clientBookPage, totalPages);
@@ -1355,9 +1362,11 @@ export default function AdminDashboard() {
             totalPages,
             safePage,
             totalCount: sorted.length,
+            visibleCount: visible.length,
             allProfilesCount: all.length,
             withOrdersCount,
             noOrdersCount,
+            abandonedCount,
         };
     }, [profiles, orders, clientBookSearch, clientBookPage, clientBookOnlyWithOrders]);
 
@@ -3256,9 +3265,12 @@ export default function AdminDashboard() {
                                 </label>
                                 <div style={{ flex: 1 }} />
                                 <span style={{ color: "#888", fontSize: 13, marginRight: 8 }}>
-                                    {clientBook.totalCount} of {clientBook.allProfilesCount}
+                                    {clientBook.totalCount} of {clientBook.visibleCount}
                                     {clientBook.noOrdersCount > 0 && !clientBookOnlyWithOrders && !clientBookSearch && (
                                         <> · {clientBook.withOrdersCount} with orders, {clientBook.noOrdersCount} without</>
+                                    )}
+                                    {clientBook.abandonedCount > 0 && (
+                                        <> · <span title="Profiles with no name, email, or orders — likely abandoned signups">{clientBook.abandonedCount} abandoned hidden</span></>
                                     )}
                                 </span>
                                 <button
