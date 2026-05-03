@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx react-scripts *)"
+      "Bash(npx react-scripts *)",
+      "Bash(cd /d \"D:\\\\web-apps\\\\sheetal-batra\")",
+      "Bash(findstr /r \"\\\\.catch\\\\|\\\\.then\\\\|Promise\" src/utils/pdfUtils.js)"
     ]
   }
 }

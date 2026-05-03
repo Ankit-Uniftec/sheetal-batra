@@ -469,7 +469,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
       {/* PAGE 1 - Personal Details, Product Details, Sales Associate */}
       <Page size="A4" style={[styles.page, { paddingBottom: 140 }]}>
         {/* Watermark - Right side (half visible) */}
-        <WatermarkRight logoUrl={logoUrl} />
+        {(order.items || []).length <= 3 && <WatermarkRight logoUrl={logoUrl} />}
 
         {/* Header with Logo */}
         <View style={styles.header}>
@@ -557,7 +557,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
       {/* PAGE 2 - Billing, Payment, Signature, Notes, Policy */}
       <Page size="A4" style={styles.page}>
         {/* Watermark - Left side (half visible) */}
-        <WatermarkLeft logoUrl={logoUrl} />
+        {(order.items || []).length <= 3 && <WatermarkLeft logoUrl={logoUrl} />}
 
         {/* Header with Logo */}
         <View style={styles.header}>
