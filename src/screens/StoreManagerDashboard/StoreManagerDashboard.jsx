@@ -84,6 +84,16 @@ export default function StoreManagerDashboard() {
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
     const [sortBy, setSortBy] = useState("newest");
+    // RM-style filters (copied pattern). orderType kept for parity even though
+    // SM doesn't currently filter on it — leaves the door open.
+    const [filters, setFilters] = useState({
+        dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000,
+        payment: [], priority: [], orderType: [], salesperson: ""
+    });
+    const [openDropdown, setOpenDropdown] = useState(null);
+
+    // Returns tab — drill-down list when a stat-card number is clicked
+    const [returnsDrillType, setReturnsDrillType] = useState(null);
 
     // Client book
     const [clientSearch, setClientSearch] = useState("");
@@ -265,6 +275,19 @@ export default function StoreManagerDashboard() {
         const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
         const totalDiscount = period.reduce((s, o) => s + Number(o.discount_amount || 0), 0);
 
+        // Extras breakdown — count `included` (no extra cost) vs `excluded`
+        // (charged separately). An extra with price > 0 = paid/excluded;
+        // price === 0 (or missing) = bundled/included.
+        let extrasIncluded = 0, extrasExcluded = 0;
+        period.forEach(o => (o.items || []).forEach(it => {
+            (it.extras || []).forEach(ex => {
+                const p = Number(ex.price || 0);
+                if (p > 0) extrasExcluded += 1;
+                else extrasIncluded += 1;
+            });
+        }));
+        const extrasTotal = extrasIncluded + extrasExcluded;
+
         // Daily buckets
         const buckets = {};
         period.forEach(o => {
@@ -284,7 +307,7 @@ export default function StoreManagerDashboard() {
         const partial = period.filter(o => getPaymentStatus(o) === "partial").length;
         const unpaid = period.filter(o => getPaymentStatus(o) === "unpaid").length;
 
-        return { totalRevenue, totalOrders, totalItems, aov, totalDiscount, dailySales, paid, partial, unpaid };
+        return { totalRevenue, totalOrders, totalItems, aov, totalDiscount, dailySales, paid, partial, unpaid, extrasIncluded, extrasExcluded, extrasTotal };
     }, [storeOrders, timeline, customDateFrom, customDateTo]);
 
     // ═══════════════════════════════════════════════════════════
@@ -348,6 +371,26 @@ export default function StoreManagerDashboard() {
                     (getOrderSalesperson(o) || "").toLowerCase().includes(q);
             });
         }
+
+        // Filter chip logic — mirrors RM dashboard (filters.dateFrom, etc.)
+        if (filters.dateFrom || filters.dateTo) {
+            result = result.filter(o => {
+                const d = new Date(o.created_at);
+                if (filters.dateFrom && d < new Date(filters.dateFrom)) return false;
+                if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false;
+                return true;
+            });
+        }
+        if (filters.minPrice > 0 || filters.maxPrice < 500000) {
+            result = result.filter(o => {
+                const total = o.grand_total || o.net_total || 0;
+                return total >= filters.minPrice && total <= filters.maxPrice;
+            });
+        }
+        if (filters.payment.length > 0) result = result.filter(o => filters.payment.includes(getPaymentStatus(o)));
+        if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes((o.order_flag || "Normal").toLowerCase()));
+        if (filters.salesperson) result = result.filter(o => getOrderSalesperson(o) === filters.salesperson);
+
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
             const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
@@ -364,7 +407,109 @@ export default function StoreManagerDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, sortBy]);
+    }, [filteredByStatus, orderSearch, sortBy, filters]);
+
+    // Filter helpers — RM-style
+    const appliedFilters = useMemo(() => {
+        const chips = [];
+        if (filters.dateFrom || filters.dateTo) {
+            const label = filters.dateFrom && filters.dateTo
+                ? `${filters.dateFrom} to ${filters.dateTo}`
+                : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
+            chips.push({ type: "date", label });
+        }
+        if (filters.minPrice > 0 || filters.maxPrice < 500000) {
+            chips.push({ type: "price", label: `₹${(filters.minPrice / 1000).toFixed(0)}K - ₹${(filters.maxPrice / 1000).toFixed(0)}K` });
+        }
+        filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
+        filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
+        if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
+        return chips;
+    }, [filters]);
+
+    const removeFilter = (type, value) => {
+        if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+        else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
+        else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
+        else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
+    };
+
+    const clearAllFilters = () => setFilters({
+        dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000,
+        payment: [], priority: [], orderType: [], salesperson: ""
+    });
+
+    const toggleFilter = (category, value) => setFilters(prev => ({
+        ...prev,
+        [category]: prev[category].includes(value)
+            ? prev[category].filter(v => v !== value)
+            : [...prev[category], value]
+    }));
+
+    // List of unique salespersons (for the dropdown)
+    const salespersonOptions = useMemo(() => {
+        const set = new Set();
+        storeOrders.forEach(o => {
+            const sp = getOrderSalesperson(o);
+            if (sp && isPersonName(sp)) set.add(sp);
+        });
+        return Array.from(set).sort();
+    }, [storeOrders]);
+
+    // CSV Export — uses real-time sale data (grand_total, advance_payment,
+    // discount_amount, store_credit_used) from the order rows. Not MRP.
+    const exportOrdersCsv = () => {
+        const escape = (v) => {
+            if (v === null || v === undefined) return "";
+            const s = String(v).replace(/"/g, '""');
+            return /[",\n]/.test(s) ? `"${s}"` : s;
+        };
+        const headers = [
+            "Order No", "Order Date", "Delivery Date", "Customer", "Phone",
+            "Salesperson", "Status", "Payment Status", "Mode of Payment",
+            "Order Value (₹)", "Discount (₹)", "Store Credit Used (₹)",
+            "Advance Paid (₹)", "Net Sale (₹)", "QTY",
+        ];
+        const rows = filteredOrders.map(o => {
+            const qty = o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0;
+            const grand = Number(o.grand_total || 0);
+            const discount = Number(o.discount_amount || 0);
+            const credit = Number(o.store_credit_used || 0);
+            const advance = Number(o.advance_payment || 0);
+            // Real-time net sale = grand_total minus discount and store credit
+            // (advance is what customer paid so far; net is what was actually
+            // realised from the customer for the goods).
+            const netSale = grand - discount - credit;
+            return [
+                o.order_no || "",
+                o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
+                o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
+                o.delivery_name || "",
+                o.delivery_phone || "",
+                getOrderSalesperson(o) || "",
+                o.status || "",
+                getPaymentStatus(o),
+                o.payment_mode || "",
+                grand,
+                discount,
+                credit,
+                advance,
+                netSale,
+                qty,
+            ].map(escape).join(",");
+        });
+        const csv = [headers.join(","), ...rows].join("\n");
+        const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const stamp = new Date().toISOString().slice(0, 10);
+        a.download = `${storeLabel}-orders-${stamp}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     const orderTabCounts = useMemo(() => ({
         all: storeOrders.length,
@@ -409,17 +554,26 @@ export default function StoreManagerDashboard() {
             saIssues[sp].value += Number(o.grand_total || 0);
         });
 
+        // SA who handled the most cancellations (top of saIssues sorted by cancellation count)
+        const saIssuesList = Object.values(saIssues);
+        const topCancelSA = saIssuesList
+            .filter(s => s.cancellations > 0)
+            .sort((a, b) => b.cancellations - a.cancellations)[0] || null;
+
         return {
             cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.grand_total || 0), 0),
             returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.grand_total || 0), 0),
             refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.grand_total || 0), 0),
             exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.grand_total || 0), 0),
             revokedCount: revoked.length,
+            // ↓ raw arrays kept so the drill-down list can render the actual orders
+            cancelled, returned, refunded, exchanged, revoked,
             cancellationReasons: analyzeReasons(cancelled, "cancellation_reason"),
             returnReasons: analyzeReasons(returned, "return_reason"),
             refundReasons: analyzeReasons(refunded, "refund_reason"),
             exchangeReasons: analyzeReasons(exchanged, "exchange_reason"),
-            saIssues: Object.values(saIssues).sort((a, b) => (b.cancellations + b.returns + b.refunds + b.exchanges + b.revokes) - (a.cancellations + a.returns + a.refunds + a.exchanges + a.revokes)),
+            saIssues: saIssuesList.sort((a, b) => (b.cancellations + b.returns + b.refunds + b.exchanges + b.revokes) - (a.cancellations + a.returns + a.refunds + a.exchanges + a.revokes)),
+            topCancelSA,
         };
     }, [storeOrders, timeline, customDateFrom, customDateTo]);
 
@@ -460,49 +614,100 @@ export default function StoreManagerDashboard() {
             if (!phone) return;
             if (!clientMap[phone]) {
                 clientMap[phone] = {
-                    name, phone, city: order.delivery_city || order.city || "-",
-                    totalSpend: 0, orderCount: 0, items: 0,
+                    name, phone,
+                    // City is tracked privately so we can build cohorts; not
+                    // shown in the table per spec.
+                    city: (order.delivery_city || order.city || "").trim(),
+                    state: (order.delivery_state || "").trim(),
+                    totalSpend: 0, orderCount: 0, qty: 0,
+                    refunds: 0,
+                    storeCredit: 0,
                     firstOrder: order.created_at, lastOrder: order.created_at,
                 };
             }
             const c = clientMap[phone];
             c.totalSpend += Number(order.grand_total || 0);
             c.orderCount += 1;
-            c.items += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
-            if (new Date(order.created_at) < new Date(c.firstOrder)) c.firstOrder = order.created_at;
-            if (new Date(order.created_at) > new Date(c.lastOrder)) c.lastOrder = order.created_at;
+            c.qty += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
+            // Refunds — there's no refund_amount column. The refund flow
+            // (OrderHistory.handleRefund) sets status='refund_requested' +
+            // refund_reason + refund_status, and the modal text states
+            // "Full refund will be initiated". So we treat the full
+            // grand_total as the refund amount when any of those flags are set.
+            const isRefund = order.status === "refund_requested" ||
+                !!order.refund_reason ||
+                !!order.refund_status;
+            if (isRefund) {
+                c.refunds += Number(order.grand_total || 0);
+            }
+            // Store credit applied to the order at checkout
+            c.storeCredit += Number(order.store_credit_used || 0);
+            // Use the most recent non-empty city/state we see for this client
+            const newDate = new Date(order.created_at);
+            if (newDate > new Date(c.lastOrder)) c.lastOrder = order.created_at;
+            if (newDate < new Date(c.firstOrder)) c.firstOrder = order.created_at;
+            const oCity = (order.delivery_city || order.city || "").trim();
+            const oState = (order.delivery_state || "").trim();
+            if (!c.city && oCity) c.city = oCity;
+            if (!c.state && oState) c.state = oState;
             if (c.name === "Unknown" && name !== "Unknown") c.name = name;
         });
 
-        let clients = Object.values(clientMap).map(c => ({
+        // Full unfiltered, unsorted list — used as the source of truth for
+        // top clients + cohorts so neither is affected by the search box.
+        const allClients = Object.values(clientMap).map(c => ({
             ...c, aov: c.orderCount > 0 ? c.totalSpend / c.orderCount : 0,
         }));
 
-        // Search
+        // ─── Top Clients (top 5 by spend, full-store regardless of search) ───
+        const topClients = [...allClients]
+            .sort((a, b) => b.totalSpend - a.totalSpend)
+            .slice(0, 5);
+
+        // ─── Cohorts by city ───
+        // Buckets each client by their primary city, then aggregates client
+        // count + revenue per bucket. "—" bucket holds clients with no
+        // delivery city (e.g. store pickup).
+        const cohortMap = {};
+        allClients.forEach(c => {
+            const key = c.city || "(No city)";
+            if (!cohortMap[key]) cohortMap[key] = { city: key, clients: 0, revenue: 0, orders: 0 };
+            cohortMap[key].clients += 1;
+            cohortMap[key].revenue += c.totalSpend;
+            cohortMap[key].orders += c.orderCount;
+        });
+        const cohorts = Object.values(cohortMap)
+            .sort((a, b) => b.clients - a.clients);
+
+        // ─── Searchable + sortable table list ───
+        let clients = allClients;
         if (clientSearch.trim()) {
             const q = clientSearch.toLowerCase();
-            clients = clients.filter(c => c.name?.toLowerCase().includes(q) || c.phone?.includes(q) || c.city?.toLowerCase().includes(q));
+            clients = clients.filter(c =>
+                c.name?.toLowerCase().includes(q) ||
+                c.phone?.includes(q) ||
+                c.city?.toLowerCase().includes(q)
+            );
         }
-
-        // Sort
         if (clientSort === "totalSpend") clients.sort((a, b) => b.totalSpend - a.totalSpend);
         else if (clientSort === "orderCount") clients.sort((a, b) => b.orderCount - a.orderCount);
         else if (clientSort === "recent") clients.sort((a, b) => new Date(b.lastOrder) - new Date(a.lastOrder));
 
-        const totalClients = clients.length;
-        const repeatClients = clients.filter(c => c.orderCount > 1).length;
+        const totalClients = allClients.length;            // FULL store count
+        const filteredCount = clients.length;              // After search
+        const repeatClients = allClients.filter(c => c.orderCount > 1).length;
         const repeatRate = totalClients > 0 ? ((repeatClients / totalClients) * 100).toFixed(1) : 0;
 
         const segmentation = [
-            { name: "One-time", value: clients.filter(c => c.orderCount === 1).length },
-            { name: "Repeat (2-3)", value: clients.filter(c => c.orderCount >= 2 && c.orderCount <= 3).length },
-            { name: "Loyal (4+)", value: clients.filter(c => c.orderCount >= 4).length },
+            { name: "One-time", value: allClients.filter(c => c.orderCount === 1).length },
+            { name: "Repeat (2-3)", value: allClients.filter(c => c.orderCount >= 2 && c.orderCount <= 3).length },
+            { name: "Loyal (4+)", value: allClients.filter(c => c.orderCount >= 4).length },
         ];
 
         const totalPages = Math.ceil(clients.length / ITEMS_PER_PAGE);
         const current = clients.slice((clientPage - 1) * ITEMS_PER_PAGE, clientPage * ITEMS_PER_PAGE);
 
-        return { totalClients, repeatRate, segmentation, current, totalPages };
+        return { totalClients, filteredCount, repeatRate, segmentation, current, totalPages, topClients, cohorts };
     }, [storeOrders, clientSearch, clientSort, clientPage]);
 
     // ═══════════════════════════════════════════════════════════
@@ -552,7 +757,16 @@ export default function StoreManagerDashboard() {
     }, [storeOrders, timeline, customDateFrom, customDateTo]);
 
     // Resets
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, sortBy, filters]);
+
+    // Close filter dropdowns when clicking outside
+    useEffect(() => {
+        const onDoc = (e) => {
+            if (!e.target.closest(".sm-filter-dropdown")) setOpenDropdown(null);
+        };
+        document.addEventListener("mousedown", onDoc);
+        return () => document.removeEventListener("mousedown", onDoc);
+    }, []);
     useEffect(() => { setClientPage(1); }, [clientSearch, clientSort]);
     useEffect(() => {
         if (activeTab === "inventory") {
@@ -593,6 +807,7 @@ export default function StoreManagerDashboard() {
                         {[
                             { key: "sales", label: "Sales Overview" },
                             { key: "sa_performance", label: "SA Performance" },
+                            { key: "roster", label: "Store Roster" },
                             { key: "orders", label: "Orders" },
                             { key: "returns", label: "Returns & Issues" },
                             { key: "inventory", label: "Store Inventory" },
@@ -633,9 +848,18 @@ export default function StoreManagerDashboard() {
                             <div className="sm-stats-grid">
                                 <div className="sm-stat-card"><span className="sm-stat-label">Revenue</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.totalRevenue))}</span></div>
                                 <div className="sm-stat-card"><span className="sm-stat-label">Orders</span><span className="sm-stat-value">{salesStats.totalOrders}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">Items Sold</span><span className="sm-stat-value">{salesStats.totalItems}</span></div>
+                                <div className="sm-stat-card"><span className="sm-stat-label">QTY</span><span className="sm-stat-value">{salesStats.totalItems}</span></div>
                                 <div className="sm-stat-card"><span className="sm-stat-label">AOV</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.aov))}</span></div>
                                 <div className="sm-stat-card"><span className="sm-stat-label">Discounts</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.totalDiscount))}</span></div>
+                                <div className="sm-stat-card">
+                                    <span className="sm-stat-label">Extra Items Sold</span>
+                                    <span className="sm-stat-value">{salesStats.extrasTotal}</span>
+                                    <span className="sm-stat-sub" style={{ fontSize: 11, marginTop: 4 }}>
+                                        <span style={{ color: '#2e7d32' }}>+{salesStats.extrasIncluded} incl.</span>
+                                        {" / "}
+                                        <span style={{ color: '#c62828' }}>+{salesStats.extrasExcluded} excl.</span>
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Payment status */}
@@ -684,22 +908,8 @@ export default function StoreManagerDashboard() {
                         <div>
                             <h2 className="sm-section-title">SA-wise Performance</h2>
 
-                            {/* Store Roster */}
-                            <h3 className="sm-subsection-title">Store Roster ({storeSAs.length} SAs)</h3>
-                            <div className="sm-table-wrapper">
-                                <table className="sm-table">
-                                    <thead><tr><th>Name</th><th>Designation</th><th>Phone</th><th>Email</th></tr></thead>
-                                    <tbody>
-                                        {storeSAs.length === 0 ? <tr><td colSpan="4" className="sm-no-data">No SAs found for {storeLabel}</td></tr> :
-                                            storeSAs.map(sa => (
-                                                <tr key={sa.email}><td style={{ fontWeight: 500 }}>{sa.saleperson}</td><td>{sa.designation || "-"}</td><td>{sa.phone || "-"}</td><td>{sa.email || "-"}</td></tr>
-                                            ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
                             {/* SA Sales */}
-                            <h3 className="sm-subsection-title" style={{ marginTop: 24 }}>Sales Performance</h3>
+                            <h3 className="sm-subsection-title">Sales Performance</h3>
                             {saPerformance.saList.length > 0 ? (
                                 <>
                                     <div className="sm-chart-card">
@@ -716,7 +926,7 @@ export default function StoreManagerDashboard() {
 
                                     <div className="sm-table-wrapper" style={{ marginTop: 16 }}>
                                         <table className="sm-table">
-                                            <thead><tr><th>SA Name</th><th className="amount">Revenue</th><th>Orders</th><th>Items</th><th className="amount">AOV</th><th className="amount">Discount</th><th>Delivered</th><th>Cancelled</th></tr></thead>
+                                            <thead><tr><th>SA Name</th><th className="amount">Revenue</th><th>Orders</th><th>QTY</th><th className="amount">AOV</th><th className="amount">Discount</th><th>Delivered</th><th>Cancelled</th></tr></thead>
                                             <tbody>
                                                 {saPerformance.saList.map(sa => (
                                                     <tr key={sa.name}>
@@ -737,30 +947,61 @@ export default function StoreManagerDashboard() {
                         </div>
                     )}
 
+                    {/* ═══════════ TAB: STORE ROSTER (standalone) ═══════════ */}
+                    {activeTab === "roster" && (
+                        <div>
+                            <h2 className="sm-section-title">{storeLabel} Store Roster</h2>
+                            <div className="sm-stats-grid">
+                                <div className="sm-stat-card">
+                                    <span className="sm-stat-label">Total SAs</span>
+                                    <span className="sm-stat-value">{storeSAs.length}</span>
+                                </div>
+                            </div>
+                            <div className="sm-table-wrapper" style={{ marginTop: 16 }}>
+                                <table className="sm-table">
+                                    <thead><tr><th>Name</th><th>Designation</th><th>Phone</th><th>Email</th></tr></thead>
+                                    <tbody>
+                                        {storeSAs.length === 0 ? <tr><td colSpan="4" className="sm-no-data">No SAs found for {storeLabel}</td></tr> :
+                                            storeSAs.map(sa => (
+                                                <tr key={sa.email}><td style={{ fontWeight: 500 }}>{sa.saleperson}</td><td>{sa.designation || "-"}</td><td>{sa.phone || "-"}</td><td>{sa.email || "-"}</td></tr>
+                                            ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
                     {/* ═══════════ TAB 3: ORDERS ═══════════ */}
                     {activeTab === "orders" && (
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                                 <h2 className="sm-section-title">{storeLabel} Orders</h2>
-                                <button className="sm-logout-btn" onClick={async () => {
-                                    const { data: { session } } = await supabase.auth.getSession();
-                                    if (session) {
-                                        sessionStorage.setItem("associateSession", JSON.stringify({
-                                            access_token: session.access_token,
-                                            refresh_token: session.refresh_token,
-                                            user: { email: session.user?.email },
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button
+                                        className="sm-export-btn"
+                                        onClick={exportOrdersCsv}
+                                        title="Export filtered orders as CSV (real-time sales \u2014 not MRP)"
+                                    >{"\u2B07"} Export CSV</button>
+                                    <button className="sm-logout-btn" onClick={async () => {
+                                        const { data: { session } } = await supabase.auth.getSession();
+                                        if (session) {
+                                            sessionStorage.setItem("associateSession", JSON.stringify({
+                                                access_token: session.access_token,
+                                                refresh_token: session.refresh_token,
+                                                user: { email: session.user?.email },
+                                            }));
+                                        }
+                                        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+                                            store: userStore,
+                                            name: currentUserName,
+                                            email: currentUserEmail,
                                         }));
-                                    }
-                                    sessionStorage.setItem("currentSalesperson", JSON.stringify({
-                                        store: userStore,
-                                        name: currentUserName,
-                                        email: currentUserEmail,
-                                    }));
-                                    sessionStorage.setItem("returnDashboard", "/store-manager-dashboard");
-                                    navigate("/buyerVerification");
-                                }} style={{ background: '#d5b85a', color: '#fff', padding: '8px 16px', borderRadius: 6, fontWeight: 600 }}>
-                                    + Place Order
-                                </button>
+                                        sessionStorage.setItem("returnDashboard", "/store-manager-dashboard");
+                                        navigate("/buyerVerification");
+                                    }} style={{ background: '#d5b85a', color: '#fff', padding: '8px 16px', borderRadius: 6, fontWeight: 600 }}>
+                                        + Place Order
+                                    </button>
+                                </div>
                             </div>
                             <div className="sm-toolbar">
                                 <div className="sm-search-wrapper">
@@ -772,6 +1013,104 @@ export default function StoreManagerDashboard() {
                                     <option value="delivery">Delivery Date</option><option value="amount_high">Amount: High</option><option value="amount_low">Amount: Low</option>
                                 </select>
                             </div>
+
+                            {/* \u2500\u2500\u2500 Filters (RM dashboard pattern) \u2500\u2500\u2500 */}
+                            <div className="sm-filter-bar">
+                                <div className="sm-filter-dropdown">
+                                    <button
+                                        className={`sm-filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`}
+                                        onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}
+                                    >Date Range {"\u25BE"}</button>
+                                    {openDropdown === "date" && (
+                                        <div className="sm-dropdown-panel">
+                                            <div className="sm-dropdown-title">Select Date Range</div>
+                                            <div className="sm-date-inputs">
+                                                <input type="date" value={filters.dateFrom} onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))} />
+                                                <span>to</span>
+                                                <input type="date" value={filters.dateTo} onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))} />
+                                            </div>
+                                            <button className="sm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="sm-filter-dropdown">
+                                    <button
+                                        className={`sm-filter-btn ${(filters.minPrice > 0 || filters.maxPrice < 500000) ? "active" : ""}`}
+                                        onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")}
+                                    >Price {"\u25BE"}</button>
+                                    {openDropdown === "price" && (
+                                        <div className="sm-dropdown-panel sm-price-panel">
+                                            <div className="sm-dropdown-title">Order Value</div>
+                                            <div className="sm-price-inputs">
+                                                <div className="sm-price-input-wrap"><span>{"\u20B9"}</span><input type="number" value={filters.minPrice} onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 1000) }))} /></div>
+                                                <span>to</span>
+                                                <div className="sm-price-input-wrap"><span>{"\u20B9"}</span><input type="number" value={filters.maxPrice} onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 1000) }))} /></div>
+                                            </div>
+                                            <button className="sm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="sm-filter-dropdown">
+                                    <button
+                                        className={`sm-filter-btn ${filters.payment.length > 0 ? "active" : ""}`}
+                                        onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}
+                                    >Payment {"\u25BE"}</button>
+                                    {openDropdown === "payment" && (
+                                        <div className="sm-dropdown-panel">
+                                            <div className="sm-dropdown-title">Payment Status</div>
+                                            {["paid", "partial", "unpaid"].map(opt => (
+                                                <label key={opt} className="sm-checkbox-label">
+                                                    <input type="checkbox" checked={filters.payment.includes(opt)} onChange={() => toggleFilter("payment", opt)} />
+                                                    <span>{opt === "unpaid" ? "Unpaid (COD)" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                                                </label>
+                                            ))}
+                                            <button className="sm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="sm-filter-dropdown">
+                                    <button
+                                        className={`sm-filter-btn ${filters.priority.length > 0 ? "active" : ""}`}
+                                        onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}
+                                    >Priority {"\u25BE"}</button>
+                                    {openDropdown === "priority" && (
+                                        <div className="sm-dropdown-panel">
+                                            <div className="sm-dropdown-title">Priority</div>
+                                            {["normal", "urgent"].map(opt => (
+                                                <label key={opt} className="sm-checkbox-label">
+                                                    <input type="checkbox" checked={filters.priority.includes(opt)} onChange={() => toggleFilter("priority", opt)} />
+                                                    <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                                                </label>
+                                            ))}
+                                            <button className="sm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="sm-filter-dropdown">
+                                    <select
+                                        className="sm-filter-btn"
+                                        style={{ cursor: 'pointer' }}
+                                        value={filters.salesperson}
+                                        onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}
+                                    >
+                                        <option value="">All Salespersons</option>
+                                        {salespersonOptions.map(sp => <option key={sp} value={sp}>{sp}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {appliedFilters.length > 0 && (
+                                <div className="sm-applied-filters">
+                                    <span className="sm-applied-label">Applied:</span>
+                                    {appliedFilters.map((chip, i) => (
+                                        <span key={i} className="sm-filter-chip">
+                                            {chip.label}
+                                            <button onClick={() => removeFilter(chip.type, chip.value)}>{"\u00D7"}</button>
+                                        </span>
+                                    ))}
+                                    <button className="sm-clear-all" onClick={clearAllFilters}>Clear All</button>
+                                </div>
+                            )}
 
                             <div className="sm-status-tabs">
                                 {STATUS_TABS.map(tab => (
@@ -785,7 +1124,7 @@ export default function StoreManagerDashboard() {
 
                             <div className="sm-table-wrapper">
                                 <table className="sm-table">
-                                    <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th className="amount">Amount</th><th>Payment</th><th>Status</th><th>SA</th><th>Date</th><th>Journey</th></tr></thead>
+                                    <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th className="amount">Amount</th><th>Payment</th><th>Status</th><th>SA</th><th>Order Date</th><th>Journey</th></tr></thead>
                                     <tbody>
                                         {currentOrders.length === 0 ? <tr><td colSpan="9" className="sm-no-data">No orders found</td></tr> :
                                             currentOrders.map(o => (
@@ -847,13 +1186,107 @@ export default function StoreManagerDashboard() {
                     {activeTab === "returns" && (
                         <div>
                             <h2 className="sm-section-title">Returns, Cancellations & Issues</h2>
+                            {/* Stat cards \u2014 click a count to drill into the underlying orders */}
                             <div className="sm-stats-grid">
-                                <div className="sm-stat-card"><span className="sm-stat-label">Cancellations</span><span className="sm-stat-value">{returnsStats.cancelledCount}</span><span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.cancelledValue))}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">Returns</span><span className="sm-stat-value">{returnsStats.returnedCount}</span><span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.returnedValue))}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">Refunds</span><span className="sm-stat-value">{returnsStats.refundedCount}</span><span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.refundedValue))}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">Exchanges</span><span className="sm-stat-value">{returnsStats.exchangedCount}</span><span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.exchangedValue))}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">Revoked</span><span className="sm-stat-value">{returnsStats.revokedCount}</span></div>
+                                <button type="button" className={`sm-stat-card sm-stat-clickable ${returnsDrillType === "cancelled" ? "active" : ""}`} onClick={() => setReturnsDrillType(returnsDrillType === "cancelled" ? null : "cancelled")}>
+                                    <span className="sm-stat-label">Cancellations</span>
+                                    <span className="sm-stat-value">{returnsStats.cancelledCount}</span>
+                                    <span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.cancelledValue))}</span>
+                                </button>
+                                <button type="button" className={`sm-stat-card sm-stat-clickable ${returnsDrillType === "returned" ? "active" : ""}`} onClick={() => setReturnsDrillType(returnsDrillType === "returned" ? null : "returned")}>
+                                    <span className="sm-stat-label">Returns</span>
+                                    <span className="sm-stat-value">{returnsStats.returnedCount}</span>
+                                    <span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.returnedValue))}</span>
+                                </button>
+                                <button type="button" className={`sm-stat-card sm-stat-clickable ${returnsDrillType === "refunded" ? "active" : ""}`} onClick={() => setReturnsDrillType(returnsDrillType === "refunded" ? null : "refunded")}>
+                                    <span className="sm-stat-label">Refunds</span>
+                                    <span className="sm-stat-value">{returnsStats.refundedCount}</span>
+                                    <span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.refundedValue))}</span>
+                                </button>
+                                <button type="button" className={`sm-stat-card sm-stat-clickable ${returnsDrillType === "exchanged" ? "active" : ""}`} onClick={() => setReturnsDrillType(returnsDrillType === "exchanged" ? null : "exchanged")}>
+                                    <span className="sm-stat-label">Exchanges</span>
+                                    <span className="sm-stat-value">{returnsStats.exchangedCount}</span>
+                                    <span className="sm-stat-sub">{"\u20B9"}{formatIndianNumber(Math.round(returnsStats.exchangedValue))}</span>
+                                </button>
+                                <button type="button" className={`sm-stat-card sm-stat-clickable ${returnsDrillType === "revoked" ? "active" : ""}`} onClick={() => setReturnsDrillType(returnsDrillType === "revoked" ? null : "revoked")}>
+                                    <span className="sm-stat-label">Revoked</span>
+                                    <span className="sm-stat-value">{returnsStats.revokedCount}</span>
+                                </button>
                             </div>
+
+                            {/* Top SA handling cancellations */}
+                            {returnsStats.topCancelSA && (
+                                <div className="sm-stats-grid" style={{ marginTop: 16 }}>
+                                    <div className="sm-stat-card" style={{ borderLeft: '4px solid #c62828' }}>
+                                        <span className="sm-stat-label">Top SA \u2014 Cancellations</span>
+                                        <span className="sm-stat-value" style={{ fontSize: 18 }}>{returnsStats.topCancelSA.name}</span>
+                                        <span className="sm-stat-sub">
+                                            {returnsStats.topCancelSA.cancellations} cancellation{returnsStats.topCancelSA.cancellations !== 1 ? 's' : ''}
+                                            {" \u00B7 "}
+                                            {"\u20B9"}{formatIndianNumber(Math.round(returnsStats.topCancelSA.value))} value
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Drill-down list \u2014 appears when a stat-card above is clicked */}
+                            {returnsDrillType && (() => {
+                                const list = returnsStats[returnsDrillType] || [];
+                                const labelMap = {
+                                    cancelled: "Cancelled Orders",
+                                    returned: "Returned Orders",
+                                    refunded: "Refunded Orders",
+                                    exchanged: "Exchange Orders",
+                                    revoked: "Revoked Orders",
+                                };
+                                const reasonField = {
+                                    cancelled: "cancellation_reason",
+                                    returned: "return_reason",
+                                    refunded: "refund_reason",
+                                    exchanged: "exchange_reason",
+                                    revoked: "revoked_reason",
+                                }[returnsDrillType];
+                                return (
+                                    <div className="sm-drilldown" style={{ marginTop: 16 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                            <h3 className="sm-subsection-title" style={{ margin: 0 }}>
+                                                {labelMap[returnsDrillType]} ({list.length})
+                                            </h3>
+                                            <button className="sm-clear-all" onClick={() => setReturnsDrillType(null)}>Close</button>
+                                        </div>
+                                        {list.length === 0 ? (
+                                            <p className="sm-no-data">No orders in this category for the selected period.</p>
+                                        ) : (
+                                            <div className="sm-table-wrapper">
+                                                <table className="sm-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Order ID</th>
+                                                            <th>Customer</th>
+                                                            <th>SA</th>
+                                                            <th>Order Date</th>
+                                                            <th className="amount">Amount</th>
+                                                            <th>Reason</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {list.map(o => (
+                                                            <tr key={o.id}>
+                                                                <td><span className="sm-order-id">{o.order_no || "-"}</span></td>
+                                                                <td>{o.delivery_name || "-"}</td>
+                                                                <td>{getOrderSalesperson(o) || "-"}</td>
+                                                                <td>{formatDate(o.created_at)}</td>
+                                                                <td className="amount">{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
+                                                                <td>{o[reasonField] || "\u2014"}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                             {returnsStats.cancellationReasons.length > 0 && (
                                 <div className="sm-chart-card" style={{ marginTop: 24 }}>
@@ -982,13 +1415,83 @@ export default function StoreManagerDashboard() {
                         <div>
                             <h2 className="sm-section-title">{storeLabel} Client Book</h2>
                             <div className="sm-stats-grid">
-                                <div className="sm-stat-card"><span className="sm-stat-label">Total Clients</span><span className="sm-stat-value">{clientBook.totalClients}</span></div>
+                                <div className="sm-stat-card"><span className="sm-stat-label">Number of Clients</span><span className="sm-stat-value">{clientBook.totalClients}</span></div>
                                 <div className="sm-stat-card"><span className="sm-stat-label">Repeat Rate</span><span className="sm-stat-value">{clientBook.repeatRate}%</span></div>
                             </div>
 
+                            {/* \u2500\u2500\u2500 Top Clients (top 5 by spend, full-store) \u2500\u2500\u2500 */}
+                            {clientBook.topClients.length > 0 && (
+                                <>
+                                    <h3 className="sm-subsection-title" style={{ marginTop: 20 }}>
+                                        Top Clients {"\u2014"} {storeLabel}
+                                    </h3>
+                                    <div className="sm-top-clients-grid">
+                                        {clientBook.topClients.map((c, i) => (
+                                            <div key={c.phone} className="sm-top-client-card">
+                                                <div className="sm-top-client-rank">#{i + 1}</div>
+                                                <div className="sm-top-client-info">
+                                                    <div className="sm-top-client-name">{c.name}</div>
+                                                    <div className="sm-top-client-meta">{c.phone}{c.city ? ` \u00B7 ${c.city}` : ""}</div>
+                                                    <div className="sm-top-client-stats">
+                                                        <span><b>{"\u20B9"}{formatIndianNumber(Math.round(c.totalSpend))}</b></span>
+                                                        <span className="sm-top-client-sub">{c.orderCount} orders {"\u00B7"} {c.qty} qty</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* \u2500\u2500\u2500 Cohorts by city \u2500\u2500\u2500 */}
+                            {clientBook.cohorts.length > 0 && (
+                                <>
+                                    <h3 className="sm-subsection-title" style={{ marginTop: 24 }}>
+                                        Address Cohorts {"\u2014"} Clients by City
+                                    </h3>
+                                    <div className="sm-cohorts-row">
+                                        <div className="sm-table-wrapper" style={{ flex: 1 }}>
+                                            <table className="sm-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>City</th>
+                                                        <th className="amount">Clients</th>
+                                                        <th className="amount">Orders</th>
+                                                        <th className="amount">Revenue</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {clientBook.cohorts.slice(0, 12).map(c => (
+                                                        <tr key={c.city}>
+                                                            <td style={{ fontWeight: 500 }}>{c.city}</td>
+                                                            <td className="amount">{c.clients}</td>
+                                                            <td className="amount">{c.orders}</td>
+                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.revenue))}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {clientBook.cohorts.length > 1 && (
+                                            <div className="sm-chart-card" style={{ flex: 1, padding: 14 }}>
+                                                <ResponsiveContainer width="100%" height={260}>
+                                                    <BarChart data={clientBook.cohorts.slice(0, 8)} layout="vertical" margin={{ top: 4, right: 20, left: 4, bottom: 4 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
+                                                        <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} />
+                                                        <YAxis type="category" dataKey="city" tick={{ fontSize: 11 }} width={100} axisLine={false} tickLine={false} />
+                                                        <Tooltip />
+                                                        <Bar dataKey="clients" fill="#d5b85a" name="Clients" radius={[0, 4, 4, 0]} barSize={18} />
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
                             {/* Segmentation pie */}
                             {clientBook.segmentation.some(s => s.value > 0) && (
-                                <div className="sm-chart-card" style={{ marginTop: 16 }}>
+                                <div className="sm-chart-card" style={{ marginTop: 24 }}>
                                     <h3 className="sm-chart-title">Client Segmentation</h3>
                                     <ResponsiveContainer width="100%" height={280}>
                                         <PieChart>
@@ -1002,10 +1505,13 @@ export default function StoreManagerDashboard() {
                                 </div>
                             )}
 
-                            {/* Search & sort */}
-                            <div className="sm-toolbar" style={{ marginTop: 20 }}>
+                            {/* Full client list \u2014 search & sort */}
+                            <h3 className="sm-subsection-title" style={{ marginTop: 24 }}>
+                                Full Client Book ({clientBook.totalClients} clients)
+                            </h3>
+                            <div className="sm-toolbar" style={{ marginTop: 8 }}>
                                 <div className="sm-search-wrapper">
-                                    <input type="text" placeholder="Search name, phone, city..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} className="sm-search-input" />
+                                    <input type="text" placeholder="Search name, phone, or city..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} className="sm-search-input" />
                                     {clientSearch && <button className="sm-search-clear" onClick={() => setClientSearch("")}>{"\u00D7"}</button>}
                                 </div>
                                 <select value={clientSort} onChange={(e) => setClientSort(e.target.value)} className="sm-sort-select">
@@ -1013,18 +1519,44 @@ export default function StoreManagerDashboard() {
                                 </select>
                             </div>
 
+                            <div className="sm-orders-count">
+                                Showing {clientBook.filteredCount} of {clientBook.totalClients} clients
+                                {clientSearch && " (filtered)"}
+                            </div>
+
                             <div className="sm-table-wrapper">
                                 <table className="sm-table">
-                                    <thead><tr><th>#</th><th>Name</th><th>Phone</th><th>City</th><th>Orders</th><th>Items</th><th className="amount">Total Spend</th><th className="amount">AOV</th><th>Last Order</th></tr></thead>
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Name</th>
+                                            <th>Phone</th>
+                                            <th className="amount">Orders</th>
+                                            <th className="amount">QTY</th>
+                                            <th className="amount">Total Spend</th>
+                                            <th className="amount">AOV</th>
+                                            <th className="amount">Refunds</th>
+                                            <th className="amount">Store Credit</th>
+                                            <th>Last Order</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
-                                        {clientBook.current.length === 0 ? <tr><td colSpan="9" className="sm-no-data">No clients found</td></tr> :
+                                        {clientBook.current.length === 0 ? <tr><td colSpan="10" className="sm-no-data">No clients found</td></tr> :
                                             clientBook.current.map((c, idx) => (
                                                 <tr key={c.phone}>
                                                     <td>{(clientPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                                                    <td style={{ fontWeight: 500 }}>{c.name}</td><td>{c.phone}</td><td>{c.city}</td>
-                                                    <td>{c.orderCount}</td><td>{c.items}</td>
+                                                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                                                    <td>{c.phone}</td>
+                                                    <td className="amount">{c.orderCount}</td>
+                                                    <td className="amount">{c.qty}</td>
                                                     <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.totalSpend))}</td>
                                                     <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.aov))}</td>
+                                                    <td className="amount" style={{ color: c.refunds > 0 ? '#c62828' : 'inherit' }}>
+                                                        {c.refunds > 0 ? `\u20B9${formatIndianNumber(Math.round(c.refunds))}` : "\u2014"}
+                                                    </td>
+                                                    <td className="amount" style={{ color: c.storeCredit > 0 ? '#7b1fa2' : 'inherit' }}>
+                                                        {c.storeCredit > 0 ? `\u20B9${formatIndianNumber(Math.round(c.storeCredit))}` : "\u2014"}
+                                                    </td>
                                                     <td>{formatDate(c.lastOrder)}</td>
                                                 </tr>
                                             ))}

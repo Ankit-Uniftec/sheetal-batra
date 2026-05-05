@@ -291,10 +291,13 @@ export default function OrderDetailPage() {
         mode_of_delivery: alterationData.delivery_type,
         delivery_date: alterationData.delivery_date,
         
-        // Salesperson info
+        // Salesperson info — carry the store too so the alteration shows up
+        // under the originating store on dashboards (was previously missing,
+        // causing alterations to land in the "Other" channel bucket).
         salesperson: order.salesperson,
         salesperson_phone: order.salesperson_phone,
         salesperson_email: order.salesperson_email,
+        salesperson_store: order.salesperson_store,
 
         // Order details
         order_no: alterationOrderNo,

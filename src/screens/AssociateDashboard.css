@@ -473,6 +473,23 @@
   cursor: pointer;
 }
 
+/* Stock Order button — sits to the right of the main + button */
+.ad-add-btn.ad-stock-btn {
+  left: auto;
+  right: 40px;
+  transform: none;
+  width: auto;
+  min-width: 70px;
+  height: 56px;
+  padding: 0 18px;
+  border-radius: 28px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  background: #2c3e50;
+  border-color: #2c3e50;
+}
+
 /* Back Button */
 .ad-back-btn {
   position: fixed;

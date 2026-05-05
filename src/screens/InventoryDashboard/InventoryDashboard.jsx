@@ -6,9 +6,10 @@ import "./InventoryDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
-// TEMP (prod): warehouse + stock exchange tabs hidden — re-enable when feature is ready
-// import WarehouseTab from "./WarehouseTab";
-// import StockExchangeTab from "./StockExchangeTab";
+import StockOrdersTab from "./StockOrdersTab";
+import StockCalendarTab from "./StockCalendarTab";
+import WarehouseTab from "./WarehouseTab";
+import StockExchangeTab from "./StockExchangeTab";
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
@@ -20,6 +21,11 @@ export default function InventoryDashboard() {
   // ==================== SIDEBAR & TABS ====================
   const [activeTab, setActiveTab] = useState("inventory");
   const [showSidebar, setShowSidebar] = useState(false);
+
+  // When the user clicks an order on the Calendar tab, we switch to the
+  // Stock Orders tab and pass the id down so that tab can scroll to and
+  // briefly highlight the matching card.
+  const [highlightOrderId, setHighlightOrderId] = useState(null);
 
   // ==================== EXISTING STATES ====================
   const [products, setProducts] = useState([]);
@@ -528,11 +534,11 @@ export default function InventoryDashboard() {
         <aside className={`inv-sidebar ${showSidebar ? "open" : ""}`}>
           <nav className="inv-menu">
             <a className={`inv-menu-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</a>
-            {/* TEMP (prod): warehouse + stock exchange tabs hidden — re-enable when feature is ready
+            <a className={`inv-menu-item ${activeTab === "stockOrders" ? "active" : ""}`} onClick={() => { setActiveTab("stockOrders"); setShowSidebar(false); }}>Stock Orders</a>
+            <a className={`inv-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
             <a className={`inv-menu-item ${activeTab === "warehouses" ? "active" : ""}`} onClick={() => { setActiveTab("warehouses"); setShowSidebar(false); }}>Warehouses</a>
             <a className={`inv-menu-item ${activeTab === "exchanges" ? "active" : ""}`} onClick={() => { setActiveTab("exchanges"); setShowSidebar(false); }}>Stock Exchange</a>
-            */}
-            <a className="inv-menu-item inv-menu-logout" onClick={handleLogout}>Log Out</a>
+            {/* <a className="inv-menu-item inv-menu-logout" onClick={handleLogout}>Log Out</a> */}
           </nav>
         </aside>
 
@@ -969,18 +975,34 @@ export default function InventoryDashboard() {
         )}
         </>)}
 
-        {/* TEMP (prod): warehouse + stock exchange tabs hidden — re-enable when feature is ready
+        {/* ==================== STOCK ORDERS TAB ==================== */}
+        {activeTab === "stockOrders" && (
+          <StockOrdersTab
+            highlightOrderId={highlightOrderId}
+            onHighlightShown={() => setHighlightOrderId(null)}
+          />
+        )}
+
+        {/* ==================== CALENDAR TAB ==================== */}
+        {activeTab === "calendar" && (
+          <StockCalendarTab
+            onOpenOrder={(orderId) => {
+              setHighlightOrderId(orderId);
+              setActiveTab("stockOrders");
+            }}
+          />
+        )}
+
         {activeTab === "warehouses" && <WarehouseTab />}
         {activeTab === "exchanges" && <StockExchangeTab />}
-        */}
 
       </div>
       </div>
 
       {/* Back Button */}
-      <button className="inv-back-btn" onClick={() => navigate("/login")}>
+      {/* <button className="inv-back-btn" onClick={() => navigate("/login")}>
         ←
-      </button>
+      </button> */}
     </div>
   );
 }

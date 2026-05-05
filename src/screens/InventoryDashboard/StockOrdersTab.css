@@ -1,0 +1,145 @@
+/* StockOrdersTab visuals
+ *
+ * Cards use the same .ad-* classes as the Associate Dashboard so the look
+ * is consistent. The styles below cover only the pieces that aren't shared
+ * (toolbar/search/modal/empty/highlight flash).
+ */
+
+.stock-orders-tab {
+  padding: 8px 0;
+}
+
+.stock-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.stock-search {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.stock-search:focus { border-color: #d5b85a; }
+
+.stock-refresh {
+  padding: 10px 18px;
+  background: #d5b85a;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stock-refresh:hover { background: #d5b85a; }
+
+.stock-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+  font-style: italic;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+/* Brief flash highlight when navigating from the calendar */
+.ad-order-card-flash {
+  animation: stock-flash 2s ease-out;
+}
+
+@keyframes stock-flash {
+  0%   { box-shadow: 0 0 0 4px rgba(213, 184, 90, 0); background-color: white; }
+  20%  { box-shadow: 0 0 0 4px rgba(213, 184, 90, 0.6); background-color: #fff8e1; }
+  100% { box-shadow: 0 0 0 4px rgba(213, 184, 90, 0); background-color: white; }
+}
+
+/* ─── Modal ─── */
+.stock-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.stock-modal {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  min-width: 340px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+.stock-modal h3 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+}
+
+.stock-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.stock-modal-field span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+}
+
+.stock-modal-field input {
+  padding: 10px 12px;
+  border: 1px solid #d8d8d8;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+
+.stock-modal-field input:focus { border-color: #d5b85a; }
+
+.stock-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.stock-btn {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #d8d8d8;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #333;
+}
+
+.stock-btn:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.stock-btn-primary {
+  background: #2c3e50;
+  border-color: #2c3e50;
+  color: white;
+}
+
+.stock-btn-primary:hover:not(:disabled) {
+  background: #1a2530;
+}
+
+.stock-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

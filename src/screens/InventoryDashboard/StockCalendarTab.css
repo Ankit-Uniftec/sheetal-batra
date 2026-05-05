@@ -1,0 +1,217 @@
+.stock-cal {
+  padding: 8px 0;
+}
+
+.stock-cal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.stock-cal-header h2 {
+  margin: 0;
+  flex: 1;
+  text-align: center;
+  font-size: 18px;
+  color: #2c3e50;
+}
+
+.stock-cal-nav {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #d8d8d8;
+  background: white;
+  font-size: 22px;
+  cursor: pointer;
+  color: #555;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stock-cal-nav:hover { background: #f5f5f5; }
+
+.stock-cal-today {
+  padding: 8px 16px;
+  border: 1px solid #d5b85a;
+  background: #d5b85a;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stock-cal-today:hover { background: #c1a647; }
+
+.stock-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 6px;
+  background: white;
+}
+
+.stock-cal-dayhead {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+  padding: 8px 4px;
+}
+
+.stock-cal-cell {
+  position: relative;
+  min-height: 70px;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  background: #fafafa;
+  transition: all 0.15s;
+}
+
+.stock-cal-cell.blank {
+  background: transparent;
+  cursor: default;
+}
+
+.stock-cal-cell:not(.blank):hover {
+  background: #fff5d8;
+}
+
+.stock-cal-cell.is-today { border: 2px solid #d5b85a; }
+
+.stock-cal-cell.is-selected {
+  background: #2c3e50;
+  color: white;
+}
+
+.stock-cal-cell.is-selected .stock-cal-day { color: white; }
+
+.stock-cal-cell.has-orders:not(.is-selected) {
+  background: #fff8e1;
+  border-left: 3px solid #d5b85a;
+}
+
+.stock-cal-day {
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+}
+
+.stock-cal-count {
+  background: #d5b85a;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  align-self: flex-end;
+}
+
+.is-selected .stock-cal-count {
+  background: white;
+  color: #2c3e50;
+}
+
+/* ─── Selected day detail ─── */
+.stock-cal-detail {
+  margin-top: 24px;
+  background: white;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.stock-cal-detail h3 {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stock-cal-detail-count {
+  color: #888;
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.stock-cal-empty {
+  color: #999;
+  font-style: italic;
+  margin: 0;
+}
+
+.stock-cal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stock-cal-list li {
+  padding: 10px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border-left: 3px solid #d5b85a;
+}
+
+.stock-cal-list-item-clickable {
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.stock-cal-list-item-clickable:hover {
+  background: #fff5d8;
+  transform: translateX(2px);
+}
+
+.stock-cal-listrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.stock-cal-listrow strong {
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.stock-cal-listmeta {
+  font-size: 12px;
+  color: #777;
+}
+
+.stock-cal-status {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stock-cal-status.status-order_received,
+.stock-cal-status.status-pending,
+.stock-cal-status.status-active { background: #e8f5e9; color: #2e7d32; }
+
+.stock-cal-status.status-cancelled { background: #ffebee; color: #c62828; }
+
+.stock-cal-status.status-delivered,
+.stock-cal-status.status-completed { background: #e3f2fd; color: #1565c0; }
