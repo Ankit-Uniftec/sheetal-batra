@@ -10,6 +10,7 @@ import StockOrdersTab from "./StockOrdersTab";
 import StockCalendarTab from "./StockCalendarTab";
 import WarehouseTab from "./WarehouseTab";
 import StockExchangeTab from "./StockExchangeTab";
+import AddProduct from "../../components/AddProduct/AddProduct";
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
@@ -538,6 +539,7 @@ export default function InventoryDashboard() {
             <a className={`inv-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
             <a className={`inv-menu-item ${activeTab === "warehouses" ? "active" : ""}`} onClick={() => { setActiveTab("warehouses"); setShowSidebar(false); }}>Warehouses</a>
             <a className={`inv-menu-item ${activeTab === "exchanges" ? "active" : ""}`} onClick={() => { setActiveTab("exchanges"); setShowSidebar(false); }}>Stock Exchange</a>
+            <a className={`inv-menu-item ${activeTab === "addProduct" ? "active" : ""}`} onClick={() => { setActiveTab("addProduct"); setShowSidebar(false); }}>Add Product</a>
             {/* <a className="inv-menu-item inv-menu-logout" onClick={handleLogout}>Log Out</a> */}
           </nav>
         </aside>
@@ -995,6 +997,9 @@ export default function InventoryDashboard() {
 
         {activeTab === "warehouses" && <WarehouseTab />}
         {activeTab === "exchanges" && <StockExchangeTab />}
+        {activeTab === "addProduct" && (
+          <AddProduct onProductAdded={() => fetchProducts()} />
+        )}
 
       </div>
       </div>

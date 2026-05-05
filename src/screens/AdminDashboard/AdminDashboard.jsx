@@ -179,6 +179,9 @@ export default function AdminDashboard() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [salespersonTable, setSalespersonTable] = useState([]);
+    // Sales Team tab — search filter + the id of the row currently being saved
+    const [salesTeamSearch, setSalesTeamSearch] = useState("");
+    const [stockTogglingId, setStockTogglingId] = useState(null);
     const [pdfLoading, setPdfLoading] = useState(null);
     const [vendors, setVendors] = useState([]);
     const [profiles, setProfiles] = useState([]);
@@ -285,7 +288,7 @@ export default function AdminDashboard() {
             const [ordersRes, productsRes, spRes, vendorsRes, profilesRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 supabase.from("products").select("*").order("name", { ascending: true }),
-                supabase.from("salesperson").select("saleperson, role"),
+                supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders"),
                 supabase.from("vendors").select("*"),
                 supabase.from("profiles").select("id, full_name, phone, email, created_at"),
             ]);
@@ -969,6 +972,26 @@ export default function AdminDashboard() {
         if (error) showPopup({ title: "Error", message: "Failed to update status.", type: "error" });
         else setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updateData } : o));
         setStatusUpdating(null);
+    };
+
+    // Toggle a single SA's permission to place stock orders.
+    // Optimistic update: flip in local state first, revert on error.
+    const toggleStockOrderPermission = async (sp) => {
+        if (!sp?.id) return;
+        const next = !sp.can_place_stock_orders;
+        setStockTogglingId(sp.id);
+        // optimistic
+        setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, can_place_stock_orders: next } : s));
+        const { error } = await supabase
+            .from("salesperson")
+            .update({ can_place_stock_orders: next })
+            .eq("id", sp.id);
+        if (error) {
+            // revert
+            setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, can_place_stock_orders: !next } : s));
+            showPopup({ title: "Update Failed", message: error.message || "Could not change stock-order permission.", type: "error", confirmText: "OK" });
+        }
+        setStockTogglingId(null);
     };
 
     // Accounts
@@ -1688,6 +1711,7 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
                         <button className={`admin-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
+                        {/* <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button> */}
                         {/* <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button> */}
                     </nav>
                 </aside>
@@ -3356,6 +3380,104 @@ export default function AdminDashboard() {
                             )}
                         </div>
                     )}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* SALES TEAM TAB — manage SA permissions               */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "sales_team" && (() => {
+                        // Sales Team is for roles that actually place orders
+                        // via the SA Dashboard. Other roles (admin, store_manager,
+                        // ceo, etc.) are excluded — they don't get a Stock button
+                        // anyway. Same gate as AssociateDashboard.js auth check.
+                        const isSARole = (r) => r === "salesperson" || r === "sa_services";
+                        const teamList = salespersonTable.filter(sp => isSARole(sp.role));
+                        return (
+                        <div className="admin-clients-tab">
+                            <h2 className="admin-section-title">Sales Team & Permissions</h2>
+
+                            {/* Quick stats — scoped to actual SA roles only */}
+                            <div className="admin-stats-grid" style={{ marginBottom: 16 }}>
+                                <div className="admin-stat-card">
+                                    <span className="admin-stat-label">Total Salespersons</span>
+                                    <span className="admin-stat-value">{teamList.length}</span>
+                                </div>
+                                <div className="admin-stat-card">
+                                    <span className="admin-stat-label">Stock Order Permission</span>
+                                    <span className="admin-stat-value">
+                                        {teamList.filter(s => s.can_place_stock_orders).length}
+                                    </span>
+                                    <span className="admin-stat-sub">SAs can place stock orders</span>
+                                </div>
+                            </div>
+
+                            <div className="admin-toolbar">
+                                <input
+                                    type="text"
+                                    className="admin-search-input"
+                                    placeholder="Search by name, email, store…"
+                                    value={salesTeamSearch}
+                                    onChange={(e) => setSalesTeamSearch(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="admin-table-wrapper">
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Role</th>
+                                            <th>Designation</th>
+                                            <th>Store</th>
+                                            <th>Phone</th>
+                                            <th>Email</th>
+                                            <th style={{ textAlign: 'center' }}>Place Stock Orders</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(() => {
+                                            const q = salesTeamSearch.trim().toLowerCase();
+                                            const list = teamList.filter(sp => {
+                                                if (!q) return true;
+                                                return [sp.saleperson, sp.email, sp.phone, sp.store_name, sp.role, sp.designation]
+                                                    .filter(Boolean)
+                                                    .some(v => String(v).toLowerCase().includes(q));
+                                            }).sort((a, b) => (a.saleperson || "").localeCompare(b.saleperson || ""));
+                                            if (list.length === 0) {
+                                                return <tr><td colSpan="7" className="no-data">No salespersons found</td></tr>;
+                                            }
+                                            return list.map(sp => {
+                                                const checked = !!sp.can_place_stock_orders;
+                                                const saving = stockTogglingId === sp.id;
+                                                return (
+                                                    <tr key={sp.id || sp.email}>
+                                                        <td style={{ fontWeight: 500 }}>{sp.saleperson || "—"}</td>
+                                                        <td>{sp.role || "—"}</td>
+                                                        <td>{sp.designation || "—"}</td>
+                                                        <td>{sp.store_name || "—"}</td>
+                                                        <td>{sp.phone || "—"}</td>
+                                                        <td>{sp.email || "—"}</td>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            <label className="admin-stock-toggle" title={checked ? "Click to revoke" : "Click to grant"}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={checked}
+                                                                    disabled={saving}
+                                                                    onChange={() => toggleStockOrderPermission(sp)}
+                                                                />
+                                                                <span className="admin-stock-toggle-slider" />
+                                                            </label>
+                                                            {saving && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>saving…</span>}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            });
+                                        })()}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        );
+                    })()}
 
                 </main>
             </div>

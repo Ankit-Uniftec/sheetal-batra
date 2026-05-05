@@ -1669,7 +1669,10 @@ export default function Dashboard() {
         {/* ─── Stock Order button ─────────────────────────────────────
             Internal inventory order: skips OTP + customer detail, all items
             are priced at 0 and mode_of_delivery is forced to "WH Delhi".
-            Routed straight to /product. */}
+            Routed straight to /product.
+            Visible ONLY when admin has flagged this SA via
+            salesperson.can_place_stock_orders = true. */}
+        {salesperson?.can_place_stock_orders && (
         <button
           className="ad-add-btn ad-stock-btn"
           title="Place Stock Order (Internal Inventory)"
@@ -1710,6 +1713,7 @@ export default function Dashboard() {
             navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
           }}
         >Stock</button>
+        )}
       </div>
     </div>
   );
