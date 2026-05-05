@@ -519,6 +519,22 @@ export default function ProductForm() {
   // Initialize Popup hook
   const { showPopup, PopupComponent } = usePopup();
 
+  // Stock-order flag: when true, this order is for internal inventory
+  // (skips OTP/customer flow, forces WH Delhi delivery, zeroes all prices,
+  // and routes through a different ReviewDetail/Inventory Dashboard path).
+  const isStockOrder =
+    location.state?.isStockOrder === true ||
+    sessionStorage.getItem("isStockOrder") === "true";
+
+  // Delivery options — restricted to "WH Delhi" for stock orders.
+  const DELIVERY_OPTIONS = isStockOrder
+    ? [{ label: "WH Delhi", value: "WH Delhi" }]
+    : [
+      { label: "Home Delivery", value: "Home Delivery" },
+      { label: "Delhi Store", value: "Delhi Store" },
+      { label: "Ludhiana Store", value: "Ludhiana Store" },
+    ];
+
   // Draft order states
   const [saveDraftLoading, setSaveDraftLoading] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState(null);
@@ -565,7 +581,7 @@ export default function ProductForm() {
   const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
 
-  const [modeOfDelivery, setModeOfDelivery] = useState("Delhi Store");
+  const [modeOfDelivery, setModeOfDelivery] = useState(isStockOrder ? "WH Delhi" : "Delhi Store");
   const [orderFlag, setOrderFlag] = useState("Normal");
   const [deliveryDate, setDeliveryDate] = useState("");
 
@@ -1276,6 +1292,9 @@ export default function ProductForm() {
   useEffect(() => {
     const fetchCustomerMeasurements = async () => {
       if (!user?.id) return;
+      // Stock orders have no customer — skip the lookup (and don't write the
+      // SA's auth-id to the customer_measurements table).
+      if (isStockOrder) { setMeasurementsLoaded(true); return; }
 
       try {
         const { data, error } = await supabase
@@ -2396,7 +2415,29 @@ export default function ProductForm() {
     // Check if measurements have changed from saved measurements
     const measurementsChanged = JSON.stringify(allMeasurements) !== JSON.stringify(customerSavedMeasurements);
 
+    // STOCK ORDER: zero every monetary field on each line item.
+    // We mutate the items array (already a fresh copy) to keep downstream
+    // payload calculations consistent. Extras and additionals are also zeroed.
+    if (isStockOrder) {
+      finalItems = finalItems.map((it) => ({
+        ...it,
+        price: 0,
+        extras: Array.isArray(it.extras)
+          ? it.extras.map((e) => ({ ...e, price: 0 }))
+          : it.extras,
+        additionals: Array.isArray(it.additionals)
+          ? it.additionals.map((a) => ({ ...a, price: 0 }))
+          : it.additionals,
+      }));
+    }
+
     const orderPayload = {
+      // For stock orders we still write the auth.id of the placer (the SA
+      // themselves — `user` here is the SA's auth user since stock orders
+      // skip OTP and no customer auth swap-in happens). This keeps
+      // orders.user_id NOT-NULL constraints satisfied and provides an
+      // audit trail of who placed the stock order. Dashboards already
+      // filter is_stock_order=true rows out, so this id leaks nowhere.
       user_id: user?.id,
 
       // Product level details
@@ -2404,7 +2445,7 @@ export default function ProductForm() {
 
       // Delivery Details
       delivery_date: formatDate(earliestDeliveryDate), // Use earliest date as order-level date
-      mode_of_delivery: modeOfDelivery,
+      mode_of_delivery: isStockOrder ? "WH Delhi" : modeOfDelivery,
       order_flag: orderFlag,
 
       urgent_reason:
@@ -2419,25 +2460,55 @@ export default function ProductForm() {
       delivery_notes: deliveryNotes, // Order-wide delivery notes
       attachments: attachments,
 
-      // Totals
-      subtotal: subtotal,
-      taxes: taxes,
-      grand_total: totalOrder,
+      // Totals (forced to 0 for stock orders — see zeroing block above)
+      subtotal: isStockOrder ? 0 : subtotal,
+      taxes: isStockOrder ? 0 : taxes,
+      grand_total: isStockOrder ? 0 : totalOrder,
       total_quantity: finalTotalQuantity,
       order_type: overallOrderType,
       payment_order_type: overallPaymentOrderType,
-      is_gifting: isGiftingOrder,
+      is_gifting: isStockOrder ? false : isGiftingOrder,
 
-      // Measurements for customer profile
-      save_measurements: measurementsChanged && Object.keys(allMeasurements).length > 0,
-      measurements_to_save: allMeasurements,
+      // Measurements for customer profile (skipped for stock — no customer)
+      save_measurements: isStockOrder ? false : (measurementsChanged && Object.keys(allMeasurements).length > 0),
+      measurements_to_save: isStockOrder ? {} : allMeasurements,
 
       // Timestamp
       created_at: new Date().toISOString(),
+
+      // ─── Stock-order-specific fields ─────────────────────────────
+      // Only includes columns that actually exist on the `orders` table.
+      // Address is a single column (no _city/_state/_pincode for billing);
+      // delivery_* uses the broken-out columns the schema does provide.
+      ...(isStockOrder && {
+        is_stock_order: true,
+        delivery_name: "Internal Stock",
+        delivery_phone: "",
+        delivery_email: "",
+        delivery_address: "WH Delhi",
+        delivery_city: "Delhi",
+        delivery_state: "Delhi",
+        delivery_pincode: "",
+        delivery_country: "India",
+        billing_same: true,
+        billing_company: null,
+        billing_gstin: null,
+        billing_address: "WH Delhi",
+        billing_country: "India",
+        advance_payment: 0,
+        discount_percent: 0,
+        discount_amount: 0,
+        net_total: 0,
+        remaining_payment: 0,
+        store_credit_used: 0,
+        payment_mode: "",
+      }),
     };
 
-    // Include draft ID in payload so it can be deleted after order confirmation
-    navigate("/confirmDetail", {
+    // Stock orders skip OrderDetails (customer/payment) entirely — go straight
+    // to ReviewDetail since there's no customer payment to capture.
+    const targetRoute = isStockOrder ? "/orderDetail" : "/confirmDetail";
+    navigate(targetRoute, {
       state: {
         orderPayload,
         draftId: currentDraftId, // Pass draft ID to delete after order placement
@@ -2996,11 +3067,7 @@ export default function ProductForm() {
                             <div className="field" style={{ maxWidth: 200 }}>
                               {/* <label>Delivery Location</label> */}
                               <SearchableSelect
-                                options={[
-                                  { label: "Home Delivery", value: "Home Delivery" },
-                                  { label: "Delhi Store", value: "Delhi Store" },
-                                  { label: "Ludhiana Store", value: "Ludhiana Store" },
-                                ]}
+                                options={DELIVERY_OPTIONS}
                                 value={item.mode_of_delivery || modeOfDelivery || ""}
                                 onChange={(val) =>
                                   updateItem(item._id, {
@@ -3445,11 +3512,7 @@ export default function ProductForm() {
 
               <div className="field">
                 <SearchableSelect
-                  options={[
-                    { label: "Home Delivery", value: "Home Delivery" },
-                    { label: "Delhi Store", value: "Delhi Store" },
-                    { label: " Ludhiana Store ", value: "Ludhiana Store" },
-                  ]}
+                  options={DELIVERY_OPTIONS}
                   value={modeOfDelivery}
                   onChange={setModeOfDelivery}
                   placeholder="Mode of Delivery"

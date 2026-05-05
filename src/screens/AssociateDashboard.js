@@ -347,6 +347,8 @@ export default function Dashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     sessionStorage.setItem("requirePasswordVerificationOnDashboard", "true");
+    // Clear any in-flight order-flow flags so they don't leak into the next session
+    sessionStorage.removeItem("isStockOrder");
     navigate("/login");
   };
 
@@ -1655,9 +1657,59 @@ export default function Dashboard() {
               designation: salesperson.designation || "",
             }));
 
+            // Clear any leftover stock-order flag — this is the regular
+            // customer flow, not a stock order. Prevents leakage if the SA
+            // had previously started a stock order and backed out.
+            sessionStorage.removeItem("isStockOrder");
+
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}
         >+</button>
+
+        {/* ─── Stock Order button ─────────────────────────────────────
+            Internal inventory order: skips OTP + customer detail, all items
+            are priced at 0 and mode_of_delivery is forced to "WH Delhi".
+            Routed straight to /product. */}
+        <button
+          className="ad-add-btn ad-stock-btn"
+          title="Place Stock Order (Internal Inventory)"
+          onClick={async () => {
+            if (!salesperson) {
+              showPopup({
+                title: "Access Denied",
+                message: "Salesperson data not found. Please login again.",
+                type: "error",
+                confirmText: "Ok",
+              });
+              return;
+            }
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) sessionStorage.setItem("associateSession", JSON.stringify({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+              user: { email: session.user?.email },
+            }));
+            sessionStorage.setItem("returnToAssociate", "true");
+            sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+
+            sessionStorage.setItem("currentSalesperson", JSON.stringify({
+              name: salesperson.saleperson,
+              email: salesperson.email,
+              phone: salesperson.phone,
+              store: salesperson.store_name,
+              designation: salesperson.designation,
+            }));
+
+            // Stock-order flag — read by ProductForm + ReviewDetail to alter behaviour.
+            sessionStorage.setItem("isStockOrder", "true");
+            // Reset any in-progress non-stock order form data so we start clean
+            sessionStorage.removeItem("screen4FormData");
+            sessionStorage.removeItem("screen6FormData");
+
+            navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
+          }}
+        >Stock</button>
       </div>
     </div>
   );

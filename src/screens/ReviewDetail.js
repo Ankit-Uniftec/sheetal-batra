@@ -109,6 +109,11 @@ export default function ReviewDetail() {
   const [loadingMessage, setLoadingMessage] = useState("Placing order...");
   const [showSignature, setShowSignature] = useState(false);
   const [sigPad, setSigPad] = useState(null);
+
+  // Private-SA-only mandatory fields, captured on this screen.
+  // Persist to orders.exb_name + orders.sb_representative_name on insert.
+  const [exbName, setExbName] = useState("");
+  const [sbRepName, setSbRepName] = useState("");
   // Whether to send the order PDF to the client via WhatsApp.
   // Regular SA: always true (asked before signature only for Private SA).
   // Stored as a ref so it doesn't trigger re-renders mid-flow.
@@ -120,6 +125,13 @@ export default function ReviewDetail() {
       return sp.designation === "Private SA";
     } catch { return false; }
   })();
+
+  // Stock-order detection — set by the SA's "Place Stock Order" button and
+  // carried through ProductForm. Stock orders skip the OTP/customer flow,
+  // skip Private-SA verification, force the order_no to the STOCK prefix
+  // (via p_store: 'Internal' in the RPC), and skip WhatsApp.
+  const isStockOrder = order?.is_stock_order === true ||
+    sessionStorage.getItem("isStockOrder") === "true";
 
   const totalAmount = Number(order?.grand_total) || 0;
   const advancePayment = Number(order?.advance_payment) || 0;
@@ -137,6 +149,24 @@ export default function ReviewDetail() {
   };
 
   const handlePlaceOrder = () => {
+    // Stock orders skip the WhatsApp/PDF prompt — there's no customer to send to.
+    if (isStockOrder) {
+      sendPdfRef.current = false;
+      setShowSignature(true);
+      return;
+    }
+    // Private SA mandatory fields gate
+    if (isPrivateSA) {
+      if (!exbName.trim() || !sbRepName.trim()) {
+        showPopup({
+          type: "warning",
+          title: "Missing Required Fields",
+          message: "EXB Name and SB Representative Name are required to place a private order.",
+          confirmText: "OK",
+        });
+        return;
+      }
+    }
     if (isPrivateSA) {
       // Ask BEFORE signature whether to send PDF to client. Decide once, then
       // proceed normally — no post-insert popup, no duplicate-insert race.
@@ -313,7 +343,10 @@ export default function ReviewDetail() {
     //  - A non-Private SA spoofing a private (₹0) order
     //  - A regular order's monetary fields leaking into a private order
     let isConfirmedPrivateOrder = false;
-    if (isPrivateSA) {
+    // Stock orders are not customer/private orders — skip the entire Private SA
+    // verification block. The is_stock_order flag is already set on the payload
+    // by ProductForm.
+    if (isPrivateSA && !isStockOrder) {
       // Client claims Private SA — verify it against the DB before accepting.
       if (!normalizedOrder.salesperson_email) {
         showPopup({
@@ -372,17 +405,30 @@ export default function ReviewDetail() {
       // prices and roll up into grand_total. Forcing all amounts to 0 here
       // would erase the SA's pricing for those add-ons.
       orderDataToInsert.is_private_order = true;
+      // Mandatory private-order metadata captured on this screen.
+      orderDataToInsert.exb_name = exbName.trim();
+      orderDataToInsert.sb_representative_name = sbRepName.trim();
     } else {
       // Explicitly mark non-private orders as such for clear audit trail
       orderDataToInsert.is_private_order = false;
     }
 
+    // STOCK ORDER FLAG — propagate to the row so dashboards can filter on it.
+    if (isStockOrder) {
+      orderDataToInsert.is_stock_order = true;
+    }
+
     setLoadingMessage("Generating invoice PDFs...");
 
     // 3️⃣ GENERATE ORDER NUMBER
+    // Stock orders use the 'Internal' store key, which the RPC maps to the
+    // STOCK prefix (e.g. SB-STOCK-MMYY-000001).
+    const rpcStore = isStockOrder
+      ? "Internal"
+      : (normalizedOrder.salesperson_store || "Delhi Store");
     const { data: orderNo, error: orderNoError } = await supabase.rpc(
       "generate_order_no",
-      { p_store: normalizedOrder.salesperson_store || "Delhi Store" }
+      { p_store: rpcStore }
     );
 
     if (orderNoError) {
@@ -397,14 +443,18 @@ export default function ReviewDetail() {
     }
 
     // 3.5️⃣ DUPLICATE CHECK — prevent back/reload double submission
+    // Stock orders have no customer (user_id is null), so the user_id-keyed
+    // duplicate check below doesn't apply. Skip it for stock.
     const istNow = Date.now() + (5.5 * 60 * 60 * 1000);
     const thirtySecondsAgo = new Date(istNow - 30 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-    const { data: recentOrders } = await supabase
-      .from("orders")
-      .select("id, order_no, grand_total, items")
-      .eq("user_id", order.user_id)
-      .gte("created_at", thirtySecondsAgo)
-      .limit(3);
+    const { data: recentOrders } = isStockOrder
+      ? { data: [] }
+      : await supabase
+        .from("orders")
+        .select("id, order_no, grand_total, items")
+        .eq("user_id", order.user_id)
+        .gte("created_at", thirtySecondsAgo)
+        .limit(3);
 
     if (recentOrders && recentOrders.length > 0) {
       const currentItem = normalizedOrder.items?.[0] || order.items?.[0] || {};
@@ -726,6 +776,9 @@ export default function ReviewDetail() {
     // 7️⃣ CLEAR SESSION & NAVIGATE
     sessionStorage.removeItem("screen4FormData");
     sessionStorage.removeItem("screen6FormData");
+    // Clear the stock-order flag so the next time the SA places a normal
+    // order it doesn't accidentally inherit stock behaviour.
+    sessionStorage.removeItem("isStockOrder");
 
     navigate("/order-placed", {
       state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
@@ -1068,6 +1121,44 @@ export default function ReviewDetail() {
             <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
           </div>
         </div>
+
+        {/* ─── Other Details (Private SA only) ────────────────────
+            EXB Name + SB Representative Name are mandatory when a Private
+            SA places an order. Persisted to orders.exb_name and
+            orders.sb_representative_name. Hidden for every other flow.
+            Uses the same .section-box / .row3 / .field / .input-line
+            classes as the rest of this screen (gold underline style). */}
+        {isPrivateSA && (
+          <div className="section-box">
+            <h3>Other Details</h3>
+            <div className="row3">
+              <div className="field">
+                <label htmlFor="exbName">EXB Name *</label>
+                <input
+                  id="exbName"
+                  type="text"
+                  className="input-line"
+                  value={exbName}
+                  onChange={(e) => setExbName(e.target.value)}
+                  placeholder="Exhibition name"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="sbRepName">SB Representative Name *</label>
+                <input
+                  id="sbRepName"
+                  type="text"
+                  className="input-line"
+                  value={sbRepName}
+                  onChange={(e) => setSbRepName(e.target.value)}
+                  placeholder="Representative name"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <button className="confirm-btn" disabled={loading} onClick={handlePlaceOrder}>
           {loading ? "Placing..." : "Place Order"}

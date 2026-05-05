@@ -621,3 +621,300 @@
     .sm-search-wrapper { max-width: 100%; }
     .sm-logo { height: 36px; }
 }
+
+/* ─── Export button ────────────────────────────────────────── */
+.sm-export-btn {
+    background: #d5b85a;
+    color: #fff !important;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+/* .sm-export-btn:hover { background: #8B7355; } */
+
+/* ─── Clickable stat card (Returns tab drill-down) ─────────── */
+.sm-stat-clickable {
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+}
+.sm-stat-clickable.active {
+    border-color: #d5b85a;
+    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.4);
+}
+
+/* ─── Filter bar (RM-style copy) ───────────────────────────── */
+.sm-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.sm-filter-dropdown { position: relative; }
+
+.sm-filter-btn {
+    background: #fff;
+    border: 1px solid #d4d4d4;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #444;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s;
+}
+.sm-filter-btn:hover { border-color: #d5b85a; }
+.sm-filter-btn.active {
+    background: #fff8e1;
+    border-color: #d5b85a;
+    color: #8B7355;
+    font-weight: 600;
+}
+
+.sm-dropdown-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: #fff;
+    border: 1px solid #d4d4d4;
+    border-radius: 8px;
+    padding: 14px;
+    min-width: 220px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    z-index: 50;
+}
+
+.sm-dropdown-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.sm-date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sm-date-inputs input {
+    padding: 6px 8px;
+    border: 1px solid #d4d4d4;
+    border-radius: 4px;
+    font-size: 13px;
+    flex: 1;
+}
+.sm-date-inputs span { color: #888; font-size: 12px; }
+
+.sm-price-panel { min-width: 280px; }
+.sm-price-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sm-price-input-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.sm-price-input-wrap > span {
+    position: absolute;
+    left: 8px;
+    color: #888;
+}
+.sm-price-input-wrap input {
+    width: 100%;
+    padding: 6px 8px 6px 22px;
+    border: 1px solid #d4d4d4;
+    border-radius: 4px;
+    font-size: 13px;
+}
+.sm-price-inputs > span { color: #888; font-size: 12px; }
+
+.sm-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    cursor: pointer;
+    font-size: 13px;
+    color: #444;
+}
+.sm-checkbox-label input { margin: 0; }
+
+.sm-dropdown-apply {
+    margin-top: 12px;
+    width: 100%;
+    background: #d5b85a;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.sm-dropdown-apply:hover { background: #c1a54a; }
+
+.sm-applied-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 12px;
+}
+
+.sm-applied-label {
+    font-size: 12px;
+    color: #888;
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.sm-filter-chip {
+    background: #fff8e1;
+    border: 1px solid #d5b85a;
+    border-radius: 16px;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: #8B7355;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.sm-filter-chip button {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #8B7355;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+}
+.sm-filter-chip button:hover { color: #c62828; }
+
+.sm-clear-all {
+    background: transparent;
+    border: 1px solid #c62828;
+    color: #c62828;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: auto;
+}
+.sm-clear-all:hover { background: #ffebee; }
+
+/* ─── Returns drill-down panel ─────────────────────────────── */
+.sm-drilldown {
+    background: #fafafa;
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+/* ─── Make Client Book numeric cells right-align cleanly ───── */
+.sm-table th.amount,
+.sm-table td.amount {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* ─── Top Clients (Client Book) ────────────────────────────── */
+.sm-top-clients-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.sm-top-client-card {
+    display: flex;
+    gap: 12px;
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 14px;
+    backdrop-filter: blur(10px);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.sm-top-client-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.sm-top-client-rank {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    background: #d5b85a;
+    color: #fff !important;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.sm-top-client-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sm-top-client-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sm-top-client-meta {
+    font-size: 11px;
+    color: #888 !important;
+}
+
+.sm-top-client-stats {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 2px;
+    flex-wrap: wrap;
+}
+
+.sm-top-client-stats b { color: #d5b85a !important; font-size: 15px; }
+
+.sm-top-client-sub {
+    font-size: 11px;
+    color: #888 !important;
+}
+
+/* ─── Cohorts row (table + chart side by side) ─────────────── */
+.sm-cohorts-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.sm-cohorts-row > * { min-width: 280px; }
+
+@media (max-width: 720px) {
+    .sm-cohorts-row { flex-direction: column; }
+}
