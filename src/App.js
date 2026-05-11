@@ -13,6 +13,8 @@ import OrderPlaced from "./screens/OrderPlacedScreen/OrderPlaced";
 import EditOrder from "./screens/EditOrder/EditOrder";
 import InventoryDashboard from "./screens/InventoryDashboard/InventoryDashboard";
 import AccountsDashboard from "./screens/AccountsDashboard/AccountsDashboard";
+import AccountantDashboard from "./screens/AccountantDashboard/AccountantDashboard";
+import HeadOfDesignDashboard from "./screens/HeadOfDesignDashboard/HeadOfDesignDashboard";
 import OrderDetailPage from "./pages/OrderDetailPage";
 import AdminDashboard from "./screens/AdminDashboard/AdminDashboard";
 import B2BVendorSelection from "./screens/B2bvendorSelection/B2bvendorselection";
@@ -58,6 +60,8 @@ function App() {
         <Route path="/edit-order" element={<PrivateRoute><EditOrder /></PrivateRoute>} />
         <Route path="/inventoryDashboard" element={<PrivateRoute><InventoryDashboard /></PrivateRoute>} />
         <Route path="/accounts" element={<PrivateRoute><AccountsDashboard /></PrivateRoute>} />
+        <Route path="/accountant-dashboard" element={<PrivateRoute><AccountantDashboard /></PrivateRoute>} />
+        <Route path="/head-of-design-dashboard" element={<PrivateRoute><HeadOfDesignDashboard /></PrivateRoute>} />
         <Route path="/order/:orderId" element={<PrivateRoute><OrderDetailPage /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         <Route path="/b2b-executive-dashboard" element={<PrivateRoute><B2bExecutiveDashboard /></PrivateRoute>} />
