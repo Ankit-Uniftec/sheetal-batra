@@ -610,6 +610,10 @@ export default function ProductForm() {
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
   const [isGiftingOrder, setIsGiftingOrder] = useState(false); // Gifting order toggle
+  // Custom Piece mode — independent of Gifting (a customer can gift a custom piece).
+  // When ON, the product list filters to `is_custom_piece = true`, Women/Kids
+  // is forced/disabled, and the item is flagged with is_custom_piece on save.
+  const [isCustomPieceMode, setIsCustomPieceMode] = useState(false);
 
   // URGENT POPUP
   const [showUrgentModal, setShowUrgentModal] = useState(false);
@@ -1504,8 +1508,15 @@ export default function ProductForm() {
     const syncEnabled = selectedProduct.sync_enabled || false;
     setIsSyncProduct(syncEnabled);
 
-    // Force Women for sync products
-    if (syncEnabled && isKidsProduct) {
+    // Auto-flip Custom Piece mode when the selected product is flagged as one.
+    // This covers the case where the SA picks a custom product without first
+    // toggling the Custom Piece switch (or when restoring from a draft).
+    if (selectedProduct.is_custom_piece === true && !isCustomPieceMode) {
+      setIsCustomPieceMode(true);
+    }
+
+    // Force Women for sync products or custom-piece products
+    if ((syncEnabled || selectedProduct.is_custom_piece === true) && isKidsProduct) {
       setIsKidsProduct(false);
     }
 
@@ -1837,6 +1848,11 @@ export default function ProductForm() {
       isKids: isKidsProduct,
       category: isKidsProduct ? "Kids" : "Women", // Store category string
       is_gifting: isGiftingOrder,
+      // Custom piece flag — item-level so a mixed cart (custom + non-custom)
+      // can be represented honestly. Driven by the form's toggle, falls back
+      // to the product's flag (in case the toggle is off but the product
+      // somehow has is_custom_piece=true on it).
+      is_custom_piece: isCustomPieceMode || selectedProduct.is_custom_piece === true,
       order_type: getOrderType(),
       payment_order_type: getPaymentOrderType(),
       delivery_date: deliveryDate, // Add delivery date per product
@@ -2626,12 +2642,15 @@ export default function ProductForm() {
                   className="category-select"
                   value={isKidsProduct ? "kids" : "women"}
                   onChange={(e) => setIsKidsProduct(e.target.value === "kids")}
-                  disabled={isSyncProduct}
+                  disabled={isSyncProduct || isCustomPieceMode}
                 >
                   <option value="women">Women</option>
                   <option value="kids">Kids</option>
                 </select>
                 {isSyncProduct && <span className="sync-badge">LXRTS</span>}
+                {isCustomPieceMode && !isSyncProduct && (
+                  <span className="sync-badge" style={{ background: '#7b1fa2', color: '#fff' }}>CUSTOM PIECE</span>
+                )}
               </div>
 
               {/* Gifting Order Dropdown */}
@@ -2660,6 +2679,39 @@ export default function ProductForm() {
                   <option value="gifting">Gifting Order</option>
                 </select>
                 {isGiftingOrder && <span className="sync-badge" style={{ background: '#e91e63', color: '#fff' }}>GIFT</span>}
+              </div>
+
+              {/* Custom Piece Mode toggle — independent of Gifting. When ON,
+                  the product list filters to is_custom_piece=true products,
+                  Women/Kids is locked to Women, and each item gets is_custom_piece. */}
+              <div className="category-dropdown-container" style={{ marginLeft: '10px' }}>
+                <select
+                  className="category-select"
+                  value={isCustomPieceMode ? "custom" : "standard"}
+                  onChange={(e) => {
+                    const newVal = e.target.value === "custom";
+                    // Switching mode mid-cart is confusing — block it if items already added.
+                    if (orderItems.length > 0) {
+                      const existingIsCustom = !!orderItems[0].is_custom_piece;
+                      if (existingIsCustom !== newVal) {
+                        showPopup({
+                          title: "Cannot Mix Modes",
+                          message: "Cart already has " + (existingIsCustom ? "Custom Piece" : "Standard") + " items. Clear the cart first or place a separate order.",
+                          type: "warning",
+                        });
+                        return;
+                      }
+                    }
+                    setIsCustomPieceMode(newVal);
+                    // Clear the currently selected product since the list will change
+                    setSelectedProduct(null);
+                  }}
+                  disabled={isSyncProduct}
+                >
+                  <option value="standard">Standard Product</option>
+                  <option value="custom">Custom Piece</option>
+                </select>
+                {isCustomPieceMode && <span className="sync-badge" style={{ background: '#7b1fa2', color: '#fff' }}>CUSTOM</span>}
               </div>
             </div> {/* End of dropdowns row */}
 
@@ -3107,10 +3159,12 @@ export default function ProductForm() {
               {/* PRODUCT SELECT */}
               <div className="flex items-center gap-2 pt-2 min-h-10 flex-1" style={{ borderBottom: "2px solid #D5B85A", margin: 0 }}>
                 <SearchableSelect
-                  options={products.map((p) => ({
-                    label: p.name,
-                    value: p.id,
-                  }))}
+                  options={products
+                    .filter((p) => isCustomPieceMode ? p.is_custom_piece === true : !p.is_custom_piece)
+                    .map((p) => ({
+                      label: p.name,
+                      value: p.id,
+                    }))}
                   value={selectedProduct?.id || ""}
                   onChange={(val) =>
                     setSelectedProduct(

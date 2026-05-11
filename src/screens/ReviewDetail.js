@@ -126,6 +126,17 @@ export default function ReviewDetail() {
     } catch { return false; }
   })();
 
+  // Exhibition orders — gate for the mandatory EXB Name + SB Representative
+  // Name fields. Detected from the SA's store (read from sessionStorage during
+  // the order flow) or the order's salesperson_store as a fallback.
+  const isExhibition = (() => {
+    try {
+      const sp = JSON.parse(sessionStorage.getItem("currentSalesperson") || "{}");
+      if (sp.store && /exhib/i.test(sp.store)) return true;
+    } catch {}
+    return /exhib/i.test(order?.salesperson_store || "");
+  })();
+
   // Stock-order detection — set by the SA's "Place Stock Order" button and
   // carried through ProductForm. Stock orders skip the OTP/customer flow,
   // skip Private-SA verification, force the order_no to the STOCK prefix
@@ -155,13 +166,13 @@ export default function ReviewDetail() {
       setShowSignature(true);
       return;
     }
-    // Private SA mandatory fields gate
-    if (isPrivateSA) {
+    // Exhibition order mandatory fields gate
+    if (isExhibition) {
       if (!exbName.trim() || !sbRepName.trim()) {
         showPopup({
           type: "warning",
           title: "Missing Required Fields",
-          message: "EXB Name and SB Representative Name are required to place a private order.",
+          message: "EXB Name and SB Representative Name are required to place an exhibition order.",
           confirmText: "OK",
         });
         return;
@@ -405,12 +416,16 @@ export default function ReviewDetail() {
       // prices and roll up into grand_total. Forcing all amounts to 0 here
       // would erase the SA's pricing for those add-ons.
       orderDataToInsert.is_private_order = true;
-      // Mandatory private-order metadata captured on this screen.
-      orderDataToInsert.exb_name = exbName.trim();
-      orderDataToInsert.sb_representative_name = sbRepName.trim();
     } else {
       // Explicitly mark non-private orders as such for clear audit trail
       orderDataToInsert.is_private_order = false;
+    }
+
+    // Exhibition orders — persist the EXB metadata captured on this screen.
+    // The form-side gate already enforces these are non-empty when isExhibition.
+    if (isExhibition) {
+      orderDataToInsert.exb_name = exbName.trim();
+      orderDataToInsert.sb_representative_name = sbRepName.trim();
     }
 
     // STOCK ORDER FLAG — propagate to the row so dashboards can filter on it.
@@ -1122,13 +1137,14 @@ export default function ReviewDetail() {
           </div>
         </div>
 
-        {/* ─── Other Details (Private SA only) ────────────────────
-            EXB Name + SB Representative Name are mandatory when a Private
-            SA places an order. Persisted to orders.exb_name and
-            orders.sb_representative_name. Hidden for every other flow.
+        {/* ─── Other Details (Exhibition orders only) ──────────────
+            EXB Name + SB Representative Name are mandatory when an SA
+            from an Exhibition store places an order. Persisted to
+            orders.exb_name and orders.sb_representative_name. Hidden
+            for every other flow.
             Uses the same .section-box / .row3 / .field / .input-line
             classes as the rest of this screen (gold underline style). */}
-        {isPrivateSA && (
+        {isExhibition && (
           <div className="section-box">
             <h3>Other Details</h3>
             <div className="row3">

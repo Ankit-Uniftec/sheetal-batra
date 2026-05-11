@@ -123,7 +123,11 @@ export default function AddProduct({ onProductAdded }) {
 
   // Mode toggles
   const [mode, setMode] = useState("manual");           // 'manual' | 'csv'
-  const [productType, setProductType] = useState("normal"); // 'normal' | 'lxrts'
+  // 'normal' = regular off-the-rack | 'lxrts' = Shopify-synced | 'custom_piece' = bespoke / made-to-order.
+  // LXRTS and Custom Piece are mutually exclusive product types — a single product
+  // can never be both. Custom Piece persists `is_custom_piece: true` on the row;
+  // Normal-shaped layout (sizes + inventory) applies to both 'normal' and 'custom_piece'.
+  const [productType, setProductType] = useState("normal");
 
   // Auto-SKU
   const [sku, setSku] = useState("");
@@ -161,10 +165,13 @@ export default function AddProduct({ onProductAdded }) {
   const [csvExporting, setCsvExporting] = useState(false);
   const csvFileInputRef = useRef(null);
 
-  // Suggestions for chip inputs (top/bottom/color), pulled once on mount
+  // Suggestions for chip inputs (top/bottom), pulled once on mount
   const [topSuggest, setTopSuggest] = useState([]);
   const [bottomSuggest, setBottomSuggest] = useState([]);
-  const [colorSuggest, setColorSuggest] = useState([]);
+  // Full color rows from the `colors` table. Default Color must be an exact
+  // match of a row in this table so ProductForm can find its hex and
+  // pre-fill swatches when the product is later selected.
+  const [colorList, setColorList] = useState([]);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -182,22 +189,29 @@ export default function AddProduct({ onProductAdded }) {
         if (alive) setSkuLoading(false);
       }
 
-      // Pull existing options + colors to use as autocomplete suggestions.
-      // We grab the raw arrays/strings and union them client-side because
-      // Supabase doesn't easily expose `unnest()` over the JS client.
-      const { data } = await supabase
+      // Pull existing top/bottom options used across products — these stay
+      // as freeform chip suggestions since every product can have its own
+      // bespoke list. We unnest client-side (Supabase JS doesn't expose it).
+      const { data: prodData } = await supabase
         .from("products")
-        .select("top_options, bottom_options, default_color");
-      if (!alive || !data) return;
-      const t = new Set(), b = new Set(), c = new Set();
-      data.forEach((p) => {
+        .select("top_options, bottom_options");
+      if (!alive) return;
+      const t = new Set(), b = new Set();
+      (prodData || []).forEach((p) => {
         (p.top_options || []).forEach((v) => v && t.add(String(v).trim()));
         (p.bottom_options || []).forEach((v) => v && b.add(String(v).trim()));
-        if (p.default_color) c.add(String(p.default_color).trim());
       });
       setTopSuggest([...t].sort());
       setBottomSuggest([...b].sort());
-      setColorSuggest([...c].sort());
+
+      // Colors must be a curated list (from the `colors` table) so
+      // ProductForm's exact-name match against the same table succeeds.
+      const { data: colorData } = await supabase
+        .from("colors")
+        .select("name, hex")
+        .order("name", { ascending: true });
+      if (!alive) return;
+      setColorList(colorData || []);
     })();
     return () => { alive = false; };
   }, []);
@@ -225,15 +239,16 @@ export default function AddProduct({ onProductAdded }) {
   };
 
   // ─── Validation ───
+  // Custom Piece uses the same shape as Normal — sizes + inventory.
+  // LXRTS still needs Shopify ID + variants.
   const validate = () => {
     if (!name.trim()) return "Product name is required.";
     if (!basePrice || Number(basePrice) <= 0) return "Base price must be greater than 0.";
 
-    if (productType === "normal") {
+    if (productType === "normal" || productType === "custom_piece") {
       if (!isMto && availableSizes.length === 0) return "Pick at least one available size, or mark as Made-to-Order.";
       if (!isMto && (inventory === "" || isNaN(Number(inventory)))) return "Inventory must be a number.";
-    } else {
-      // LXRTS
+    } else if (productType === "lxrts") {
       if (!shopifyProductId.trim()) return "Shopify Product ID is required for LXRTS products.";
       const validVariants = variants.filter((v) => v.size && v.size.trim());
       if (validVariants.length === 0) return "Add at least one size variant.";
@@ -271,9 +286,10 @@ export default function AddProduct({ onProductAdded }) {
       default_bottom: defaultBottom || null,
       default_color: defaultColor.trim() || null,
       sync_enabled: productType === "lxrts",
+      is_custom_piece: productType === "custom_piece",
     };
 
-    if (productType === "normal") {
+    if (productType === "normal" || productType === "custom_piece") {
       productRow.available_size = availableSizes.length > 0 ? availableSizes : null;
       productRow.inventory = isMto ? 9999 : Number(inventory) || 0;
       productRow.shopify_product_id = null;
@@ -574,7 +590,7 @@ export default function AddProduct({ onProductAdded }) {
         >CSV Import / Export</button>
       </div>
 
-      {/* ── Product type toggle (Normal / LXRTS) ── */}
+      {/* ── Product type toggle (Normal / LXRTS / Custom Piece) ── */}
       <div className="ap-typebar">
         <label className={`ap-type-pill ${productType === "normal" ? "active" : ""}`}>
           <input
@@ -595,6 +611,16 @@ export default function AddProduct({ onProductAdded }) {
             onChange={() => setProductType("lxrts")}
           />
           <span>LXRTS (Shopify)</span>
+        </label>
+        <label className={`ap-type-pill ${productType === "custom_piece" ? "active" : ""}`}>
+          <input
+            type="radio"
+            name="productType"
+            value="custom_piece"
+            checked={productType === "custom_piece"}
+            onChange={() => setProductType("custom_piece")}
+          />
+          <span>Custom Piece</span>
         </label>
       </div>
 
@@ -692,23 +718,40 @@ export default function AddProduct({ onProductAdded }) {
             </div>
             <div className="ap-field">
               <label>Default Color</label>
-              <input
+              {/* Sourced from the `colors` table so the saved name exactly
+                  matches what ProductForm looks up to find the hex.
+                  If the color you need isn't here, add it to the `colors`
+                  table first (Supabase Studio) and refresh this page. */}
+              <select
                 className="ap-input"
                 value={defaultColor}
                 onChange={(e) => setDefaultColor(e.target.value)}
-                placeholder="e.g. Burnt Orange"
-                list="ap-color-suggest"
-              />
-              <datalist id="ap-color-suggest">
-                {colorSuggest.map((c) => <option key={c} value={c} />)}
-              </datalist>
+              >
+                <option value="">— Select a color —</option>
+                {colorList.map((c) => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+              {/* Tiny swatch preview when a color is picked */}
+              {defaultColor && (() => {
+                const picked = colorList.find((c) => c.name === defaultColor);
+                if (!picked?.hex) return null;
+                return (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                    <span style={{ display: 'inline-block', width: 14, height: 14, background: picked.hex, border: '1px solid #ccc', borderRadius: 3 }} />
+                    <span style={{ fontSize: 11, color: '#888' }}>{picked.hex}</span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
-          {/* ── Normal-only: sizes + inventory ── */}
-          {productType === "normal" && (
+          {/* ── Sizes + inventory (Normal and Custom Piece both use this shape) ── */}
+          {(productType === "normal" || productType === "custom_piece") && (
             <>
-              <h3 className="ap-section-title">Inventory (Normal Product)</h3>
+              <h3 className="ap-section-title">
+                Inventory ({productType === "custom_piece" ? "Custom Piece" : "Normal Product"})
+              </h3>
               <div className="ap-field">
                 <div className="ap-size-label-row">
                   <label>Available Sizes</label>
