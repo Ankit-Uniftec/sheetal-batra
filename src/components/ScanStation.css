@@ -162,6 +162,54 @@
   cursor: not-allowed;
 }
 
+/* Manual Entry toggle — shown by default in place of the input field */
+.wd-manual-toggle-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.wd-manual-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: transparent;
+  color: #888;
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.wd-manual-toggle-btn:hover {
+  color: #d5b85a;
+  border-color: #d5b85a;
+  background: #fefdf8;
+}
+
+/* Small × cancel inside the manual entry form */
+.wd-manual-cancel-btn {
+  width: 38px;
+  height: 38px;
+  align-self: center;
+  background: transparent;
+  color: #999;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wd-manual-cancel-btn:hover {
+  color: #c62828;
+  border-color: #c62828;
+}
+
 /* ========== SCAN RESULT ========== */
 .wd-scan-result {
   display: flex;

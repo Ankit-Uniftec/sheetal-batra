@@ -8,9 +8,8 @@ import formatDate from "../utils/formatDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import NotificationBell from "../components/NotificationBell";
-// TEMP (prod): scan station hidden — re-enable when barcode flow is ready
-// import ScanStation from "../components/ScanStation";
-// import "../components/ScanStation.css";
+import ScanStation from "../components/ScanStation";
+import "../components/ScanStation.css";
 import { getStageLabel, getStageColor } from "../utils/barcodeService";
 
 // Status options for alterations
@@ -88,6 +87,9 @@ const WarehouseDashboard = () => {
   const [pdfLoading, setPdfLoading] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(null);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  // Stations the logged-in warehouse user is allowed to scan at. Empty array
+  // means no restriction (passed-through ScanStation will show all stations).
+  const [assignedStations, setAssignedStations] = useState([]);
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
@@ -287,7 +289,7 @@ const WarehouseDashboard = () => {
       // ✅ Role check - only warehouse users allowed
       const { data: userRecord } = await supabase
         .from("salesperson")
-        .select("role")
+        .select("role, assigned_stations")
         .eq("email", session.user.email?.toLowerCase())
         .single();
 
@@ -298,6 +300,7 @@ const WarehouseDashboard = () => {
       }
 
       setCurrentUserEmail(session.user.email?.toLowerCase() || "");
+      setAssignedStations(userRecord.assigned_stations || []);
       fetchOrders();
     };
 
@@ -582,14 +585,6 @@ const WarehouseDashboard = () => {
         return acc;
       }, {});
   }, [orders]);
-
-  const markAsCompleted = async (orderId) => {
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "completed" })
-      .eq("id", orderId);
-    if (!error) fetchOrders();
-  };
 
   // Update warehouse stage from dropdown
   // const updateWarehouseStage = async (orderId, orderNo, newStage) => {
@@ -893,12 +888,10 @@ const WarehouseDashboard = () => {
               onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>
               Calendar
             </a>
-            {/* TEMP (prod): Scan Station tab hidden — re-enable when barcode flow is ready
             <a className={`wd-menu-item ${activeTab === "scan" ? "active" : ""}`}
               onClick={() => { setActiveTab("scan"); setShowSidebar(false); }}>
               Scan Station
             </a>
-            */}
             <a className="wd-menu-item" onClick={handleLogout}>Log Out</a>
           </nav>
         </aside>
@@ -1425,7 +1418,9 @@ const WarehouseDashboard = () => {
                               <p><strong className="wd-label">Delivery Date:</strong> {getWarehouseDate(order.delivery_date, order.created_at)}</p>
                             </div>
 
-                            {/* TEMP (prod): barcode component tracker hidden — re-enable when scan flow is ready.
+                            {/* Per-component stage tracker — populated by the
+                                warehouse Scan Station as each barcode advances
+                                through dyeing → cutting → stitching → QC → dispatch. */}
                             {!isAlteration && (
                               <div className="wd-component-tracker">
                                 {order.status === "cancelled" ? (
@@ -1473,35 +1468,6 @@ const WarehouseDashboard = () => {
                                           "Awaiting Production"}
                                   </div>
                                 )}
-                              </div>
-                            )}
-                            */}
-
-                            {/* Simple status badge + Mark as Complete (used while scan flow is disabled) */}
-                            {!isAlteration && (
-                              <div className="wd-component-tracker">
-                                <div className={`wd-order-status-badge ${
-                                  order.status === "cancelled" ? "wd-status-cancelled" :
-                                  order.status === "completed" ? "wd-status-completed" :
-                                  order.status === "delivered" ? "wd-status-delivered" :
-                                  "wd-status-pending"
-                                }`}>
-                                  {order.status === "cancelled" ? "Cancelled" :
-                                    order.status === "completed" ? "Completed" :
-                                      order.status === "delivered" ? "Delivered" :
-                                        (order.status === "pending" || order.status === "order_received") ? "Order Received" :
-                                          "Awaiting Production"}
-                                </div>
-                                <button
-                                  className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""}`}
-                                  disabled={order.status === "completed" || order.status === "delivered" || order.status === "cancelled"}
-                                  onClick={() => markAsCompleted(order.id)}
-                                >
-                                  {order.status === "completed" ? "Completed" :
-                                    order.status === "delivered" ? "Delivered" :
-                                      order.status === "cancelled" ? "Cancelled" :
-                                        "Mark as Completed"}
-                                </button>
                               </div>
                             )}
                           </div>
@@ -1644,11 +1610,12 @@ const WarehouseDashboard = () => {
               )}
             </div>
           )}
-          {/* TEMP (prod): Scan Station hidden — re-enable when barcode flow is ready
           {activeTab === "scan" && (
-            <ScanStation currentUserEmail={currentUserEmail} />
+            <ScanStation
+              currentUserEmail={currentUserEmail}
+              allowedStations={assignedStations}
+            />
           )}
-          */}
         </div>
       </div>
 
