@@ -87,6 +87,9 @@ const WarehouseDashboard = () => {
   const [pdfLoading, setPdfLoading] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(null);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  // Stations the logged-in warehouse user is allowed to scan at. Empty array
+  // means no restriction (passed-through ScanStation will show all stations).
+  const [assignedStations, setAssignedStations] = useState([]);
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
@@ -286,7 +289,7 @@ const WarehouseDashboard = () => {
       // ✅ Role check - only warehouse users allowed
       const { data: userRecord } = await supabase
         .from("salesperson")
-        .select("role")
+        .select("role, assigned_stations")
         .eq("email", session.user.email?.toLowerCase())
         .single();
 
@@ -297,6 +300,7 @@ const WarehouseDashboard = () => {
       }
 
       setCurrentUserEmail(session.user.email?.toLowerCase() || "");
+      setAssignedStations(userRecord.assigned_stations || []);
       fetchOrders();
     };
 
@@ -1607,7 +1611,10 @@ const WarehouseDashboard = () => {
             </div>
           )}
           {activeTab === "scan" && (
-            <ScanStation currentUserEmail={currentUserEmail} />
+            <ScanStation
+              currentUserEmail={currentUserEmail}
+              allowedStations={assignedStations}
+            />
           )}
         </div>
       </div>

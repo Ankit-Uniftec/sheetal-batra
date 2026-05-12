@@ -21,11 +21,37 @@ import {
 // ============================================================
 // SCAN STATION COMPONENT
 // ============================================================
-const ScanStation = ({ currentUserEmail }) => {
+/**
+ * ScanStation
+ *
+ * @param {object} props
+ * @param {string} props.currentUserEmail
+ * @param {string[]} [props.allowedStations]
+ *   Optional list of station `value`s this user is permitted to scan at.
+ *   - If omitted/empty → all SCAN_STATIONS visible (legacy / admin use).
+ *   - If exactly one → that station is auto-selected and the "Change Station"
+ *     button is hidden (worker only has one assignment).
+ *   - If more than one → the picker grid is filtered to those stations, and
+ *     the worker can switch between them via the existing "Change Station"
+ *     button.
+ */
+const ScanStation = ({ currentUserEmail, allowedStations }) => {
     const { showPopup, PopupComponent } = usePopup();
 
-    // Station selection
-    const [selectedStation, setSelectedStation] = useState(null);
+    // Resolve the visible station list: filter by allowedStations if provided,
+    // otherwise fall back to the full SCAN_STATIONS list.
+    const visibleStations = React.useMemo(() => {
+        if (!allowedStations || allowedStations.length === 0) return SCAN_STATIONS;
+        const allow = new Set(allowedStations);
+        return SCAN_STATIONS.filter((s) => allow.has(s.value));
+    }, [allowedStations]);
+
+    // If the worker is assigned exactly one station, auto-select it so they
+    // don't have to pick from a single-button grid every login.
+    const autoSelectStation = visibleStations.length === 1 ? visibleStations[0].value : null;
+
+    // Station selection — starts on auto-selected one when applicable
+    const [selectedStation, setSelectedStation] = useState(autoSelectStation);
 
     // Scan state
     const [scanResult, setScanResult] = useState(null); // { success, data, error }
@@ -589,9 +615,13 @@ const ScanStation = ({ currentUserEmail }) => {
             {!selectedStation ? (
                 <div className="wd-station-selector">
                     <h2 className="wd-scan-title">Select Your Station</h2>
-                    <p className="wd-scan-subtitle">Choose the station you are working at today</p>
+                    <p className="wd-scan-subtitle">
+                        {visibleStations.length === 0
+                            ? "You do not have any stations assigned. Please contact your admin."
+                            : "Choose the station you are working at today"}
+                    </p>
                     <div className="wd-station-grid">
-                        {SCAN_STATIONS.map(station => (
+                        {visibleStations.map(station => (
                             <button
                                 key={station.value}
                                 className="wd-station-btn"
@@ -607,16 +637,21 @@ const ScanStation = ({ currentUserEmail }) => {
                     {/* Active Station Header */}
                     <div className="wd-scan-header">
                         <div className="wd-scan-header-left">
-                            <button
-                                className="wd-scan-back-btn"
-                                onClick={() => {
-                                    setSelectedStation(null);
-                                    setScanResult(null);
-                                    setSelectedComponent(null);
-                                }}
-                            >
-                                {'\u2190'} Change Station
-                            </button>
+                            {/* Hide "Change Station" if the worker is locked
+                                to a single station (or if they have none \u2014 should
+                                never reach here in that case, but guard anyway). */}
+                            {visibleStations.length > 1 && (
+                                <button
+                                    className="wd-scan-back-btn"
+                                    onClick={() => {
+                                        setSelectedStation(null);
+                                        setScanResult(null);
+                                        setSelectedComponent(null);
+                                    }}
+                                >
+                                    {'\u2190'} Change Station
+                                </button>
+                            )}
                             <h2 className="wd-scan-title">
                                 {SCAN_STATIONS.find(s => s.value === selectedStation)?.label}
                             </h2>

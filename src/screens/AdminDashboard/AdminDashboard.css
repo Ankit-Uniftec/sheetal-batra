@@ -2026,5 +2026,68 @@
 .admin-stock-toggle input:disabled + .admin-stock-toggle-slider {
     opacity: 0.5;
     cursor: not-allowed;
+}
 
+/* ─── Sales Team tab — Assigned Stations multi-select ─── */
+.admin-stations-cell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.admin-stations-btn {
+    background: white;
+    border: 1px solid #d8d8d8;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #444;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: border-color 0.15s;
+}
+
+.admin-stations-btn:hover {
+    border-color: #d5b85a;
+    color: #d5b85a;
+}
+
+.admin-stations-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: white;
+    border: 1px solid #d4d4d4;
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    padding: 6px 0;
+    min-width: 220px;
+    max-height: 320px;
+    overflow-y: auto;
+    z-index: 50;
+}
+
+.admin-stations-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: #444;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s;
+}
+
+.admin-stations-dropdown-item:hover {
+    background: rgba(213, 184, 90, 0.08);
+}
+
+.admin-stations-dropdown-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #d5b85a;
 }

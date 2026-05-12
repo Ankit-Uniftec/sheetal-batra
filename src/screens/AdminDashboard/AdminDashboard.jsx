@@ -8,6 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import formatPhoneNumber from "../../utils/formatPhoneNumber";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { SCAN_STATIONS } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import config from "../../config/config";
@@ -182,6 +183,10 @@ export default function AdminDashboard() {
     // Sales Team tab — search filter + the id of the row currently being saved
     const [salesTeamSearch, setSalesTeamSearch] = useState("");
     const [stockTogglingId, setStockTogglingId] = useState(null);
+    // Per-row save indicator when station assignments are changing.
+    const [stationsSavingId, setStationsSavingId] = useState(null);
+    // Which row's station dropdown is currently open (id, or null).
+    const [stationDropdownOpenId, setStationDropdownOpenId] = useState(null);
     const [pdfLoading, setPdfLoading] = useState(null);
     const [vendors, setVendors] = useState([]);
     const [profiles, setProfiles] = useState([]);
@@ -288,7 +293,7 @@ export default function AdminDashboard() {
             const [ordersRes, productsRes, spRes, vendorsRes, profilesRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 supabase.from("products").select("*").order("name", { ascending: true }),
-                supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders"),
+                supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders, assigned_stations"),
                 supabase.from("vendors").select("*"),
                 supabase.from("profiles").select("id, full_name, phone, email, created_at"),
             ]);
@@ -972,6 +977,30 @@ export default function AdminDashboard() {
         if (error) showPopup({ title: "Error", message: "Failed to update status.", type: "error" });
         else setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updateData } : o));
         setStatusUpdating(null);
+    };
+
+    // Toggle a single station for an SA — optimistic add/remove on the
+    // assigned_stations array. Used by the dropdown checkboxes.
+    const toggleStationAssignment = async (sp, stationValue) => {
+        if (!sp?.id) return;
+        const current = sp.assigned_stations || [];
+        const has = current.includes(stationValue);
+        const next = has
+            ? current.filter((s) => s !== stationValue)
+            : [...current, stationValue];
+        setStationsSavingId(sp.id);
+        // optimistic
+        setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, assigned_stations: next } : s));
+        const { error } = await supabase
+            .from("salesperson")
+            .update({ assigned_stations: next })
+            .eq("id", sp.id);
+        if (error) {
+            // revert
+            setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, assigned_stations: current } : s));
+            showPopup({ title: "Update Failed", message: error.message || "Could not change station assignment.", type: "error", confirmText: "OK" });
+        }
+        setStationsSavingId(null);
     };
 
     // Toggle a single SA's permission to place stock orders.
@@ -1711,7 +1740,7 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
                         <button className={`admin-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
-                        {/* <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button> */}
+                        <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
                         {/* <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button> */}
                     </nav>
                 </aside>
@@ -3389,8 +3418,14 @@ export default function AdminDashboard() {
                         // via the SA Dashboard. Other roles (admin, store_manager,
                         // ceo, etc.) are excluded — they don't get a Stock button
                         // anyway. Same gate as AssociateDashboard.js auth check.
-                        const isSARole = (r) => r === "salesperson" || r === "sa_services";
-                        const teamList = salespersonTable.filter(sp => isSARole(sp.role));
+                        // Sales Team now covers floor-facing roles too —
+                        // warehouse + scan_station users need station assignments.
+                        const isTeamRole = (r) =>
+                          r === "salesperson" ||
+                          r === "sa_services" ||
+                          r === "warehouse" ||
+                          r === "scan_station";
+                        const teamList = salespersonTable.filter(sp => isTeamRole(sp.role));
                         return (
                         <div className="admin-clients-tab">
                             <h2 className="admin-section-title">Sales Team & Permissions</h2>
@@ -3431,6 +3466,7 @@ export default function AdminDashboard() {
                                             <th>Phone</th>
                                             <th>Email</th>
                                             <th style={{ textAlign: 'center' }}>Place Stock Orders</th>
+                                            <th>Assigned Stations</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -3443,11 +3479,16 @@ export default function AdminDashboard() {
                                                     .some(v => String(v).toLowerCase().includes(q));
                                             }).sort((a, b) => (a.saleperson || "").localeCompare(b.saleperson || ""));
                                             if (list.length === 0) {
-                                                return <tr><td colSpan="7" className="no-data">No salespersons found</td></tr>;
+                                                return <tr><td colSpan="8" className="no-data">No salespersons found</td></tr>;
                                             }
                                             return list.map(sp => {
                                                 const checked = !!sp.can_place_stock_orders;
                                                 const saving = stockTogglingId === sp.id;
+                                                const stations = sp.assigned_stations || [];
+                                                const stationsSaving = stationsSavingId === sp.id;
+                                                const dropdownOpen = stationDropdownOpenId === sp.id;
+                                                // Stations are only meaningful for warehouse + scan_station roles
+                                                const showStations = sp.role === "warehouse" || sp.role === "scan_station";
                                                 return (
                                                     <tr key={sp.id || sp.email}>
                                                         <td style={{ fontWeight: 500 }}>{sp.saleperson || "—"}</td>
@@ -3467,6 +3508,45 @@ export default function AdminDashboard() {
                                                                 <span className="admin-stock-toggle-slider" />
                                                             </label>
                                                             {saving && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>saving…</span>}
+                                                        </td>
+                                                        <td>
+                                                            {!showStations ? (
+                                                                <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
+                                                            ) : (
+                                                                <div className="admin-stations-cell">
+                                                                    <button
+                                                                        type="button"
+                                                                        className="admin-stations-btn"
+                                                                        onClick={() => setStationDropdownOpenId(dropdownOpen ? null : sp.id)}
+                                                                    >
+                                                                        {stations.length === 0
+                                                                            ? "Assign stations…"
+                                                                            : stations.length === 1
+                                                                                ? (SCAN_STATIONS.find(s => s.value === stations[0])?.label || stations[0])
+                                                                                : `${stations.length} stations`}
+                                                                        <span style={{ marginLeft: 6, fontSize: 10 }}>▾</span>
+                                                                    </button>
+                                                                    {stationsSaving && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>saving…</span>}
+                                                                    {dropdownOpen && (
+                                                                        <div className="admin-stations-dropdown" onMouseLeave={() => setStationDropdownOpenId(null)}>
+                                                                            {SCAN_STATIONS.map(station => {
+                                                                                const isAssigned = stations.includes(station.value);
+                                                                                return (
+                                                                                    <label key={station.value} className="admin-stations-dropdown-item">
+                                                                                        <input
+                                                                                            type="checkbox"
+                                                                                            checked={isAssigned}
+                                                                                            onChange={() => toggleStationAssignment(sp, station.value)}
+                                                                                            disabled={stationsSaving}
+                                                                                        />
+                                                                                        <span>{station.label}</span>
+                                                                                    </label>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 );
