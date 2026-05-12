@@ -8,9 +8,8 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 
-// TEMP (prod): set to false to hide all barcodes and force single-page PDF.
-// Re-enable when barcode workflow is ready in production.
-const SHOW_BARCODES = false;
+// Barcode workflow is live — barcodes render on warehouse PDFs.
+const SHOW_BARCODES = true;
 
 // Define colors locally
 const COLORS = {

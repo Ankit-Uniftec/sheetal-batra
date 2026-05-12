@@ -2705,11 +2705,7 @@
   margin-top: 12px;
   border-top: 1px solid #eee;
   padding-top: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  width: 100%;
 }
 
 .wd-comp-loading {
@@ -2718,20 +2714,25 @@
   margin: 0;
 }
 
+/* Responsive grid — components wrap into multiple compact columns
+   instead of stretching full-width. min 220px so a row stays readable. */
 .wd-comp-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .wd-comp-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 8px 10px;
   background: #f9f9f9;
   border-radius: 8px;
   border: 1px solid #eee;
+  min-width: 0; /* allow children to truncate inside the grid cell */
 }
 
 .wd-comp-row.wd-comp-delayed {
@@ -2743,6 +2744,16 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.wd-comp-left .wd-comp-barcode,
+.wd-comp-left .wd-comp-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wd-comp-barcode {
@@ -2761,6 +2772,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .wd-comp-stage-badge {
@@ -2769,7 +2781,7 @@
   border-radius: 12px;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: #fff !important;
   white-space: nowrap;
 }
 
@@ -2825,13 +2837,8 @@
 }
 
 @media (max-width: 600px) {
-  .wd-comp-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-
-  .wd-comp-right {
-    align-self: flex-end;
+  /* On phones, force single-column grid so each component row stays readable */
+  .wd-comp-list {
+    grid-template-columns: 1fr;
   }
 }

@@ -1350,7 +1350,8 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* TEMP (prod): Production Status (barcode-derived) hidden — re-enable when scan flow is ready.
+                      {/* Production Status — derived live from per-component
+                          barcode scans (filled by the warehouse scan stations). */}
                       {!order.is_alteration && (() => {
                         if (!orderComponentsMap[order.id]) {
                           fetchComponentsForOrder(order.id);
@@ -1400,7 +1401,6 @@ export default function Dashboard() {
                           </div>
                         );
                       })()}
-                      */}
 
                       {own && canMarkDelivered(order) && (
                         <div className="ad-order-actions">

@@ -78,8 +78,10 @@ const ScanStation = ({ currentUserEmail }) => {
     // Stats
     const [todayStats, setTodayStats] = useState({ scanned: 0, passed: 0, failed: 0 });
 
-    // Manual barcode input
+    // Manual barcode input — hidden by default. Workers should be scanning;
+    // the manual field is only for the occasional damaged-barcode case.
     const [manualBarcode, setManualBarcode] = useState("");
+    const [showManualEntry, setShowManualEntry] = useState(false);
 
     // ============================================================
     // BARCODE SCANNER HOOK
@@ -630,21 +632,44 @@ const ScanStation = ({ currentUserEmail }) => {
                         </div>
                     </div>
 
-                    {/* Manual Input */}
-                    <form className="wd-manual-input" onSubmit={handleManualSubmit}>
-                        <input
-                            type="text"
-                            value={manualBarcode}
-                            onChange={(e) => setManualBarcode(e.target.value)}
-                            placeholder="Type barcode or scan..."
-                            className="wd-manual-field"
-                            data-barcode-passthrough=""
-                            autoFocus
-                        />
-                        <button type="submit" className="wd-manual-btn" disabled={isProcessing}>
-                            {isProcessing ? "Processing..." : "Submit"}
-                        </button>
-                    </form>
+                    {/* Manual Entry — hidden by default. Most stations should
+                        scan via the connected hardware (captured by useBarcodeScanner).
+                        The button below reveals a text input for manually typing a
+                        barcode (e.g. when a label is damaged). */}
+                    {!showManualEntry ? (
+                        <div className="wd-manual-toggle-row">
+                            <button
+                                type="button"
+                                className="wd-manual-toggle-btn"
+                                onClick={() => setShowManualEntry(true)}
+                            >
+                                ⌨ Manual Entry
+                            </button>
+                        </div>
+                    ) : (
+                        <form className="wd-manual-input" onSubmit={handleManualSubmit}>
+                            <input
+                                type="text"
+                                value={manualBarcode}
+                                onChange={(e) => setManualBarcode(e.target.value)}
+                                placeholder="Type barcode and press Submit..."
+                                className="wd-manual-field"
+                                data-barcode-passthrough=""
+                                autoFocus
+                            />
+                            <button type="submit" className="wd-manual-btn" disabled={isProcessing}>
+                                {isProcessing ? "Processing..." : "Submit"}
+                            </button>
+                            <button
+                                type="button"
+                                className="wd-manual-cancel-btn"
+                                onClick={() => { setShowManualEntry(false); setManualBarcode(""); }}
+                                title="Hide manual entry"
+                            >
+                                ✕
+                            </button>
+                        </form>
+                    )}
 
                     {/* Scan Result Display */}
                     {scanResult && (
