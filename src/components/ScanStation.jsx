@@ -38,10 +38,13 @@ import {
 const ScanStation = ({ currentUserEmail, allowedStations }) => {
     const { showPopup, PopupComponent } = usePopup();
 
-    // Resolve the visible station list: filter by allowedStations if provided,
-    // otherwise fall back to the full SCAN_STATIONS list.
+    // Resolve the visible station list.
+    //   - prop omitted (undefined/null)  → show every station (legacy / unscoped use)
+    //   - prop is an array (incl. empty) → strict filter to that list
+    // An empty array therefore means "no stations assigned" and the picker
+    // renders zero buttons + a help message, NOT a permissive fallback.
     const visibleStations = React.useMemo(() => {
-        if (!allowedStations || allowedStations.length === 0) return SCAN_STATIONS;
+        if (allowedStations === undefined || allowedStations === null) return SCAN_STATIONS;
         const allow = new Set(allowedStations);
         return SCAN_STATIONS.filter((s) => allow.has(s.value));
     }, [allowedStations]);
