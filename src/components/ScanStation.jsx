@@ -20,10 +20,8 @@ import {
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
 // labels (e.g. "Embroidery In-Progress") so RPC error messages read
-// naturally. RPC errors are returned verbatim by Supabase, so this is the
-// cleanest place to clean them up. Sort longest-first so a shorter value
-// (e.g. "embroidery") doesn't shadow a longer one (e.g.
-// "embroidery_in_progress").
+// naturally. Sort longest-first so a shorter value (e.g. "embroidery")
+// doesn't shadow a longer one (e.g. "embroidery_in_progress").
 const prettifyStageMessage = (msg) => {
     if (!msg) return msg;
     let out = String(msg);
@@ -34,6 +32,59 @@ const prettifyStageMessage = (msg) => {
         }
     }
     return out;
+};
+
+// Parse the current ("from") stage out of a raw RPC error message.
+// Handles "Cannot move from X to Y", "from stage: X", etc.
+const extractCurrentStageFromError = (rawMsg) => {
+    if (!rawMsg) return null;
+    const s = String(rawMsg);
+    const fromToMatch = s.match(/from\s+([a-z][a-z_]*)\s+to\s+/i);
+    if (fromToMatch) return fromToMatch[1];
+    const fromStageMatch = s.match(/from\s+stage[:\s]+([a-z][a-z_]*)/i);
+    if (fromStageMatch) return fromStageMatch[1];
+    return null;
+};
+
+// Given a stage value (e.g. "dry_cleaning_completed"), return the next
+// expected scan station in the workflow (skipping security_gate which has
+// step=0 and is special). Returns null when the piece is at the very end.
+const getNextStationAfterStage = (stageValue) => {
+    if (!stageValue) return null;
+    const cur = PRODUCTION_STAGES.find((s) => s.value === stageValue);
+    if (!cur) return null;
+    const nextStation = SCAN_STATIONS
+        .filter((s) => s.step > cur.step && s.step > 0)
+        .sort((a, b) => a.step - b.step)[0];
+    return nextStation || null;
+};
+
+// Build a worker-friendly explanation from a raw RPC error string. Tells
+// them where the piece currently is and where it should be scanned next.
+// Falls back to the prettified raw message when we can't parse a stage.
+const buildFriendlyScanError = (rawMsg) => {
+    if (!rawMsg) return rawMsg;
+    const fromStage = extractCurrentStageFromError(rawMsg);
+    if (!fromStage) return prettifyStageMessage(rawMsg);
+
+    const currentLabel = getStageLabel(fromStage) || fromStage.replace(/_/g, " ");
+    const nextStation = getNextStationAfterStage(fromStage);
+    const nextMsg = nextStation
+        ? ` Next scan should happen at the ${nextStation.label} station.`
+        : " It has passed the last production stage.";
+
+    // Forward-movement error from advance_component_stage
+    if (/cannot move from/i.test(rawMsg)) {
+        return `This piece has already completed up to "${currentLabel}".${nextMsg}` +
+            ` If this piece genuinely needs rework, route it through QC first.`;
+    }
+    // Security gate error — piece is inside, trying to exit again
+    if (/security|exit not valid/i.test(rawMsg)) {
+        return `This piece is currently inside the warehouse at "${currentLabel}".` +
+            ` Security Gate is only for sending pieces OUT to an external vendor.${nextMsg}`;
+    }
+
+    return prettifyStageMessage(rawMsg);
 };
 
 // ============================================================
@@ -303,7 +354,13 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 return;
             }
 
-            const result = await advanceComponentStage(
+            // Auto-retry once on the PGRST116 "Cannot coerce ... single JSON object"
+            // error — it's a transient server-side race (locks / trigger ordering
+            // in the advance_component_stage RPC) and almost always succeeds on
+            // a second attempt within a few hundred ms. Keeps workers from
+            // seeing scary internal errors for what is effectively a network/
+            // timing hiccup.
+            const callAdvance = () => advanceComponentStage(
                 barcode,
                 targetStage,
                 currentUserEmail,
@@ -311,6 +368,18 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 null,
                 "scan"
             );
+            let result;
+            try {
+                result = await callAdvance();
+            } catch (firstErr) {
+                const msg = firstErr?.message || "";
+                const code = firstErr?.code || "";
+                const isCoerceError = /coerce.*single JSON object/i.test(msg) || code === "PGRST116";
+                if (!isCoerceError) throw firstErr;
+                // brief pause + retry once
+                await new Promise((r) => setTimeout(r, 350));
+                result = await callAdvance();
+            }
 
             if (result.success) {
                 setScanResult({
@@ -344,10 +413,17 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 });
             }
         } catch (err) {
+            // Translate the PGRST116 message before the friendly-error helper
+            // runs, so workers see actionable text even if the retry above
+            // didn't recover.
+            const rawMsg = err?.message || "";
+            const isCoerceError = /coerce.*single JSON object/i.test(rawMsg) || err?.code === "PGRST116";
             setScanResult({
                 success: false,
-                error: "SYSTEM_ERROR",
-                message: err.message || "Something went wrong",
+                error: isCoerceError ? "TRANSIENT_ERROR" : "SYSTEM_ERROR",
+                message: isCoerceError
+                    ? "Couldn't update this piece. Please scan again. If it keeps failing, contact your admin and share the barcode."
+                    : rawMsg || "Something went wrong",
             });
         }
 
@@ -734,7 +810,11 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                 {scanResult.success ? "\u2713" : "\u2717"}
                             </div>
                             <div className="wd-scan-result-body">
-                                <p className="wd-scan-result-msg">{prettifyStageMessage(scanResult.message)}</p>
+                                <p className="wd-scan-result-msg">
+                                    {scanResult.success
+                                        ? prettifyStageMessage(scanResult.message)
+                                        : buildFriendlyScanError(scanResult.message)}
+                                </p>
                                 {scanResult.data?.barcode && (
                                     <p className="wd-scan-result-barcode">{scanResult.data.barcode}</p>
                                 )}

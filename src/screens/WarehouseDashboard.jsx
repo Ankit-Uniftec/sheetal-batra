@@ -115,6 +115,11 @@ const WarehouseDashboard = () => {
   const [openDropdown, setOpenDropdown] = useState(null);
   const dropdownRef = useRef(null);
 
+  // Tracks the previous activeTab so we can detect "Scan -> back to Orders/
+  // Calendar" transitions and re-fetch fresh data (otherwise the per-order
+  // component cache would still show pre-scan stages).
+  const prevTabRef = useRef("orders");
+
   // Calendar state
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
@@ -306,6 +311,21 @@ const WarehouseDashboard = () => {
 
     checkAuthAndFetch();
   }, [navigate]);
+
+  // After the worker scans something at the Scan Station tab and switches
+  // back to Orders or Calendar, re-pull the orders + clear the per-order
+  // component cache so the cards reflect the latest stages without a
+  // manual page refresh.
+  useEffect(() => {
+    const prev = prevTabRef.current;
+    prevTabRef.current = activeTab;
+    if (prev === "scan" && activeTab !== "scan") {
+      fetchOrders();
+      setOrderComponentsMap({});
+      setComponentLoadingMap({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
 
