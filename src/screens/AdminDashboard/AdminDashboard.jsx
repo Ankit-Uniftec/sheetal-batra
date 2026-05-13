@@ -3466,7 +3466,9 @@ export default function AdminDashboard() {
                                             <th>Phone</th>
                                             <th>Email</th>
                                             <th style={{ textAlign: 'center' }}>Place Stock Orders</th>
+                                            {/* TEMP (prod): Assigned Stations column hidden — re-enable when scan flow is ready.
                                             <th>Assigned Stations</th>
+                                            */}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -3479,7 +3481,7 @@ export default function AdminDashboard() {
                                                     .some(v => String(v).toLowerCase().includes(q));
                                             }).sort((a, b) => (a.saleperson || "").localeCompare(b.saleperson || ""));
                                             if (list.length === 0) {
-                                                return <tr><td colSpan="8" className="no-data">No salespersons found</td></tr>;
+                                                return <tr><td colSpan="7" className="no-data">No salespersons found</td></tr>;
                                             }
                                             return list.map(sp => {
                                                 const checked = !!sp.can_place_stock_orders;
@@ -3509,6 +3511,7 @@ export default function AdminDashboard() {
                                                             </label>
                                                             {saving && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>saving…</span>}
                                                         </td>
+                                                        {/* TEMP (prod): Assigned Stations cell hidden — re-enable when scan flow is ready.
                                                         <td>
                                                             {!showStations ? (
                                                                 <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
@@ -3548,6 +3551,7 @@ export default function AdminDashboard() {
                                                                 </div>
                                                             )}
                                                         </td>
+                                                        */}
                                                     </tr>
                                                 );
                                             });

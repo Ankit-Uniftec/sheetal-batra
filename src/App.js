@@ -15,7 +15,8 @@ import InventoryDashboard from "./screens/InventoryDashboard/InventoryDashboard"
 import AccountsDashboard from "./screens/AccountsDashboard/AccountsDashboard";
 import AccountantDashboard from "./screens/AccountantDashboard/AccountantDashboard";
 import HeadOfDesignDashboard from "./screens/HeadOfDesignDashboard/HeadOfDesignDashboard";
-import ScanStationPage from "./screens/ScanStationPage/ScanStationPage";
+// TEMP (prod): ScanStationPage import hidden — re-enable when scan flow is ready.
+// import ScanStationPage from "./screens/ScanStationPage/ScanStationPage";
 import OrderDetailPage from "./pages/OrderDetailPage";
 import AdminDashboard from "./screens/AdminDashboard/AdminDashboard";
 import B2BVendorSelection from "./screens/B2bvendorSelection/B2bvendorselection";
@@ -63,7 +64,8 @@ function App() {
         <Route path="/accounts" element={<PrivateRoute><AccountsDashboard /></PrivateRoute>} />
         <Route path="/accountant-dashboard" element={<PrivateRoute><AccountantDashboard /></PrivateRoute>} />
         <Route path="/head-of-design-dashboard" element={<PrivateRoute><HeadOfDesignDashboard /></PrivateRoute>} />
-        <Route path="/scan-station" element={<PrivateRoute><ScanStationPage /></PrivateRoute>} />
+        {/* TEMP (prod): /scan-station route hidden — re-enable when scan flow is ready. */}
+        {/* <Route path="/scan-station" element={<PrivateRoute><ScanStationPage /></PrivateRoute>} /> */}
         <Route path="/order/:orderId" element={<PrivateRoute><OrderDetailPage /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         <Route path="/b2b-executive-dashboard" element={<PrivateRoute><B2bExecutiveDashboard /></PrivateRoute>} />
