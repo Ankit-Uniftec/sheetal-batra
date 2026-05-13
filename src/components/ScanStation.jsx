@@ -215,9 +215,39 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 return;
             }
 
-            // QC station — show pass/fail popup
+            // QC station — show pass/fail popup.
+            // record_qc_result requires the component to already be at
+            // qc_in_progress, so if the worker scanned a piece coming from
+            // finishing_completed (the normal forward path), advance it to
+            // qc_in_progress first. If it's already at qc_in_progress (e.g.
+            // they re-scanned after dismissing the popup), skip the advance.
             if (selectedStation === "qc") {
-                const component = await fetchComponentByBarcode(barcode);
+                let component = await fetchComponentByBarcode(barcode);
+
+                if (component.current_stage !== "qc_in_progress") {
+                    try {
+                        await advanceComponentStage(
+                            barcode,
+                            "qc_in_progress",
+                            currentUserEmail,
+                            "Quality Check",
+                            null,
+                            "scan"
+                        );
+                        // Refresh local copy so the popup sees the new stage
+                        component = { ...component, current_stage: "qc_in_progress" };
+                    } catch (advanceErr) {
+                        const rawMsg = advanceErr?.message || "";
+                        setScanResult({
+                            success: false,
+                            error: "QC_ENTRY_ERROR",
+                            message: buildFriendlyScanError(rawMsg),
+                        });
+                        setIsProcessing(false);
+                        return;
+                    }
+                }
+
                 setSelectedComponent(component);
                 setQcPopup({
                     isOpen: true,

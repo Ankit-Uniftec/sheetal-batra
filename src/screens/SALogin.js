@@ -76,8 +76,9 @@ export default function SALogin() {
         navigate("/accountant-dashboard")
       } else if (userRecord.role === "head_of_design") {
         navigate("/head-of-design-dashboard")
-      } else if (userRecord.role === "scan_station") {
-        navigate("/scan-station")
+      // TEMP (prod): scan_station role redirect hidden — re-enable when scan flow is ready.
+      // } else if (userRecord.role === "scan_station") {
+      //   navigate("/scan-station")
       } else if (userRecord.role === "gm") {
         navigate("/gm-dashboard")
       } else if (userRecord.role === "retail_manager") {

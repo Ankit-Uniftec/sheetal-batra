@@ -1517,7 +1517,8 @@ export default function ProductionManagerDashboard() {
                             <div className="pm-orders-tab">
                                 <h2 className="pm-tab-title">Production Tracking</h2>
 
-                                {/* ── Per-stage component cards (live from scan stations) ── */}
+                                {/* TEMP (prod): per-stage component cards (barcode-derived) hidden —
+                                    re-enable when scan flow is ready.
                                 {stageStats.list.length > 0 && (
                                     <>
                                         <p className="pm-stage-cards-help">
@@ -1541,6 +1542,7 @@ export default function ProductionManagerDashboard() {
                                         </div>
                                     </>
                                 )}
+                                */}
 
                                 <div className="pm-stats-row-3" style={{ marginTop: 16 }}>
                                     <StatCard title="In Production" value={statusStats.inProd} icon={Icons.gear} />
@@ -2250,7 +2252,7 @@ export default function ProductionManagerDashboard() {
                 </div>
             </div>
 
-            {/* ── Stage drill-down modal ── */}
+            {/* TEMP (prod): stage drill-down modal hidden — re-enable when scan flow is ready.
             {stageDrillDown && (() => {
                 const stageLabel = getStageLabel(stageDrillDown) || stageDrillDown;
                 const stageColor = getStageColor(stageDrillDown) || "#666";
@@ -2295,6 +2297,7 @@ export default function ProductionManagerDashboard() {
                     </div>
                 );
             })()}
+            */}
         </>
     );
 }
