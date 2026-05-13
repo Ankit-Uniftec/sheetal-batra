@@ -18,6 +18,24 @@ import {
     getStageColor,
 } from "../utils/barcodeService";
 
+// Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
+// labels (e.g. "Embroidery In-Progress") so RPC error messages read
+// naturally. RPC errors are returned verbatim by Supabase, so this is the
+// cleanest place to clean them up. Sort longest-first so a shorter value
+// (e.g. "embroidery") doesn't shadow a longer one (e.g.
+// "embroidery_in_progress").
+const prettifyStageMessage = (msg) => {
+    if (!msg) return msg;
+    let out = String(msg);
+    const stages = [...PRODUCTION_STAGES].sort((a, b) => b.value.length - a.value.length);
+    for (const s of stages) {
+        if (out.includes(s.value)) {
+            out = out.split(s.value).join(s.label);
+        }
+    }
+    return out;
+};
+
 // ============================================================
 // SCAN STATION COMPONENT
 // ============================================================
@@ -716,7 +734,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                 {scanResult.success ? "\u2713" : "\u2717"}
                             </div>
                             <div className="wd-scan-result-body">
-                                <p className="wd-scan-result-msg">{scanResult.message}</p>
+                                <p className="wd-scan-result-msg">{prettifyStageMessage(scanResult.message)}</p>
                                 {scanResult.data?.barcode && (
                                     <p className="wd-scan-result-barcode">{scanResult.data.barcode}</p>
                                 )}

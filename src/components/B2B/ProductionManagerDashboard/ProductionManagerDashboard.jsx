@@ -10,6 +10,7 @@ import NotificationBell from "../../../components/NotificationBell";
 import ProductionOverrides from "../../../components/ProductionOverrides";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor } from "../../../utils/barcodeService";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
@@ -118,6 +119,12 @@ export default function ProductionManagerDashboard() {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
+    // Per-component stage tracking (from order_components table). Each row =
+    // one trackable piece (top, bottom, dupatta, extra) of an order. We use
+    // these for the live stage-count cards on the Production tab.
+    const [components, setComponents] = useState([]);
+    // Drill-down: which stage's components list is the user looking at?
+    const [stageDrillDown, setStageDrillDown] = useState(null); // string|null
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
     const [currentUserEmail, setCurrentUserEmail] = useState("");
@@ -208,6 +215,31 @@ export default function ProductionManagerDashboard() {
                 }
             }
             setOrders(allOrders);
+
+            // Fetch every order_components row so the Production tab can
+            // aggregate counts per stage. Paged to bypass the 1000-row cap.
+            let allComponents = [];
+            let cFrom = 0;
+            let cDone = false;
+            while (!cDone) {
+                const { data: cData, error: cErr } = await supabase
+                    .from("order_components")
+                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, item_index")
+                    .order("created_at", { ascending: false })
+                    .range(cFrom, cFrom + PAGE_SIZE - 1);
+                if (cErr) {
+                    console.warn("order_components fetch failed:", cErr.message);
+                    break;
+                }
+                if (cData && cData.length > 0) {
+                    allComponents = [...allComponents, ...cData];
+                    cFrom += PAGE_SIZE;
+                    if (cData.length < PAGE_SIZE) cDone = true;
+                } else {
+                    cDone = true;
+                }
+            }
+            setComponents(allComponents);
 
             setLoading(false);
         } catch (err) {
@@ -405,6 +437,32 @@ export default function ProductionManagerDashboard() {
         const readyForDispatch = orders.filter(o => o.production_status === "ready_for_dispatch").length;
         return { pending, inProd, dispatched, readyForDispatch };
     }, [orders]);
+
+    // Per-stage component counts. Source of truth: order_components.current_stage
+    // (advanced live by the warehouse Scan Station). One row per top/bottom/
+    // dupatta/extra so a single order contributes multiple data points.
+    const stageStats = useMemo(() => {
+        const counts = {};
+        components.forEach((c) => {
+            const k = c.current_stage || "order_received";
+            counts[k] = (counts[k] || 0) + 1;
+        });
+        // PRODUCTION_STAGES is already in workflow order; keep that order.
+        const list = PRODUCTION_STAGES.map((s) => ({
+            value: s.value,
+            label: s.label,
+            color: s.color,
+            count: counts[s.value] || 0,
+        })).filter((s) => s.count > 0);
+        const total = components.length;
+        return { list, total };
+    }, [components]);
+
+    // Components in the currently-drilled-down stage (for the modal list)
+    const drillDownComponents = useMemo(() => {
+        if (!stageDrillDown) return [];
+        return components.filter((c) => (c.current_stage || "order_received") === stageDrillDown);
+    }, [components, stageDrillDown]);
 
     const productionMetrics = useMemo(() => {
         const now = new Date();
@@ -1458,7 +1516,33 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "production" && (
                             <div className="pm-orders-tab">
                                 <h2 className="pm-tab-title">Production Tracking</h2>
-                                <div className="pm-stats-row-3">
+
+                                {/* ── Per-stage component cards (live from scan stations) ── */}
+                                {stageStats.list.length > 0 && (
+                                    <>
+                                        <p className="pm-stage-cards-help">
+                                            Live count of components at each warehouse stage —
+                                            click any card to see which orders are there.
+                                            <span className="pm-stage-total"> Total tracked: <b>{stageStats.total}</b></span>
+                                        </p>
+                                        <div className="pm-stage-cards-grid">
+                                            {stageStats.list.map((s) => (
+                                                <button
+                                                    key={s.value}
+                                                    type="button"
+                                                    className="pm-stage-card"
+                                                    style={{ "--stage-color": s.color }}
+                                                    onClick={() => setStageDrillDown(s.value)}
+                                                >
+                                                    <span className="pm-stage-card-count">{s.count}</span>
+                                                    <span className="pm-stage-card-label">{s.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="pm-stats-row-3" style={{ marginTop: 16 }}>
                                     <StatCard title="In Production" value={statusStats.inProd} icon={Icons.gear} />
                                     <StatCard title="QC Failures" value={productionMetrics.qcFailed} subtitle={`${productionMetrics.qcFailRate}% fail rate`} highlight={productionMetrics.qcFailed > 0} icon={Icons.xCircle} />
                                     <StatCard title="Avg Lead Time" value={`${productionMetrics.avgLeadTime}d`} subtitle="Confirmation to QC" icon={Icons.timer} />
@@ -2165,6 +2249,52 @@ export default function ProductionManagerDashboard() {
                     </main>
                 </div>
             </div>
+
+            {/* ── Stage drill-down modal ── */}
+            {stageDrillDown && (() => {
+                const stageLabel = getStageLabel(stageDrillDown) || stageDrillDown;
+                const stageColor = getStageColor(stageDrillDown) || "#666";
+                return (
+                    <div className="pm-stage-modal-overlay" onClick={() => setStageDrillDown(null)}>
+                        <div className="pm-stage-modal" onClick={(e) => e.stopPropagation()}>
+                            <div className="pm-stage-modal-head">
+                                <div>
+                                    <span className="pm-stage-modal-dot" style={{ background: stageColor }} />
+                                    <h3 className="pm-stage-modal-title">{stageLabel}</h3>
+                                    <span className="pm-stage-modal-count">{drillDownComponents.length} components</span>
+                                </div>
+                                <button className="pm-stage-modal-close" onClick={() => setStageDrillDown(null)}>×</button>
+                            </div>
+                            <div className="pm-stage-modal-body">
+                                {drillDownComponents.length === 0 ? (
+                                    <p className="pm-stage-modal-empty">No components currently at this stage.</p>
+                                ) : (
+                                    <table className="pm-stage-modal-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Order #</th>
+                                                <th>Component</th>
+                                                <th>Type</th>
+                                                <th>Barcode</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {drillDownComponents.map((c) => (
+                                                <tr key={c.id}>
+                                                    <td className="pm-stage-modal-order">{c.order_no}</td>
+                                                    <td>{c.component_label || c.component_type || "—"}</td>
+                                                    <td style={{ textTransform: "capitalize", color: "#888" }}>{c.component_type}</td>
+                                                    <td className="pm-stage-modal-barcode">{c.barcode}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </>
     );
 }
