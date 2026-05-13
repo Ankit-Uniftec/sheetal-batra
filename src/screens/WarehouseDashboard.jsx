@@ -1525,8 +1525,7 @@ const WarehouseDashboard = () => {
                                   {order.status === "cancelled" ? "Cancelled" :
                                     order.status === "completed" ? "Completed" :
                                       order.status === "delivered" ? "Delivered" :
-                                        (order.status === "pending" || order.status === "order_received") ? "Order Received" :
-                                          "Awaiting Production"}
+                                        "Order Received"}
                                 </div>
                                 <button
                                   className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""}`}
