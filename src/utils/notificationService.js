@@ -21,6 +21,24 @@ export const NOTIFICATION_TYPES = {
 
     // Future
     PRODUCTION_STAGE_DELAY: "production_stage_delay", // #16 (hold)
+
+    // After PRODUCTION_STAGE_DELAY line:
+    SA_BIRTHDAY_REMINDER: "sa_birthday_reminder",
+    SA_DELIVERY_TODAY: "sa_delivery_today",
+    SA_DELIVERY_T2: "sa_delivery_t2",
+    SA_DELAYED_ORDER: "sa_delayed_order",
+    SA_ALTERATION_DELIVERY: "sa_alteration_delivery",
+
+    // B2B immediate alerts
+    B2B_ORDER_REJECTED: "b2b_order_rejected",
+    B2B_APPROVAL_AWAITED: "b2b_approval_awaited",
+    // B2B scheduled (handled by edge function, types here for reference)
+    B2B_DELIVERY_TODAY: "b2b_delivery_today",
+    B2B_DELIVERY_T2: "b2b_delivery_t2",
+    B2B_DELAYED_ORDER: "b2b_delayed_order",
+
+    // Management alerts
+    ORDER_REVOKED: "order_revoked",
 };
 
 // ==========================================
@@ -76,6 +94,17 @@ const RECIPIENT_MAP = {
     ],
     [NOTIFICATION_TYPES.PRODUCTION_STAGE_DELAY]: [
         // Future — hold for now
+    ],
+    [NOTIFICATION_TYPES.B2B_ORDER_REJECTED]: [
+        { role: "executive", store: "B2B", channel: "in_app" },
+    ],
+    [NOTIFICATION_TYPES.B2B_APPROVAL_AWAITED]: [
+        { role: "executive", store: "B2B", channel: "in_app" },
+        { role: "merchandiser", store: "B2B", channel: "in_app" },
+    ],
+    [NOTIFICATION_TYPES.ORDER_REVOKED]: [
+        { role: "admin", channel: "in_app" },   // Jahnavi (CMO)
+        { role: "coo", channel: "in_app" },      // Manish (COO)
     ],
 };
 
@@ -136,6 +165,21 @@ const TEMPLATES = {
     [NOTIFICATION_TYPES.DELAY_2_DAY]: (meta) => ({
         title: "2-Day Delay Alert",
         message: `2 days order delayed – Immediate Follow-Up Needed (${meta.order_no})`,
+        priority: "escalation",
+    }),
+    [NOTIFICATION_TYPES.B2B_ORDER_REJECTED]: (meta) => ({
+        title: "B2B Order Rejected",
+        message: `Rejected Order — ${meta.order_no}`,
+        priority: "urgent",
+    }),
+    [NOTIFICATION_TYPES.B2B_APPROVAL_AWAITED]: (meta) => ({
+        title: "Approval Awaited",
+        message: `Approval Awaited — ${meta.order_no}`,
+        priority: "normal",
+    }),
+    [NOTIFICATION_TYPES.ORDER_REVOKED]: (meta) => ({
+        title: "Order Revoked",
+        message: `Order Revoked — ${meta.order_no}`,
         priority: "escalation",
     }),
 };
@@ -232,6 +276,43 @@ export const sendNotification = async (type, options = {}) => {
                     recipient_designation: config.designation || null,
                     channel: config.channel || "in_app",
                 });
+            } else if (config.role && config.store) {
+                // Role + store-based: find all users with this role in this store
+                const { data: users } = await supabase
+                    .from("salesperson")
+                    .select("email, role")
+                    .eq("role", config.role)
+                    .eq("store_name", config.store);
+
+                if (users) {
+                    for (const user of users) {
+                        recipients.push({
+                            notification_id: notification.id,
+                            recipient_role: config.role,
+                            recipient_email: user.email,
+                            recipient_designation: null,
+                            channel: config.channel || "in_app",
+                        });
+                    }
+                }
+            } else if (config.role) {
+                // Role-only (management roles like admin, coo)
+                const { data: roleUsers } = await supabase
+                    .from("salesperson")
+                    .select("email, role")
+                    .eq("role", config.role);
+
+                if (roleUsers) {
+                    for (const ru of roleUsers) {
+                        recipients.push({
+                            notification_id: notification.id,
+                            recipient_role: config.role,
+                            recipient_email: ru.email,
+                            recipient_designation: null,
+                            channel: config.channel || "in_app",
+                        });
+                    }
+                }
             } else if (config.designation) {
                 // Designation-based: find all users with this designation
                 const { data: users } = await supabase
@@ -372,10 +453,10 @@ export const getUnreadCount = async (email) => {
 // CLEAR ALL NOTIFICATIONS
 // ==========================================
 export const clearAllNotifications = async (email) => {
-  const { error } = await supabase
-    .from("notification_recipients")
-    .delete()
-    .eq("recipient_email", email);
+    const { error } = await supabase
+        .from("notification_recipients")
+        .delete()
+        .eq("recipient_email", email);
 
-  if (error) console.error("❌ clearAllNotifications error:", error);
+    if (error) console.error("❌ clearAllNotifications error:", error);
 };

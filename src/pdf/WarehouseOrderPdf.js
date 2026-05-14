@@ -830,7 +830,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             {/* Measurements Section */}
             <View style={warehouseStyles.measurementsBar}>
               <Text style={warehouseStyles.sectionTitle}>
-                {isAlteration ? "Updated Measurements" : "Measurements"}
+                {isAlteration ? "Updated Body Measurements" : "Body Measurements"}
               </Text>
             </View>
             <MeasurementsDisplay measurements={item.measurements} />
@@ -939,7 +939,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
           {/* Measurements */}
           <View style={warehouseStyles.measurementsBar}>
             <Text style={warehouseStyles.sectionTitle}>
-              {isAlteration ? "Updated Measurements" : "Measurements"}
+              {isAlteration ? "Updated Body Measurements" : "Body Measurements"}
             </Text>
           </View>
           <MeasurementsDisplay measurements={item.measurements} />

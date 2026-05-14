@@ -7,6 +7,8 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
+import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
+import NotificationBell from "../../components/NotificationBell";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -299,6 +301,15 @@ export default function B2bMerchandiserDashboard() {
                 }
             }
 
+            // Send notification for rejected orders
+            if (newStatus === "rejected") {
+                sendNotification(NOTIFICATION_TYPES.B2B_ORDER_REJECTED, {
+                    orderId: order.id,
+                    orderNo: order.order_no,
+                    metadata: { client_name: order.delivery_name, rejected_by: user?.email },
+                });
+            }
+
             setApprovalModal(null);
             setApprovalReason("");
             loadAllData();
@@ -482,6 +493,10 @@ export default function B2bMerchandiserDashboard() {
             <header className="merch-header">
                 <img src={Logo} alt="logo" className="merch-header-logo" onClick={() => setActiveTab("dashboard")} />
                 <div className="merch-header-right">
+                    <NotificationBell
+                        userEmail={user?.email}
+                        onOrderClick={(orderId) => handleViewOrder(orderId)}
+                    />
                     <button className="merch-header-btn" onClick={handleLogout}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
                     </button>

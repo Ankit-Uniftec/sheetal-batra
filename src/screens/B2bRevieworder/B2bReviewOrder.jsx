@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
+import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -207,6 +208,7 @@ export default function B2bReviewOrder() {
             };
 
             let resultOrderNo;
+            let insertedOrderId  = null;
 
             if (editingOrderId) {
                 // ===== EDIT MODE: UPDATE existing order =====
@@ -263,12 +265,14 @@ export default function B2bReviewOrder() {
                     orderPayload.approval_status = "pending";
                 }
 
-                const { data: orderData, error: orderError } = await supabase
+                const { data: insertedOrderData, error: orderError } = await supabase
                     .from("orders")
                     .insert([orderPayload])
                     .select()
                     .single();
                 if (orderError) throw orderError;
+                insertedOrderId = insertedOrderData.id;
+
 
                 resultOrderNo = orderNo.replace("DLC", "B2B");
 
@@ -276,11 +280,27 @@ export default function B2bReviewOrder() {
                     const { error: approvalError } = await supabase
                         .from("b2b_approvals")
                         .insert([{
-                            order_id: orderData.id,
+                            order_id: insertedOrderData.id,
                             status: "pending",
                             submitted_by: user?.email || "unknown",
                             submitted_at: new Date().toISOString(),
                         }]);
+                }
+            }
+
+            // Send notification for approval awaited (non-merchandiser orders)
+            if (!isMerchandiser) {
+                const notifOrderId = editingOrderId || insertedOrderId;
+                if (notifOrderId) {
+                    sendNotification(NOTIFICATION_TYPES.B2B_APPROVAL_AWAITED, {
+                        orderId: notifOrderId,
+                        orderNo: resultOrderNo,
+                        metadata: {
+                            vendor_name: vendor?.store_brand_name,
+                            submitted_by: user?.email,
+                            is_edit: !!editingOrderId,
+                        },
+                    });
                 }
             }
 
