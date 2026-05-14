@@ -91,6 +91,7 @@ const WarehouseDashboard = () => {
   // Stations the logged-in warehouse user is allowed to scan at. Empty array
   // means no restriction (passed-through ScanStation will show all stations).
   const [assignedStations, setAssignedStations] = useState([]);
+  const [userDesignation, setUserDesignation] = useState("");
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
@@ -295,7 +296,7 @@ const WarehouseDashboard = () => {
       // ✅ Role check - only warehouse users allowed
       const { data: userRecord } = await supabase
         .from("salesperson")
-        .select("role, assigned_stations")
+        .select("role, assigned_stations, designation")
         .eq("email", session.user.email?.toLowerCase())
         .single();
 
@@ -307,6 +308,7 @@ const WarehouseDashboard = () => {
 
       setCurrentUserEmail(session.user.email?.toLowerCase() || "");
       setAssignedStations(userRecord.assigned_stations || []);
+      setUserDesignation(userRecord.designation || "");
       fetchOrders();
     };
 
@@ -389,11 +391,17 @@ const WarehouseDashboard = () => {
   const filteredOrders = useMemo(() => {
     let result = filteredByStatus;
 
-    // Search filter
+    // Search filter — numeric input matches order_no, text matches product_name
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.trim().toLowerCase();
+      const isNumericQuery = /\d/.test(query);
       result = result.filter((order) => {
-        return order.order_no?.toLowerCase().includes(query);
+        if (isNumericQuery) {
+          return order.order_no?.toLowerCase().includes(query);
+        }
+        return (order.items || []).some(
+          (it) => it?.product_name?.toLowerCase().includes(query)
+        );
       });
     }
 
@@ -468,6 +476,35 @@ const WarehouseDashboard = () => {
 
     return result;
   }, [filteredByStatus, searchQuery, filters, sortBy]);
+
+  const handleExportCSV = () => {
+    if (filteredOrders.length === 0) return;
+    const headers = [
+      "Order No", "Order Date", "Customer Name",
+      "Delivery Date", "Mode of Delivery", "Item Count",
+      "Priority", "Status", "Salesperson", "Store",
+    ];
+    const rows = filteredOrders.map((order) => [
+      order.order_no || "",
+      order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
+      order.delivery_name || "",
+      order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
+      order.mode_of_delivery || order.delivery_location || order.delivery_city || "",
+      Array.isArray(order.items) ? order.items.length : 0,
+      getPriority(order),
+      order.status || "",
+      order.salesperson || "",
+      order.salesperson_store || "",
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`));
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `warehouse_orders_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Tab counts
   const tabCounts = useMemo(() => {
@@ -953,7 +990,7 @@ const WarehouseDashboard = () => {
                   <span className="wd-search-icon">&#128269;</span>
                   <input
                     type="text"
-                    placeholder="Search Order #, Customer, Product..."
+                    placeholder="Search Order # (numbers) or Product (text)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="wd-search-input"
@@ -970,6 +1007,21 @@ const WarehouseDashboard = () => {
                     <option value="amount_high">Amount: High to Low</option>
                     <option value="amount_low">Amount: Low to High</option>
                   </select>
+                  {userDesignation?.trim().toLowerCase() === "offline production head" && (
+                    <button
+                      className="wd-export-btn"
+                      onClick={handleExportCSV}
+                      title="Export current view to CSV"
+                      disabled={filteredOrders.length === 0}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      Export CSV
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1447,7 +1499,7 @@ const WarehouseDashboard = () => {
                             </div>
 
                             <div className="wd-measurement-section">
-                              <strong className="wd-label wd-measurement-label">Measurements:</strong>
+                              <strong className="wd-label wd-measurement-label">Body Measurements:</strong>
                               <div className="wd-measurement-grid">
                                 {renderMeasurements(firstItem.measurements)}
                               </div>

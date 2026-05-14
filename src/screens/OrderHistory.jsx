@@ -633,13 +633,20 @@ export default function OrderHistory() {
       closeActionModal();
       showPopup({ type: "success", title: "Order Revoked", message: "Order revoked successfully! Full refund will be initiated.", confirmText: "OK" });
 
-      // Notify warehouse — Order Cancelled (#21) — revoke is also a cancellation
+      // Notify warehouse — Order Cancelled
       sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
         orderId: order.id,
         orderNo: order.order_no,
         metadata: { client_name: order.delivery_name, reason: "Brand-Initiated Revoke" },
         attachments: order.customer_url ? [{ type: "order_pdf", url: order.customer_url }] : [],
       }).catch(err => console.error("Notification error:", err));
+
+      // Notify management — Order Revoked
+      sendNotification(NOTIFICATION_TYPES.ORDER_REVOKED, {
+        orderId: order.id,
+        orderNo: order.order_no,
+        metadata: { client_name: order.delivery_name, reason: "Brand-Initiated Revoke" },
+      }).catch(err => console.error("Revoke notification error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {

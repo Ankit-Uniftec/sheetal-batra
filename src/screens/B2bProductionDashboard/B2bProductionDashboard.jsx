@@ -6,6 +6,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import NotificationBell from "../../components/NotificationBell";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -291,6 +292,10 @@ export default function B2bProductionDashboard() {
             <header className="prod-header">
                 <img src={Logo} alt="logo" className="prod-header-logo" onClick={() => setActiveTab("dashboard")} />
                 <div className="prod-header-right">
+                    <NotificationBell
+                        userEmail={user?.email}
+                        onOrderClick={(orderId) => handleViewOrder(orderId)}
+                    />
                     <button className="prod-header-btn" onClick={handleLogout}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
                     </button>

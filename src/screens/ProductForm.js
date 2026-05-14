@@ -3001,7 +3001,7 @@ export default function ProductForm() {
                             </div>
 
                             <div className="measure-fields">
-                              <h3 className="measure-title">Custom Measurements (in)</h3>
+                              <h3 className="measure-title">Custom Body Measurements (in)</h3>
                               <div className="measure-grid">
                                 {(() => {
                                   const itemCategoryKey = getCategoryKeyFromDisplayName(itemActiveCategory) || itemActiveCategory;
@@ -3339,7 +3339,7 @@ export default function ProductForm() {
 
             {/* MEASUREMENTS */}
             <div className="measure-bar">
-              <span>Custom Measurements </span>
+              <span>Custom Body Measurements </span>
               <button
                 className="plus-btn"
                 onClick={() => setShowMeasurements(!showMeasurements)}
@@ -3372,7 +3372,7 @@ export default function ProductForm() {
 
                 <div className="measure-fields">
                   <div className="measure-header">
-                    <h3 className="measure-title">Custom Measurements (in)</h3>
+                    <h3 className="measure-title">Custom Body Measurements (in)</h3>
                     <div style={{ display: "flex", gap: "10px" }}>
                       <button
                         className="auto-populate-btn"

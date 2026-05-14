@@ -284,18 +284,34 @@
 }
 
 .wd-export-btn {
-  padding: 10px 18px;
-  border: 1px solid #e0d5c5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 16px;
+  border: 1px solid #d5b85a;
   border-radius: 8px;
+  background: #faf6e8;
+  color: #8B7355;
   font-size: 14px;
-  background: #fff;
+  font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s;
 }
 
-.wd-export-btn:hover {
-  background: #f9f7f0;
-  border-color: #d5b85a;
+.wd-export-btn:hover:not(:disabled) {
+  background: #f5ecd0;
+  border-color: #c9a94e;
+}
+
+.wd-export-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.wd-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ========== STATUS TABS ========== */

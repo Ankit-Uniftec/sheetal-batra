@@ -135,16 +135,18 @@ export default function Dashboard() {
       return true; // Show all regular orders
     });
 
-    // Then apply search filter
+    // Then apply search filter — numeric input matches order_no, text matches product_name
     if (!orderSearch.trim()) return baseOrders;
 
-    const q = orderSearch.toLowerCase();
+    const q = orderSearch.trim().toLowerCase();
+    const isNumericQuery = /\d/.test(q);
     return baseOrders.filter((order) => {
-      const productName = order.items?.[0]?.product_name?.toLowerCase() || "";
-      const productId = String(order.id || "").toLowerCase();
-      const clientName = order.delivery_name?.toLowerCase() || "";
-      const orderNo = order.order_no?.toLowerCase() || "";
-      return productId.includes(q) || productName.includes(q) || clientName.includes(q) || orderNo.includes(q);
+      if (isNumericQuery) {
+        return order.order_no?.toLowerCase().includes(q);
+      }
+      return (order.items || []).some(
+        (it) => it?.product_name?.toLowerCase().includes(q)
+      );
     });
   }, [orders, orderSearch]);
 
@@ -1110,7 +1112,7 @@ export default function Dashboard() {
               <div className="ad-order-search-bar">
                 <input
                   type="text"
-                  placeholder="Search by Order ID, Product Name or Client Name"
+                  placeholder="Search by Order # (numbers) or Product Name (text)"
                   value={orderSearch}
                   onChange={(e) => {
                     setOrderSearch(e.target.value);
