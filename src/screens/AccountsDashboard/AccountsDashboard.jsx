@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import SearchByDropdown from "../../components/SearchByDropdown";
 
 export default function AccountsDashboard() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export default function AccountsDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchField, setSearchField] = useState("order_no");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -167,15 +169,22 @@ export default function AccountsDashboard() {
     let filtered = lineItems;
 
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (item) =>
-          item.order_no?.toLowerCase().includes(query) ||
-          item.sa_name?.toLowerCase().includes(query) ||
-          item.client_name?.toLowerCase().includes(query) ||
-          item.product_name?.toLowerCase().includes(query) ||
-          item.city?.toLowerCase().includes(query)
-      );
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter((item) => {
+        switch (searchField) {
+          case "product_name":
+            return item.product_name?.toLowerCase().includes(query);
+          case "client_name":
+            return item.client_name?.toLowerCase().includes(query);
+          case "salesperson":
+            return item.sa_name?.toLowerCase().includes(query);
+          case "city":
+            return item.city?.toLowerCase().includes(query);
+          case "order_no":
+          default:
+            return item.order_no?.toLowerCase().includes(query);
+        }
+      });
     }
 
     if (dateFrom) {
@@ -194,7 +203,7 @@ export default function AccountsDashboard() {
     }
 
     return filtered;
-  }, [lineItems, searchQuery, dateFrom, dateTo, statusFilter]);
+  }, [lineItems, searchQuery, searchField, dateFrom, dateTo, statusFilter]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -209,7 +218,7 @@ export default function AccountsDashboard() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, dateFrom, dateTo, statusFilter]);
+  }, [searchQuery, searchField, dateFrom, dateTo, statusFilter]);
 
   // Page numbers for pagination
   const getPageNumbers = () => {
@@ -443,29 +452,20 @@ export default function AccountsDashboard() {
 
         {/* Filters & Search */}
         <div className="acc-toolbar">
-          <div className="acc-search-wrapper">
-            <span className="acc-search-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              placeholder="Search by Order ID, SA, Client, Product..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="acc-search-input"
-            />
-            {searchQuery && (
-              <button
-                className="acc-search-clear"
-                onClick={() => setSearchQuery("")}
-              >
-                ✕
-              </button>
-            )}
-          </div>
+          <SearchByDropdown
+            fields={[
+              { value: "order_no", label: "Order Number" },
+              { value: "product_name", label: "Product Name" },
+              { value: "client_name", label: "Client Name" },
+              { value: "salesperson", label: "Salesperson" },
+              { value: "city", label: "City" },
+            ]}
+            selectedField={searchField}
+            onFieldChange={setSearchField}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            placeholder="Type to search..."
+          />
 
           <div className="acc-filters">
             <div className="acc-filter-item">

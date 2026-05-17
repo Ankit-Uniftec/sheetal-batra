@@ -38,7 +38,7 @@ export default function B2bReviewOrder() {
 
     const [user, setUser] = useState(null);
     const [userRole, setUserRole] = useState(null);
-    const [salespersonStore, setSalespersonStore] = useState("Delhi Store");
+    const [salespersonStore, setSalespersonStore] = useState("");
     const [salespersonName, setSalespersonName] = useState("");
     const [salespersonPhone, setSalespersonPhone] = useState("");
     const [vendorData, setVendorData] = useState(null);
@@ -167,6 +167,22 @@ export default function B2bReviewOrder() {
     // Submit Order (INSERT for new, UPDATE for edit)
     const handleSubmit = async () => {
         if (isSubmitting) return;
+
+        // Hard requirement: must have a resolved store. The 4 lookups at mount
+        // time (sessionStorage → currentSalesperson → salesperson DB → vendor
+        // default) populate salespersonStore. If none succeeded, refuse to
+        // write — a "Delhi Store" default would silently mis-attribute Ludhiana
+        // (or any other store's) B2B orders and corrupt store-wise reports.
+        if (!salespersonStore || !salespersonStore.trim()) {
+            showPopup({
+                title: "Salesperson Store Missing",
+                message: "Could not determine the salesperson's store. Please reload and try again. If this persists, contact admin to verify the salesperson profile has a store assigned.",
+                type: "error",
+                confirmText: "Ok",
+            });
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
@@ -180,7 +196,7 @@ export default function B2bReviewOrder() {
                 po_number: poNumber,
                 b2b_order_type: orderType,
                 merchandiser_name: merchandiser,
-                salesperson_store: salespersonStore || "Delhi Store",
+                salesperson_store: salespersonStore,
                 salesperson: salespersonName || "",
                 salesperson_email: user?.email || "",
                 salesperson_phone: salespersonPhone || "",
@@ -244,9 +260,10 @@ export default function B2bReviewOrder() {
                 }
             } else {
                 // ===== NEW ORDER: INSERT =====
+                // salespersonStore is guaranteed non-empty by the guard at handleSubmit entry.
                 const { data: orderNo, error: orderNoError } = await supabase.rpc(
                     "generate_order_no",
-                    { p_store: salespersonStore || "Delhi Store" }
+                    { p_store: salespersonStore }
                 );
                 if (orderNoError) throw orderNoError;
                 if (!orderNo) throw new Error("Failed to generate order number.");

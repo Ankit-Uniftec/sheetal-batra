@@ -7,6 +7,7 @@ import formatIndianNumber from "../../../utils/formatIndianNumber";
 import formatDate from "../../../utils/formatDate";
 import { usePopup } from "../../../components/Popup";
 import NotificationBell from "../../../components/NotificationBell";
+import SearchByDropdown from "../../../components/SearchByDropdown";
 import ProductionOverrides from "../../../components/ProductionOverrides";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
@@ -119,6 +120,10 @@ export default function ProductionManagerDashboard() {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
+    // Maps vendor.id → vendor row. Used to resolve a B2B order's "client name"
+    // (B2B orders have no delivery_name; the vendor's store_brand_name is the
+    // analogue). Populated alongside orders so we don't fetch on every render.
+    const [vendorMap, setVendorMap] = useState({});
     // Per-component stage tracking (from order_components table). Each row =
     // one trackable piece (top, bottom, dupatta, extra) of an order. We use
     // these for the live stage-count cards on the Production tab.
@@ -131,6 +136,7 @@ export default function ProductionManagerDashboard() {
 
     // Orders tab state
     const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearchField, setOrderSearchField] = useState("order_no");
     const [channelFilter, setChannelFilter] = useState("all");
     const [statusTab, setStatusTab] = useState("all");
     const [sortBy, setSortBy] = useState("newest");
@@ -216,6 +222,26 @@ export default function ProductionManagerDashboard() {
             }
             setOrders(allOrders);
 
+            // Resolve B2B "client name" — fetch all vendors referenced by the
+            // loaded B2B orders. delivery_name is empty for B2B; store_brand_name
+            // is the right analogue for the production manager view.
+            const vendorIds = [...new Set(
+                allOrders
+                    .filter(o => o.is_b2b && o.vendor_id)
+                    .map(o => o.vendor_id)
+            )];
+            if (vendorIds.length > 0) {
+                const { data: vData } = await supabase
+                    .from("vendors")
+                    .select("id, store_brand_name, vendor_code, location")
+                    .in("id", vendorIds);
+                if (vData) {
+                    const vMap = {};
+                    vData.forEach(v => { vMap[v.id] = v; });
+                    setVendorMap(vMap);
+                }
+            }
+
             // Fetch every order_components row so the Production tab can
             // aggregate counts per stage. Paged to bypass the 1000-row cap.
             let allComponents = [];
@@ -267,7 +293,7 @@ export default function ProductionManagerDashboard() {
     }, []);
 
     // Reset page when filters change
-    useEffect(() => { setCurrentPage(1); }, [orderSearch, statusTab, channelFilter, filters, sortBy]);
+    useEffect(() => { setCurrentPage(1); }, [orderSearch, orderSearchField, statusTab, channelFilter, filters, sortBy]);
 
     // When highlighted order is set (e.g. from navigation state), scroll to it once orders are loaded
     useEffect(() => {
@@ -332,7 +358,7 @@ export default function ProductionManagerDashboard() {
             return [
                 order.order_no || "",
                 item.product_name || "",
-                order.delivery_name || "",
+                getClientName(order) || "",
                 item.size || "",
                 order.grand_total || 0,
                 item.top_color?.name || "",
@@ -683,10 +709,21 @@ export default function ProductionManagerDashboard() {
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
         if (orderSearch.trim()) {
-            const q = orderSearch.toLowerCase();
+            const q = orderSearch.trim().toLowerCase();
             result = result.filter(o => {
-                const productName = o.items?.[0]?.product_name || "";
-                return (o.order_no || "").toLowerCase().includes(q) || (o.delivery_name || "").toLowerCase().includes(q) || (o.delivery_phone || "").toLowerCase().includes(q) || (o.po_number || "").toLowerCase().includes(q) || productName.toLowerCase().includes(q);
+                switch (orderSearchField) {
+                    case "product_name":
+                        return (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
+                    case "client_name":
+                        return getClientName(o).toLowerCase().includes(q);
+                    case "phone":
+                        return (o.delivery_phone || "").toLowerCase().includes(q);
+                    case "po_number":
+                        return (o.po_number || "").toLowerCase().includes(q);
+                    case "order_no":
+                    default:
+                        return (o.order_no || "").toLowerCase().includes(q);
+                }
             });
         }
         if (filters.dateFrom || filters.dateTo) {
@@ -721,7 +758,8 @@ export default function ProductionManagerDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, filters, sortBy]);
+        // vendorMap is a dep because client_name search resolves through it for B2B orders
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap]);
 
     const orderTabCounts = useMemo(() => {
         const base = channelFilter === "b2b" ? orders.filter(o => o.is_b2b) : channelFilter === "store" ? orders.filter(o => !o.is_b2b) : orders;
@@ -745,6 +783,16 @@ export default function ProductionManagerDashboard() {
 
     const getChannelLabel = (order) => { if (order.is_b2b) return "B2B"; return "Store"; };
     const getChannelClass = (order) => { if (order.is_b2b) return "pm-channel-b2b"; return "pm-channel-store"; };
+    // Resolves the "client" string for either channel: retail uses delivery_name,
+    // B2B uses the vendor's store_brand_name (resolved via vendorMap). Returns
+    // empty string if neither is available (caller decides the fallback dash).
+    const getClientName = (order) => {
+        if (order?.is_b2b) {
+            const v = order.vendor_id ? vendorMap[order.vendor_id] : null;
+            return v?.store_brand_name || order.delivery_name || "";
+        }
+        return order?.delivery_name || "";
+    };
 
     const getStatusLabel = (order) => {
         if (order.production_status === "dispatched" || order.status === "delivered") return "Dispatched";
@@ -1303,9 +1351,21 @@ export default function ProductionManagerDashboard() {
 
                                 {/* Row 2: Search + Channel + Sort */}
                                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-                                    <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
-                                        <input type="text" placeholder="Search order #, client, product, PO..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="pm-search-input" style={{ paddingLeft: 32, width: "100%", boxSizing: "border-box" }} />
-                                        <svg style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", opacity: 0.4 }} xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
+                                    <div style={{ flex: "1 1 220px", minWidth: 180 }}>
+                                        <SearchByDropdown
+                                            fields={[
+                                                { value: "order_no", label: "Order Number" },
+                                                { value: "product_name", label: "Product Name" },
+                                                { value: "client_name", label: "Client Name" },
+                                                { value: "phone", label: "Phone" },
+                                                { value: "po_number", label: "PO Number" },
+                                            ]}
+                                            selectedField={orderSearchField}
+                                            onFieldChange={setOrderSearchField}
+                                            query={orderSearch}
+                                            onQueryChange={setOrderSearch}
+                                            placeholder="Type to search..."
+                                        />
                                     </div>
                                     <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="pm-filter-select" style={{ flex: "0 0 auto" }}>
                                         <option value="all">All Channels</option>
@@ -1465,7 +1525,7 @@ export default function ProductionManagerDashboard() {
                                                     <div className="pm-product-thumb"><img src={imgSrc} alt={item.product_name || "Product"} /></div>
                                                     <div className="pm-product-details">
                                                         <div className="pm-product-name"><span className="pm-order-label">Product:</span><span className="pm-ovalue">{item.product_name || "—"}</span></div>
-                                                        <div className="pm-product-name"><span className="pm-order-label">Client:</span><span className="pm-ovalue">{order.delivery_name || "—"}</span></div>
+                                                        <div className="pm-product-name"><span className="pm-order-label">Client:</span><span className="pm-ovalue">{getClientName(order) || "—"}</span></div>
                                                         <div className="pm-product-name"><span className="pm-order-label">SA Name:</span><span className="pm-ovalue">{order.salesperson || "—"}{order.salesperson_store ? ` (${order.salesperson_store})` : ""}</span></div>
                                                         <div className="pm-odetails-grid">
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Amount:</span><span className="pm-ovalue">₹{formatIndianNumber(order.grand_total || 0)}</span></div>
@@ -1678,7 +1738,7 @@ export default function ProductionManagerDashboard() {
                                             <div style={{ overflowX: "auto" }}>
                                                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                                                     <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Dispatched On</th><th style={{ padding: "8px 10px" }}>By</th></tr></thead>
-                                                    <tbody>{recentlyDispatched.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.dispatched_at)}</td><td style={{ padding: "8px 10px" }}>{o.dispatched_by || "-"}</td></tr>))}</tbody>
+                                                    <tbody>{recentlyDispatched.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{getClientName(o) || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.dispatched_at)}</td><td style={{ padding: "8px 10px" }}>{o.dispatched_by || "-"}</td></tr>))}</tbody>
                                                 </table>
                                             </div>
                                         </div>
@@ -1791,7 +1851,7 @@ export default function ProductionManagerDashboard() {
                                 if (drSearch.trim()) {
                                     const q = drSearch.toLowerCase();
                                     r = r.filter(x => (x.order.order_no || "").toLowerCase().includes(q) ||
-                                        (x.order.delivery_name || "").toLowerCase().includes(q) ||
+                                        getClientName(x.order).toLowerCase().includes(q) ||
                                         (x.order.salesperson || "").toLowerCase().includes(q) ||
                                         ((x.order.items?.[0]?.product_name) || "").toLowerCase().includes(q));
                                 }
@@ -1827,7 +1887,7 @@ export default function ProductionManagerDashboard() {
                                     return [
                                         o.order_no || "",
                                         r.isOpen ? "Open (Running Late)" : "Completed",
-                                        o.delivery_name || "",
+                                        getClientName(o) || "",
                                         o.salesperson || "",
                                         o.salesperson_store || "",
                                         o.is_b2b ? "B2B" : "Store",
@@ -1959,7 +2019,7 @@ export default function ProductionManagerDashboard() {
                                                         return (
                                                             <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
                                                                 <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
-                                                                <td style={{ padding: "8px 12px" }}>{o.delivery_name || "-"}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{getClientName(o) || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{formatDate(o.delivery_date)}</td>
@@ -2002,7 +2062,7 @@ export default function ProductionManagerDashboard() {
                                                         return (
                                                             <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
                                                                 <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
-                                                                <td style={{ padding: "8px 12px" }}>{o.delivery_name || "-"}</td>
+                                                                <td style={{ padding: "8px 12px" }}>{getClientName(o) || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{formatDate(o.created_at)}</td>

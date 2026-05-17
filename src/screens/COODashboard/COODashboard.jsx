@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -99,6 +100,7 @@ export default function COODashboard() {
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearchField, setOrderSearchField] = useState("order_no");
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
     const [sortBy, setSortBy] = useState("newest");
@@ -578,8 +580,22 @@ export default function COODashboard() {
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
         if (orderSearch.trim()) {
-            const q = orderSearch.toLowerCase();
-            result = result.filter(o => { const it = o.items?.[0] || {}; return o.order_no?.toLowerCase().includes(q) || it.product_name?.toLowerCase().includes(q) || o.delivery_name?.toLowerCase().includes(q) || o.delivery_phone?.includes(q) || (getOrderSalesperson(o) || "").toLowerCase().includes(q); });
+            const q = orderSearch.trim().toLowerCase();
+            result = result.filter(o => {
+                switch (orderSearchField) {
+                    case "product_name":
+                        return (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
+                    case "client_name":
+                        return o.delivery_name?.toLowerCase().includes(q);
+                    case "phone":
+                        return (o.delivery_phone || "").includes(q);
+                    case "salesperson":
+                        return (getOrderSalesperson(o) || "").toLowerCase().includes(q);
+                    case "order_no":
+                    default:
+                        return o.order_no?.toLowerCase().includes(q);
+                }
+            });
         }
         if (filters.dateFrom || filters.dateTo) { result = result.filter(o => { const d = new Date(o.created_at); if (filters.dateFrom && d < new Date(filters.dateFrom)) return false; if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false; return true; }); }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) { result = result.filter(o => { const t = o.grand_total || 0; return t >= filters.minPrice && t <= filters.maxPrice; }); }
@@ -603,7 +619,7 @@ export default function COODashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
 
     const orderTabCounts = useMemo(() => ({ all: nonLxrtsOrders.length, unfulfilled: nonLxrtsOrders.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length, prepared: nonLxrtsOrders.filter(o => o.status?.toLowerCase() === "completed").length, delivered: nonLxrtsOrders.filter(o => o.status?.toLowerCase() === "delivered").length, cancelled: nonLxrtsOrders.filter(o => o.status?.toLowerCase() === "cancelled").length }), [nonLxrtsOrders]);
     const ordersTotalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
@@ -641,7 +657,7 @@ export default function COODashboard() {
     };
 
     // Resets
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
     useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
     useEffect(() => {
         if (activeTab === "inventory") {
@@ -924,7 +940,20 @@ export default function COODashboard() {
                         <div className="admin-orders-tab">
                             <h2 className="admin-section-title">Order Tracking</h2>
                             <div className="admin-toolbar">
-                                <div className="admin-search-wrapper"><span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span><input type="text" placeholder="Search Order #, Customer, Phone..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="admin-search-input" />{orderSearch && <button className="search-clear" onClick={() => setOrderSearch("")}>{"\u00D7"}</button>}</div>
+                                <SearchByDropdown
+                                    fields={[
+                                        { value: "order_no", label: "Order Number" },
+                                        { value: "product_name", label: "Product Name" },
+                                        { value: "client_name", label: "Client Name" },
+                                        { value: "phone", label: "Phone" },
+                                        { value: "salesperson", label: "Salesperson" },
+                                    ]}
+                                    selectedField={orderSearchField}
+                                    onFieldChange={setOrderSearchField}
+                                    query={orderSearch}
+                                    onQueryChange={setOrderSearch}
+                                    placeholder="Type to search..."
+                                />
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="admin-sort-select"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="delivery">Delivery Date</option><option value="amount_high">Amount: High</option><option value="amount_low">Amount: Low</option></select>
                                 <button className="admin-export-btn" onClick={handleExportCSV}>Export CSV</button>
                             </div>

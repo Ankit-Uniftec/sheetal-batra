@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -207,6 +208,7 @@ export default function CEODashboard() {
 
     // Orders states
     const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearchField, setOrderSearchField] = useState("order_no");
     const [sortBy, setSortBy] = useState("newest");
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
@@ -831,11 +833,21 @@ export default function CEODashboard() {
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
         if (orderSearch.trim()) {
-            const q = orderSearch.toLowerCase();
+            const q = orderSearch.trim().toLowerCase();
             result = result.filter(order => {
-                const item = order.items?.[0] || {};
-                return order.order_no?.toLowerCase().includes(q) || item.product_name?.toLowerCase().includes(q) ||
-                    order.delivery_name?.toLowerCase().includes(q) || order.delivery_phone?.includes(q) || (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                switch (orderSearchField) {
+                    case "product_name":
+                        return (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
+                    case "client_name":
+                        return order.delivery_name?.toLowerCase().includes(q);
+                    case "phone":
+                        return (order.delivery_phone || "").includes(q);
+                    case "salesperson":
+                        return (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                    case "order_no":
+                    default:
+                        return order.order_no?.toLowerCase().includes(q);
+                }
             });
         }
         if (filters.dateFrom || filters.dateTo) {
@@ -874,7 +886,7 @@ export default function CEODashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
 
     const orderTabCounts = useMemo(() => {
         const validOrders = orders.filter(o => !isLxrtsOrder(o));
@@ -1630,7 +1642,7 @@ export default function CEODashboard() {
 
     // Reset pages
     useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
     useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setClientsPage(1); }, [clientsSearch, clientsSortBy, clientsStoreFilter]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
@@ -3143,11 +3155,20 @@ export default function CEODashboard() {
                         <div className="admin-orders-tab">
                             <h2 className="admin-section-title">Order Management</h2>
                             <div className="admin-toolbar">
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search Order #, Customer, Phone..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="admin-search-input" />
-                                    {orderSearch && <button className="search-clear" onClick={() => setOrderSearch("")}>×</button>}
-                                </div>
+                                <SearchByDropdown
+                                    fields={[
+                                        { value: "order_no", label: "Order Number" },
+                                        { value: "product_name", label: "Product Name" },
+                                        { value: "client_name", label: "Client Name" },
+                                        { value: "phone", label: "Phone" },
+                                        { value: "salesperson", label: "Salesperson" },
+                                    ]}
+                                    selectedField={orderSearchField}
+                                    onFieldChange={setOrderSearchField}
+                                    query={orderSearch}
+                                    onQueryChange={setOrderSearch}
+                                    placeholder="Type to search..."
+                                />
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="admin-sort-select">
                                     <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="delivery">Delivery Date</option><option value="amount_high">Amount: High to Low</option><option value="amount_low">Amount: Low to High</option>
                                 </select>

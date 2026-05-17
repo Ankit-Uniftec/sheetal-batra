@@ -6,6 +6,26 @@ import Logo from "../images/logo.png";
 import { generateOrderBarcodeImages } from "./barcodeImageUtils";
 import { fetchOrderComponents } from "./barcodeService";
 
+// Resolves the "client name" for a PDF header. B2B orders have no
+// delivery_name; the vendor's store_brand_name is the operations-facing
+// analogue. Retail orders fall straight through to delivery_name.
+// Returns "" if nothing can be resolved (PDFs render their own dash).
+const resolveClientNameForPdf = async (order) => {
+  if (!order?.is_b2b) return order?.delivery_name || "";
+  if (!order?.vendor_id) return order?.delivery_name || "";
+  try {
+    const { data } = await supabase
+      .from("vendors")
+      .select("store_brand_name")
+      .eq("id", order.vendor_id)
+      .maybeSingle();
+    return data?.store_brand_name || order?.delivery_name || "";
+  } catch (err) {
+    console.warn("Vendor lookup for PDF client name failed:", err.message);
+    return order?.delivery_name || "";
+  }
+};
+
 /**
  * Generate and download Customer PDF
  * If PDF URL exists in order, opens it directly
@@ -31,9 +51,10 @@ export const downloadCustomerPdf = async (order, setLoading = null) => {
     // Generate fresh PDF
     const logoUrl = new URL(Logo, window.location.origin).href;
     const orderData = { ...order, items: order.items || [] };
+    const resolvedClientName = await resolveClientNameForPdf(orderData);
 
     const pdfBlob = await pdf(
-      <CustomerOrderPdf order={orderData} logoUrl={logoUrl} />
+      <CustomerOrderPdf order={orderData} logoUrl={logoUrl} resolvedClientName={resolvedClientName} />
     ).toBlob();
 
     // Upload to storage (upsert overwrites existing)
@@ -115,6 +136,9 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
     const logoUrl = new URL(Logo, window.location.origin).href;
     const warehouseUrls = [];
 
+    // Resolve client name once for all items in this order
+    const resolvedClientName = await resolveClientNameForPdf(order);
+
     // Generate one PDF per product
     // Fetch components and generate barcode images
     let components = [];
@@ -151,6 +175,7 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
           logoUrl={logoUrl}
           masterBarcodeImage={barcodeData.masterBarcode}
           componentBarcodes={itemBarcodes}
+          resolvedClientName={resolvedClientName}
         />
       ).toBlob();
 
@@ -226,6 +251,7 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
 
     const logoUrl = new URL(Logo, window.location.origin).href;
     const item = items[productIndex];
+    const resolvedClientName = await resolveClientNameForPdf(order);
 
     // Fetch components and generate barcode images
     let components = [];
@@ -254,6 +280,7 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
         logoUrl={logoUrl}
         masterBarcodeImage={barcodeData.masterBarcode}
         componentBarcodes={itemBarcodes}
+        resolvedClientName={resolvedClientName}
       />
     ).toBlob();
 
@@ -313,6 +340,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
   const orderData = { ...order, items: order.items || [] };
   const items = orderData.items;
   const totalItems = items.length;
+  const resolvedClientName = await resolveClientNameForPdf(orderData);
 
   let customerUrl = null;
   let warehouseUrls = [];
@@ -320,7 +348,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
   // ========== CUSTOMER PDF ==========
   try {
     const customerPdfBlob = await pdf(
-      <CustomerOrderPdf order={orderData} logoUrl={logoUrl} />
+      <CustomerOrderPdf order={orderData} logoUrl={logoUrl} resolvedClientName={resolvedClientName} />
     ).toBlob();
 
     const { error: uploadError } = await supabase.storage
@@ -376,6 +404,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
           logoUrl={logoUrl}
           masterBarcodeImage={barcodeData.masterBarcode}
           componentBarcodes={itemBarcodes}
+          resolvedClientName={resolvedClientName}
         />
       ).toBlob();
 

@@ -378,11 +378,34 @@ export default function OrderDetails() {
             const session = JSON.parse(associateSession);
             const associateEmail = session?.user?.email;
 
-            // If emails don't match, the salesperson data is stale (different associate)
+            // If emails don't match, the salesperson data is stale (different associate).
+            // Bail out completely — without an SA context, the order would be written
+            // with a null salesperson_store and pollute store-wise dashboards.
             if (associateEmail && spData.email && associateEmail.toLowerCase() !== spData.email.toLowerCase()) {
               sessionStorage.removeItem("currentSalesperson");
-              return; // Don't set stale salesperson data
+              showPopup({
+                title: "Session Mismatch",
+                message: "Salesperson data does not match the logged-in associate. Please start over from your dashboard.",
+                type: "error",
+                confirmText: "Ok",
+              });
+              navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
+              return;
             }
+          }
+
+          // Hard requirement: the cached SA must have a store_name. Without it,
+          // we'd write an order with a null salesperson_store. Bail out instead.
+          if (!spData.store) {
+            console.error("Salesperson data missing store_name:", spData);
+            showPopup({
+              title: "Missing Store",
+              message: "Salesperson record has no store assigned. Please contact admin to fix the salesperson profile.",
+              type: "error",
+              confirmText: "Ok",
+            });
+            navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
+            return;
           }
 
           setSelectedSP({
@@ -393,6 +416,15 @@ export default function OrderDetails() {
           });
         } catch (e) {
           console.error("Failed to parse salesperson data:", e);
+          // Malformed sessionStorage payload — treat the same as missing data.
+          showPopup({
+            title: "Session Error",
+            message: "Salesperson data is corrupted. Please start over from your dashboard.",
+            type: "error",
+            confirmText: "Ok",
+          });
+          navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
+          return;
         }
       }
     })();
@@ -540,6 +572,21 @@ export default function OrderDetails() {
       }
     }
 
+    // Hard guard: refuse to build an order payload without a resolved store.
+    // The screen-load effects already bail out when SA context is missing/stale,
+    // but this is the last line of defence — better to halt the order here than
+    // write a row with null salesperson_store and pollute dashboards.
+    const resolvedStore = selectedSP?.store_name || spFallback?.store || "";
+    if (!resolvedStore.trim()) {
+      showPopup({
+        title: "Salesperson Missing",
+        message: "Cannot place this order — no salesperson/store could be resolved. Please return to the dashboard and start over.",
+        type: "error",
+        confirmText: "Ok",
+      });
+      return;
+    }
+
     const payload = {
       ...order,
       user_id: user.id,
@@ -581,7 +628,8 @@ export default function OrderDetails() {
       salesperson: selectedSP?.saleperson || spFallback?.name || null,
       salesperson_phone: selectedSP?.phone ? formatPhoneNumber(selectedSP.phone) : (spFallback?.phone ? formatPhoneNumber(spFallback.phone) : null),
       salesperson_email: (selectedSP?.email || spFallback?.email || '').toLowerCase() || null,
-      salesperson_store: selectedSP?.store_name || spFallback?.store || null,
+      // Guaranteed non-empty by the resolvedStore guard above — no fallback needed.
+      salesperson_store: resolvedStore,
 
       // Gifting recipient details
       gift_recipient_name: order.is_gifting ? giftRecipientName || null : null,

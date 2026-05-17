@@ -7,10 +7,21 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import SearchByDropdown from "../../components/SearchByDropdown";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
 } from "recharts";
+
+const TIMELINE_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "weekly", label: "Last 7 Days" },
+  { value: "monthly", label: "Last 30 Days" },
+  { value: "yearly", label: "Last 365 Days" },
+  { value: "all", label: "All Time" },
+  { value: "custom", label: "Custom" },
+];
 
 const COLOR_NAME_MAP = {
   black: "#1a1a1a", white: "#f5f5f5", red: "#c62828", blue: "#1565c0",
@@ -48,17 +59,76 @@ const StatCard = ({ title, value, subtitle, highlight }) => (
   </div>
 );
 
+// Inline timeline picker — dropdown + optional custom-range inputs. Shared by
+// overview, brand performance, and client insights tabs.
+const TimelineFilter = ({ timeline, setTimeline, customFrom, setCustomFrom, customTo, setCustomTo }) => (
+  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 16 }}>
+    <label style={{ fontSize: 13, color: "#666" }}>Showing data for:</label>
+    <select
+      value={timeline}
+      onChange={(e) => setTimeline(e.target.value)}
+      style={{ padding: "8px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 13, background: "#fff", color: "#333", cursor: "pointer", outline: "none" }}
+    >
+      {TIMELINE_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+    {timeline === "custom" && (
+      <>
+        <input
+          type="date"
+          value={customFrom}
+          onChange={(e) => setCustomFrom(e.target.value)}
+          style={{ padding: "7px 10px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 13 }}
+        />
+        <span style={{ color: "#888", fontSize: 13 }}>to</span>
+        <input
+          type="date"
+          value={customTo}
+          onChange={(e) => setCustomTo(e.target.value)}
+          style={{ padding: "7px 10px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 13 }}
+        />
+      </>
+    )}
+  </div>
+);
+
 export default function AssistantCmoDashboard() {
-  const { PopupComponent } = usePopup();
+  const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("overview");
+  // Date-wise filter for overview / brand performance / client insights tabs.
+  // Defaults to "all" — viewing the full dataset is the most useful starting
+  // point on this dashboard (CMO ops, not daily SA-style monitoring).
+  const [timeline, setTimeline] = useState("all");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
+  // Set when user clicks a top-product row. The Orders tab reads this on
+  // mount via an effect to pre-fill the search box with the product name.
+  const [productFilterForOrders, setProductFilterForOrders] = useState("");
+
+  // Orders tab state
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderSearchField, setOrderSearchField] = useState("order_no");
+  const [orderStatusTab, setOrderStatusTab] = useState("all");
+  const [orderSortBy, setOrderSortBy] = useState("newest");
+  const [ordersPage, setOrdersPage] = useState(1);
+  const ORDERS_PER_PAGE = 20;
+
+  // Client Book tab state
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientStoreFilter, setClientStoreFilter] = useState("all");
+  const [clientsPage, setClientsPage] = useState(1);
+  const CLIENTS_PER_PAGE = 25;
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [consignment, setConsignment] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  // Logged-in user's salesperson row. Drives the gated Stock Order sidebar item.
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [showSidebar, setShowSidebar] = useState(false);
 
   useEffect(() => {
@@ -68,7 +138,7 @@ export default function AssistantCmoDashboard() {
 
       const { data: userRecord } = await supabase
         .from("salesperson")
-        .select("role")
+        .select("saleperson, role, email, phone, store_name, designation, can_place_stock_orders")
         .eq("email", session.user.email?.toLowerCase())
         .single();
 
@@ -79,10 +149,48 @@ export default function AssistantCmoDashboard() {
       }
 
       setCurrentUserEmail(session.user.email?.toLowerCase() || "");
+      setCurrentUserProfile(userRecord);
       fetchAllData();
     };
     checkAuthAndFetch();
   }, [navigate]);
+
+  // Stock-order entry — same flow as SA dashboard. Gated on
+  // salesperson.can_place_stock_orders.
+  const handleStartStockOrder = async () => {
+    if (!currentUserProfile) {
+      showPopup({
+        title: "Access Denied",
+        message: "User profile not loaded. Please refresh and try again.",
+        type: "error",
+        confirmText: "Ok",
+      });
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) sessionStorage.setItem("associateSession", JSON.stringify({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      user: { email: session.user?.email },
+    }));
+    sessionStorage.setItem("returnToAssociate", "true");
+    // Route back to the assistant-CMO dashboard after the order is placed.
+    // Without this, OrderPlaced.handleBackToDashboard defaults to
+    // /AssociateDashboard, whose role check fails and logs out non-SA users.
+    sessionStorage.setItem("returnDashboard", "/assistant-cmo-dashboard");
+    sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+    sessionStorage.setItem("currentSalesperson", JSON.stringify({
+      name: currentUserProfile.saleperson,
+      email: currentUserProfile.email,
+      phone: currentUserProfile.phone,
+      store: currentUserProfile.store_name,
+      designation: currentUserProfile.designation,
+    }));
+    sessionStorage.setItem("isStockOrder", "true");
+    sessionStorage.removeItem("screen4FormData");
+    sessionStorage.removeItem("screen6FormData");
+    navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
+  };
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -110,6 +218,55 @@ export default function AssistantCmoDashboard() {
   };
 
   // ==================== HELPERS ====================
+  // Resolve the start/end of the active timeline. Mirrors AdminDashboard's
+  // getDateRange so future changes can be unified. "all" returns an open range.
+  const getDateRange = (tl) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    switch (tl) {
+      case "today": return { start: today, end: now };
+      case "yesterday": {
+        const y = new Date(today); y.setDate(y.getDate() - 1);
+        const yEnd = new Date(today); yEnd.setMilliseconds(-1);
+        return { start: y, end: yEnd };
+      }
+      case "weekly": {
+        const d = new Date(today); d.setDate(d.getDate() - 7);
+        return { start: d, end: now };
+      }
+      case "monthly": {
+        const d = new Date(today); d.setDate(d.getDate() - 30);
+        return { start: d, end: now };
+      }
+      case "yearly": {
+        const d = new Date(today); d.setDate(d.getDate() - 365);
+        return { start: d, end: now };
+      }
+      case "custom":
+        return {
+          start: customDateFrom ? new Date(customDateFrom) : new Date(0),
+          end: customDateTo ? new Date(customDateTo + "T23:59:59") : now,
+        };
+      case "all":
+      default:
+        return { start: new Date(0), end: now };
+    }
+  };
+
+  // The orders slice that the date-aware tabs (overview, brand, clients)
+  // compute their metrics from. Other tabs (revenue, product, inventory)
+  // still iterate the full `orders` array.
+  const dateFilteredOrders = useMemo(() => {
+    const range = getDateRange(timeline);
+    if (timeline === "all") return orders;
+    return orders.filter((o) => {
+      if (!o.created_at) return false;
+      const d = new Date(o.created_at);
+      return d >= range.start && d <= range.end;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, timeline, customDateFrom, customDateTo]);
+
   const getOrderStore = (o) => {
     if (o.is_b2b) return "B2B";
     const s = (o.salesperson_store || "").trim();
@@ -127,9 +284,11 @@ export default function AssistantCmoDashboard() {
 
   // ==================== OVERVIEW (Bhawna's own section) ====================
   const overview = useMemo(() => {
+    // Scoped to the active timeline (see dateFilteredOrders memo).
+    const _orders = dateFilteredOrders;
     // Store-wise sales
     const storeMap = {};
-    orders.forEach((o) => {
+    _orders.forEach((o) => {
       const store = getOrderStore(o);
       if (!storeMap[store]) storeMap[store] = { name: store, orderCount: 0, revenue: 0, refundCount: 0, cancelCount: 0, returnCount: 0 };
       storeMap[store].orderCount += 1;
@@ -139,24 +298,42 @@ export default function AssistantCmoDashboard() {
       if (o.return_reason || o.status === "returned") storeMap[store].returnCount += 1;
     });
 
-    // Product-wise sales analytics
+    // Product-wise sales analytics (overall + per-store).
+    // Per-store enables the "Top products by store" view used for ad targeting.
     const productMap = {};
-    orders.forEach((o) => {
+    const productByStoreMap = {}; // { storeName: { productName: {qty, revenue} } }
+    _orders.forEach((o) => {
       if (!isRevenueOrder(o)) return;
+      const store = getOrderStore(o);
+      if (!productByStoreMap[store]) productByStoreMap[store] = {};
       (o.items || []).forEach((item) => {
         const name = item.product_name;
         if (!name) return;
+        const qty = Number(item.quantity || 1);
+        const rev = Number(item.price || 0) * qty;
         if (!productMap[name]) productMap[name] = { name, qty: 0, revenue: 0 };
-        productMap[name].qty += Number(item.quantity || 1);
-        productMap[name].revenue += Number(item.price || 0) * Number(item.quantity || 1);
+        productMap[name].qty += qty;
+        productMap[name].revenue += rev;
+        const storeMap = productByStoreMap[store];
+        if (!storeMap[name]) storeMap[name] = { name, qty: 0, revenue: 0 };
+        storeMap[name].qty += qty;
+        storeMap[name].revenue += rev;
       });
     });
     const topProducts = Object.values(productMap).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    // Per-store top-10 by revenue. Stores with no products are excluded.
+    const topProductsByStore = Object.entries(productByStoreMap)
+      .map(([store, pm]) => ({
+        store,
+        products: Object.values(pm).sort((a, b) => b.revenue - a.revenue).slice(0, 10),
+      }))
+      .filter((s) => s.products.length > 0)
+      .sort((a, b) => a.store.localeCompare(b.store));
 
     // Refund / Cancellation / Return totals
-    const refunds = orders.filter((o) => o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded");
-    const cancellations = orders.filter((o) => o.status === "cancelled");
-    const returns = orders.filter((o) => o.return_reason || o.status === "returned");
+    const refunds = _orders.filter((o) => o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded");
+    const cancellations = _orders.filter((o) => o.status === "cancelled");
+    const returns = _orders.filter((o) => o.return_reason || o.status === "returned");
     const refundValue = refunds.reduce((s, o) => s + Number(o.grand_total || 0), 0);
     const cancelValue = cancellations.reduce((s, o) => s + Number(o.grand_total || 0), 0);
     const returnValue = returns.reduce((s, o) => s + Number(o.grand_total || 0), 0);
@@ -164,7 +341,7 @@ export default function AssistantCmoDashboard() {
     // Discount impact
     let totalDiscount = 0;
     let ordersWithDiscount = 0;
-    orders.forEach((o) => {
+    _orders.forEach((o) => {
       const d = Number(o.discount_amount || 0);
       if (d > 0) {
         totalDiscount += d;
@@ -191,6 +368,7 @@ export default function AssistantCmoDashboard() {
     return {
       storePerformance: Object.values(storeMap),
       topProducts,
+      topProductsByStore,
       refundCount: refunds.length, refundValue,
       cancelCount: cancellations.length, cancelValue,
       returnCount: returns.length, returnValue,
@@ -198,13 +376,15 @@ export default function AssistantCmoDashboard() {
       returnReasons,
       storeTargets: Object.values(storeTargets),
     };
-  }, [orders]);
+  }, [dateFilteredOrders]);
 
   // ==================== BRAND PERFORMANCE ====================
   const brandPerformance = useMemo(() => {
+    // Scoped to the active timeline.
+    const _orders = dateFilteredOrders;
     let totalRefundQty = 0;
     let totalRefundValue = 0;
-    orders.forEach((o) => {
+    _orders.forEach((o) => {
       if (o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded") {
         totalRefundQty += 1;
         totalRefundValue += Number(o.grand_total || 0);
@@ -214,7 +394,7 @@ export default function AssistantCmoDashboard() {
     // Top products + colors (overall)
     const productMap = {};
     const colorMap = {};
-    orders.forEach((o) => {
+    _orders.forEach((o) => {
       if (!isRevenueOrder(o)) return;
       (o.items || []).forEach((item) => {
         const name = item.product_name;
@@ -239,7 +419,7 @@ export default function AssistantCmoDashboard() {
       topColors: sortedColors.slice(0, 8),
       bottomColors: sortedColors.slice(-5).reverse(),
     };
-  }, [orders]);
+  }, [dateFilteredOrders]);
 
   // ==================== REVENUE & DRIVERS ====================
   const revenueMetrics = useMemo(() => {
@@ -277,6 +457,23 @@ export default function AssistantCmoDashboard() {
     const aovOverall = ytdCount > 0 ? ytdRev / ytdCount : 0;
     const aovMtd = mtdCount > 0 ? mtdRev / mtdCount : 0;
 
+    // AOV per store (YTD basis, same scope as aovOverall). Lets CMO compare
+    // ticket size across locations.
+    const aovStoreMap = {};
+    orders.forEach((o) => {
+      if (!isRevenueOrder(o)) return;
+      const d = new Date(o.delivered_at || o.created_at);
+      if (isNaN(d.getTime())) return;
+      if (d.getFullYear() !== thisYear) return;
+      const store = getOrderStore(o);
+      if (!aovStoreMap[store]) aovStoreMap[store] = { name: store, revenue: 0, count: 0 };
+      aovStoreMap[store].revenue += Number(o.grand_total || 0);
+      aovStoreMap[store].count += 1;
+    });
+    const aovByStore = Object.values(aovStoreMap)
+      .map((s) => ({ ...s, aov: s.count > 0 ? s.revenue / s.count : 0 }))
+      .sort((a, b) => b.aov - a.aov);
+
     const dailyGrowth = yesterdayRev > 0 ? (((todayRev - yesterdayRev) / yesterdayRev) * 100).toFixed(1) : (todayRev > 0 ? "100.0" : "0.0");
     const momGrowth = lastMonthRev > 0 ? (((mtdRev - lastMonthRev) / lastMonthRev) * 100).toFixed(1) : (mtdRev > 0 ? "100.0" : "0.0");
     const yoyGrowth = lastYearRev > 0 ? (((ytdRev - lastYearRev) / lastYearRev) * 100).toFixed(1) : (ytdRev > 0 ? "100.0" : "0.0");
@@ -299,7 +496,7 @@ export default function AssistantCmoDashboard() {
 
     return {
       todayRev, yesterdayRev, mtdRev, lastMonthRev, ytdRev, lastYearRev,
-      aovOverall, aovMtd,
+      aovOverall, aovMtd, aovByStore,
       dailyGrowth, momGrowth, yoyGrowth,
       monthsTrend,
     };
@@ -400,9 +597,11 @@ export default function AssistantCmoDashboard() {
     });
     const avgClientAge = withDob > 0 ? (totalAgeYears / withDob).toFixed(1) : "—";
 
-    // Repeat customer rate
+    // Repeat customer rate — scoped to the active timeline so "% of customers
+    // who ordered more than once" reflects the chosen period (e.g. monthly
+    // repeat rate). avgClientAge / newLast{7,30} stay full-dataset metrics.
     const customerOrders = {};
-    orders.forEach((o) => {
+    dateFilteredOrders.forEach((o) => {
       const id = o.user_id || o.delivery_email;
       if (!id) return;
       customerOrders[id] = (customerOrders[id] || 0) + 1;
@@ -421,9 +620,260 @@ export default function AssistantCmoDashboard() {
       repeatRate, repeatCustomers, totalCustomers,
       newLast7, newLast30,
     };
-  }, [orders, profiles]);
+  }, [dateFilteredOrders, profiles]);
 
   // ==================== INVENTORY ====================
+  // ==================== ORDERS TAB ====================
+  // Status tabs: same shape Admin uses, scoped to the buckets that make sense
+  // for a CMO view. "all" is everything; the rest are buckets by lifecycle.
+  const ORDER_STATUS_TABS = useMemo(() => [
+    { value: "all", label: "All Orders" },
+    { value: "unfulfilled", label: "Unfulfilled" },
+    { value: "completed", label: "Completed / Delivered" },
+    { value: "cancelled", label: "Cancelled" },
+  ], []);
+
+  const matchOrderStatus = (o, tab) => {
+    const s = (o.status || "").toLowerCase();
+    switch (tab) {
+      case "unfulfilled": return s !== "completed" && s !== "delivered" && s !== "cancelled";
+      case "completed": return s === "completed" || s === "delivered";
+      case "cancelled": return s === "cancelled";
+      case "all":
+      default: return true;
+    }
+  };
+
+  // Filter + sort + paginate. Uses the full `orders` dataset (Orders tab is
+  // intentionally NOT bound to the dashboard timeline filter — CMO needs
+  // search-by-order-no to work across history).
+  const filteredOrders = useMemo(() => {
+    let result = orders.filter((o) => matchOrderStatus(o, orderStatusTab));
+    const q = orderSearch.trim().toLowerCase();
+    if (q) {
+      result = result.filter((o) => {
+        switch (orderSearchField) {
+          case "product_name":
+            return (o.items || []).some((it) => it?.product_name?.toLowerCase().includes(q));
+          case "client_name":
+            return (o.delivery_name || "").toLowerCase().includes(q);
+          case "phone":
+            return (o.delivery_phone || "").includes(q);
+          case "salesperson":
+            return (o.salesperson || "").toLowerCase().includes(q);
+          case "order_no":
+          default:
+            return (o.order_no || "").toLowerCase().includes(q);
+        }
+      });
+    }
+    // Sort
+    const getOrderNum = (no) => {
+      const m = (no || "").replace(/-[A-Z]\d*$/, "").match(/(\d{2})(\d{2})-(\d{6})$/);
+      return m ? parseInt(m[2] + m[1] + m[3]) : 0;
+    };
+    result = [...result].sort((a, b) => {
+      switch (orderSortBy) {
+        case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
+        case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
+        case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
+        case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+        default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
+      }
+    });
+    return result;
+  }, [orders, orderStatusTab, orderSearch, orderSearchField, orderSortBy]);
+
+  // Status tab counts
+  const orderTabCounts = useMemo(() => {
+    return ORDER_STATUS_TABS.reduce((acc, tab) => {
+      acc[tab.value] = orders.filter((o) => matchOrderStatus(o, tab.value)).length;
+      return acc;
+    }, {});
+  }, [orders, ORDER_STATUS_TABS]);
+
+  // Reset pagination when filters change
+  useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, orderStatusTab, orderSortBy]);
+
+  // Top-product click-through: when a product name is set, pre-fill the
+  // Orders search with it and clear the consumed value.
+  useEffect(() => {
+    if (productFilterForOrders) {
+      setOrderSearch(productFilterForOrders);
+      setOrderSearchField("product_name");
+      setOrderStatusTab("all");
+      setProductFilterForOrders("");
+    }
+  }, [productFilterForOrders]);
+
+  // CSV export — mirrors GM/Admin pattern: UTF-8 BOM + text/csv blob + temp anchor.
+  const handleOrdersExportCSV = () => {
+    if (filteredOrders.length === 0) return;
+    const headers = [
+      "Order No", "Order Date", "Customer", "Phone", "Salesperson", "Store",
+      "Product", "Status", "Amount", "Delivery Date",
+    ];
+    const rows = filteredOrders.map((o) => {
+      const item = o.items?.[0] || {};
+      return [
+        o.order_no || "",
+        o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
+        o.delivery_name || "",
+        o.delivery_phone || "",
+        o.salesperson || "",
+        getOrderStore(o),
+        item.product_name || "",
+        o.status || "",
+        o.grand_total || 0,
+        o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
+      ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
+    });
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `acmo_orders_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ==================== CLIENT BOOK ====================
+  // Builds the same client/order aggregation Admin uses, with one addition:
+  // each client carries a primary store derived from their most recent order.
+  // The Client Book tab uses that to filter by store.
+  const clientBook = useMemo(() => {
+    const orderIndex = {}; // key -> { sas:Set, orderCount, lastOrderAt, storeCounts:{store:n}, lastOrderStore }
+    const addToIndex = (key, order) => {
+      if (!key) return;
+      if (!orderIndex[key]) orderIndex[key] = { sas: new Set(), orderCount: 0, lastOrderAt: null, storeCounts: {}, lastOrderStore: null };
+      const entry = orderIndex[key];
+      const sa = (order.salesperson || "").trim();
+      if (sa) entry.sas.add(sa);
+      entry.orderCount += 1;
+      const store = getOrderStore(order);
+      entry.storeCounts[store] = (entry.storeCounts[store] || 0) + 1;
+      if (order.created_at && (!entry.lastOrderAt || new Date(order.created_at) > new Date(entry.lastOrderAt))) {
+        entry.lastOrderAt = order.created_at;
+        entry.lastOrderStore = store;
+      }
+    };
+    orders.forEach((o) => {
+      const phone = (o.delivery_phone || o.phone || "").trim();
+      if (phone) addToIndex(`phone:${phone}`, o);
+      if (o.user_id) addToIndex(`uid:${o.user_id}`, o);
+    });
+
+    const all = profiles.map((p) => {
+      const phone = (p.phone || "").trim();
+      const email = (p.email || "").trim().toLowerCase();
+      const byUid = p.id ? orderIndex[`uid:${p.id}`] : null;
+      const byPhone = phone ? orderIndex[`phone:${phone}`] : null;
+
+      const sas = new Set();
+      let orderCount = 0;
+      let lastOrderAt = null;
+      let lastOrderStore = null;
+      let bestStoreCounts = {};
+      [byUid, byPhone].forEach((src) => {
+        if (!src) return;
+        src.sas.forEach((s) => sas.add(s));
+        orderCount += src.orderCount;
+        if (src.lastOrderAt && (!lastOrderAt || new Date(src.lastOrderAt) > new Date(lastOrderAt))) {
+          lastOrderAt = src.lastOrderAt;
+          lastOrderStore = src.lastOrderStore;
+        }
+        Object.entries(src.storeCounts).forEach(([k, v]) => {
+          bestStoreCounts[k] = (bestStoreCounts[k] || 0) + v;
+        });
+      });
+      if (byUid && byPhone) {
+        orderCount = Math.max(byUid.orderCount, byPhone.orderCount);
+      }
+      // Primary store: most-frequent across this client's orders (fallback to last).
+      const primaryStore = Object.entries(bestStoreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || lastOrderStore || "";
+
+      return {
+        id: p.id,
+        name: (p.full_name || "").trim() || "—",
+        phone,
+        email,
+        sas: Array.from(sas).sort(),
+        orderCount,
+        lastOrderAt,
+        primaryStore,
+      };
+    });
+
+    // Hide abandoned signups (no name, no email, no orders) — same as Admin.
+    const isAbandoned = (c) => c.name === "—" && !c.email && c.orderCount === 0;
+    const visible = all.filter((c) => !isAbandoned(c));
+
+    // Store filter
+    let filtered = visible;
+    if (clientStoreFilter !== "all") {
+      filtered = filtered.filter((c) => c.primaryStore === clientStoreFilter);
+    }
+    // Search filter
+    const q = clientSearch.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter((c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.phone.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        c.sas.some((s) => s.toLowerCase().includes(q))
+      );
+    }
+    const sorted = filtered.sort((a, b) => a.name.localeCompare(b.name));
+    const totalPages = Math.max(1, Math.ceil(sorted.length / CLIENTS_PER_PAGE));
+    const safePage = Math.min(clientsPage, totalPages);
+    const start = (safePage - 1) * CLIENTS_PER_PAGE;
+    const pageRows = sorted.slice(start, start + CLIENTS_PER_PAGE);
+
+    // Per-store counts (for the chip-bar)
+    const storeBreakdown = visible.reduce((acc, c) => {
+      const s = c.primaryStore || "—";
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      all: sorted,
+      pageRows,
+      totalPages,
+      safePage,
+      totalCount: sorted.length,
+      visibleCount: visible.length,
+      storeBreakdown,
+    };
+  }, [profiles, orders, clientSearch, clientStoreFilter, clientsPage]);
+
+  // Reset to page 1 when search or store filter changes
+  useEffect(() => { setClientsPage(1); }, [clientSearch, clientStoreFilter]);
+
+  // CSV export for client book
+  const handleClientBookExportCSV = () => {
+    if (clientBook.all.length === 0) return;
+    const headers = ["Client Name", "Phone", "Email", "Primary Store", "Connected SA(s)", "Total Orders", "Last Order Date"];
+    const rows = clientBook.all.map((c) => [
+      c.name,
+      c.phone,
+      c.email,
+      c.primaryStore || "",
+      c.sas.join("; "),
+      c.orderCount,
+      c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("en-GB") : "",
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`));
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `acmo_client_book_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const inventoryMetrics = useMemo(() => {
     const now = new Date();
     const delayedDeliveries = orders.filter((o) => {
@@ -508,8 +958,15 @@ export default function AssistantCmoDashboard() {
             <button className={`acmo-nav-item ${activeTab === "revenue" ? "active" : ""}`} onClick={() => { setActiveTab("revenue"); setShowSidebar(false); }}>Revenue & Drivers</button>
             <button className={`acmo-nav-item ${activeTab === "product" ? "active" : ""}`} onClick={() => { setActiveTab("product"); setShowSidebar(false); }}>Product & Style</button>
             <button className={`acmo-nav-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Insights</button>
+            <button className={`acmo-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
+            <button className={`acmo-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
             <button className={`acmo-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
-            <button className={`acmo-nav-item ${activeTab === "cost" ? "active" : ""}`} onClick={() => { setActiveTab("cost"); setShowSidebar(false); }}>Cost & Expenditure</button>
+            {currentUserProfile?.can_place_stock_orders && (
+              <button
+                className="acmo-nav-item"
+                onClick={() => { setShowSidebar(false); handleStartStockOrder(); }}
+              >Stock Order</button>
+            )}
           </nav>
         </aside>
 
@@ -518,6 +975,7 @@ export default function AssistantCmoDashboard() {
           {activeTab === "overview" && (
             <>
               <h2 className="acmo-section-title">Overview</h2>
+              <TimelineFilter timeline={timeline} setTimeline={setTimeline} customFrom={customDateFrom} setCustomFrom={setCustomDateFrom} customTo={customDateTo} setCustomTo={setCustomDateTo} />
 
               <div className="acmo-card">
                 <p className="acmo-card-title">Store-wise Sales Breakdown</p>
@@ -543,7 +1001,12 @@ export default function AssistantCmoDashboard() {
                       <thead><tr><th>Product</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
                       <tbody>
                         {overview.topProducts.map((p) => (
-                          <tr key={p.name}>
+                          <tr
+                            key={p.name}
+                            onClick={() => { setProductFilterForOrders(p.name); setActiveTab("orders"); }}
+                            style={{ cursor: "pointer" }}
+                            title="Click to see all orders with this product"
+                          >
                             <td>{p.name}</td>
                             <td>{p.qty}</td>
                             <td>₹{formatIndianNumber(Math.round(p.revenue))}</td>
@@ -554,6 +1017,39 @@ export default function AssistantCmoDashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Top products grouped by store — helps target ads per location. */}
+              {overview.topProductsByStore.length > 0 && (
+                <div className="acmo-card">
+                  <p className="acmo-card-title">Top Products by Store</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+                    {overview.topProductsByStore.map((s) => (
+                      <div key={s.store} style={{ border: "1px solid #f0e8d4", borderRadius: 10, padding: 12, background: "#fff" }}>
+                        <p style={{ margin: "0 0 8px 0", fontWeight: 600, color: "#8B7355" }}>{s.store}</p>
+                        <div className="acmo-table-wrapper">
+                          <table className="acmo-table">
+                            <thead><tr><th>Product</th><th>Qty</th><th>Revenue</th></tr></thead>
+                            <tbody>
+                              {s.products.map((p) => (
+                                <tr
+                                  key={p.name}
+                                  onClick={() => { setProductFilterForOrders(p.name); setActiveTab("orders"); }}
+                                  style={{ cursor: "pointer" }}
+                                  title="Click to see all orders with this product"
+                                >
+                                  <td>{p.name}</td>
+                                  <td>{p.qty}</td>
+                                  <td>₹{formatIndianNumber(Math.round(p.revenue))}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="acmo-card">
                 <p className="acmo-card-title">Refunds, Cancellations & Returns</p>
@@ -579,7 +1075,7 @@ export default function AssistantCmoDashboard() {
                 ) : (
                   <div className="acmo-table-wrapper">
                     <table className="acmo-table">
-                      <thead><tr><th>Reason</th><th>Count</th></tr></thead>
+                      <thead><tr><th>Reason</th><th>Qty</th></tr></thead>
                       <tbody>
                         {overview.returnReasons.map((r) => (
                           <tr key={r.name}><td>{r.name}</td><td><strong>{r.count}</strong></td></tr>
@@ -611,15 +1107,7 @@ export default function AssistantCmoDashboard() {
           {activeTab === "brand" && (
             <>
               <h2 className="acmo-section-title">Overall Brand Performance</h2>
-
-              <div className="acmo-stats-grid">
-                <StatCard
-                  title="Cumulative Refunds"
-                  value={brandPerformance.totalRefundQty}
-                  subtitle={`₹${formatIndianNumber(Math.round(brandPerformance.totalRefundValue))}`}
-                  highlight={brandPerformance.totalRefundQty > 0}
-                />
-              </div>
+              <TimelineFilter timeline={timeline} setTimeline={setTimeline} customFrom={customDateFrom} setCustomFrom={setCustomDateFrom} customTo={customDateTo} setCustomTo={setCustomDateTo} />
 
               <div className="acmo-card">
                 <p className="acmo-card-title">Top-Performing Products (Overall)</p>
@@ -632,7 +1120,7 @@ export default function AssistantCmoDashboard() {
                       <XAxis type="number" tick={{ fontSize: 11, fill: "#888" }} allowDecimals={false} axisLine={false} />
                       <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 11, fill: "#444" }} tickFormatter={(v) => (v.length > 20 ? v.slice(0, 20) + "…" : v)} axisLine={false} tickLine={false} />
                       <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }} />
-                      <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={18}>
+                      <Bar dataKey="count" name="Qty" radius={[0, 6, 6, 0]} barSize={18}>
                         {brandPerformance.topProducts.map((_, i) => (
                           <Cell key={i} fill={`rgba(213, 184, 90, ${1 - i * 0.07})`} />
                         ))}
@@ -652,7 +1140,7 @@ export default function AssistantCmoDashboard() {
                         <XAxis dataKey="name" interval={0} tick={{ fontSize: 11, fill: "#555" }} angle={-25} textAnchor="end" height={60} />
                         <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }} />
-                        <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={24}>
+                        <Bar dataKey="count" name="Qty" radius={[4, 4, 0, 0]} barSize={24}>
                           {brandPerformance.topColors.map((c, i) => (
                             <Cell key={i} fill={getColorHex(c.name)} stroke="rgba(0,0,0,0.08)" />
                           ))}
@@ -671,7 +1159,7 @@ export default function AssistantCmoDashboard() {
                         <XAxis dataKey="name" interval={0} tick={{ fontSize: 11, fill: "#555" }} angle={-25} textAnchor="end" height={60} />
                         <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }} />
-                        <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={24}>
+                        <Bar dataKey="count" name="Qty" radius={[4, 4, 0, 0]} barSize={24}>
                           {brandPerformance.bottomColors.map((c, i) => (
                             <Cell key={i} fill={getColorHex(c.name)} stroke="rgba(0,0,0,0.08)" />
                           ))}
@@ -704,6 +1192,21 @@ export default function AssistantCmoDashboard() {
                   <StatCard title="AOV (YTD)" value={`₹${formatIndianNumber(Math.round(revenueMetrics.aovOverall))}`} subtitle="Across all delivered orders this year" />
                   <StatCard title="AOV (This Month)" value={`₹${formatIndianNumber(Math.round(revenueMetrics.aovMtd))}`} subtitle="Delivered orders this month" />
                 </div>
+                {revenueMetrics.aovByStore.length > 0 && (
+                  <>
+                    <p style={{ margin: "16px 0 8px 0", fontSize: 13, color: "#666" }}>By store (YTD)</p>
+                    <div className="acmo-stats-grid">
+                      {revenueMetrics.aovByStore.map((s) => (
+                        <StatCard
+                          key={s.name}
+                          title={`AOV — ${s.name}`}
+                          value={`₹${formatIndianNumber(Math.round(s.aov))}`}
+                          subtitle={`${s.count} orders · ₹${formatIndianNumber(Math.round(s.revenue))} revenue`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="acmo-card">
@@ -736,7 +1239,7 @@ export default function AssistantCmoDashboard() {
                         <XAxis type="number" tick={{ fontSize: 11, fill: "#888" }} allowDecimals={false} axisLine={false} />
                         <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11, fill: "#444" }} tickFormatter={(v) => (v.length > 18 ? v.slice(0, 18) + "…" : v)} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }} />
-                        <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={16} fill="#d5b85a" />
+                        <Bar dataKey="count" name="Qty" radius={[0, 6, 6, 0]} barSize={16} fill="#d5b85a" />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -769,7 +1272,7 @@ export default function AssistantCmoDashboard() {
                         <XAxis dataKey="name" interval={0} tick={{ fontSize: 11, fill: "#555" }} angle={-25} textAnchor="end" height={60} />
                         <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }} />
-                        <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={24}>
+                        <Bar dataKey="count" name="Qty" radius={[4, 4, 0, 0]} barSize={24}>
                           {productStyle.topColors.map((c, i) => (
                             <Cell key={i} fill={getColorHex(c.name)} stroke="rgba(0,0,0,0.08)" />
                           ))}
@@ -788,7 +1291,7 @@ export default function AssistantCmoDashboard() {
                         <XAxis dataKey="name" interval={0} tick={{ fontSize: 11, fill: "#555" }} angle={-25} textAnchor="end" height={60} />
                         <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }} />
-                        <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={24}>
+                        <Bar dataKey="count" name="Qty" radius={[4, 4, 0, 0]} barSize={24}>
                           {productStyle.bottomColors.map((c, i) => (
                             <Cell key={i} fill={getColorHex(c.name)} stroke="rgba(0,0,0,0.08)" />
                           ))}
@@ -869,6 +1372,7 @@ export default function AssistantCmoDashboard() {
           {activeTab === "clients" && (
             <>
               <h2 className="acmo-section-title">Client Insights</h2>
+              <TimelineFilter timeline={timeline} setTimeline={setTimeline} customFrom={customDateFrom} setCustomFrom={setCustomDateFrom} customTo={customDateTo} setCustomTo={setCustomDateTo} />
 
               <div className="acmo-stats-grid">
                 <StatCard title="Average Client Age" value={clientInsights.avgClientAge !== "—" ? `${clientInsights.avgClientAge} yrs` : "—"} subtitle={`${clientInsights.totalClients} total clients`} />
@@ -878,6 +1382,285 @@ export default function AssistantCmoDashboard() {
               </div>
             </>
           )}
+
+          {/* ==================== ORDERS ==================== */}
+          {activeTab === "orders" && (() => {
+            const pagedOrders = filteredOrders.slice((ordersPage - 1) * ORDERS_PER_PAGE, ordersPage * ORDERS_PER_PAGE);
+            const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ORDERS_PER_PAGE));
+            return (
+              <>
+                <h2 className="acmo-section-title">Orders</h2>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
+                  <SearchByDropdown
+                    fields={[
+                      { value: "order_no", label: "Order Number" },
+                      { value: "product_name", label: "Product Name" },
+                      { value: "client_name", label: "Client Name" },
+                      { value: "phone", label: "Phone" },
+                      { value: "salesperson", label: "Salesperson" },
+                    ]}
+                    selectedField={orderSearchField}
+                    onFieldChange={setOrderSearchField}
+                    query={orderSearch}
+                    onQueryChange={setOrderSearch}
+                    placeholder="Type to search..."
+                  />
+                  <select
+                    value={orderSortBy}
+                    onChange={(e) => setOrderSortBy(e.target.value)}
+                    style={{ padding: "10px 14px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="delivery">Delivery Date</option>
+                    <option value="amount_high">Amount: High to Low</option>
+                    <option value="amount_low">Amount: Low to High</option>
+                  </select>
+                  <button
+                    onClick={handleOrdersExportCSV}
+                    disabled={filteredOrders.length === 0}
+                    title="Export filtered orders to CSV"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, height: 42,
+                      padding: "0 16px", border: "1px solid #d5b85a", borderRadius: 8,
+                      background: filteredOrders.length === 0 ? "#f5f5f5" : "#faf6e8",
+                      color: filteredOrders.length === 0 ? "#999" : "#8B7355",
+                      fontSize: 14, fontWeight: 500,
+                      cursor: filteredOrders.length === 0 ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap", transition: "all 0.2s",
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Export CSV
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                  {ORDER_STATUS_TABS.map((tab) => {
+                    const active = orderStatusTab === tab.value;
+                    return (
+                      <button
+                        key={tab.value}
+                        onClick={() => setOrderStatusTab(tab.value)}
+                        style={{
+                          padding: "8px 14px",
+                          border: `1px solid ${active ? "#d5b85a" : "#e0d5c5"}`,
+                          borderRadius: 20,
+                          background: active ? "#d5b85a" : "#fff",
+                          color: active ? "#fff" : "#666",
+                          fontSize: 13, fontWeight: 500, cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {tab.label}
+                        <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.8 }}>
+                          ({orderTabCounts[tab.value] || 0})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p style={{ color: "#888", fontSize: 13, marginBottom: 12 }}>
+                  Showing {pagedOrders.length} of {filteredOrders.length} orders
+                </p>
+
+                <div className="acmo-table-wrapper">
+                  <table className="acmo-table">
+                    <thead>
+                      <tr>
+                        <th>Order No</th>
+                        <th>Order Date</th>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>SA</th>
+                        <th>Store</th>
+                        <th>Status</th>
+                        <th>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedOrders.length === 0 ? (
+                        <tr><td colSpan={8} className="acmo-empty">No orders match the current filters.</td></tr>
+                      ) : (
+                        pagedOrders.map((o) => {
+                          const item = o.items?.[0] || {};
+                          return (
+                            <tr key={o.id}>
+                              <td style={{ fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "—"}</td>
+                              <td>{o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "—"}</td>
+                              <td>{o.delivery_name || "—"}</td>
+                              <td>{item.product_name || "—"}</td>
+                              <td>{o.salesperson || "—"}</td>
+                              <td>{getOrderStore(o)}</td>
+                              <td>{o.status || "—"}</td>
+                              <td>₹{formatIndianNumber(o.grand_total || 0)}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 16 }}>
+                    <button
+                      onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
+                      disabled={ordersPage === 1}
+                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: ordersPage === 1 ? "not-allowed" : "pointer", opacity: ordersPage === 1 ? 0.5 : 1 }}
+                    >Prev</button>
+                    <span style={{ fontSize: 13, color: "#666" }}>Page {ordersPage} of {totalPages}</span>
+                    <button
+                      onClick={() => setOrdersPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={ordersPage === totalPages}
+                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: ordersPage === totalPages ? "not-allowed" : "pointer", opacity: ordersPage === totalPages ? 0.5 : 1 }}
+                    >Next</button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* ==================== CLIENT BOOK ==================== */}
+          {activeTab === "client_book" && (() => {
+            // Build the chip list dynamically — show whichever stores have at
+            // least one client. Always include "All" first.
+            const storeChips = ["all", ...Object.keys(clientBook.storeBreakdown).sort()];
+            return (
+              <>
+                <h2 className="acmo-section-title">Client Book</h2>
+                <p style={{ color: "#666", fontSize: 13, marginTop: -8, marginBottom: 14 }}>
+                  Clients grouped by their primary (most-frequent) store.
+                </p>
+
+                {/* Store filter chips */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+                  {storeChips.map((s) => {
+                    const active = clientStoreFilter === s;
+                    const label = s === "all" ? "All" : s;
+                    const count = s === "all" ? clientBook.visibleCount : (clientBook.storeBreakdown[s] || 0);
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setClientStoreFilter(s)}
+                        style={{
+                          padding: "8px 14px",
+                          border: `1px solid ${active ? "#d5b85a" : "#e0d5c5"}`,
+                          borderRadius: 20,
+                          background: active ? "#d5b85a" : "#fff",
+                          color: active ? "#fff" : "#666",
+                          fontSize: 13, fontWeight: 500, cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {label}
+                        <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.85 }}>({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
+                  <input
+                    type="text"
+                    placeholder="Search by name, phone, email, or SA..."
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    style={{ flex: "1 1 280px", maxWidth: 480, padding: "10px 14px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, outline: "none" }}
+                  />
+                  <span style={{ color: "#888", fontSize: 13 }}>
+                    {clientBook.totalCount} {clientBook.totalCount === 1 ? "client" : "clients"}
+                  </span>
+                  <button
+                    onClick={handleClientBookExportCSV}
+                    disabled={clientBook.all.length === 0}
+                    title="Export the entire (filtered) client book to CSV"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, height: 42,
+                      padding: "0 16px", border: "1px solid #d5b85a", borderRadius: 8,
+                      background: clientBook.all.length === 0 ? "#f5f5f5" : "#faf6e8",
+                      color: clientBook.all.length === 0 ? "#999" : "#8B7355",
+                      fontSize: 14, fontWeight: 500,
+                      cursor: clientBook.all.length === 0 ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap", transition: "all 0.2s",
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Export CSV
+                  </button>
+                </div>
+
+                <div className="acmo-table-wrapper">
+                  <table className="acmo-table">
+                    <thead>
+                      <tr>
+                        <th>Client Name</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Primary Store</th>
+                        <th>Connected SA(s)</th>
+                        <th>Orders</th>
+                        <th>Last Order</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientBook.pageRows.length === 0 ? (
+                        <tr><td colSpan={7} className="acmo-empty">No clients match the current filters.</td></tr>
+                      ) : (
+                        clientBook.pageRows.map((c) => (
+                          <tr key={c.id || `${c.phone}-${c.email}`}>
+                            <td style={{ fontWeight: 500 }}>{c.name}</td>
+                            <td>{c.phone || "—"}</td>
+                            <td>{c.email || "—"}</td>
+                            <td>{c.primaryStore || "—"}</td>
+                            <td>
+                              {c.sas.length === 0 ? (
+                                <span style={{ color: "#aaa" }}>—</span>
+                              ) : (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                  {c.sas.map((sa) => (
+                                    <span key={sa} style={{ background: "#f5f0e8", color: "#8B7355", padding: "2px 8px", borderRadius: 10, fontSize: 12, fontWeight: 500 }}>{sa}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td>{c.orderCount}</td>
+                            <td>{c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("en-GB") : "—"}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {clientBook.totalPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 16 }}>
+                    <button
+                      onClick={() => setClientsPage((p) => Math.max(1, p - 1))}
+                      disabled={clientBook.safePage === 1}
+                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: clientBook.safePage === 1 ? "not-allowed" : "pointer", opacity: clientBook.safePage === 1 ? 0.5 : 1 }}
+                    >Prev</button>
+                    <span style={{ fontSize: 13, color: "#666" }}>Page {clientBook.safePage} of {clientBook.totalPages}</span>
+                    <button
+                      onClick={() => setClientsPage((p) => Math.min(clientBook.totalPages, p + 1))}
+                      disabled={clientBook.safePage === clientBook.totalPages}
+                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: clientBook.safePage === clientBook.totalPages ? "not-allowed" : "pointer", opacity: clientBook.safePage === clientBook.totalPages ? 0.5 : 1 }}
+                    >Next</button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* ==================== INVENTORY ==================== */}
           {activeTab === "inventory" && (
@@ -898,18 +1681,6 @@ export default function AssistantCmoDashboard() {
             </>
           )}
 
-          {/* ==================== COST & EXPENDITURE ==================== */}
-          {activeTab === "cost" && (
-            <>
-              <h2 className="acmo-section-title">Cost & Expenditure</h2>
-
-              <div className="acmo-stats-grid">
-                <StatCard title="Discounts Given" value={`₹${formatIndianNumber(Math.round(costExpenditure.totalDiscount))}`} subtitle={`${costExpenditure.discountPct}% of gross revenue · ${costExpenditure.discountedOrders} orders`} />
-                <StatCard title="Refunds Value" value={`₹${formatIndianNumber(Math.round(costExpenditure.refundValue))}`} subtitle="Across all channels" highlight={costExpenditure.refundValue > 0} />
-                <StatCard title="Returns Value" value={`₹${formatIndianNumber(Math.round(costExpenditure.returnValue))}`} subtitle="Across all channels" highlight={costExpenditure.returnValue > 0} />
-              </div>
-            </>
-          )}
         </main>
       </div>
     </div>

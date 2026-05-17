@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -120,6 +121,8 @@ export default function GMDashboard() {
     const [currentUserEmail, setCurrentUserEmail] = useState("");
     const [currentUserName, setCurrentUserName] = useState("");
     const [currentUserStore, setCurrentUserStore] = useState("");
+    // Logged-in GM's full salesperson row. Drives the gated Stock Order sidebar item.
+    const [currentUserProfile, setCurrentUserProfile] = useState(null);
 
     // UI state
     const [activeTab, setActiveTab] = useState("store_performance");
@@ -132,6 +135,7 @@ export default function GMDashboard() {
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearchField, setOrderSearchField] = useState("order_no");
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
     const [sortBy, setSortBy] = useState("newest");
@@ -175,7 +179,7 @@ export default function GMDashboard() {
 
             const { data: userRecord } = await supabase
                 .from("salesperson")
-                .select("role, saleperson, store_name")
+                .select("saleperson, role, email, phone, store_name, designation, can_place_stock_orders")
                 .eq("email", session.user.email?.toLowerCase())
                 .single();
 
@@ -186,12 +190,52 @@ export default function GMDashboard() {
             }
 
             setCurrentUserEmail(session.user.email?.toLowerCase() || "");
-            setCurrentUserStore(userRecord.store_name || "Delhi Store");
+            // No "Delhi Store" default — if a GM profile has no store_name, that's
+            // a data issue the admin needs to fix, not something to paper over.
+            setCurrentUserStore(userRecord.store_name || "");
             setCurrentUserName(userRecord.saleperson || "");
+            setCurrentUserProfile(userRecord);
             fetchAllData();
         };
         checkAuthAndFetch();
     }, [navigate]);
+
+    // Stock-order entry — same flow as SA dashboard. Gated on
+    // salesperson.can_place_stock_orders.
+    const handleStartStockOrder = async () => {
+        if (!currentUserProfile) {
+            showPopup({
+                title: "Access Denied",
+                message: "User profile not loaded. Please refresh and try again.",
+                type: "error",
+                confirmText: "Ok",
+            });
+            return;
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) sessionStorage.setItem("associateSession", JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            user: { email: session.user?.email },
+        }));
+        sessionStorage.setItem("returnToAssociate", "true");
+        // Route back to the GM dashboard after the order is placed.
+        // Without this, OrderPlaced.handleBackToDashboard defaults to
+        // /AssociateDashboard, whose role check fails and logs out non-SA users.
+        sessionStorage.setItem("returnDashboard", "/gm-dashboard");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+            name: currentUserProfile.saleperson,
+            email: currentUserProfile.email,
+            phone: currentUserProfile.phone,
+            store: currentUserProfile.store_name,
+            designation: currentUserProfile.designation,
+        }));
+        sessionStorage.setItem("isStockOrder", "true");
+        sessionStorage.removeItem("screen4FormData");
+        sessionStorage.removeItem("screen6FormData");
+        navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
+    };
 
     const fetchAllData = async () => {
         setLoading(true);
@@ -727,11 +771,21 @@ export default function GMDashboard() {
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
         if (orderSearch.trim()) {
-            const q = orderSearch.toLowerCase();
+            const q = orderSearch.trim().toLowerCase();
             result = result.filter(order => {
-                const item = order.items?.[0] || {};
-                return order.order_no?.toLowerCase().includes(q) || item.product_name?.toLowerCase().includes(q) ||
-                    order.delivery_name?.toLowerCase().includes(q) || order.delivery_phone?.includes(q) || (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                switch (orderSearchField) {
+                    case "product_name":
+                        return (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
+                    case "client_name":
+                        return order.delivery_name?.toLowerCase().includes(q);
+                    case "phone":
+                        return (order.delivery_phone || "").includes(q);
+                    case "salesperson":
+                        return (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                    case "order_no":
+                    default:
+                        return order.order_no?.toLowerCase().includes(q);
+                }
             });
         }
         if (filters.dateFrom || filters.dateTo) {
@@ -767,7 +821,7 @@ export default function GMDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
 
     const orderTabCounts = useMemo(() => {
         const valid = orders.filter(o => !isLxrtsOrder(o));
@@ -832,7 +886,7 @@ export default function GMDashboard() {
     };
 
     // Reset pages on filter change
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
     useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
     useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
@@ -889,6 +943,12 @@ export default function GMDashboard() {
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
+                        {currentUserProfile?.can_place_stock_orders && (
+                            <button
+                                className="admin-nav-item"
+                                onClick={() => { setShowSidebar(false); handleStartStockOrder(); }}
+                            >Stock Order</button>
+                        )}
                     </nav>
                 </aside>
 
@@ -1358,7 +1418,9 @@ export default function GMDashboard() {
                                         }));
                                     }
                                     sessionStorage.setItem("currentSalesperson", JSON.stringify({
-                                        store: currentUserStore || "Delhi Store",
+                                        // Pass the resolved store verbatim. The order-flow guard
+                                        // (ReviewDetail.js) will refuse the write if it's empty.
+                                        store: currentUserStore,
                                         name: currentUserName,
                                         email: currentUserEmail,
                                     }));
@@ -1370,11 +1432,20 @@ export default function GMDashboard() {
                             </div>
 
                             <div className="admin-toolbar">
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search Order #, Customer, Phone..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="admin-search-input" />
-                                    {orderSearch && <button className="search-clear" onClick={() => setOrderSearch("")}>{"\u00D7"}</button>}
-                                </div>
+                                <SearchByDropdown
+                                    fields={[
+                                        { value: "order_no", label: "Order Number" },
+                                        { value: "product_name", label: "Product Name" },
+                                        { value: "client_name", label: "Client Name" },
+                                        { value: "phone", label: "Phone" },
+                                        { value: "salesperson", label: "Salesperson" },
+                                    ]}
+                                    selectedField={orderSearchField}
+                                    onFieldChange={setOrderSearchField}
+                                    query={orderSearch}
+                                    onQueryChange={setOrderSearch}
+                                    placeholder="Type to search..."
+                                />
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="admin-sort-select">
                                     <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="delivery">Delivery Date</option><option value="amount_high">Amount: High to Low</option><option value="amount_low">Amount: Low to High</option>
                                 </select>

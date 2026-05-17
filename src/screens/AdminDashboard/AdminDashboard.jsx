@@ -11,6 +11,7 @@ import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils"
 import { SCAN_STATIONS } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -180,6 +181,13 @@ export default function AdminDashboard() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [salespersonTable, setSalespersonTable] = useState([]);
+    // SA Targets tab — keyed by `${email}|${year}-${month}` for O(1) cell lookup.
+    // Loaded lazily the first time the tab is opened.
+    const [monthlyTargets, setMonthlyTargets] = useState({});
+    const [targetsLoaded, setTargetsLoaded] = useState(false);
+    const [targetsLoading, setTargetsLoading] = useState(false);
+    const [savingTargetKey, setSavingTargetKey] = useState(null);
+    const [targetsSearch, setTargetsSearch] = useState("");
     // Sales Team tab — search filter + the id of the row currently being saved
     const [salesTeamSearch, setSalesTeamSearch] = useState("");
     const [stockTogglingId, setStockTogglingId] = useState(null);
@@ -216,6 +224,7 @@ export default function AdminDashboard() {
 
     // Orders states
     const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearchField, setOrderSearchField] = useState("order_no");
     const [sortBy, setSortBy] = useState("newest");
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
@@ -262,6 +271,10 @@ export default function AdminDashboard() {
     const [analyticsCustomTo, setAnalyticsCustomTo] = useState("");
     const [showAnalyticsCustomPicker, setShowAnalyticsCustomPicker] = useState(false);
     const [currentUserEmail, setCurrentUserEmail] = useState("");
+    // Logged-in admin's own salesperson row. Used to render the "Stock Order"
+    // sidebar button only when can_place_stock_orders is set, and to seed the
+    // currentSalesperson sessionStorage for the order flow downstream.
+    const [currentUserProfile, setCurrentUserProfile] = useState(null);
     // Fetch data on mount
     useEffect(() => {
         const checkAuthAndFetch = async () => {
@@ -271,7 +284,7 @@ export default function AdminDashboard() {
             // ✅ Role check - only admin users allowed
             const { data: userRecord } = await supabase
                 .from("salesperson")
-                .select("role")
+                .select("saleperson, role, email, phone, store_name, designation, can_place_stock_orders")
                 .eq("email", session.user.email?.toLowerCase())
                 .single();
 
@@ -282,10 +295,49 @@ export default function AdminDashboard() {
             }
 
             setCurrentUserEmail(session.user.email?.toLowerCase() || "");
+            setCurrentUserProfile(userRecord);
             fetchAllData();
         };
         checkAuthAndFetch();
     }, [navigate]);
+
+    // Stock-order entry — same flow as SA dashboard. Gated on
+    // salesperson.can_place_stock_orders. Skips OTP + customer detail,
+    // routes straight to /product with the isStockOrder flag set.
+    const handleStartStockOrder = async () => {
+        if (!currentUserProfile) {
+            showPopup({
+                title: "Access Denied",
+                message: "User profile not loaded. Please refresh and try again.",
+                type: "error",
+                confirmText: "Ok",
+            });
+            return;
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) sessionStorage.setItem("associateSession", JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            user: { email: session.user?.email },
+        }));
+        sessionStorage.setItem("returnToAssociate", "true");
+        // Route back to the admin dashboard after the order is placed.
+        // Without this, OrderPlaced.handleBackToDashboard defaults to
+        // /AssociateDashboard, whose role check fails and logs out non-SA users.
+        sessionStorage.setItem("returnDashboard", "/admin");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+            name: currentUserProfile.saleperson,
+            email: currentUserProfile.email,
+            phone: currentUserProfile.phone,
+            store: currentUserProfile.store_name,
+            designation: currentUserProfile.designation,
+        }));
+        sessionStorage.setItem("isStockOrder", "true");
+        sessionStorage.removeItem("screen4FormData");
+        sessionStorage.removeItem("screen6FormData");
+        navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
+    };
 
     const fetchAllData = async () => {
         setLoading(true);
@@ -315,6 +367,116 @@ export default function AdminDashboard() {
     }, []);
 
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+
+    // ─────────────────────────────────────────────────────────────
+    // SA Targets — month columns rendered in the table.
+    // 2 past (read-only) + current + 2 future. All keyed (year, month).
+    // ─────────────────────────────────────────────────────────────
+    const targetMonthColumns = useMemo(() => {
+        const cols = [];
+        const today = new Date();
+        const baseY = today.getFullYear();
+        const baseM = today.getMonth(); // 0-indexed
+        // -2, -1, 0, +1, +2 from current month
+        for (let offset = -2; offset <= 2; offset++) {
+            const d = new Date(baseY, baseM + offset, 1);
+            cols.push({
+                year: d.getFullYear(),
+                month: d.getMonth() + 1, // 1-indexed for the DB
+                label: d.toLocaleString("en-US", { month: "short", year: "numeric" }),
+                isPast: offset < 0,
+                isCurrent: offset === 0,
+                key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+            });
+        }
+        return cols;
+    }, []);
+
+    const cellKey = (email, year, month) =>
+        `${(email || "").toLowerCase()}|${year}-${String(month).padStart(2, "0")}`;
+
+    // Fetch targets the first time the SA Targets tab is opened.
+    // Pulls all rows for the visible 5-month window across all SAs.
+    useEffect(() => {
+        if (activeTab !== "sa_targets" || targetsLoaded || targetsLoading) return;
+        const loadTargets = async () => {
+            setTargetsLoading(true);
+            try {
+                // Build the (year, month) list to fetch — current ±2 months.
+                const months = targetMonthColumns.map(c => ({ year: c.year, month: c.month }));
+                // Use an OR filter: (year=Y1 AND month=M1) OR (year=Y2 AND month=M2) ...
+                const orExpr = months
+                    .map(({ year, month }) => `and(year.eq.${year},month.eq.${month})`)
+                    .join(",");
+                const { data, error } = await supabase
+                    .from("sa_monthly_targets")
+                    .select("salesperson_email, year, month, target_amount")
+                    .or(orExpr);
+                if (error) throw error;
+                const map = {};
+                (data || []).forEach(row => {
+                    map[cellKey(row.salesperson_email, row.year, row.month)] = Number(row.target_amount) || 0;
+                });
+                setMonthlyTargets(map);
+                setTargetsLoaded(true);
+            } catch (err) {
+                console.error("Failed to load SA monthly targets:", err);
+            } finally {
+                setTargetsLoading(false);
+            }
+        };
+        loadTargets();
+    }, [activeTab, targetsLoaded, targetsLoading, targetMonthColumns]);
+
+    // Save or clear a single cell. Upserts on a non-empty value, deletes the
+    // row if the user clears the cell. Refuses to write past months.
+    const handleSaveTargetCell = async (email, year, month, rawValue) => {
+        const col = targetMonthColumns.find(c => c.year === year && c.month === month);
+        if (!col || col.isPast) return; // defense-in-depth; UI already prevents this
+        const key = cellKey(email, year, month);
+        const trimmed = String(rawValue ?? "").trim();
+        const numeric = trimmed === "" ? null : Number(trimmed.replace(/[^\d.]/g, ""));
+        const existing = monthlyTargets[key];
+        // Skip no-op writes
+        if (numeric === existing || (numeric == null && existing == null)) return;
+        setSavingTargetKey(key);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (numeric == null) {
+                // Clearing the cell — remove the row so carry-forward kicks back in.
+                await supabase
+                    .from("sa_monthly_targets")
+                    .delete()
+                    .eq("salesperson_email", email.toLowerCase())
+                    .eq("year", year)
+                    .eq("month", month);
+                setMonthlyTargets(prev => {
+                    const next = { ...prev };
+                    delete next[key];
+                    return next;
+                });
+            } else if (Number.isFinite(numeric) && numeric >= 0) {
+                await supabase
+                    .from("sa_monthly_targets")
+                    .upsert(
+                        {
+                            salesperson_email: email.toLowerCase(),
+                            year,
+                            month,
+                            target_amount: numeric,
+                            set_by: user?.email || null,
+                        },
+                        { onConflict: "salesperson_email,year,month" }
+                    );
+                setMonthlyTargets(prev => ({ ...prev, [key]: numeric }));
+            }
+        } catch (err) {
+            console.error("Failed to save target:", err);
+            showPopup({ type: "error", title: "Save failed", message: err.message || "Could not save target.", confirmText: "OK" });
+        } finally {
+            setSavingTargetKey(null);
+        }
+    };
 
     // Helper functions
     const getPaymentStatus = (order) => {
@@ -846,11 +1008,21 @@ export default function AdminDashboard() {
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
         if (orderSearch.trim()) {
-            const q = orderSearch.toLowerCase();
+            const q = orderSearch.trim().toLowerCase();
             result = result.filter(order => {
-                const item = order.items?.[0] || {};
-                return order.order_no?.toLowerCase().includes(q) || item.product_name?.toLowerCase().includes(q) ||
-                    order.delivery_name?.toLowerCase().includes(q) || order.delivery_phone?.includes(q) || (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                switch (orderSearchField) {
+                    case "product_name":
+                        return (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
+                    case "client_name":
+                        return order.delivery_name?.toLowerCase().includes(q);
+                    case "phone":
+                        return (order.delivery_phone || "").includes(q);
+                    case "salesperson":
+                        return (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                    case "order_no":
+                    default:
+                        return order.order_no?.toLowerCase().includes(q);
+                }
             });
         }
         if (filters.dateFrom || filters.dateTo) {
@@ -889,7 +1061,7 @@ export default function AdminDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
 
     const orderTabCounts = useMemo(() => {
         const validOrders = orders.filter(o => !isLxrtsOrder(o));
@@ -1671,7 +1843,7 @@ export default function AdminDashboard() {
 
     // Reset pages
     useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
     useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setClientsPage(1); }, [clientsSearch, clientsSortBy, clientsStoreFilter]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
@@ -1741,6 +1913,13 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
                         <button className={`admin-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
                         <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
+                        <button className={`admin-nav-item ${activeTab === "sa_targets" ? "active" : ""}`} onClick={() => { setActiveTab("sa_targets"); setShowSidebar(false); }}>SA Targets</button>
+                        {currentUserProfile?.can_place_stock_orders && (
+                            <button
+                                className="admin-nav-item"
+                                onClick={() => { setShowSidebar(false); handleStartStockOrder(); }}
+                            >Stock Order</button>
+                        )}
                         {/* <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button> */}
                     </nav>
                 </aside>
@@ -3058,11 +3237,20 @@ export default function AdminDashboard() {
                         <div className="admin-orders-tab">
                             <h2 className="admin-section-title">Order Management</h2>
                             <div className="admin-toolbar">
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search Order #, Customer, Phone..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="admin-search-input" />
-                                    {orderSearch && <button className="search-clear" onClick={() => setOrderSearch("")}>×</button>}
-                                </div>
+                                <SearchByDropdown
+                                    fields={[
+                                        { value: "order_no", label: "Order Number" },
+                                        { value: "product_name", label: "Product Name" },
+                                        { value: "client_name", label: "Client Name" },
+                                        { value: "phone", label: "Phone" },
+                                        { value: "salesperson", label: "Salesperson" },
+                                    ]}
+                                    selectedField={orderSearchField}
+                                    onFieldChange={setOrderSearchField}
+                                    query={orderSearch}
+                                    onQueryChange={setOrderSearch}
+                                    placeholder="Type to search..."
+                                />
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="admin-sort-select">
                                     <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="delivery">Delivery Date</option><option value="amount_high">Amount: High to Low</option><option value="amount_low">Amount: Low to High</option>
                                 </select>
@@ -3414,26 +3602,28 @@ export default function AdminDashboard() {
                     {/* SALES TEAM TAB — manage SA permissions               */}
                     {/* ═══════════════════════════════════════════════════ */}
                     {activeTab === "sales_team" && (() => {
-                        // Sales Team is for roles that actually place orders
-                        // via the SA Dashboard. Other roles (admin, store_manager,
-                        // ceo, etc.) are excluded — they don't get a Stock button
-                        // anyway. Same gate as AssociateDashboard.js auth check.
-                        // Sales Team now covers floor-facing roles too —
-                        // warehouse + scan_station users need station assignments.
-                        const isTeamRole = (r) =>
-                          r === "salesperson" ||
-                          r === "sa_services" ||
-                          r === "warehouse" ||
-                          r === "scan_station";
-                        const teamList = salespersonTable.filter(sp => isTeamRole(sp.role));
+                        // Roles eligible for stock-order permission. Matches the
+                        // dashboards that have a "Stock Order" sidebar item wired
+                        // up — SA (salesperson + sa_services), Admin, GM, and
+                        // Assistant CMO. Other roles don't have the button yet,
+                        // so listing them here would be misleading.
+                        const STOCK_ELIGIBLE_ROLES = new Set([
+                            "salesperson",
+                            "sa_services",
+                            "admin",
+                            "gm",
+                            "assistant_cmo",
+                        ]);
+                        const teamList = salespersonTable.filter(sp => STOCK_ELIGIBLE_ROLES.has(sp.role));
+                        const canHaveStockPermission = (r) => STOCK_ELIGIBLE_ROLES.has(r);
                         return (
                         <div className="admin-clients-tab">
-                            <h2 className="admin-section-title">Sales Team & Permissions</h2>
+                            <h2 className="admin-section-title">Team & Permissions</h2>
 
-                            {/* Quick stats — scoped to actual SA roles only */}
+                            {/* Quick stats */}
                             <div className="admin-stats-grid" style={{ marginBottom: 16 }}>
                                 <div className="admin-stat-card">
-                                    <span className="admin-stat-label">Total Salespersons</span>
+                                    <span className="admin-stat-label">Total Members</span>
                                     <span className="admin-stat-value">{teamList.length}</span>
                                 </div>
                                 <div className="admin-stat-card">
@@ -3441,7 +3631,7 @@ export default function AdminDashboard() {
                                     <span className="admin-stat-value">
                                         {teamList.filter(s => s.can_place_stock_orders).length}
                                     </span>
-                                    <span className="admin-stat-sub">SAs can place stock orders</span>
+                                    <span className="admin-stat-sub">Members with stock-order permission</span>
                                 </div>
                             </div>
 
@@ -3500,16 +3690,22 @@ export default function AdminDashboard() {
                                                         <td>{sp.phone || "—"}</td>
                                                         <td>{sp.email || "—"}</td>
                                                         <td style={{ textAlign: 'center' }}>
-                                                            <label className="admin-stock-toggle" title={checked ? "Click to revoke" : "Click to grant"}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={checked}
-                                                                    disabled={saving}
-                                                                    onChange={() => toggleStockOrderPermission(sp)}
-                                                                />
-                                                                <span className="admin-stock-toggle-slider" />
-                                                            </label>
-                                                            {saving && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>saving…</span>}
+                                                            {canHaveStockPermission(sp.role) ? (
+                                                                <>
+                                                                    <label className="admin-stock-toggle" title={checked ? "Click to revoke" : "Click to grant"}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={checked}
+                                                                            disabled={saving}
+                                                                            onChange={() => toggleStockOrderPermission(sp)}
+                                                                        />
+                                                                        <span className="admin-stock-toggle-slider" />
+                                                                    </label>
+                                                                    {saving && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>saving…</span>}
+                                                                </>
+                                                            ) : (
+                                                                <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
+                                                            )}
                                                         </td>
                                                         {/* TEMP (prod): Assigned Stations cell hidden — re-enable when scan flow is ready.
                                                         <td>
@@ -3560,6 +3756,115 @@ export default function AdminDashboard() {
                                 </table>
                             </div>
                         </div>
+                        );
+                    })()}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* SA TARGETS TAB — per-SA monthly target editor        */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "sa_targets" && (() => {
+                        const isTargetableRole = (r) => r === "salesperson" || r === "sa_services";
+                        const teamList = salespersonTable
+                            .filter(sp => isTargetableRole(sp.role))
+                            .filter(sp => {
+                                const q = targetsSearch.trim().toLowerCase();
+                                if (!q) return true;
+                                return [sp.saleperson, sp.email, sp.store_name]
+                                    .filter(Boolean)
+                                    .some(v => String(v).toLowerCase().includes(q));
+                            })
+                            .sort((a, b) => (a.saleperson || "").localeCompare(b.saleperson || ""));
+
+                        return (
+                            <div className="admin-clients-tab">
+                                <h2 className="admin-section-title" style={{ marginBottom: 6 }}>SA Monthly Targets</h2>
+                                <p style={{ color: "#666", fontSize: 13, marginTop: 0, marginBottom: 18 }}>
+                                    Past months are read-only. Empty cells fall back to the most recent prior month (carry-forward).
+                                </p>
+
+                                <div style={{ marginBottom: 12 }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name, email, or store..."
+                                        value={targetsSearch}
+                                        onChange={(e) => setTargetsSearch(e.target.value)}
+                                        className="admin-search-input"
+                                        style={{ width: "100%", maxWidth: 420 }}
+                                    />
+                                </div>
+
+                                <div className="admin-table-wrapper">
+                                    <div className="admin-table-container">
+                                        <table className="admin-table sa-targets-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ minWidth: 180 }}>SA Name</th>
+                                                    <th style={{ minWidth: 200 }}>Email</th>
+                                                    <th style={{ minWidth: 120 }}>Store</th>
+                                                    {targetMonthColumns.map(col => (
+                                                        <th
+                                                            key={col.key}
+                                                            className={col.isCurrent ? "sa-targets-current-col" : ""}
+                                                            style={{ minWidth: 130, textAlign: "center" }}
+                                                        >
+                                                            {col.label}
+                                                            {col.isCurrent && <span className="sa-targets-current-tag"> (Current)</span>}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {targetsLoading && (
+                                                    <tr><td colSpan={3 + targetMonthColumns.length} className="no-data">Loading targets…</td></tr>
+                                                )}
+                                                {!targetsLoading && teamList.length === 0 && (
+                                                    <tr><td colSpan={3 + targetMonthColumns.length} className="no-data">No SAs found</td></tr>
+                                                )}
+                                                {!targetsLoading && teamList.map(sp => (
+                                                    <tr key={sp.id || sp.email}>
+                                                        <td style={{ fontWeight: 500 }}>{sp.saleperson || "—"}</td>
+                                                        <td>{sp.email || "—"}</td>
+                                                        <td>{sp.store_name || "—"}</td>
+                                                        {targetMonthColumns.map(col => {
+                                                            const key = cellKey(sp.email, col.year, col.month);
+                                                            const value = monthlyTargets[key];
+                                                            const isSaving = savingTargetKey === key;
+                                                            if (col.isPast) {
+                                                                return (
+                                                                    <td key={col.key} className="sa-targets-cell sa-targets-past">
+                                                                        {value != null ? `₹${formatIndianNumber(value)}` : "—"}
+                                                                    </td>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <td key={col.key} className={`sa-targets-cell ${col.isCurrent ? "sa-targets-current-cell" : ""}`}>
+                                                                    <input
+                                                                        type="text"
+                                                                        inputMode="numeric"
+                                                                        className="sa-targets-input"
+                                                                        defaultValue={value != null ? value : ""}
+                                                                        placeholder="—"
+                                                                        disabled={isSaving}
+                                                                        onBlur={(e) => handleSaveTargetCell(sp.email, col.year, col.month, e.target.value)}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === "Enter") e.target.blur();
+                                                                            if (e.key === "Escape") {
+                                                                                e.target.value = value != null ? value : "";
+                                                                                e.target.blur();
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    {isSaving && <span style={{ fontSize: 10, color: "#888", marginLeft: 4 }}>saving…</span>}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         );
                     })()}
 
