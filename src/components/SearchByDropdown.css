@@ -1,0 +1,94 @@
+.sbd-wrapper {
+  display: flex !important;
+  align-items: stretch;
+  height: 42px;
+  border: 1px solid #e0d5c5;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  width: 100%;
+  max-width: 560px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.sbd-wrapper:focus-within {
+  border-color: #d5b85a;
+}
+
+.sbd-wrapper .sbd-select {
+  width: auto !important;
+  max-width: none !important;
+  border: none !important;
+  border-right: 1px solid #e0d5c5 !important;
+  border-radius: 0 !important;
+  background-color: #faf6e8 !important;
+  color: #8B7355 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  padding: 0 32px 0 14px !important;
+  margin: 0 !important;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238B7355' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  flex-shrink: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.sbd-wrapper .sbd-input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  padding: 0 14px !important;
+  margin: 0 !important;
+  font-size: 14px !important;
+  color: #333 !important;
+  background: transparent !important;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.sbd-wrapper .sbd-input::placeholder {
+  color: #b8a886;
+}
+
+.sbd-wrapper .sbd-clear {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #8B7355;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: color 0.15s;
+  height: 100%;
+}
+
+.sbd-wrapper .sbd-clear:hover {
+  color: #d32f2f;
+}
+
+@media (max-width: 720px) {
+  .sbd-wrapper {
+    max-width: 100%;
+  }
+  .sbd-wrapper .sbd-select {
+    font-size: 13px !important;
+    padding: 0 28px 0 10px !important;
+  }
+  .sbd-wrapper .sbd-input {
+    padding: 0 10px !important;
+    font-size: 13px !important;
+  }
+}

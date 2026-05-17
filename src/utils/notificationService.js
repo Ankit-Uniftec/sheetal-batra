@@ -112,11 +112,18 @@ const RECIPIENT_MAP = {
 // NOTIFICATION TITLE & MESSAGE TEMPLATES
 // ==========================================
 const TEMPLATES = {
-    [NOTIFICATION_TYPES.ORDER_PLACED]: (meta) => ({
-        title: "New Order Placed",
-        message: `Order ${meta.order_no}${meta.is_urgent ? " 🔥 URGENT" : ""} — ${meta.store || meta.source || "Offline"} client`,
-        priority: meta.is_urgent ? "urgent" : "normal",
-    }),
+    [NOTIFICATION_TYPES.ORDER_PLACED]: (meta) => {
+        // Stock orders bypass the customer flow entirely (no real client),
+        // so the trailing "client" suffix doesn't apply. Detect via the
+        // order_no prefix so we don't need every caller to pass a flag.
+        const isStock = typeof meta.order_no === "string" && meta.order_no.includes("-STOCK-");
+        const trailer = isStock ? "" : " client";
+        return {
+            title: "New Order Placed",
+            message: `Order ${meta.order_no}${meta.is_urgent ? " 🔥 URGENT" : ""} — ${meta.store || meta.source || "Offline"}${trailer}`,
+            priority: meta.is_urgent ? "urgent" : "normal",
+        };
+    },
     [NOTIFICATION_TYPES.ORDER_DELAYED_T1]: (meta) => ({
         title: "Order Delayed",
         message: `Order Delayed — ${meta.client_name} (${meta.order_no})`,

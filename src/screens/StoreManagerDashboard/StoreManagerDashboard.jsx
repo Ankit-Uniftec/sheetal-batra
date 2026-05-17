@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import NotificationBell from "../../components/NotificationBell";
+import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -81,6 +82,7 @@ export default function StoreManagerDashboard() {
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearchField, setOrderSearchField] = useState("order_no");
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
     const [sortBy, setSortBy] = useState("newest");
@@ -97,6 +99,7 @@ export default function StoreManagerDashboard() {
 
     // Client book
     const [clientSearch, setClientSearch] = useState("");
+    const [expandedCohortCity, setExpandedCohortCity] = useState(null);
     const [clientPage, setClientPage] = useState(1);
     const [clientSort, setClientSort] = useState("totalSpend");
 
@@ -361,14 +364,21 @@ export default function StoreManagerDashboard() {
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
         if (orderSearch.trim()) {
-            const q = orderSearch.toLowerCase();
+            const q = orderSearch.trim().toLowerCase();
             result = result.filter(o => {
-                const item = o.items?.[0] || {};
-                return o.order_no?.toLowerCase().includes(q) ||
-                    item.product_name?.toLowerCase().includes(q) ||
-                    o.delivery_name?.toLowerCase().includes(q) ||
-                    o.delivery_phone?.includes(q) ||
-                    (getOrderSalesperson(o) || "").toLowerCase().includes(q);
+                switch (orderSearchField) {
+                    case "product_name":
+                        return (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
+                    case "client_name":
+                        return o.delivery_name?.toLowerCase().includes(q);
+                    case "phone":
+                        return (o.delivery_phone || "").includes(q);
+                    case "salesperson":
+                        return (getOrderSalesperson(o) || "").toLowerCase().includes(q);
+                    case "order_no":
+                    default:
+                        return o.order_no?.toLowerCase().includes(q);
+                }
             });
         }
 
@@ -407,7 +417,7 @@ export default function StoreManagerDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, sortBy, filters]);
+    }, [filteredByStatus, orderSearch, orderSearchField, sortBy, filters]);
 
     // Filter helpers — RM-style
     const appliedFilters = useMemo(() => {
@@ -669,15 +679,22 @@ export default function StoreManagerDashboard() {
         // count + revenue per bucket. "—" bucket holds clients with no
         // delivery city (e.g. store pickup).
         const cohortMap = {};
+        const cohortClientsByCity = {};
         allClients.forEach(c => {
             const key = c.city || "(No city)";
             if (!cohortMap[key]) cohortMap[key] = { city: key, clients: 0, revenue: 0, orders: 0 };
             cohortMap[key].clients += 1;
             cohortMap[key].revenue += c.totalSpend;
             cohortMap[key].orders += c.orderCount;
+            if (!cohortClientsByCity[key]) cohortClientsByCity[key] = [];
+            cohortClientsByCity[key].push(c);
         });
         const cohorts = Object.values(cohortMap)
             .sort((a, b) => b.clients - a.clients);
+        // Sort each city's clients by spend so the expanded list leads with VIPs
+        Object.keys(cohortClientsByCity).forEach(city => {
+            cohortClientsByCity[city].sort((a, b) => b.totalSpend - a.totalSpend);
+        });
 
         // ─── Searchable + sortable table list ───
         let clients = allClients;
@@ -707,7 +724,7 @@ export default function StoreManagerDashboard() {
         const totalPages = Math.ceil(clients.length / ITEMS_PER_PAGE);
         const current = clients.slice((clientPage - 1) * ITEMS_PER_PAGE, clientPage * ITEMS_PER_PAGE);
 
-        return { totalClients, filteredCount, repeatRate, segmentation, current, totalPages, topClients, cohorts };
+        return { totalClients, filteredCount, repeatRate, segmentation, current, totalPages, topClients, cohorts, cohortClientsByCity };
     }, [storeOrders, clientSearch, clientSort, clientPage]);
 
     // ═══════════════════════════════════════════════════════════
@@ -757,7 +774,7 @@ export default function StoreManagerDashboard() {
     }, [storeOrders, timeline, customDateFrom, customDateTo]);
 
     // Resets
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, sortBy, filters]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, sortBy, filters]);
 
     // Close filter dropdowns when clicking outside
     useEffect(() => {
@@ -807,12 +824,12 @@ export default function StoreManagerDashboard() {
                         {[
                             { key: "sales", label: "Sales Overview" },
                             { key: "sa_performance", label: "SA Performance" },
-                            { key: "roster", label: "Store Roster" },
                             { key: "orders", label: "Orders" },
                             { key: "returns", label: "Returns & Issues" },
                             { key: "inventory", label: "Store Inventory" },
                             { key: "clients", label: "Client Book" },
                             { key: "alterations", label: "Alterations" },
+                            { key: "roster", label: "Store Roster" },
                         ].map(tab => (
                             <button key={tab.key} className={`sm-nav-item ${activeTab === tab.key ? "active" : ""}`}
                                 onClick={() => { setActiveTab(tab.key); setShowSidebar(false); }}>{tab.label}</button>
@@ -848,18 +865,31 @@ export default function StoreManagerDashboard() {
                             <div className="sm-stats-grid">
                                 <div className="sm-stat-card"><span className="sm-stat-label">Revenue</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.totalRevenue))}</span></div>
                                 <div className="sm-stat-card"><span className="sm-stat-label">Orders</span><span className="sm-stat-value">{salesStats.totalOrders}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">QTY</span><span className="sm-stat-value">{salesStats.totalItems}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">AOV</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.aov))}</span></div>
-                                <div className="sm-stat-card"><span className="sm-stat-label">Discounts</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.totalDiscount))}</span></div>
                                 <div className="sm-stat-card">
-                                    <span className="sm-stat-label">Extra Items Sold</span>
-                                    <span className="sm-stat-value">{salesStats.extrasTotal}</span>
-                                    <span className="sm-stat-sub" style={{ fontSize: 11, marginTop: 4 }}>
-                                        <span style={{ color: '#2e7d32' }}>+{salesStats.extrasIncluded} incl.</span>
-                                        {" / "}
-                                        <span style={{ color: '#c62828' }}>+{salesStats.extrasExcluded} excl.</span>
+                                    <span className="sm-stat-label">Product Qty</span>
+                                    <span className="sm-stat-value">{salesStats.totalItems}</span>
+                                    <span className="sm-stat-sub" style={{ fontSize: 11, marginTop: 4, color: '#666' }}>
+                                        Excludes extras
                                     </span>
                                 </div>
+                                <div className="sm-stat-card">
+                                    <span className="sm-stat-label">Extras Qty</span>
+                                    <span className="sm-stat-value">{salesStats.extrasTotal}</span>
+                                    <span className="sm-stat-sub" style={{ fontSize: 11, marginTop: 4 }}>
+                                        <span style={{ color: '#2e7d32' }}>{salesStats.extrasIncluded} incl.</span>
+                                        {" / "}
+                                        <span style={{ color: '#c62828' }}>{salesStats.extrasExcluded} excl.</span>
+                                    </span>
+                                </div>
+                                <div className="sm-stat-card sm-stat-card-total">
+                                    <span className="sm-stat-label">Total Qty</span>
+                                    <span className="sm-stat-value">{salesStats.totalItems + salesStats.extrasTotal}</span>
+                                    <span className="sm-stat-sub" style={{ fontSize: 11, marginTop: 4, color: '#666' }}>
+                                        Products + extras
+                                    </span>
+                                </div>
+                                <div className="sm-stat-card"><span className="sm-stat-label">AOV</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.aov))}</span></div>
+                                <div className="sm-stat-card"><span className="sm-stat-label">Discounts</span><span className="sm-stat-value">{"\u20B9"}{formatIndianNumber(Math.round(salesStats.totalDiscount))}</span></div>
                             </div>
 
                             {/* Payment status */}
@@ -1004,10 +1034,20 @@ export default function StoreManagerDashboard() {
                                 </div>
                             </div>
                             <div className="sm-toolbar">
-                                <div className="sm-search-wrapper">
-                                    <input type="text" placeholder="Search Order #, Customer, Product..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="sm-search-input" />
-                                    {orderSearch && <button className="sm-search-clear" onClick={() => setOrderSearch("")}>{"\u00D7"}</button>}
-                                </div>
+                                <SearchByDropdown
+                                    fields={[
+                                        { value: "order_no", label: "Order Number" },
+                                        { value: "product_name", label: "Product Name" },
+                                        { value: "client_name", label: "Client Name" },
+                                        { value: "phone", label: "Phone" },
+                                        { value: "salesperson", label: "Salesperson" },
+                                    ]}
+                                    selectedField={orderSearchField}
+                                    onFieldChange={setOrderSearchField}
+                                    query={orderSearch}
+                                    onQueryChange={setOrderSearch}
+                                    placeholder="Type to search..."
+                                />
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sm-sort-select">
                                     <option value="newest">Newest First</option><option value="oldest">Oldest First</option>
                                     <option value="delivery">Delivery Date</option><option value="amount_high">Amount: High</option><option value="amount_low">Amount: Low</option>
@@ -1124,9 +1164,23 @@ export default function StoreManagerDashboard() {
 
                             <div className="sm-table-wrapper">
                                 <table className="sm-table">
-                                    <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th className="amount">Amount</th><th>Payment</th><th>Status</th><th>SA</th><th>Order Date</th><th>Journey</th></tr></thead>
+                                    <thead><tr>
+                                        <th>Order ID</th>
+                                        <th>Customer</th>
+                                        <th>Product</th>
+                                        <th className="amount">MRP</th>
+                                        <th className="amount">Final</th>
+                                        <th className="amount">Refund</th>
+                                        <th className="amount">Store Credit</th>
+                                        <th>Payment</th>
+                                        <th>Status</th>
+                                        <th>SA</th>
+                                        <th>Order Date</th>
+                                        <th>Delivery Date</th>
+                                        <th>Journey</th>
+                                    </tr></thead>
                                     <tbody>
-                                        {currentOrders.length === 0 ? <tr><td colSpan="9" className="sm-no-data">No orders found</td></tr> :
+                                        {currentOrders.length === 0 ? <tr><td colSpan="13" className="sm-no-data">No orders found</td></tr> :
                                             currentOrders.map(o => (
                                                 <tr key={o.id} style={{ cursor: 'pointer' }} onClick={() => {
                                                     sessionStorage.setItem("currentSalesperson", JSON.stringify({
@@ -1150,23 +1204,50 @@ export default function StoreManagerDashboard() {
                                                         }
                                                     });
                                                 }}>
-                                                    <td><span className="sm-order-id">{o.order_no || "-"}</span></td>
-                                                    <td>{o.delivery_name || "-"}</td>
-                                                    <td className="sm-product-cell">{o.items?.[0]?.product_name || "-"}</td>
-                                                    <td className="amount">{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
-                                                    <td><span className={`sm-payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o)}</span></td>
-                                                    <td><span className={`sm-status-badge ${(o.status === "pending" ? "order_received" : (o.status || "order_received"))}`}>{o.status === "pending" ? "Order Received" : (o.status === "order_received" ? "Order Received" : (o.status || "Order Received"))}</span></td>
-                                                    <td>{getOrderSalesperson(o) || "-"}</td>
-                                                    <td>{formatDate(o.created_at)}</td>
-                                                    <td>
-                                                        <div style={{ fontSize: 11, lineHeight: 1.4 }}>
-                                                            {o.in_production_at && <div>{"\u2705"} Production: {formatDate(o.in_production_at)}</div>}
-                                                            {o.ready_for_dispatch_at && <div>{"\u2705"} Ready: {formatDate(o.ready_for_dispatch_at)}</div>}
-                                                            {o.dispatched_at && <div>{"\u2705"} Dispatched: {formatDate(o.dispatched_at)}</div>}
-                                                            {o.delivered_at && <div>{"\u2705"} Delivered: {formatDate(o.delivered_at)}</div>}
-                                                            {!o.in_production_at && !o.dispatched_at && !o.delivered_at && <span style={{ color: '#999' }}>Pending</span>}
-                                                        </div>
-                                                    </td>
+                                                    {(() => {
+                                                        const mrp = Number(o.grand_total || 0);
+                                                        const discount = Number(o.discount_amount || 0);
+                                                        const credit = Number(o.store_credit_used || 0);
+                                                        // Prefer the stored post-discount field (written by ReviewDetail when
+                                                        // discount is applied); fall back to the subtract math for orders that
+                                                        // never went through that path. When no discount/credit exist, Final
+                                                        // equals MRP (intended \u2014 they're the same number for that order).
+                                                        const finalAmt = Number(
+                                                            o.grand_total_after_discount ?? o.net_total ?? (mrp - discount - credit)
+                                                        );
+                                                        const isRefund = o.status === "refund_requested" || !!o.refund_reason || !!o.refund_status;
+                                                        const refundAmt = isRefund ? mrp : 0;
+                                                        const hasDiscount = discount > 0 || credit > 0 || (mrp !== finalAmt);
+                                                        return (
+                                                            <>
+                                                                <td><span className="sm-order-id">{o.order_no || "-"}</span></td>
+                                                                <td>{o.delivery_name || "-"}</td>
+                                                                <td className="sm-product-cell">{o.items?.[0]?.product_name || "-"}</td>
+                                                                <td className="amount">
+                                                                    {hasDiscount
+                                                                        ? <span style={{ textDecoration: "line-through", color: "#999" }}>{"\u20B9"}{formatIndianNumber(mrp)}</span>
+                                                                        : <>{"\u20B9"}{formatIndianNumber(mrp)}</>}
+                                                                </td>
+                                                                <td className="amount">{"\u20B9"}{formatIndianNumber(Math.max(0, Math.round(finalAmt)))}</td>
+                                                                <td className="amount">{refundAmt > 0 ? `\u20B9${formatIndianNumber(refundAmt)}` : "\u2014"}</td>
+                                                                <td className="amount">{credit > 0 ? `\u20B9${formatIndianNumber(credit)}` : "\u2014"}</td>
+                                                                <td><span className={`sm-payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o)}</span></td>
+                                                                <td><span className={`sm-status-badge ${(o.status === "pending" ? "order_received" : (o.status || "order_received"))}`}>{o.status === "pending" ? "Order Received" : (o.status === "order_received" ? "Order Received" : (o.status || "Order Received"))}</span></td>
+                                                                <td>{getOrderSalesperson(o) || "-"}</td>
+                                                                <td>{formatDate(o.created_at)}</td>
+                                                                <td>{o.delivery_date ? formatDate(o.delivery_date) : "\u2014"}</td>
+                                                                <td>
+                                                                    <div style={{ fontSize: 11, lineHeight: 1.4 }}>
+                                                                        {o.in_production_at && <div>{"\u2705"} Production: {formatDate(o.in_production_at)}</div>}
+                                                                        {o.ready_for_dispatch_at && <div>{"\u2705"} Ready: {formatDate(o.ready_for_dispatch_at)}</div>}
+                                                                        {o.dispatched_at && <div>{"\u2705"} Dispatched: {formatDate(o.dispatched_at)}</div>}
+                                                                        {o.delivered_at && <div>{"\u2705"} Delivered: {formatDate(o.delivered_at)}</div>}
+                                                                        {!o.in_production_at && !o.dispatched_at && !o.delivered_at && <span style={{ color: '#999' }}>Pending</span>}
+                                                                    </div>
+                                                                </td>
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </tr>
                                             ))}
                                     </tbody>
@@ -1461,14 +1542,62 @@ export default function StoreManagerDashboard() {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {clientBook.cohorts.slice(0, 12).map(c => (
-                                                        <tr key={c.city}>
-                                                            <td style={{ fontWeight: 500 }}>{c.city}</td>
-                                                            <td className="amount">{c.clients}</td>
-                                                            <td className="amount">{c.orders}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.revenue))}</td>
-                                                        </tr>
-                                                    ))}
+                                                    {clientBook.cohorts.slice(0, 12).map(c => {
+                                                        const isExpanded = expandedCohortCity === c.city;
+                                                        const cityClients = (clientBook.cohortClientsByCity?.[c.city] || []).slice(0, 50);
+                                                        return (
+                                                            <React.Fragment key={c.city}>
+                                                                <tr
+                                                                    onClick={() => setExpandedCohortCity(isExpanded ? null : c.city)}
+                                                                    style={{ cursor: "pointer" }}
+                                                                    className={isExpanded ? "sm-cohort-row-expanded" : ""}
+                                                                >
+                                                                    <td style={{ fontWeight: 500 }}>
+                                                                        <span style={{ display: "inline-block", width: 14, fontSize: 10, color: "#8B7355" }}>{isExpanded ? "\u25BE" : "\u25B8"}</span>
+                                                                        <span style={{ textDecoration: "underline", color: "#8B7355" }}>{c.city}</span>
+                                                                    </td>
+                                                                    <td className="amount">{c.clients}</td>
+                                                                    <td className="amount">{c.orders}</td>
+                                                                    <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.revenue))}</td>
+                                                                </tr>
+                                                                {isExpanded && (
+                                                                    <tr className="sm-cohort-expand">
+                                                                        <td colSpan="4" style={{ padding: 0, background: "#faf6e8" }}>
+                                                                            <div style={{ padding: "10px 14px" }}>
+                                                                                <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
+                                                                                    Showing {cityClients.length} of {c.clients} clients in {c.city}, sorted by total spend.
+                                                                                </div>
+                                                                                <table className="sm-table" style={{ marginBottom: 0 }}>
+                                                                                    <thead>
+                                                                                        <tr>
+                                                                                            <th>Client</th>
+                                                                                            <th>Phone</th>
+                                                                                            <th className="amount">Orders</th>
+                                                                                            <th className="amount">Total Spend</th>
+                                                                                        </tr>
+                                                                                    </thead>
+                                                                                    <tbody>
+                                                                                        {cityClients.length === 0 ? (
+                                                                                            <tr><td colSpan="4" className="sm-no-data">No clients in this city</td></tr>
+                                                                                        ) : (
+                                                                                            cityClients.map(client => (
+                                                                                                <tr key={client.phone || client.name}>
+                                                                                                    <td>{client.name || "\u2014"}</td>
+                                                                                                    <td>{client.phone || "\u2014"}</td>
+                                                                                                    <td className="amount">{client.orderCount}</td>
+                                                                                                    <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(client.totalSpend))}</td>
+                                                                                                </tr>
+                                                                                            ))
+                                                                                        )}
+                                                                                    </tbody>
+                                                                                </table>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>

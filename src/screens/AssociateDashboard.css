@@ -1976,6 +1976,19 @@
   margin-top: 4px;
 }
 
+/* Brown dot marker for dates with at least one stock order. Sits top-right
+   of the cell so it doesn't disturb the existing count layout. */
+.ad-ios-stock-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8B5A2B;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+
 /* ========== ORDERS SECTION BELOW CALENDAR ========== */
 .ad-calendar-orders-section {
   margin-top: 20px;

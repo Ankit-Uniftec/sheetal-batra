@@ -2538,6 +2538,13 @@ export default function ProductForm() {
       sessionStorage.removeItem("screen4FormData");
       sessionStorage.removeItem("screen6FormData");
 
+      // Route back to whichever dashboard the user started from. Stock orders
+      // placed by non-SA roles (admin / GM / assistant_cmo) set returnDashboard
+      // before navigating here; for the regular SA flow it falls back to
+      // /AssociateDashboard. Without this fallback, non-SA users hit the SA
+      // role check on AssociateDashboard and get force-signed-out.
+      const returnDashboard = sessionStorage.getItem("returnDashboard") || "/AssociateDashboard";
+
       // ✅ Check if we have a saved associate session
       const savedSession = sessionStorage.getItem("associateSession");
 
@@ -2561,12 +2568,14 @@ export default function ProductForm() {
         // Clean up and navigate
         sessionStorage.removeItem("associateSession");
         sessionStorage.removeItem("returnToAssociate");
+        sessionStorage.removeItem("returnDashboard");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate("/AssociateDashboard", { replace: true });
+        navigate(returnDashboard, { replace: true });
       } else {
         // No saved session - just navigate back
+        sessionStorage.removeItem("returnDashboard");
         sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate("/AssociateDashboard", { replace: true });
+        navigate(returnDashboard, { replace: true });
       }
     } catch (e) {
       console.error("Logout error", e);

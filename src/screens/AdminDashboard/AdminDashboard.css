@@ -2091,3 +2091,61 @@
     cursor: pointer;
     accent-color: #d5b85a;
 }
+
+/* ─── SA Targets tab ──────────────────────────────────────── */
+.sa-targets-table th.sa-targets-current-col {
+    background: #faf6e8;
+    color: #8B7355;
+}
+
+.sa-targets-current-tag {
+    font-size: 10px;
+    font-weight: 500;
+    color: #b79b3d;
+    margin-left: 4px;
+}
+
+.sa-targets-cell {
+    text-align: center;
+    vertical-align: middle;
+    padding: 6px 8px;
+}
+
+.sa-targets-past {
+    color: #888;
+    background: #fafafa;
+    font-variant-numeric: tabular-nums;
+}
+
+.sa-targets-current-cell {
+    background: rgba(213, 184, 90, 0.06);
+}
+
+.sa-targets-input {
+    width: 110px;
+    padding: 6px 8px;
+    font-size: 13px;
+    text-align: right;
+    border: 1px solid #e0d5c5;
+    border-radius: 6px;
+    background: #fff;
+    color: #333;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    font-variant-numeric: tabular-nums;
+}
+
+.sa-targets-input:focus {
+    border-color: #d5b85a;
+    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.2);
+}
+
+.sa-targets-input:disabled {
+    background: #f5f5f5;
+    color: #999;
+    cursor: not-allowed;
+}
+
+.sa-targets-input::placeholder {
+    color: #c0b7a0;
+}

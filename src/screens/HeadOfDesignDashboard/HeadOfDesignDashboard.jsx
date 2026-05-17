@@ -10,6 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from "recharts";
+import SearchByDropdown from "../../components/SearchByDropdown";
 
 // Head of Design Dashboard — read-only view for Tanuja Singh.
 // Two focused tabs:
@@ -116,6 +117,7 @@ export default function HeadOfDesignDashboard() {
   // Order Status drill-down
   const [statusFilter, setStatusFilter] = useState("all");
   const [orderSearch, setOrderSearch] = useState("");
+  const [orderSearchField, setOrderSearchField] = useState("order_no");
   const [ordersPage, setOrdersPage] = useState(1);
 
   // B2B tab filters
@@ -214,22 +216,29 @@ export default function HeadOfDesignDashboard() {
     if (statusFilter !== "all") list = list.filter(o => getOrderStatus(o) === statusFilter);
     if (orderSearch.trim()) {
       const q = orderSearch.trim().toLowerCase();
-      list = list.filter(o =>
-        (o.order_no || "").toLowerCase().includes(q) ||
-        (o.delivery_name || "").toLowerCase().includes(q) ||
-        (o.salesperson || "").toLowerCase().includes(q) ||
-        (o.delivery_phone || "").includes(q)
-      );
+      list = list.filter(o => {
+        switch (orderSearchField) {
+          case "client_name":
+            return (o.delivery_name || "").toLowerCase().includes(q);
+          case "phone":
+            return (o.delivery_phone || "").includes(q);
+          case "salesperson":
+            return (o.salesperson || "").toLowerCase().includes(q);
+          case "order_no":
+          default:
+            return (o.order_no || "").toLowerCase().includes(q);
+        }
+      });
     }
     return list;
-  }, [periodOrders, statusFilter, orderSearch]);
+  }, [periodOrders, statusFilter, orderSearch, orderSearchField]);
 
   const ordersTotalPages = Math.max(1, Math.ceil(filteredOrdersForTable.length / ITEMS_PER_PAGE));
   const currentOrdersPage = useMemo(
     () => filteredOrdersForTable.slice((ordersPage - 1) * ITEMS_PER_PAGE, ordersPage * ITEMS_PER_PAGE),
     [filteredOrdersForTable, ordersPage]
   );
-  useEffect(() => { setOrdersPage(1); }, [statusFilter, orderSearch, timeline, customDateFrom, customDateTo]);
+  useEffect(() => { setOrdersPage(1); }, [statusFilter, orderSearch, orderSearchField, timeline, customDateFrom, customDateTo]);
 
   // ─── B2B (Tab 2) ─────────────────────────────────────────────
   const b2bAll = useMemo(
@@ -433,12 +442,18 @@ export default function HeadOfDesignDashboard() {
                     Orders {statusFilter !== "all" && `— ${STATUS_FLOW.find(s => s.key === statusFilter)?.label}`}
                     <span className="hod-count">({filteredOrdersForTable.length})</span>
                   </h3>
-                  <input
-                    type="text"
-                    className="hod-search"
-                    placeholder="Search order #, customer, phone…"
-                    value={orderSearch}
-                    onChange={(e) => setOrderSearch(e.target.value)}
+                  <SearchByDropdown
+                    fields={[
+                      { value: "order_no", label: "Order Number" },
+                      { value: "client_name", label: "Client Name" },
+                      { value: "phone", label: "Phone" },
+                      { value: "salesperson", label: "Salesperson" },
+                    ]}
+                    selectedField={orderSearchField}
+                    onFieldChange={setOrderSearchField}
+                    query={orderSearch}
+                    onQueryChange={setOrderSearch}
+                    placeholder="Type to search..."
                   />
                 </div>
 

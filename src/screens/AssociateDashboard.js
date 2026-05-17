@@ -11,6 +11,7 @@ import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
+import SearchByDropdown from "../components/SearchByDropdown";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -33,6 +34,7 @@ export default function Dashboard() {
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [salesperson, setSalesperson] = useState(null);
+  const [monthlyTarget, setMonthlyTarget] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -48,7 +50,14 @@ export default function Dashboard() {
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
+  const [orderSearchField, setOrderSearchField] = useState("order_no");
   const [clientSearch, setClientSearch] = useState("");
+
+  const ASSOCIATE_SEARCH_FIELDS = [
+    { value: "order_no", label: "Order Number" },
+    { value: "product_name", label: "Product Name" },
+    { value: "client_name", label: "Client Name" },
+  ];
 
   // Edit modal state
   const [editingOrder, setEditingOrder] = useState(null);
@@ -98,20 +107,39 @@ export default function Dashboard() {
       return true;
     });
 
-    const totalRevenue = displayOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+    // Current calendar month revenue — resets at 00:00 on the 1st.
+    // Used by the sales-target progress bar AND the headline revenue card.
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const totalRevenue = displayOrders.reduce((sum, o) => {
+      if (!o.created_at) return sum;
+      return new Date(o.created_at) >= monthStart
+        ? sum + Number(o.grand_total || 0)
+        : sum;
+    }, 0);
     const totalOrders = displayOrders.length;
+    // Split: stock orders (internal inventory) vs client orders. Helps the SA
+    // see how much of their volume is real customer business.
+    const stockOrders = displayOrders.filter((o) => o.is_stock_order).length;
+    const clientOrders = totalOrders - stockOrders;
     const totalClients = new Set(displayOrders.map((o) => o.user_id)).size;
     const activeOrders = displayOrders.filter(
       (o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "delivered" &&
         formatDate(o.created_at) === formatDate(new Date())
     );
 
-    return { totalRevenue, totalOrders, totalClients, activeOrders };
+    return { totalRevenue, totalOrders, clientOrders, stockOrders, totalClients, activeOrders };
   }, [orders, isServices, salesperson]);
 
-  // Sales Target - use DB value or default to 800000
+  // Sales Target — prefer the current month's row from sa_monthly_targets
+  // (with carry-forward from the most recent prior month). Falls back to the
+  // legacy scalar column on salesperson, then a hard default, so the UI keeps
+  // working before the migration is applied / before any rows are seeded.
   const DEFAULT_SALES_TARGET = 800000;
-  const salesTarget = salesperson?.sales_target > 0 ? salesperson.sales_target : DEFAULT_SALES_TARGET;
+  const salesTarget =
+    (monthlyTarget && monthlyTarget > 0)
+      ? monthlyTarget
+      : (salesperson?.sales_target > 0 ? salesperson.sales_target : DEFAULT_SALES_TARGET);
 
   // ✅ OPTIMIZED: Memoize ordersByDate
   const ordersByDate = useMemo(() => {
@@ -122,6 +150,17 @@ export default function Dashboard() {
       }
       return acc;
     }, {});
+  }, [orders]);
+
+  // Set of dates that contain at least one stock order. Used by the calendar
+  // to render a small brown indicator so SAs can spot stock days at a glance.
+  const stockOrderDates = useMemo(() => {
+    const s = new Set();
+    orders.forEach((o) => {
+      if (!o.is_stock_order || !o.delivery_date) return;
+      s.add(formatDate(o.delivery_date));
+    });
+    return s;
   }, [orders]);
 
   // ✅ OPTIMIZED: Memoize filtered orders
@@ -135,20 +174,24 @@ export default function Dashboard() {
       return true; // Show all regular orders
     });
 
-    // Then apply search filter — numeric input matches order_no, text matches product_name
+    // Then apply search filter — user picks the field via the dropdown
     if (!orderSearch.trim()) return baseOrders;
 
     const q = orderSearch.trim().toLowerCase();
-    const isNumericQuery = /\d/.test(q);
     return baseOrders.filter((order) => {
-      if (isNumericQuery) {
-        return order.order_no?.toLowerCase().includes(q);
+      switch (orderSearchField) {
+        case "product_name":
+          return (order.items || []).some(
+            (it) => it?.product_name?.toLowerCase().includes(q)
+          );
+        case "client_name":
+          return order.delivery_name?.toLowerCase().includes(q);
+        case "order_no":
+        default:
+          return order.order_no?.toLowerCase().includes(q);
       }
-      return (order.items || []).some(
-        (it) => it?.product_name?.toLowerCase().includes(q)
-      );
     });
-  }, [orders, orderSearch]);
+  }, [orders, orderSearch, orderSearchField]);
 
   // ✅ OPTIMIZED: Paginated orders
   const paginatedOrders = useMemo(() => {
@@ -281,6 +324,25 @@ export default function Dashboard() {
         setSalesperson(spData);
         localStorage.setItem("sp_email", user.email);
 
+        // Fetch the most recent monthly target row at or before the
+        // current month. Carry-forward semantics: if no row exists for
+        // this exact month, use the latest prior month's value so the
+        // SA always sees a target until admin sets a new one.
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        const { data: targetRows } = await supabase
+          .from("sa_monthly_targets")
+          .select("target_amount, year, month")
+          .eq("salesperson_email", user.email.toLowerCase())
+          .or(`year.lt.${curYear},and(year.eq.${curYear},month.lte.${curMonth})`)
+          .order("year", { ascending: false })
+          .order("month", { ascending: false })
+          .limit(1);
+        if (targetRows && targetRows.length > 0) {
+          setMonthlyTarget(Number(targetRows[0].target_amount) || null);
+        }
+
         // Step 2: Fetch orders - sa_services gets ALL orders, regular SA gets only their own
         // Paginate past Supabase's default 1000-row cap so sa_services can see 2000+ orders.
         const isServicesUser = spData.role === "sa_services";
@@ -352,6 +414,40 @@ export default function Dashboard() {
     // Clear any in-flight order-flow flags so they don't leak into the next session
     sessionStorage.removeItem("isStockOrder");
     navigate("/login");
+  };
+
+  // Stock order entry — used by both the floating "Stock" button and the
+  // sidebar "Stock Order" item. Sets the isStockOrder flag in sessionStorage
+  // and routes straight to /product (skipping OTP + customer detail).
+  const handleStartStockOrder = async () => {
+    if (!salesperson) {
+      showPopup({
+        title: "Access Denied",
+        message: "Salesperson data not found. Please login again.",
+        type: "error",
+        confirmText: "Ok",
+      });
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) sessionStorage.setItem("associateSession", JSON.stringify({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      user: { email: session.user?.email },
+    }));
+    sessionStorage.setItem("returnToAssociate", "true");
+    sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+    sessionStorage.setItem("currentSalesperson", JSON.stringify({
+      name: salesperson.saleperson,
+      email: salesperson.email,
+      phone: salesperson.phone,
+      store: salesperson.store_name,
+      designation: salesperson.designation,
+    }));
+    sessionStorage.setItem("isStockOrder", "true");
+    sessionStorage.removeItem("screen4FormData");
+    sessionStorage.removeItem("screen6FormData");
+    navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
   };
 
   // Handle customer PDF download
@@ -1016,6 +1112,12 @@ export default function Dashboard() {
               <a className={`ad-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
               <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
+              {salesperson?.can_place_stock_orders && (
+                <a
+                  className="ad-menu-item"
+                  onClick={() => { setShowSidebar(false); handleStartStockOrder(); }}
+                >Stock Order</a>
+              )}
               <a className="ad-menu-item-logout" onClick={handleLogout}>Log Out</a>
             </nav>
           </aside>
@@ -1024,7 +1126,7 @@ export default function Dashboard() {
             <>
               <div className="ad-cell ad-total-revenue">
                 <div className="ad-stat-card">
-                  <p className="ad-stat-title">Total Revenue</p>
+                  <p className="ad-stat-title">This Month's Revenue</p>
                   <div className="ad-stat-content">
                     <span className="ad-stat-value">
                       {showRevenue ? `₹${formatIndianNumber(stats.totalRevenue)}` : "₹ ••••••"}
@@ -1043,7 +1145,18 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="ad-cell ad-total-orders">
-                <StatCard title="Total Orders" className="gold-text" value={formatIndianNumber(stats.totalOrders)} />
+                <StatCard
+                  title="Total Orders"
+                  className="gold-text"
+                  value={formatIndianNumber(stats.totalOrders)}
+                  change={
+                    stats.stockOrders > 0 ? (
+                      <span style={{ fontSize: 11, color: "#8B7355" }}>
+                        {stats.clientOrders} client {"·"} {stats.stockOrders} stock
+                      </span>
+                    ) : null
+                  }
+                />
               </div>
               <div className="ad-cell ad-total-clients">
                 <StatCard title="Total Clients" value={formatIndianNumber(stats.totalClients)} />
@@ -1110,14 +1223,13 @@ export default function Dashboard() {
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Order History</h2>
               <div className="ad-order-search-bar">
-                <input
-                  type="text"
-                  placeholder="Search by Order # (numbers) or Product Name (text)"
-                  value={orderSearch}
-                  onChange={(e) => {
-                    setOrderSearch(e.target.value);
-                    setCurrentPage(1); // Reset to first page on search
-                  }}
+                <SearchByDropdown
+                  fields={ASSOCIATE_SEARCH_FIELDS}
+                  selectedField={orderSearchField}
+                  onFieldChange={(v) => { setOrderSearchField(v); setCurrentPage(1); }}
+                  query={orderSearch}
+                  onQueryChange={(v) => { setOrderSearch(v); setCurrentPage(1); }}
+                  placeholder="Type to search..."
                 />
               </div>
 
@@ -1505,6 +1617,7 @@ export default function Dashboard() {
                       const isToday = fullDate === todayDate;
                       const isSelected = selectedCalendarDate === fullDate;
                       const orderCount = ordersByDate[fullDate] || 0;
+                      const hasStock = stockOrderDates.has(fullDate);
 
                       return (
                         <div
@@ -1515,6 +1628,9 @@ export default function Dashboard() {
                           <span className="ad-ios-date-num">{date}</span>
                           {orderCount > 0 && (
                             <span className="ad-ios-order-count">{orderCount}</span>
+                          )}
+                          {hasStock && (
+                            <span className="ad-ios-stock-dot" title="Stock order on this date" />
                           )}
                         </div>
                       );
@@ -1669,54 +1785,8 @@ export default function Dashboard() {
           }}
         >+</button>
 
-        {/* ─── Stock Order button ─────────────────────────────────────
-            Internal inventory order: skips OTP + customer detail, all items
-            are priced at 0 and mode_of_delivery is forced to "WH Delhi".
-            Routed straight to /product.
-            Visible ONLY when admin has flagged this SA via
-            salesperson.can_place_stock_orders = true. */}
-        {salesperson?.can_place_stock_orders && (
-        <button
-          className="ad-add-btn ad-stock-btn"
-          title="Place Stock Order (Internal Inventory)"
-          onClick={async () => {
-            if (!salesperson) {
-              showPopup({
-                title: "Access Denied",
-                message: "Salesperson data not found. Please login again.",
-                type: "error",
-                confirmText: "Ok",
-              });
-              return;
-            }
-
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) sessionStorage.setItem("associateSession", JSON.stringify({
-              access_token: session.access_token,
-              refresh_token: session.refresh_token,
-              user: { email: session.user?.email },
-            }));
-            sessionStorage.setItem("returnToAssociate", "true");
-            sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-
-            sessionStorage.setItem("currentSalesperson", JSON.stringify({
-              name: salesperson.saleperson,
-              email: salesperson.email,
-              phone: salesperson.phone,
-              store: salesperson.store_name,
-              designation: salesperson.designation,
-            }));
-
-            // Stock-order flag — read by ProductForm + ReviewDetail to alter behaviour.
-            sessionStorage.setItem("isStockOrder", "true");
-            // Reset any in-progress non-stock order form data so we start clean
-            sessionStorage.removeItem("screen4FormData");
-            sessionStorage.removeItem("screen6FormData");
-
-            navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
-          }}
-        >Stock</button>
-        )}
+        {/* Floating "Stock" button removed — stock-order entry is now the
+            sidebar item below Client Book. handleStartStockOrder() is reused. */}
       </div>
     </div>
   );

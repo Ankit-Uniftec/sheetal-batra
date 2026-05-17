@@ -713,7 +713,7 @@ const AlterationInfoBox = ({ order }) => (
  * Warehouse PDF Document - ONE PDF PER PRODUCT
  * Now supports both regular orders and alteration orders
  */
-const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl, masterBarcodeImage = null, componentBarcodes = [] }) => {
+const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl, masterBarcodeImage = null, componentBarcodes = [], resolvedClientName = "" }) => {
   if (!order || !item) {
     console.error("WarehouseOrderPdf received undefined order or item.");
     return (
@@ -728,6 +728,9 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
   const isAlteration = order.is_alteration;
   const isUrgent = order.alteration_status === "upcoming_occasion" || order.is_urgent;
   const itemDeliveryDate = order.delivery_date;
+  // For B2B orders, delivery_name is empty; caller resolves the vendor brand
+  // and passes it as resolvedClientName. Falls back to delivery_name for retail.
+  const clientNameForHeader = resolvedClientName || order.delivery_name;
   const notes = [...new Set([item.notes, order.comments, order.delivery_notes]
     .filter(n => n && n.trim() !== ""))]
     .join(" | ");
@@ -799,7 +802,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
               <View style={warehouseStyles.infoColumn}>
                 <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
                 <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
-                <InfoRow label="CLIENT NAME:" value={order.delivery_name} />
+                <InfoRow label="CLIENT NAME:" value={clientNameForHeader} />
                 <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />
                 <InfoRow label="ORDER PRIORITY:" value={isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL")} urgent={isUrgent} />
               </View>
@@ -908,7 +911,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             <View style={warehouseStyles.infoColumn}>
               <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
               <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
-              <InfoRow label="CLIENT NAME:" value={order.delivery_name} />
+              <InfoRow label="CLIENT NAME:" value={clientNameForHeader} />
               <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />
               <InfoRow label="ORDER PRIORITY:" value={isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL")} urgent={isUrgent} />
             </View>

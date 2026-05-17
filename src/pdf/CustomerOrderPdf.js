@@ -405,11 +405,15 @@ const parsePaymentMode = (paymentMode) => {
 };
 
 // Main Customer PDF Document
-const CustomerOrderPdf = ({ order, logoUrl }) => {
+const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
   if (!order) {
     console.error("CustomerOrderPdf received an undefined or null order prop.");
     return <Document><Page size="A4" style={styles.page}><Text>Error: Order data is missing.</Text></Page></Document>;
   }
+
+  // For B2B orders, delivery_name is empty; caller resolves the vendor brand
+  // and passes it as resolvedClientName. Falls back to delivery_name for retail.
+  const clientNameForHeader = resolvedClientName || order.delivery_name || "";
 
   const grandTotal = Number(order.grand_total) || 0;
   const discountAmount = Number(order.discount_amount) || 0;
@@ -489,7 +493,7 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         {/* Personal Details */}
         <SectionBar title="Personal Details" />
         <View style={styles.rowSpaceBetween}>
-          <Text style={styles.value}>{safeString(order.delivery_name)}</Text>
+          <Text style={styles.value}>{safeString(clientNameForHeader)}</Text>
           {order.delivery_email?.trim() && (
             <Text style={styles.value}>{order.delivery_email}</Text>
           )}
@@ -577,10 +581,10 @@ const CustomerOrderPdf = ({ order, logoUrl }) => {
         <SectionBar title="Billing Details" />
         <View style={styles.twoColumn}>
           <View style={styles.column}>
-            {(order.billing_company || order.delivery_name) && (
+            {(order.billing_company || clientNameForHeader) && (
               <Field
                 label="Company / Individual Name:"
-                value={order.billing_company || order.delivery_name}
+                value={order.billing_company || clientNameForHeader}
               />
             )}
             {order.billing_gstin?.trim() && (

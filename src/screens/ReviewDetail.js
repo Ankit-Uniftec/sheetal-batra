@@ -334,9 +334,24 @@ export default function ReviewDetail() {
       }
     }
 
-    // Final fallback for store
-    if (!normalizedOrder.salesperson_store) {
-      normalizedOrder.salesperson_store = "Delhi Store";
+    // Hard requirement: by this point one of the 3 recovery passes above
+    // should have set salesperson_store. If none did, refuse to write — a
+    // silent default would mis-attribute the order's store and pollute
+    // store-wise dashboards (e.g. Ludhiana order showing under Delhi).
+    if (!normalizedOrder.salesperson_store || !String(normalizedOrder.salesperson_store).trim()) {
+      console.error("Salesperson store could not be resolved. Aborting order placement.", {
+        salesperson: normalizedOrder.salesperson,
+        salesperson_email: normalizedOrder.salesperson_email,
+      });
+      showPopup({
+        title: "Salesperson Store Missing",
+        message: "Could not determine the salesperson's store. Please return to the dashboard and start over. If this persists, contact admin to verify the salesperson profile has a store assigned.",
+        type: "error",
+        confirmText: "Ok",
+      });
+      setLoading(false);
+      setShowSignature(false);
+      return;
     }
 
     setLoadingMessage("Saving order...");
@@ -438,9 +453,9 @@ export default function ReviewDetail() {
     // 3️⃣ GENERATE ORDER NUMBER
     // Stock orders use the 'Internal' store key, which the RPC maps to the
     // STOCK prefix (e.g. SB-STOCK-MMYY-000001).
-    const rpcStore = isStockOrder
-      ? "Internal"
-      : (normalizedOrder.salesperson_store || "Delhi Store");
+    // salesperson_store is guaranteed non-empty by the guard above (line 338).
+    // For stock orders, force the "Internal" namespace regardless.
+    const rpcStore = isStockOrder ? "Internal" : normalizedOrder.salesperson_store;
     const { data: orderNo, error: orderNoError } = await supabase.rpc(
       "generate_order_no",
       { p_store: rpcStore }

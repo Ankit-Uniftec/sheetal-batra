@@ -10,6 +10,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
+import SearchByDropdown from "../../components/SearchByDropdown";
 
 // Timeline options
 const TIMELINE_OPTIONS = [
@@ -134,6 +135,7 @@ export default function RetailManagerDashboard() {
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearchField, setOrderSearchField] = useState("order_no");
     const [statusTab, setStatusTab] = useState("all");
     const [sortBy, setSortBy] = useState("newest");
     const [ordersPage, setOrdersPage] = useState(1);
@@ -558,12 +560,17 @@ export default function RetailManagerDashboard() {
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
         if (orderSearch.trim()) {
-            const q = orderSearch.toLowerCase();
+            const q = orderSearch.trim().toLowerCase();
             result = result.filter(order => {
-                const item = order.items?.[0] || {};
-                return order.order_no?.toLowerCase().includes(q) ||
-                    item.product_name?.toLowerCase().includes(q) ||
-                    (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                switch (orderSearchField) {
+                    case "product_name":
+                        return (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
+                    case "salesperson":
+                        return (getOrderSalesperson(order) || "").toLowerCase().includes(q);
+                    case "order_no":
+                    default:
+                        return order.order_no?.toLowerCase().includes(q);
+                }
             });
         }
         if (filters.dateFrom || filters.dateTo) {
@@ -602,7 +609,7 @@ export default function RetailManagerDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
 
     const orderTabCounts = useMemo(() => {
         const valid = retailOrders.filter(o => !isLxrtsOrder(o));
@@ -649,7 +656,7 @@ export default function RetailManagerDashboard() {
         ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value]
     }));
 
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, statusTab, filters, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
 
     // ═══════════════════════════════════════════════════════════
     // RENDER
@@ -1170,13 +1177,18 @@ export default function RetailManagerDashboard() {
                         <div className="rm-analytics-tab">
                             <h2 className="rm-section-title">Orders</h2>
                             <div className="rm-toolbar">
-                                <div className="rm-search-wrapper">
-                                    <span className="rm-search-icon">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
-                                    </span>
-                                    <input type="text" placeholder="Search Order #, Product, Salesperson..." value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} className="rm-search-input" />
-                                    {orderSearch && <button className="rm-search-clear" onClick={() => setOrderSearch("")}>{"\u00D7"}</button>}
-                                </div>
+                                <SearchByDropdown
+                                    fields={[
+                                        { value: "order_no", label: "Order Number" },
+                                        { value: "product_name", label: "Product Name" },
+                                        { value: "salesperson", label: "Salesperson" },
+                                    ]}
+                                    selectedField={orderSearchField}
+                                    onFieldChange={setOrderSearchField}
+                                    query={orderSearch}
+                                    onQueryChange={setOrderSearch}
+                                    placeholder="Type to search..."
+                                />
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="rm-sort-select">
                                     <option value="newest">Newest First</option>
                                     <option value="oldest">Oldest First</option>

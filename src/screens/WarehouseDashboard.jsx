@@ -12,6 +12,7 @@ import NotificationBell from "../components/NotificationBell";
 // import ScanStation from "../components/ScanStation";
 // import "../components/ScanStation.css";
 import { getStageLabel, getStageColor } from "../utils/barcodeService";
+import SearchByDropdown from "../components/SearchByDropdown";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -82,6 +83,10 @@ const WarehouseDashboard = () => {
   };
 
   const [orders, setOrders] = useState([]);
+  // Maps vendor.id → vendor row. Used to resolve B2B orders' "client name"
+  // (B2B orders have no delivery_name; the vendor's store_brand_name is the
+  // operations-facing analogue, same convention as PM dashboard + PDFs).
+  const [vendorMap, setVendorMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("orders");
   const [showSidebar, setShowSidebar] = useState(false);
@@ -95,7 +100,13 @@ const WarehouseDashboard = () => {
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchField, setSearchField] = useState("order_no");
   const [sortBy, setSortBy] = useState("newest");
+
+  const WAREHOUSE_SEARCH_FIELDS = [
+    { value: "order_no", label: "Order Number" },
+    { value: "product_name", label: "Product Name" },
+  ];
 
   // Status Tab (Primary Filter)
   const [statusTab, setStatusTab] = useState("all");
@@ -106,7 +117,6 @@ const WarehouseDashboard = () => {
     dateTo: "",
     minPrice: 0,
     maxPrice: 500000,
-    payment: [],
     priority: [],
     orderType: [],
     store: [],
@@ -259,8 +269,53 @@ const WarehouseDashboard = () => {
         return true;
       });
       setOrders(filtered);
+
+      // Resolve B2B "client name" — fetch vendors referenced by B2B orders.
+      const vendorIds = [...new Set(
+        filtered
+          .filter(o => o.is_b2b && o.vendor_id)
+          .map(o => o.vendor_id)
+      )];
+      if (vendorIds.length > 0) {
+        const { data: vData } = await supabase
+          .from("vendors")
+          .select("id, store_brand_name, vendor_code")
+          .in("id", vendorIds);
+        if (vData) {
+          const vMap = {};
+          vData.forEach(v => { vMap[v.id] = v; });
+          setVendorMap(vMap);
+        }
+      }
     }
     setLoading(false);
+  };
+
+  // Returns the client-facing name for an order. B2B orders use the vendor's
+  // store_brand_name (resolved via vendorMap); retail uses delivery_name.
+  const getClientName = (order) => {
+    if (order?.is_b2b) {
+      const v = order.vendor_id ? vendorMap[order.vendor_id] : null;
+      return v?.store_brand_name || order.delivery_name || "";
+    }
+    return order?.delivery_name || "";
+  };
+
+  // Jump to the Orders tab, scope filters to make the order visible, and
+  // visually highlight its card. Used by the NotificationBell click and by
+  // calendar order items.
+  const goToOrder = (orderId, orderNo) => {
+    setActiveTab("orders");
+    setStatusTab("all");
+    setSearchQuery(orderNo || "");
+    setTimeout(() => {
+      const el = document.querySelector(`[data-order-id="${orderId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.outline = "2px solid #d5b85a";
+        setTimeout(() => { el.style.outline = ""; }, 3000);
+      }
+    }, 300);
   };
 
   // Fetch components for a specific order
@@ -332,15 +387,6 @@ const WarehouseDashboard = () => {
 
   const MIN_CALENDAR_DATE = new Date(2025, 11, 1);
 
-  // Get payment status of an order
-  const getPaymentStatus = (order) => {
-    const total = order.grand_total || order.net_total || 0;
-    const advance = order.advance_payment || 0;
-    if (advance >= total) return "paid";
-    if (advance > 0) return "partial";
-    return "unpaid";
-  };
-
   // Get priority of an order
   const getPriority = (order) => {
     if (order.is_urgent || order.order_flag === "Urgent" || order.alteration_status === "upcoming_occasion" || order.priority === "urgent") {
@@ -349,8 +395,13 @@ const WarehouseDashboard = () => {
     return "normal";
   };
 
-  // Get order type
+  // Get order type. Stock and B2B are treated as their own categories so the
+  // filter selects all matching orders regardless of their alteration/custom
+  // flags. Stock orders skip the customer/B2B flow entirely, so they take
+  // precedence over B2B.
   const getOrderType = (order) => {
+    if (order.is_stock_order) return "stock";
+    if (order.is_b2b) return "b2b";
     if (order.is_alteration) return "alteration";
     const item = order.items?.[0];
     if (item?.order_type === "Custom" || item?.payment_order_type === "Custom") return "custom";
@@ -391,17 +442,19 @@ const WarehouseDashboard = () => {
   const filteredOrders = useMemo(() => {
     let result = filteredByStatus;
 
-    // Search filter — numeric input matches order_no, text matches product_name
+    // Search filter — user picks the field via the dropdown
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
-      const isNumericQuery = /\d/.test(query);
       result = result.filter((order) => {
-        if (isNumericQuery) {
-          return order.order_no?.toLowerCase().includes(query);
+        switch (searchField) {
+          case "product_name":
+            return (order.items || []).some(
+              (it) => it?.product_name?.toLowerCase().includes(query)
+            );
+          case "order_no":
+          default:
+            return order.order_no?.toLowerCase().includes(query);
         }
-        return (order.items || []).some(
-          (it) => it?.product_name?.toLowerCase().includes(query)
-        );
       });
     }
 
@@ -424,11 +477,6 @@ const WarehouseDashboard = () => {
         const total = order.grand_total || order.net_total || 0;
         return total >= filters.minPrice && total <= filters.maxPrice;
       });
-    }
-
-    // Payment status filter
-    if (filters.payment.length > 0) {
-      result = result.filter((order) => filters.payment.includes(getPaymentStatus(order)));
     }
 
     // Priority filter
@@ -475,7 +523,7 @@ const WarehouseDashboard = () => {
     });
 
     return result;
-  }, [filteredByStatus, searchQuery, filters, sortBy]);
+  }, [filteredByStatus, searchQuery, searchField, filters, sortBy]);
 
   const handleExportCSV = () => {
     if (filteredOrders.length === 0) return;
@@ -487,7 +535,7 @@ const WarehouseDashboard = () => {
     const rows = filteredOrders.map((order) => [
       order.order_no || "",
       order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
-      order.delivery_name || "",
+      getClientName(order) || "",
       order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
       order.mode_of_delivery || order.delivery_location || order.delivery_city || "",
       Array.isArray(order.items) ? order.items.length : 0,
@@ -544,9 +592,8 @@ const WarehouseDashboard = () => {
     if (filters.minPrice > 0 || filters.maxPrice < 500000) {
       chips.push({ type: "price", label: `Rs.${(filters.minPrice / 1000).toFixed(0)}K - Rs.${(filters.maxPrice / 1000).toFixed(0)}K` });
     }
-    filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
     filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
-    filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }));
+    filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t === "b2b" ? "B2B" : (t.charAt(0).toUpperCase() + t.slice(1)) }));
     filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
     if (filters.salesperson) {
       chips.push({ type: "salesperson", label: filters.salesperson });
@@ -574,7 +621,6 @@ const WarehouseDashboard = () => {
       dateTo: "",
       minPrice: 0,
       maxPrice: 500000,
-      payment: [],
       priority: [],
       orderType: [],
       store: [],
@@ -660,6 +706,19 @@ const WarehouseDashboard = () => {
         }
         return acc;
       }, {});
+  }, [orders]);
+
+  // Set of calendar dates that have at least one stock order. Rendered as a
+  // small brown dot on the calendar so WH staff spot stock days at a glance.
+  const stockOrderDates = useMemo(() => {
+    const s = new Set();
+    orders
+      .filter(o => !isLxrtsOrder(o) && o.is_stock_order && o.delivery_date)
+      .forEach((order) => {
+        const d = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
+        if (d) s.add(d);
+      });
+    return s;
   }, [orders]);
 
   // Update warehouse stage from dropdown
@@ -927,22 +986,7 @@ const WarehouseDashboard = () => {
         <div className="wd-header-right">
           <NotificationBell
             userEmail={currentUserEmail}
-            onOrderClick={(orderId, orderNo) => {
-              // Switch to orders tab
-              setActiveTab("orders");
-              // Clear filters to ensure order is visible
-              setStatusTab("all");
-              setSearchQuery(orderNo || "");
-              // Scroll after a short delay for render
-              setTimeout(() => {
-                const el = document.querySelector(`[data-order-id="${orderId}"]`);
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  el.style.outline = '2px solid #d5b85a';
-                  setTimeout(() => { el.style.outline = ''; }, 3000);
-                }
-              }, 300);
-            }}
+            onOrderClick={goToOrder}
           />
         </div>
       </div>
@@ -986,19 +1030,14 @@ const WarehouseDashboard = () => {
 
               {/* Search & Sort Bar */}
               <div className="wd-search-sort-bar">
-                <div className="wd-search-wrapper">
-                  <span className="wd-search-icon">&#128269;</span>
-                  <input
-                    type="text"
-                    placeholder="Search Order # (numbers) or Product (text)"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="wd-search-input"
-                  />
-                  {searchQuery && (
-                    <button className="wd-search-clear" onClick={() => setSearchQuery("")}>x</button>
-                  )}
-                </div>
+                <SearchByDropdown
+                  fields={WAREHOUSE_SEARCH_FIELDS}
+                  selectedField={searchField}
+                  onFieldChange={setSearchField}
+                  query={searchQuery}
+                  onQueryChange={setSearchQuery}
+                  placeholder="Type to search..."
+                />
                 <div className="wd-sort-export">
                   <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="wd-sort-select">
                     <option value="newest">Newest First</option>
@@ -1140,33 +1179,6 @@ const WarehouseDashboard = () => {
                   )}
                 </div>
 
-                {/* Payment Filter */}
-                <div className="wd-filter-dropdown">
-                  <button
-                    className={`wd-filter-btn ${filters.payment.length > 0 ? "active" : ""}`}
-                    onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}
-                  >
-                    Payment
-                    <span className="wd-dropdown-arrow">&#9662;</span>
-                  </button>
-                  {openDropdown === "payment" && (
-                    <div className="wd-dropdown-panel">
-                      <div className="wd-dropdown-title">Payment Status</div>
-                      {["paid", "partial", "unpaid"].map(opt => (
-                        <label key={opt} className="wd-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={filters.payment.includes(opt)}
-                            onChange={() => toggleFilter("payment", opt)}
-                          />
-                          <span>{opt === "unpaid" ? "Unpaid (COD)" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
-                        </label>
-                      ))}
-                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                    </div>
-                  )}
-                </div>
-
                 {/* Priority Filter */}
                 <div className="wd-filter-dropdown">
                   <button
@@ -1206,14 +1218,14 @@ const WarehouseDashboard = () => {
                   {openDropdown === "orderType" && (
                     <div className="wd-dropdown-panel">
                       <div className="wd-dropdown-title">Order Type</div>
-                      {["standard", "custom", "alteration"].map(opt => (
+                      {["standard", "custom", "alteration", "b2b", "stock"].map(opt => (
                         <label key={opt} className="wd-checkbox-label">
                           <input
                             type="checkbox"
                             checked={filters.orderType.includes(opt)}
                             onChange={() => toggleFilter("orderType", opt)}
                           />
-                          <span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                          <span>{opt === "b2b" ? "B2B" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
                         </label>
                       ))}
                       <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
@@ -1464,7 +1476,7 @@ const WarehouseDashboard = () => {
 
                             {/* Client & SA Name — responsive row */}
                             <div className="wd-info-row">
-                              <p><strong className="wd-label">Client Name:</strong> {order.delivery_name || "-"}</p>
+                              <p><strong className="wd-label">Client Name:</strong> {getClientName(order) || "-"}</p>
                               <p><strong className="wd-label">SA Name:</strong> {order.salesperson_name || order.salesperson || "-"}</p>
                             </div>
 
@@ -1686,6 +1698,7 @@ const WarehouseDashboard = () => {
                       const isToday = fullDate === todayDate;
                       const isSelected = selectedCalendarDate === fullDate;
                       const orderCount = ordersByDate[fullDate] || 0;
+                      const hasStock = stockOrderDates.has(fullDate);
 
                       return (
                         <div
@@ -1695,6 +1708,7 @@ const WarehouseDashboard = () => {
                         >
                           <span className="wd-ios-date-num">{date}</span>
                           {orderCount > 0 && <span className="wd-ios-order-count">{orderCount}</span>}
+                          {hasStock && <span className="wd-ios-stock-dot" title="Stock order on this date" />}
                         </div>
                       );
                     });
@@ -1716,12 +1730,24 @@ const WarehouseDashboard = () => {
                       orders
                         .filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate)
                         .map((order) => (
-                          <div className="wd-calendar-order-item" key={order.id}>
+                          <div
+                            className="wd-calendar-order-item wd-calendar-order-clickable"
+                            key={order.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => goToOrder(order.id, order.order_no)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                goToOrder(order.id, order.order_no);
+                              }
+                            }}
+                          >
                             <p><b>Order No:</b> {order.order_no}</p>
                             {order.is_b2b && order.po_number && (
                               <p><b>PO Number:</b> {order.po_number}</p>
                             )}
-                            <p><b>Client Name:</b> {order.delivery_name}</p>
+                            <p><b>Client Name:</b> {getClientName(order) || "-"}</p>
                             <p><b>Status:</b> {order.status === "pending" || order.status === "order_received" || !order.status ? "Order Received" : order.status}</p>
                           </div>
                         ))
