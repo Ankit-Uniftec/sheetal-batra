@@ -764,20 +764,40 @@ export default function RetailManagerDashboard() {
                             <div className="rm-charts-grid" style={{ marginBottom: 20 }}>
                                 <div className="rm-chart-card">
                                     <h3 className="rm-chart-title">Sales by Channel</h3>
-                                    {dashboardStats.channelBreakdown.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <PieChart>
-                                                <Pie data={dashboardStats.channelBreakdown} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="revenue"
-                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
-                                                    {dashboardStats.channelBreakdown.map((_, i) => (
-                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip />
-                                                <Legend verticalAlign="bottom" height={36} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="rm-no-chart-data">No data available</div>}
+                                    {(() => {
+                                        // Filter out zero-revenue channels — they crowd the chart with
+                                        // overlapping 0%/1% labels and contribute nothing visually.
+                                        // The legend below still labels every visible slice; tiny
+                                        // slices show their percentage in the tooltip on hover.
+                                        const chartData = dashboardStats.channelBreakdown.filter(c => Number(c.revenue) > 0);
+                                        const totalChartRevenue = chartData.reduce((s, c) => s + Number(c.revenue || 0), 0);
+                                        return chartData.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <PieChart>
+                                                    <Pie
+                                                        data={chartData}
+                                                        cx="50%" cy="45%"
+                                                        innerRadius={55} outerRadius={95}
+                                                        dataKey="revenue"
+                                                        // Only label slices that own ≥ 5% of the pie. Smaller
+                                                        // slices are identified via the legend + tooltip to
+                                                        // avoid label collision at the donut edge.
+                                                        label={({ name, percent }) => percent >= 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ""}
+                                                        labelLine={false}
+                                                    >
+                                                        {chartData.map((_, i) => (
+                                                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip formatter={(value, name) => {
+                                                        const pct = totalChartRevenue > 0 ? ((Number(value) / totalChartRevenue) * 100).toFixed(1) : "0.0";
+                                                        return [`₹${formatIndianNumber(Math.round(Number(value)))} (${pct}%)`, name];
+                                                    }} />
+                                                    <Legend verticalAlign="bottom" height={36} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        ) : <div className="rm-no-chart-data">No data available</div>;
+                                    })()}
                                 </div>
                                 <div className="rm-chart-card">
                                     <h3 className="rm-chart-title">Channel Revenue Breakdown</h3>
