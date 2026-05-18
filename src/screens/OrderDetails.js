@@ -70,6 +70,11 @@ export default function OrderDetails() {
     cancelText: "Cancel",
   });
 
+  // Collector-code input modal. Replaces window.prompt so the entry UX
+  // matches the rest of the app instead of using the native browser alert.
+  const [codeInputModal, setCodeInputModal] = useState({ show: false });
+  const [codeInputValue, setCodeInputValue] = useState("");
+
   // Separate ref for pending confirm action (to avoid stale closure issues)
   const pendingActionRef = React.useRef(null);
 
@@ -81,6 +86,11 @@ export default function OrderDetails() {
   const [birthdayApplied, setBirthdayApplied] = useState(false);
   const [appliedCode, setAppliedCode] = useState("");
   const [codWaiverApplied, setCodWaiverApplied] = useState(false);
+  // SHOPMORE flat-rupee discounts. Hardcoded (not in the discount table)
+  // because they have a different math shape — flat amount + min-spend gate —
+  // and don't fit the table's `percent`-only schema.
+  const [flatDiscountAmount, setFlatDiscountAmount] = useState(0);
+  const [flatDiscountCode, setFlatDiscountCode] = useState("");
 
   // Store Credit
   const [storeCreditApplied, setStoreCreditApplied] = useState(false);
@@ -123,6 +133,14 @@ export default function OrderDetails() {
   const COD_CHARGE = 250;
   const SHIPPING_CHARGE_AMOUNT = 2500;
   const SHIPPING_THRESHOLD = 30000;
+
+  // Hardcoded flat-discount codes. minSpend is checked against the bare
+  // product subtotal (totalAmount minus extras) — same base the % codes use.
+  // To add a new code: append here. To deactivate: delete the entry.
+  const SHOPMORE_CODES = {
+    SHOPMORE25K: { amount: 2000, minSpend: 25000 },
+    SHOPMORE40K: { amount: 4000, minSpend: 40000 },
+  };
 
   const [shippingCharge, setShippingCharge] = useState(0);
 
@@ -206,9 +224,16 @@ export default function OrderDetails() {
 
     // Calculate base amount for discount (excluding extras)
     const baseAmountForDiscount = totalAmount - extrasTotal;
-    const discountAmount = (baseAmountForDiscount * pct) / 100;
+    const percentDiscountAmount = (baseAmountForDiscount * pct) / 100;
+    // Flat-rupee SHOPMORE discount, applied after the % discount. Capped so
+    // it can never push the order below zero (defence — UI also enforces the
+    // min-spend threshold before applying).
+    const flatDiscount = Math.max(0, Number(flatDiscountAmount) || 0);
+    const cappedFlat = Math.min(flatDiscount, Math.max(0, totalAmount - percentDiscountAmount));
+    // Combined ₹ discount, persisted to orders.discount_amount.
+    const discountAmount = percentDiscountAmount + cappedFlat;
 
-    const hasDiscount = discountApplied || birthdayApplied;
+    const hasDiscount = discountApplied || birthdayApplied || cappedFlat > 0;
 
     let netPayable = Math.max(0, totalAmount - discountAmount);
     let currentShippingCharge = 0;
@@ -260,6 +285,11 @@ export default function OrderDetails() {
     return {
       discountPercent: pct,
       discountAmount,
+      // Percent-only discount in ₹ (excludes flat). Useful when downstream
+      // code needs the percent vs flat split.
+      percentDiscountAmount,
+      flatDiscountAmount: cappedFlat,
+      flatDiscountCode,
       netPayable,
       netAfterStoreCredit,
       remaining,
@@ -278,6 +308,8 @@ export default function OrderDetails() {
     totalDiscount,
     discountPercent,
     birthdayDiscount,
+    flatDiscountAmount,
+    flatDiscountCode,
     totalAmount,
     extrasTotal,
     sanitizedAdvance,
@@ -445,6 +477,8 @@ export default function OrderDetails() {
         if (data.discountApplied !== undefined) setDiscountApplied(data.discountApplied);
         if (data.birthdayApplied !== undefined) setBirthdayApplied(data.birthdayApplied);
         if (data.appliedCode) setAppliedCode(data.appliedCode);
+        if (data.flatDiscountAmount !== undefined) setFlatDiscountAmount(Number(data.flatDiscountAmount) || 0);
+        if (data.flatDiscountCode) setFlatDiscountCode(data.flatDiscountCode);
         if (data.paymentMode) setPaymentMode(data.paymentMode);
         if (data.codWaiverApplied !== undefined) setCodWaiverApplied(data.codWaiverApplied);
         if (data.storeCreditApplied !== undefined) setStoreCreditApplied(data.storeCreditApplied);
@@ -489,6 +523,8 @@ export default function OrderDetails() {
       discountApplied,
       birthdayApplied,
       appliedCode,
+      flatDiscountAmount,
+      flatDiscountCode,
       paymentMode,
       billingSame,
       billingAddress,
@@ -521,6 +557,8 @@ export default function OrderDetails() {
     discountApplied,
     birthdayApplied,
     appliedCode,
+    flatDiscountAmount,
+    flatDiscountCode,
     paymentMode,
     billingSame,
     billingAddress,
@@ -687,11 +725,16 @@ export default function OrderDetails() {
     proceedWithOrder();
   };
 
-  const handleDiscount = async () => {
-    const codeInput = window.prompt("Enter Collector code:");
-    if (codeInput === null) return;
+  // Entry point — opens the styled input modal. The submit handler on the
+  // modal calls applyCollectorCode() with the raw value.
+  const handleDiscount = () => {
+    setCodeInputValue("");
+    setCodeInputModal({ show: true });
+  };
 
-    const code = codeInput.trim().toUpperCase();
+  const applyCollectorCode = async (rawInput) => {
+    if (rawInput == null) return;
+    const code = rawInput.trim().toUpperCase();
     if (!code) {
       showPopup({
         title: "Invalid Code",
@@ -701,8 +744,89 @@ export default function OrderDetails() {
       return;
     }
 
-    // Count currently applied codes
-    const appliedCodesCount = [discountApplied, birthdayApplied, codWaiverApplied].filter(Boolean).length;
+    // Count currently applied codes (regular % + birthday % + COD waiver + flat).
+    // All four count toward the per-order maximum of 2 collector codes.
+    const flatApplied = flatDiscountAmount > 0;
+    const appliedCodesCount = [discountApplied, birthdayApplied, codWaiverApplied, flatApplied].filter(Boolean).length;
+
+    // Hardcoded flat-amount codes (SHOPMORE25K / SHOPMORE40K). Different math
+    // shape from the percent codes — flat ₹ off above a minimum spend — so
+    // they live in JS rather than the discount table.
+    if (SHOPMORE_CODES[code]) {
+      const { amount, minSpend } = SHOPMORE_CODES[code];
+
+      if (flatApplied) {
+        if (flatDiscountCode === code) {
+          showPopup({
+            title: "Already Applied",
+            message: `${code} is already applied to this order.`,
+            type: "warning",
+          });
+          return;
+        }
+        // Different flat code — offer to replace (doesn't change applied count).
+        showPopup({
+          title: "Replace Flat Discount?",
+          message: `You already have "${flatDiscountCode}" (₹${formatIndianNumber(flatDiscountAmount)} off) applied.\n\nReplace with "${code}" (₹${formatIndianNumber(amount)} off)?`,
+          type: "confirm",
+          confirmText: "Replace",
+          cancelText: "Keep Current",
+          onConfirm: () => {
+            // Threshold check on the bare product subtotal, same base as % codes.
+            const baseAmountForDiscount = totalAmount - extrasTotal;
+            if (baseAmountForDiscount < minSpend) {
+              const shortBy = minSpend - baseAmountForDiscount;
+              showPopup({
+                title: "Below Minimum Spend",
+                message: `${code} requires a minimum order of ₹${formatIndianNumber(minSpend)}. This order is ₹${formatIndianNumber(baseAmountForDiscount)} — add ₹${formatIndianNumber(shortBy)} more to qualify.`,
+                type: "warning",
+              });
+              return;
+            }
+            setFlatDiscountAmount(amount);
+            setFlatDiscountCode(code);
+            setTimeout(() => {
+              showPopup({
+                title: "Discount Applied! ✅",
+                message: `${code} replaced — flat ₹${formatIndianNumber(amount)} off this order.`,
+                type: "success",
+              });
+            }, 300);
+          },
+        });
+        return;
+      }
+
+      // No flat code applied yet — enforce max-2 cap, then threshold.
+      if (appliedCodesCount >= 2) {
+        showPopup({
+          title: "Maximum Codes Reached",
+          message: "You can only apply up to 2 collector codes per order.",
+          type: "warning",
+        });
+        return;
+      }
+
+      const baseAmountForDiscount = totalAmount - extrasTotal;
+      if (baseAmountForDiscount < minSpend) {
+        const shortBy = minSpend - baseAmountForDiscount;
+        showPopup({
+          title: "Below Minimum Spend",
+          message: `${code} requires a minimum order of ₹${formatIndianNumber(minSpend)}. This order is ₹${formatIndianNumber(baseAmountForDiscount)} — add ₹${formatIndianNumber(shortBy)} more to qualify.`,
+          type: "warning",
+        });
+        return;
+      }
+
+      setFlatDiscountAmount(amount);
+      setFlatDiscountCode(code);
+      showPopup({
+        title: "Discount Applied! ✅",
+        message: `${code} applied — flat ₹${formatIndianNumber(amount)} off this order.`,
+        type: "success",
+      });
+      return;
+    }
 
     // Check for SB250 code
     if (code === "SB250") {
@@ -981,6 +1105,11 @@ export default function OrderDetails() {
 
   const removeCodWaiver = () => {
     setCodWaiverApplied(false);
+  };
+
+  const removeFlatDiscount = () => {
+    setFlatDiscountAmount(0);
+    setFlatDiscountCode("");
   };
 
   const handleLogout = async () => {
@@ -1557,6 +1686,33 @@ export default function OrderDetails() {
                   >×</button>
                 </div>
               )}
+              {flatDiscountAmount > 0 && (
+                <div
+                  className="discount-tag flat-discount"
+                  style={{
+                    background: "#f5ecd0",
+                    color: "#8B7355",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>🛍️ {flatDiscountCode} (₹{formatIndianNumber(flatDiscountAmount)} off)</span>
+                  <button
+                    onClick={removeFlatDiscount}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
               {storeCreditApplied && (
                 <div
                   className="discount-tag store-credit"
@@ -1672,11 +1828,24 @@ export default function OrderDetails() {
             <div className="row3">
               <div className="field">
                 <label>Collector Code:</label>
-                <span>- ₹{formatIndianNumber(pricing.discountAmount)}</span>
+                <span>- ₹{formatIndianNumber(pricing.percentDiscountAmount)}</span>
               </div>
               <div className="field">
                 <label>Subtotal:</label>
-                <span>₹{formatIndianNumber(pricing.netPayable)}</span>
+                <span>₹{formatIndianNumber(Math.max(0, totalAmount - pricing.percentDiscountAmount))}</span>
+              </div>
+            </div>
+          )}
+
+          {pricing.flatDiscountAmount > 0 && (
+            <div className="row3">
+              <div className="field">
+                <label>{pricing.flatDiscountCode}:</label>
+                <span>- ₹{formatIndianNumber(pricing.flatDiscountAmount)}</span>
+              </div>
+              <div className="field">
+                <label>Subtotal:</label>
+                <span>₹{formatIndianNumber(Math.max(0, totalAmount - pricing.percentDiscountAmount - pricing.flatDiscountAmount))}</span>
               </div>
             </div>
           )}
@@ -1783,6 +1952,53 @@ export default function OrderDetails() {
         cancelText={popup.cancelText}
         showCancel={popup.type === "confirm"}
       />
+
+      {/* Collector code input modal — replaces the native browser prompt. */}
+      <Popup
+        isOpen={codeInputModal.show}
+        onClose={() => setCodeInputModal({ show: false })}
+        title="Enter Collector Code"
+        message=""
+        type="info"
+        showCancel={true}
+        confirmText="Apply"
+        cancelText="Cancel"
+        onConfirm={() => {
+          const value = codeInputValue;
+          setCodeInputModal({ show: false });
+          // Defer the validation popup so the input modal fully closes first
+          // (avoids two popups stacking).
+          setTimeout(() => applyCollectorCode(value), 0);
+        }}
+        onCancel={() => setCodeInputModal({ show: false })}
+      >
+        <input
+          type="text"
+          autoFocus
+          value={codeInputValue}
+          onChange={(e) => setCodeInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const value = codeInputValue;
+              setCodeInputModal({ show: false });
+              setTimeout(() => applyCollectorCode(value), 0);
+            }
+          }}
+          placeholder="e.g. SBBIRTHDAY, SB250, SHOPMORE25K"
+          style={{
+            width: "100%",
+            padding: "10px 14px",
+            border: "1px solid #d5b85a",
+            borderRadius: "8px",
+            fontSize: "14px",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            outline: "none",
+            marginTop: "4px",
+          }}
+        />
+      </Popup>
+
       {/* Split Payment Modal */}
       <SplitPaymentModal
         isOpen={showSplitModal}
