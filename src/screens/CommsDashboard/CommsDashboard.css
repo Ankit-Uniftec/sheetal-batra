@@ -1,0 +1,221 @@
+/* ============================================================
+   Comms Dashboard styles (Phase 1 skeleton)
+   Prefix: comms-
+   Tokens: gold #d5b85a accent, #FFFFFFB0 card backgrounds, #D4D4D4 borders
+   Mirrors the layout patterns from StoreManagerDashboard / AssistantCmoDashboard.
+   ============================================================ */
+
+.comms-page {
+  min-height: 100vh;
+  background: url("../../images/Screen1bg.png") no-repeat center center fixed;
+  background-size: cover;
+  font-family: "Futura", sans-serif;
+  color: #333;
+}
+
+.comms-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Futura", sans-serif;
+  color: #8B7355;
+  font-size: 16px;
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+.comms-header {
+  background: #fff;
+  border-bottom: 1px solid #D4D4D4;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.comms-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.comms-logo {
+  height: 40px;
+  width: auto;
+}
+
+.comms-title {
+  margin: 0;
+  font-family: "Athleas", "Futura", serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: #d5b85a;
+}
+
+.comms-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.comms-user-name {
+  font-size: 14px;
+  color: #8B7355;
+  font-weight: 500;
+}
+
+.comms-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.comms-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #8B7355;
+  border-radius: 2px;
+}
+
+/* ─── Body / Layout ──────────────────────────────────────────── */
+.comms-body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: calc(100vh - 70px);
+}
+
+/* ─── Sidebar ────────────────────────────────────────────────── */
+.comms-sidebar {
+  background: #FFFFFFB0;
+  border-right: 1px solid #D4D4D4;
+  padding: 20px 14px;
+}
+
+.comms-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comms-nav-item {
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.comms-nav-item:hover {
+  background: #faf6e8;
+  color: #8B7355;
+}
+
+.comms-nav-item.active {
+  background: #d5b85a;
+  color: #fff;
+}
+
+.comms-nav-logout {
+  margin-top: 18px;
+  color: #c62828;
+}
+
+.comms-nav-logout:hover {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* ─── Main content ───────────────────────────────────────────── */
+.comms-main {
+  padding: 24px 28px;
+  overflow-x: auto;
+}
+
+.comms-section-title {
+  font-family: "Athleas", "Futura", serif;
+  color: #d5b85a;
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.comms-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+}
+
+.comms-card-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #8B7355;
+}
+
+.comms-muted {
+  font-size: 13px;
+  color: #666;
+  margin: 0 0 10px 0;
+}
+
+.comms-stub-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.comms-stub-list li {
+  padding: 1px 0;
+}
+
+/* ─── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .comms-hamburger { display: inline-flex; }
+  .comms-title { font-size: 18px; }
+  .comms-user-name { display: none; }
+
+  .comms-body {
+    grid-template-columns: 1fr;
+  }
+
+  .comms-sidebar {
+    position: fixed;
+    top: 70px;
+    left: 0;
+    bottom: 0;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 20;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    background: #fff;
+  }
+
+  .comms-sidebar-open {
+    transform: translateX(0);
+  }
+
+  .comms-main {
+    padding: 18px 16px;
+  }
+}
