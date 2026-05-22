@@ -526,7 +526,30 @@ export default function ProductForm() {
     location.state?.isStockOrder === true ||
     sessionStorage.getItem("isStockOrder") === "true";
 
-  // Delivery options — restricted to "WH Delhi" for stock orders.
+  // Comms-order flag: when true, this is a Comms (PR/celebrity/agency) order
+  // placed by Nazreen. Skips OTP/customer flow, routes through CommsReviewOrder
+  // instead of OrderDetails. Pricing depends on engagement type: Personal order
+  // keeps real prices; Barter/Gifting/Sourcing have grand_total=0 but item
+  // prices stay (for PR Performance reporting).
+  const isCommsOrder =
+    location.state?.isCommsOrder === true ||
+    sessionStorage.getItem("isCommsOrder") === "true";
+
+  // Read comms engagement type from sessionStorage (set by CommsOrderForm).
+  // Determines whether grand_total should be zeroed.
+  const commsEngagementType = (() => {
+    if (!isCommsOrder) return null;
+    try {
+      const raw = sessionStorage.getItem("commsOrderPayload");
+      return raw ? (JSON.parse(raw).comms_engagement_type || null) : null;
+    } catch { return null; }
+  })();
+  // True for Barter/Gifting/Sourcing (free), false for Personal order (paid).
+  const isCommsFreeOrder = isCommsOrder &&
+    commsEngagementType && commsEngagementType !== "Personal order";
+
+  // Delivery options — restricted to "WH Delhi" for stock orders. Comms orders
+  // use the standard retail options (Nazreen ships from the same stores).
   const DELIVERY_OPTIONS = isStockOrder
     ? [{ label: "WH Delhi", value: "WH Delhi" }]
     : [
@@ -2468,9 +2491,11 @@ export default function ProductForm() {
       attachments: attachments,
 
       // Totals (forced to 0 for stock orders — see zeroing block above)
-      subtotal: isStockOrder ? 0 : subtotal,
-      taxes: isStockOrder ? 0 : taxes,
-      grand_total: isStockOrder ? 0 : totalOrder,
+      // Stock orders zero everything. Comms free orders (Barter/Gifting/
+      // Sourcing) zero only grand_total — item-level prices stay for PR reports.
+      subtotal: isStockOrder ? 0 : (isCommsFreeOrder ? 0 : subtotal),
+      taxes: isStockOrder ? 0 : (isCommsFreeOrder ? 0 : taxes),
+      grand_total: isStockOrder ? 0 : (isCommsFreeOrder ? 0 : totalOrder),
       total_quantity: finalTotalQuantity,
       order_type: overallOrderType,
       payment_order_type: overallPaymentOrderType,
@@ -2512,9 +2537,15 @@ export default function ProductForm() {
       }),
     };
 
-    // Stock orders skip OrderDetails (customer/payment) entirely — go straight
-    // to ReviewDetail since there's no customer payment to capture.
-    const targetRoute = isStockOrder ? "/orderDetail" : "/confirmDetail";
+    // Routing after Next:
+    //   - Stock orders → /orderDetail (skips OrderDetails customer/payment).
+    //   - Comms orders → /comms-review-order (skips OrderDetails; comms-specific
+    //     review handles mode of delivery, approval gate, and insert).
+    //   - Everything else → /confirmDetail (the normal customer/payment flow).
+    let targetRoute;
+    if (isStockOrder) targetRoute = "/orderDetail";
+    else if (isCommsOrder) targetRoute = "/comms-review-order";
+    else targetRoute = "/confirmDetail";
     navigate(targetRoute, {
       state: {
         orderPayload,

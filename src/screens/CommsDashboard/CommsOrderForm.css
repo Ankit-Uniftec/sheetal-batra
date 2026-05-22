@@ -1,0 +1,178 @@
+/* CommsOrderForm — comms-specific intake screen.
+   Prefix: cof- (Comms Order Form). Visual language matches CommsDashboard. */
+
+.cof-page {
+  min-height: 100vh;
+  background: url("../../images/Screen1bg.png") no-repeat center center fixed;
+  background-size: cover;
+  font-family: "Futura", sans-serif;
+  color: #333;
+}
+
+.cof-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8B7355;
+  font-size: 16px;
+  font-family: "Futura", sans-serif;
+}
+
+.cof-header {
+  background: #fff;
+  border-bottom: 1px solid #D4D4D4;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.cof-logo { height: 40px; width: auto; }
+
+.cof-title {
+  margin: 0;
+  font-family: "Athleas", "Futura", serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: #d5b85a;
+  flex: 1;
+  text-align: center;
+}
+
+.cof-cancel-link {
+  background: transparent;
+  border: none;
+  color: #8B7355;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cof-cancel-link:hover { color: #d5b85a; }
+
+.cof-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+.cof-section-title {
+  font-family: "Athleas", "Futura", serif;
+  color: #d5b85a;
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.cof-muted {
+  font-size: 13px;
+  color: #777;
+  margin: 0 0 22px 0;
+}
+
+.cof-grid {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 22px 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 22px;
+}
+
+.cof-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cof-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.cof-req {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.cof-input {
+  padding: 10px 12px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  color: #333;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.cof-input:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.18);
+}
+
+.cof-input:disabled {
+  background: #f5f5f5;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.cof-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.cof-btn-primary,
+.cof-btn-secondary {
+  padding: 11px 22px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.cof-btn-primary {
+  background: #d5b85a;
+  border: 1px solid #d5b85a;
+  color: #fff;
+}
+
+.cof-btn-primary:hover {
+  background: #c9a94e;
+}
+
+.cof-btn-secondary {
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  color: #555;
+}
+
+.cof-btn-secondary:hover {
+  background: #faf6e8;
+  border-color: #d5b85a;
+}
+
+/* Mobile */
+@media (max-width: 720px) {
+  .cof-title { font-size: 18px; }
+  .cof-grid {
+    grid-template-columns: 1fr;
+    padding: 16px 14px;
+    gap: 14px;
+  }
+  .cof-main { padding: 18px 14px 40px; }
+  .cof-actions { flex-direction: column-reverse; }
+  .cof-btn-primary, .cof-btn-secondary { width: 100%; }
+}

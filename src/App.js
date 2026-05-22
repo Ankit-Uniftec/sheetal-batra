@@ -38,6 +38,8 @@ import StoreManagerDashboard from "./screens/StoreManagerDashboard/StoreManagerD
 import CeoAssistantDashboard from "./screens/CeoAssistantDashboard/CeoAssistantDashboard";
 import AssistantCmoDashboard from "./screens/AssistantCmoDashboard/AssistantCmoDashboard";
 import CommsDashboard from "./screens/CommsDashboard/CommsDashboard";
+import CommsOrderForm from "./screens/CommsDashboard/CommsOrderForm";
+import CommsReviewOrder from "./screens/CommsDashboard/CommsReviewOrder";
 import PrivateRoute from "./components/PrivateRoute";
 
 
@@ -88,6 +90,8 @@ function App() {
         <Route path="/ceo-assistant-dashboard" element={<PrivateRoute><CeoAssistantDashboard /></PrivateRoute>} />
         <Route path="/assistant-cmo-dashboard" element={<PrivateRoute><AssistantCmoDashboard /></PrivateRoute>} />
         <Route path="/comms-dashboard" element={<PrivateRoute><CommsDashboard /></PrivateRoute>} />
+        <Route path="/comms-order-form" element={<PrivateRoute><CommsOrderForm /></PrivateRoute>} />
+        <Route path="/comms-review-order" element={<PrivateRoute><CommsReviewOrder /></PrivateRoute>} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/login" replace />} />

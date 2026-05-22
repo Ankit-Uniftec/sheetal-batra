@@ -1,37 +1,35 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "./CommsDashboard.css";
 import Logo from "../../images/logo.png";
+import formatIndianNumber from "../../utils/formatIndianNumber";
+import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
  *
- * PHASE 1 SCOPE (this file): foundational scaffolding only.
+ * Phase 2a scope:
  *   - Auth guard (role = "comms")
- *   - 7-tab sidebar with stubs
- *   - Header + NotificationBell
- *   - No order placement, no reports, no PR performance form yet
+ *   - 7-tab sidebar
+ *   - Overview tab: real data — engagement-type cards, recent orders,
+ *     "Create New Order" entry point that navigates to /comms-order-form
+ *   - Other 6 tabs still stubs (Phase 2b backlog below)
  *
- * PHASE 2 BACKLOG (separate sessions):
- *   1. Dashboard tab — engagement-type cards, recent orders, calendar with
- *      color-coded segments
- *   2. Orders tab — list + filters + "create new order" entry to CommsOrderForm
- *   3. CommsOrderForm + CommsReviewOrder screens
- *   4. Sourcing Returns tab — per-product return tracking
- *   5. Inventory tab — read-only inventory view + temporary-block UX
- *   6. Reports tab — three CSV/Excel exports
- *   7. PR Performance tab — per-order PR tracking form (writes to
- *      comms_pr_performance table)
- *   8. My Calendar tab — comms_calendar_events CRUD
- *   9. Integrations to build / verify:
- *      - generate_order_no RPC needs COMMS branch (see db/comms_dashboard.sql)
- *      - decrement_inventory / increment_inventory RPCs for sourcing flow
- *      - spur-whatsapp edge function delivery to +91 9773983394
- *      - Cap-and-approve flow for Gifting/Barter > Rs 35,000 (Jahnavi approval)
- *      - Alert wiring (24h before / 24h after outfit return date)
+ * Phase 2b backlog:
+ *   - Orders tab (list + filters + create-new entry)
+ *   - Admin approval UI on AdminDashboard (for >Rs 35,000 Gifting/Barter)
+ *
+ * Phase 3 backlog (future sessions):
+ *   - Sourcing Returns tab + decrement/increment_inventory RPCs
+ *   - Inventory tab (read-only view + temp-block UX)
+ *   - Reports tab (3 CSV/Excel exports)
+ *   - PR Performance tab (per-order PR tracking form)
+ *   - My Calendar tab (comms_calendar_events CRUD)
+ *   - Alerts (24h before/after outfit return date)
+ *   - WhatsApp PDF delivery wiring/verification
  */
 export default function CommsDashboard() {
   const navigate = useNavigate();
@@ -43,7 +41,10 @@ export default function CommsDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showSidebar, setShowSidebar] = useState(false);
 
-  // Auth guard — only role="comms" can access this dashboard.
+  // Comms orders loaded once after auth. Used by Overview cards + recent list.
+  const [orders, setOrders] = useState([]);
+
+  // Auth guard
   useEffect(() => {
     let cancelled = false;
     const checkAuth = async () => {
@@ -68,6 +69,16 @@ export default function CommsDashboard() {
 
       setUser(session.user);
       setProfile(sp);
+
+      // Load all comms orders for the dashboard. Filtered to is_comms=true so
+      // the comms team only ever sees comms-channel orders.
+      const { data: ordersData } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("is_comms", true)
+        .order("created_at", { ascending: false });
+      if (!cancelled && ordersData) setOrders(ordersData);
+
       setLoading(false);
     };
     checkAuth();
@@ -79,12 +90,40 @@ export default function CommsDashboard() {
     navigate("/login");
   };
 
-  if (loading) {
-    return <div className="comms-loading">Loading...</div>;
-  }
+  // Counts per engagement type — drives the Overview cards.
+  const engagementCounts = useMemo(() => {
+    const counts = { Barter: 0, Gifting: 0, Sourcing: 0, "Personal order": 0 };
+    orders.forEach((o) => {
+      const t = o.comms_engagement_type;
+      if (t && counts.hasOwnProperty(t)) counts[t] += 1;
+    });
+    return counts;
+  }, [orders]);
 
-  // Tab definitions. Each tab is stubbed in Phase 1 — features land per the
-  // backlog above.
+  // Recent orders for the overview list.
+  const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
+
+  // Upcoming sourcing returns — sourcing orders whose return date is in the
+  // next 14 days. Helps Nazreen flag follow-ups before the alerts wire up.
+  const upcomingReturns = useMemo(() => {
+    const now = new Date();
+    const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    return orders
+      .filter((o) =>
+        o.comms_engagement_type === "Sourcing" &&
+        o.comms_outfit_return_date &&
+        o.comms_return_status !== "Returned"
+      )
+      .filter((o) => {
+        const d = new Date(o.comms_outfit_return_date);
+        return d >= now && d <= horizon;
+      })
+      .sort((a, b) => new Date(a.comms_outfit_return_date) - new Date(b.comms_outfit_return_date))
+      .slice(0, 5);
+  }, [orders]);
+
+  if (loading) return <div className="comms-loading">Loading...</div>;
+
   const TABS = [
     { key: "overview", label: "Overview" },
     { key: "orders", label: "Orders" },
@@ -98,18 +137,29 @@ export default function CommsDashboard() {
   const renderStub = (label, items) => (
     <div className="comms-card">
       <h3 className="comms-card-title">{label}</h3>
-      <p className="comms-muted">This tab is part of Phase 2. Coming next:</p>
+      <p className="comms-muted">This tab is part of a later phase. Coming next:</p>
       <ul className="comms-stub-list">
         {items.map((i, idx) => <li key={idx}>{i}</li>)}
       </ul>
     </div>
   );
 
+  // Engagement-type chip color, used by the Overview cards + recent list rows.
+  const engagementColor = (type) => {
+    switch (type) {
+      case "Barter": return "#1976d2";       // blue
+      case "Gifting": return "#2e7d32";      // green
+      case "Sourcing": return "#ef6c00";     // orange
+      case "Personal order": return "#7b1fa2"; // purple
+      default: return "#888";
+    }
+  };
+
   return (
     <div className="comms-page">
       {PopupComponent}
 
-      {/* ───────── HEADER ───────── */}
+      {/* HEADER */}
       <header className="comms-header">
         <div className="comms-header-left">
           <button
@@ -129,7 +179,7 @@ export default function CommsDashboard() {
       </header>
 
       <div className="comms-body">
-        {/* ───────── SIDEBAR ───────── */}
+        {/* SIDEBAR */}
         <aside className={`comms-sidebar ${showSidebar ? "comms-sidebar-open" : ""}`}>
           <nav className="comms-nav">
             {TABS.map((tab) => (
@@ -147,18 +197,113 @@ export default function CommsDashboard() {
           </nav>
         </aside>
 
-        {/* ───────── MAIN ───────── */}
+        {/* MAIN */}
         <main className="comms-main">
           {activeTab === "overview" && (
             <>
-              <h2 className="comms-section-title">Overview</h2>
-              {renderStub("Engagement-type cards + recent orders + calendar", [
-                "Cards: Barter / Gifting / Sourcing / Personal counts",
-                "Recent orders list (last 10)",
-                "Upcoming deliveries widget",
-                "Upcoming sourcing returns (return date approaching)",
-                "Color-coded order calendar (blue/green/orange/purple)",
-              ])}
+              <div className="comms-overview-header">
+                <h2 className="comms-section-title">Overview</h2>
+                <button
+                  className="comms-primary-btn"
+                  onClick={() => navigate("/comms-order-form")}
+                >
+                  + New Comms Order
+                </button>
+              </div>
+
+              {/* Engagement-type cards */}
+              <div className="comms-cards-row">
+                {Object.entries(engagementCounts).map(([type, count]) => (
+                  <div
+                    key={type}
+                    className="comms-stat-card"
+                    style={{ borderLeftColor: engagementColor(type) }}
+                  >
+                    <p className="comms-stat-label">{type}</p>
+                    <p className="comms-stat-value">{count}</p>
+                    <p className="comms-stat-sub">orders</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Upcoming sourcing returns */}
+              {upcomingReturns.length > 0 && (
+                <div className="comms-card">
+                  <h3 className="comms-card-title">
+                    Upcoming Sourcing Returns
+                    <span className="comms-card-subtitle">Next 14 days</span>
+                  </h3>
+                  <table className="comms-table">
+                    <thead>
+                      <tr>
+                        <th>Order No</th>
+                        <th>Client</th>
+                        <th>Return Date</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {upcomingReturns.map((o) => (
+                        <tr key={o.id}>
+                          <td><span className="comms-mono">{o.order_no || "—"}</span></td>
+                          <td>{o.delivery_name || "—"}</td>
+                          <td>{formatDate(o.comms_outfit_return_date)}</td>
+                          <td>{o.comms_return_status || "Pending"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Recent orders */}
+              <div className="comms-card">
+                <h3 className="comms-card-title">Recent Orders</h3>
+                {recentOrders.length === 0 ? (
+                  <p className="comms-muted">No comms orders yet. Click "+ New Comms Order" to create one.</p>
+                ) : (
+                  <table className="comms-table">
+                    <thead>
+                      <tr>
+                        <th>Order No</th>
+                        <th>Client</th>
+                        <th>Engagement</th>
+                        <th>Delivery</th>
+                        <th>Status</th>
+                        <th className="comms-amount">Notional Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentOrders.map((o) => {
+                        const notionalValue = (o.items || []).reduce((sum, it) => {
+                          const base = Number(it.price || 0) * Number(it.quantity || 1);
+                          const extras = Array.isArray(it.extras)
+                            ? it.extras.reduce((s, e) => s + Number(e.price || 0), 0)
+                            : 0;
+                          return sum + base + extras;
+                        }, 0);
+                        return (
+                          <tr key={o.id}>
+                            <td><span className="comms-mono">{o.order_no || "—"}</span></td>
+                            <td>{o.delivery_name || "—"}</td>
+                            <td>
+                              <span
+                                className="comms-chip"
+                                style={{ background: `${engagementColor(o.comms_engagement_type)}1a`, color: engagementColor(o.comms_engagement_type) }}
+                              >
+                                {o.comms_engagement_type || "—"}
+                              </span>
+                            </td>
+                            <td>{o.delivery_date ? formatDate(o.delivery_date) : "—"}</td>
+                            <td>{o.status === "pending_approval" ? "Pending Approval" : (o.status || "—")}</td>
+                            <td className="comms-amount">₹{formatIndianNumber(notionalValue)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </>
           )}
 
@@ -169,7 +314,7 @@ export default function CommsDashboard() {
                 "Full order list with search and status filter",
                 "Filter by engagement type (Barter / Gifting / Sourcing / Personal)",
                 "Order card: Order No, Client, Type, Status, Delivery Date",
-                "Create New Order button → CommsOrderForm",
+                "Create New Order button (use the New Comms Order button on Overview for now)",
                 "Return button on sourcing orders",
               ])}
             </>
