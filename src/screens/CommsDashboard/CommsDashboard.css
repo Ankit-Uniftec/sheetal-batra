@@ -611,6 +611,173 @@
   color: #c62828;
 }
 
+/* ─── My Calendar tab — month grid ───────────────────────────── */
+.comms-cal-month {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.comms-cal-month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.comms-cal-month-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.comms-cal-nav-btn {
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #555;
+}
+
+.comms-cal-nav-btn:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+.comms-cal-weekrow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.comms-cal-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 0;
+}
+
+.comms-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.comms-cal-cell {
+  position: relative;
+  min-height: 64px;
+  border: 1px solid #ececec;
+  border-radius: 6px;
+  background: #fafafa;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: background 0.12s, border-color 0.12s;
+  overflow: hidden;
+}
+
+.comms-cal-cell:hover {
+  background: #f0f0f0;
+  border-color: #c8c8c8;
+}
+
+.comms-cal-empty {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+.comms-cal-empty:hover {
+  background: transparent;
+}
+
+.comms-cal-cell-num {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.comms-cal-today {
+  background: #fff8e1;
+  border-color: #d5b85a;
+}
+
+.comms-cal-today .comms-cal-cell-num {
+  color: #b8941f;
+  font-weight: 700;
+}
+
+.comms-cal-selected {
+  background: #fff;
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.25);
+}
+
+.comms-cal-has-events {
+  background: #fff;
+}
+
+.comms-cal-cell-count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #d5b85a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 6px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.comms-cal-cell-dots {
+  display: flex;
+  gap: 3px;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.comms-cal-cell-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+@media (max-width: 640px) {
+  .comms-cal-cell {
+    min-height: 48px;
+    padding: 4px;
+  }
+  .comms-cal-cell-num {
+    font-size: 11px;
+  }
+  .comms-cal-cell-count {
+    font-size: 9px;
+    padding: 0 4px;
+    min-width: 14px;
+    top: 2px;
+    right: 2px;
+  }
+  .comms-cal-cell-dot {
+    width: 5px;
+    height: 5px;
+  }
+}
+
 /* ─── Orders tab — SA-style order cards ──────────────────────── */
 .comms-order-cards {
   display: flex;

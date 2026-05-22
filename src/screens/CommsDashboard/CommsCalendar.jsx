@@ -2,19 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import formatDate from "../../utils/formatDate";
 
-/**
- * CommsCalendar — personal notes for the comms team. Per the spec, this is
- * Nazreen's own planner: follow-ups, shoot dates, event reminders. Not a
- * full month-grid calendar (deliberately deferred — those are expensive and
- * the workflow is "what's coming up" not "what does the month look like").
- *
- * Layout: a list of upcoming events grouped by date. Past events live in a
- * collapsed "Past" section. Each event has a small "Done" / "Delete" action.
- *
- * Storage: comms_calendar_events. Scoped to user_email so different comms
- * users (if any added later) see their own notes only.
- */
-
 const EVENT_TYPES = [
   { value: "follow_up", label: "Follow-up", color: "#1976d2" },
   { value: "event", label: "Event", color: "#2e7d32" },
@@ -30,10 +17,16 @@ const todayISO = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+const isoFromYMD = (year, month, date) =>
+  `${year}-${String(month + 1).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
+
 export default function CommsCalendar({ profile, orders, showPopup }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showPast, setShowPast] = useState(false);
+
+  // Month-grid navigation state
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(todayISO());
 
   // Modal state
   const [modal, setModal] = useState(null); // { mode: "create" | "edit", event? }
@@ -60,24 +53,21 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
     return () => { cancelled = true; };
   }, [profile?.email]);
 
-  // Group by date (YYYY-MM-DD). Past events go in a separate bucket.
-  const groups = useMemo(() => {
-    const today = todayISO();
-    const upcoming = {};
-    const past = {};
+  // Index events by YYYY-MM-DD for quick day-cell lookup
+  const eventsByDate = useMemo(() => {
+    const map = {};
     events.forEach((e) => {
-      const target = e.event_date < today ? past : upcoming;
-      (target[e.event_date] ||= []).push(e);
+      (map[e.event_date] ||= []).push(e);
     });
-    const sortedUpcoming = Object.entries(upcoming).sort(([a], [b]) => a.localeCompare(b));
-    const sortedPast = Object.entries(past).sort(([a], [b]) => b.localeCompare(a)); // most recent past first
-    return { upcoming: sortedUpcoming, past: sortedPast };
+    return map;
   }, [events]);
+
+  const eventsForSelected = selectedDate ? (eventsByDate[selectedDate] || []) : [];
 
   const openCreate = () => {
     setTitle("");
     setDescription("");
-    setEventDate(todayISO());
+    setEventDate(selectedDate || todayISO());
     setEventType("follow_up");
     setRelatedOrderId("");
     setModal({ mode: "create" });
@@ -122,6 +112,7 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
           .single();
         if (error) throw error;
         setEvents((prev) => [...prev, data].sort((a, b) => a.event_date.localeCompare(b.event_date)));
+        setSelectedDate(eventDate);
       } else {
         const { data, error } = await supabase
           .from("comms_calendar_events")
@@ -164,78 +155,124 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
     });
   };
 
-  const renderGroup = ([dateKey, eventsForDate]) => {
-    const isToday = dateKey === todayISO();
-    return (
-      <div key={dateKey} className="comms-cal-group">
-        <div className="comms-cal-group-header">
-          {formatDate(dateKey)}
-          {isToday && <span className="comms-cal-today-pill">Today</span>}
-        </div>
-        <div className="comms-cal-group-items">
-          {eventsForDate.map((e) => {
-            const meta = eventTypeMeta(e.event_type);
-            return (
-              <div key={e.id} className="comms-cal-item">
-                <span className="comms-cal-type-dot" style={{ background: meta.color }} />
-                <div className="comms-cal-item-body">
-                  <div className="comms-cal-item-title">{e.title}</div>
-                  {e.description && <div className="comms-cal-item-desc">{e.description}</div>}
-                  <div className="comms-cal-item-meta">
-                    <span className="comms-cal-type-label" style={{ color: meta.color }}>{meta.label}</span>
-                    {e.related_order_id && (() => {
-                      const order = orders.find((o) => o.id === e.related_order_id);
-                      return order ? <span style={{ marginLeft: 10, fontSize: 12, color: "#888" }}>· Order {order.order_no}</span> : null;
-                    })()}
-                  </div>
-                </div>
-                <div className="comms-cal-item-actions">
-                  <button className="comms-cal-action-btn" onClick={() => openEdit(e)}>Edit</button>
-                  <button className="comms-cal-action-btn comms-cal-delete" onClick={() => handleDelete(e)}>Delete</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
   if (loading) {
     return <div className="comms-card"><p className="comms-muted">Loading calendar…</p></div>;
   }
 
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const totalCells = Math.ceil((firstDayOfMonth + daysInMonth) / 7) * 7;
+  const today = todayISO();
+
   return (
     <>
       <div className="comms-card">
-        <div className="comms-overview-header" style={{ marginBottom: 0 }}>
-          <h3 className="comms-card-title" style={{ margin: 0 }}>Upcoming</h3>
+        <div className="comms-overview-header" style={{ marginBottom: 14 }}>
+          <h3 className="comms-card-title" style={{ margin: 0 }}></h3>
           <button className="comms-primary-btn" onClick={openCreate}>+ New Event</button>
         </div>
 
-        {groups.upcoming.length === 0 ? (
-          <p className="comms-muted" style={{ marginTop: 14 }}>
-            No upcoming events. Click "+ New Event" to add a follow-up, shoot, or note.
-          </p>
-        ) : (
-          <div className="comms-cal-list">
-            {groups.upcoming.map(renderGroup)}
+        <div className="comms-cal-month">
+          <div className="comms-cal-month-header">
+            <button
+              className="comms-cal-nav-btn"
+              onClick={() => setCalendarDate(new Date(year, month - 1, 1))}
+            >‹</button>
+            <span className="comms-cal-month-label">
+              {calendarDate.toLocaleString("default", { month: "long", year: "numeric" })}
+            </span>
+            <button
+              className="comms-cal-nav-btn"
+              onClick={() => setCalendarDate(new Date(year, month + 1, 1))}
+            >›</button>
           </div>
-        )}
+
+          <div className="comms-cal-weekrow">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+              <div key={d} className="comms-cal-weekday">{d}</div>
+            ))}
+          </div>
+
+          <div className="comms-cal-grid">
+            {Array.from({ length: totalCells }).map((_, i) => {
+              const dateNum = i - firstDayOfMonth + 1;
+              if (dateNum <= 0 || dateNum > daysInMonth) {
+                return <div key={i} className="comms-cal-cell comms-cal-empty" />;
+              }
+              const iso = isoFromYMD(year, month, dateNum);
+              const dayEvents = eventsByDate[iso] || [];
+              const isToday = iso === today;
+              const isSelected = iso === selectedDate;
+              const dotTypes = [...new Set(dayEvents.map((e) => e.event_type))];
+
+              return (
+                <div
+                  key={i}
+                  className={`comms-cal-cell ${isToday ? "comms-cal-today" : ""} ${isSelected ? "comms-cal-selected" : ""} ${dayEvents.length > 0 ? "comms-cal-has-events" : ""}`}
+                  onClick={() => setSelectedDate(iso)}
+                >
+                  <span className="comms-cal-cell-num">{dateNum}</span>
+                  {dayEvents.length > 0 && (
+                    <span className="comms-cal-cell-count">{dayEvents.length}</span>
+                  )}
+                  {dotTypes.length > 0 && (
+                    <div className="comms-cal-cell-dots">
+                      {dotTypes.slice(0, 4).map((t) => (
+                        <span key={t} className="comms-cal-cell-dot" style={{ background: eventTypeMeta(t).color }} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {groups.past.length > 0 && (
+      {selectedDate && (
         <div className="comms-card">
-          <div
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-            onClick={() => setShowPast(!showPast)}
-          >
+          <div className="comms-overview-header" style={{ marginBottom: 14 }}>
             <h3 className="comms-card-title" style={{ margin: 0 }}>
-              Past ({groups.past.reduce((s, [, items]) => s + items.length, 0)})
+              {formatDate(selectedDate)}{selectedDate === today && <span className="comms-cal-today-pill" style={{ marginLeft: 8 }}>Today</span>}
             </h3>
-            <span className="comms-muted" style={{ fontSize: 12 }}>{showPast ? "Hide" : "Show"}</span>
+            <span className="comms-muted" style={{ fontSize: 12 }}>
+              {eventsForSelected.length} event{eventsForSelected.length === 1 ? "" : "s"}
+            </span>
           </div>
-          {showPast && <div className="comms-cal-list" style={{ marginTop: 14 }}>{groups.past.map(renderGroup)}</div>}
+
+          {eventsForSelected.length === 0 ? (
+            <p className="comms-muted">
+              No events on this day. Click <b>+ New Event</b> to add one.
+            </p>
+          ) : (
+            <div className="comms-cal-list">
+              {eventsForSelected.map((e) => {
+                const meta = eventTypeMeta(e.event_type);
+                const order = e.related_order_id ? orders.find((o) => o.id === e.related_order_id) : null;
+                return (
+                  <div key={e.id} className="comms-cal-item">
+                    <span className="comms-cal-type-dot" style={{ background: meta.color }} />
+                    <div className="comms-cal-item-body">
+                      <div className="comms-cal-item-title">{e.title}</div>
+                      {e.description && <div className="comms-cal-item-desc">{e.description}</div>}
+                      <div className="comms-cal-item-meta">
+                        <span className="comms-cal-type-label" style={{ color: meta.color }}>{meta.label}</span>
+                        {order && (
+                          <span style={{ marginLeft: 10, fontSize: 12, color: "#888" }}>· Order {order.order_no}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="comms-cal-item-actions">
+                      <button className="comms-cal-action-btn" onClick={() => openEdit(e)}>Edit</button>
+                      <button className="comms-cal-action-btn comms-cal-delete" onClick={() => handleDelete(e)}>Delete</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
