@@ -207,6 +207,19 @@
     color: #b71c1c;
 }
 
+/* Small red badge next to a nav item count (e.g. pending comms approvals) */
+.admin-nav-badge {
+    display: inline-block;
+    background: #c62828;
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
 .nav-section-label {
     display: block;
     padding: 8px 16px 4px;

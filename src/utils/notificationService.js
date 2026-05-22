@@ -37,8 +37,21 @@ export const NOTIFICATION_TYPES = {
     B2B_DELIVERY_T2: "b2b_delivery_t2",
     B2B_DELAYED_ORDER: "b2b_delayed_order",
 
+    // EXB scheduled (handled by edge function)
+    EXB_BIRTHDAY_REMINDER: "exb_birthday_reminder",
+    EXB_DELIVERY_TODAY: "exb_delivery_today",
+    EXB_DELIVERY_T2: "exb_delivery_t2",
+    EXB_DELAYED_ORDER: "exb_delayed_order",
+    EXB_ALTERATION_DELIVERY: "exb_alteration_delivery",
+
     // Management alerts
     ORDER_REVOKED: "order_revoked",
+    ORDER_REVOKED_WAREHOUSE: "order_revoked_warehouse",
+
+    // Comms approval workflow (>Rs 35,000 Gifting/Barter orders need Jahnavi sign-off)
+    COMMS_APPROVAL_AWAITED: "comms_approval_awaited",   // to admin (Jahnavi)
+    COMMS_ORDER_APPROVED: "comms_order_approved",       // back to comms team (Nazreen)
+    COMMS_ORDER_REJECTED: "comms_order_rejected",       // back to comms team (Nazreen)
 };
 
 // ==========================================
@@ -105,6 +118,23 @@ const RECIPIENT_MAP = {
     [NOTIFICATION_TYPES.ORDER_REVOKED]: [
         { role: "admin", channel: "in_app" },   // Jahnavi (CMO)
         { role: "coo", channel: "in_app" },      // Manish (COO)
+    ],
+    [NOTIFICATION_TYPES.ORDER_REVOKED_WAREHOUSE]: [
+        { designation: "Production Manager", channel: "both" },
+        { designation: "Offline Production Head", channel: "both" },
+        { role: "admin", channel: "both" },    // Jahnavi
+        { role: "coo", channel: "both" },       // Manish
+    ],
+
+    // Comms approval workflow
+    [NOTIFICATION_TYPES.COMMS_APPROVAL_AWAITED]: [
+        { role: "admin", channel: "in_app" },   // Jahnavi gets the approval ask
+    ],
+    [NOTIFICATION_TYPES.COMMS_ORDER_APPROVED]: [
+        { role: "comms", channel: "in_app" },   // Nazreen learns her order was approved
+    ],
+    [NOTIFICATION_TYPES.COMMS_ORDER_REJECTED]: [
+        { role: "comms", channel: "in_app" },   // Nazreen learns her order was rejected
     ],
 };
 
@@ -186,9 +216,32 @@ const TEMPLATES = {
     }),
     [NOTIFICATION_TYPES.ORDER_REVOKED]: (meta) => ({
         title: "Order Revoked",
-        message: `Order Revoked — ${meta.order_no}`,
+        message: `Delivery Revoked — ${meta.order_no} — ${meta.client_name || "Client"} — ${meta.reason || "No reason"} — SA: ${meta.sa_name || "N/A"}`,
         priority: "escalation",
     }),
+    [NOTIFICATION_TYPES.ORDER_REVOKED_WAREHOUSE]: (meta) => ({
+        title: "Order Revoked",
+        message: `Revoked Order — ${meta.order_no}`,
+        priority: "escalation",
+    }),
+
+    // Comms approval workflow templates
+    [NOTIFICATION_TYPES.COMMS_APPROVAL_AWAITED]: (meta) => ({
+        title: "Comms Approval Needed",
+        message: `Comms order ${meta.order_no} (${meta.engagement_type || "Comms"}) for ${meta.client_name || "Client"} — value ₹${meta.value || 0} — awaiting your approval.`,
+        priority: "urgent",
+    }),
+    [NOTIFICATION_TYPES.COMMS_ORDER_APPROVED]: (meta) => ({
+        title: "Comms Order Approved",
+        message: `Order ${meta.order_no} approved by ${meta.approved_by || "admin"}.`,
+        priority: "normal",
+    }),
+    [NOTIFICATION_TYPES.COMMS_ORDER_REJECTED]: (meta) => ({
+        title: "Comms Order Rejected",
+        message: `Order ${meta.order_no} rejected${meta.reason ? ` — ${meta.reason}` : ""}.`,
+        priority: "urgent",
+    }),
+
 };
 
 // ==========================================

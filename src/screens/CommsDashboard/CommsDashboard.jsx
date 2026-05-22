@@ -44,6 +44,12 @@ export default function CommsDashboard() {
   // Comms orders loaded once after auth. Used by Overview cards + recent list.
   const [orders, setOrders] = useState([]);
 
+  // Orders tab filter state. Engagement filter is "all" or one of the 4
+  // engagement types; status filter slices the lifecycle.
+  const [ordersSearch, setOrdersSearch] = useState("");
+  const [engagementFilter, setEngagementFilter] = useState("all");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
+
   // Auth guard
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +108,35 @@ export default function CommsDashboard() {
 
   // Recent orders for the overview list.
   const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
+
+  // Full filtered list for the Orders tab.
+  const filteredOrders = useMemo(() => {
+    const q = ordersSearch.trim().toLowerCase();
+    return orders.filter((o) => {
+      // Engagement filter
+      if (engagementFilter !== "all" && o.comms_engagement_type !== engagementFilter) return false;
+      // Status filter — buckets the lifecycle into 4 user-friendly states
+      if (orderStatusFilter !== "all") {
+        const s = (o.status || "").toLowerCase();
+        const ap = o.approval_status;
+        if (orderStatusFilter === "pending_approval" && ap !== "pending_approval") return false;
+        if (orderStatusFilter === "active") {
+          if (ap === "pending_approval") return false;
+          if (s === "completed" || s === "delivered" || s === "cancelled") return false;
+        }
+        if (orderStatusFilter === "completed" && !(s === "completed" || s === "delivered")) return false;
+        if (orderStatusFilter === "cancelled" && s !== "cancelled") return false;
+      }
+      // Search by order_no, client name, agency name, POC
+      if (q) {
+        const hay = [
+          o.order_no, o.delivery_name, o.comms_agency_name, o.comms_poc_name,
+        ].filter(Boolean).map((v) => String(v).toLowerCase()).join(" ");
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [orders, ordersSearch, engagementFilter, orderStatusFilter]);
 
   // Upcoming sourcing returns — sourcing orders whose return date is in the
   // next 14 days. Helps Nazreen flag follow-ups before the alerts wire up.
@@ -309,14 +344,124 @@ export default function CommsDashboard() {
 
           {activeTab === "orders" && (
             <>
-              <h2 className="comms-section-title">Orders</h2>
-              {renderStub("Order list + create-new entry point", [
-                "Full order list with search and status filter",
-                "Filter by engagement type (Barter / Gifting / Sourcing / Personal)",
-                "Order card: Order No, Client, Type, Status, Delivery Date",
-                "Create New Order button (use the New Comms Order button on Overview for now)",
-                "Return button on sourcing orders",
-              ])}
+              <div className="comms-overview-header">
+                <h2 className="comms-section-title">Orders</h2>
+                <button
+                  className="comms-primary-btn"
+                  onClick={() => navigate("/comms-order-form")}
+                >
+                  + New Comms Order
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="comms-card" style={{ marginBottom: 12 }}>
+                <input
+                  type="text"
+                  className="comms-search"
+                  placeholder="Search by order no, client, agency, POC…"
+                  value={ordersSearch}
+                  onChange={(e) => setOrdersSearch(e.target.value)}
+                />
+
+                {/* Engagement chips */}
+                <div className="comms-chip-row">
+                  {["all", "Barter", "Gifting", "Sourcing", "Personal order"].map((opt) => (
+                    <button
+                      key={opt}
+                      className={`comms-filter-chip ${engagementFilter === opt ? "active" : ""}`}
+                      style={engagementFilter === opt && opt !== "all"
+                        ? { background: engagementColor(opt), borderColor: engagementColor(opt), color: "#fff" }
+                        : undefined}
+                      onClick={() => setEngagementFilter(opt)}
+                    >
+                      {opt === "all" ? "All Engagements" : opt}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Status chips */}
+                <div className="comms-chip-row" style={{ marginTop: 6 }}>
+                  {[
+                    { key: "all", label: "All Status" },
+                    { key: "pending_approval", label: "Pending Approval" },
+                    { key: "active", label: "Active" },
+                    { key: "completed", label: "Completed" },
+                    { key: "cancelled", label: "Cancelled" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      className={`comms-filter-chip ${orderStatusFilter === opt.key ? "active" : ""}`}
+                      onClick={() => setOrderStatusFilter(opt.key)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Results */}
+              <div className="comms-card">
+                <p className="comms-muted" style={{ marginBottom: 10 }}>
+                  Showing {filteredOrders.length} of {orders.length} orders
+                </p>
+                {filteredOrders.length === 0 ? (
+                  <p className="comms-muted">No orders match the current filters.</p>
+                ) : (
+                  <table className="comms-table">
+                    <thead>
+                      <tr>
+                        <th>Order No</th>
+                        <th>Client</th>
+                        <th>Engagement</th>
+                        <th>Purpose</th>
+                        <th>Order Date</th>
+                        <th>Delivery</th>
+                        <th>Status</th>
+                        <th className="comms-amount">Notional ₹</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredOrders.map((o) => {
+                        const notional = (o.items || []).reduce((sum, it) => {
+                          const base = Number(it.price || 0) * Number(it.quantity || 1);
+                          const extras = Array.isArray(it.extras)
+                            ? it.extras.reduce((s, e) => s + Number(e.price || 0), 0)
+                            : 0;
+                          return sum + base + extras;
+                        }, 0);
+                        const isPending = o.approval_status === "pending_approval";
+                        const isReject = o.approval_status === "rejected";
+                        const statusLabel = isPending ? "Pending Approval"
+                          : isReject ? "Rejected"
+                          : (o.status === "pending" ? "Order Received" : (o.status || "—"));
+                        return (
+                          <tr key={o.id}>
+                            <td><span className="comms-mono">{o.order_no || "—"}</span></td>
+                            <td>{o.delivery_name || "—"}</td>
+                            <td>
+                              <span
+                                className="comms-chip"
+                                style={{
+                                  background: `${engagementColor(o.comms_engagement_type)}1a`,
+                                  color: engagementColor(o.comms_engagement_type),
+                                }}
+                              >
+                                {o.comms_engagement_type || "—"}
+                              </span>
+                            </td>
+                            <td>{o.comms_purpose || "—"}</td>
+                            <td>{o.created_at ? formatDate(o.created_at) : "—"}</td>
+                            <td>{o.delivery_date ? formatDate(o.delivery_date) : "—"}</td>
+                            <td>{statusLabel}</td>
+                            <td className="comms-amount">₹{formatIndianNumber(notional)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </>
           )}
 

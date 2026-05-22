@@ -12,6 +12,7 @@ import { SCAN_STATIONS } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -275,6 +276,11 @@ export default function AdminDashboard() {
     // sidebar button only when can_place_stock_orders is set, and to seed the
     // currentSalesperson sessionStorage for the order flow downstream.
     const [currentUserProfile, setCurrentUserProfile] = useState(null);
+    // Comms approvals: Nazreen's Gifting/Barter orders > Rs 35,000 land here
+    // with approval_status='pending_approval' and need Jahnavi to sign off.
+    const [commsApprovalModal, setCommsApprovalModal] = useState(null); // { order, action: 'approve' | 'reject' }
+    const [commsApprovalReason, setCommsApprovalReason] = useState("");
+    const [commsApprovalProcessing, setCommsApprovalProcessing] = useState(false);
     // Fetch data on mount
     useEffect(() => {
         const checkAuthAndFetch = async () => {
@@ -475,6 +481,71 @@ export default function AdminDashboard() {
             showPopup({ type: "error", title: "Save failed", message: err.message || "Could not save target.", confirmText: "OK" });
         } finally {
             setSavingTargetKey(null);
+        }
+    };
+
+    // ─── Comms approval action ───
+    // Pending-approval comms orders (Gifting/Barter > Rs 35,000) sit in
+    // `orders` with approval_status='pending_approval' and status='pending_approval'.
+    // On approve: status → order_received so production can pick it up.
+    // On reject: status → cancelled so it disappears from active queues.
+    const handleCommsApprovalAction = async () => {
+        if (!commsApprovalModal) return;
+        const { order, action } = commsApprovalModal;
+        if (action === "reject" && !commsApprovalReason.trim()) return;
+        setCommsApprovalProcessing(true);
+        try {
+            const newApprovalStatus = action === "approve" ? "approved" : "rejected";
+            const newOrderStatus = action === "approve" ? "order_received" : "cancelled";
+            const { error: updateErr } = await supabase
+                .from("orders")
+                .update({
+                    approval_status: newApprovalStatus,
+                    status: newOrderStatus,
+                    approved_by: currentUserEmail || "admin",
+                    approved_at: new Date().toISOString(),
+                })
+                .eq("id", order.id);
+            if (updateErr) throw updateErr;
+
+            // Notify Nazreen — different type per action.
+            try {
+                await sendNotification(
+                    action === "approve"
+                        ? NOTIFICATION_TYPES.COMMS_ORDER_APPROVED
+                        : NOTIFICATION_TYPES.COMMS_ORDER_REJECTED,
+                    {
+                        orderId: order.id,
+                        orderNo: order.order_no,
+                        metadata: {
+                            approved_by: currentUserEmail || "admin",
+                            reason: action === "reject" ? commsApprovalReason.trim() : null,
+                        },
+                    }
+                );
+            } catch (notifErr) {
+                console.warn("Comms approval notification failed (non-blocking):", notifErr);
+            }
+
+            // Refresh the orders list so the table updates.
+            setOrders((prev) => prev.map((o) =>
+                o.id === order.id
+                    ? { ...o, approval_status: newApprovalStatus, status: newOrderStatus }
+                    : o
+            ));
+
+            setCommsApprovalModal(null);
+            setCommsApprovalReason("");
+        } catch (err) {
+            console.error("Comms approval action failed:", err);
+            showPopup({
+                type: "error",
+                title: "Action failed",
+                message: err.message || "Could not update the order.",
+                confirmText: "OK",
+            });
+        } finally {
+            setCommsApprovalProcessing(false);
         }
     };
 
@@ -1914,6 +1985,13 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
                         <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
                         <button className={`admin-nav-item ${activeTab === "sa_targets" ? "active" : ""}`} onClick={() => { setActiveTab("sa_targets"); setShowSidebar(false); }}>SA Targets</button>
+                        <button className={`admin-nav-item ${activeTab === "comms_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("comms_approvals"); setShowSidebar(false); }}>
+                            Comms Approvals
+                            {(() => {
+                                const pendingCount = orders.filter(o => o.is_comms && o.approval_status === "pending_approval").length;
+                                return pendingCount > 0 ? <span className="admin-nav-badge"> {pendingCount}</span> : null;
+                            })()}
+                        </button>
                         {currentUserProfile?.can_place_stock_orders && (
                             <button
                                 className="admin-nav-item"
@@ -3864,6 +3942,204 @@ export default function AdminDashboard() {
                                         </table>
                                     </div>
                                 </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ─── COMMS APPROVALS TAB ─────────────────────────────── */}
+                    {activeTab === "comms_approvals" && (() => {
+                        // Compute pending / reviewed comms orders. "Pending" means
+                        // approval_status='pending_approval'. "Reviewed" covers approved + rejected
+                        // so admin has visibility into recent decisions.
+                        const commsOrders = orders.filter(o => o.is_comms);
+                        const pending = commsOrders.filter(o => o.approval_status === "pending_approval");
+                        const reviewed = commsOrders
+                            .filter(o => o.approval_status === "approved" || o.approval_status === "rejected")
+                            .sort((a, b) => new Date(b.approved_at || b.created_at) - new Date(a.approved_at || a.created_at))
+                            .slice(0, 20);
+
+                        // Notional value helper (same calc CommsReviewOrder uses).
+                        const notionalOf = (o) => (o.items || []).reduce((sum, it) => {
+                            const base = Number(it.price || 0) * Number(it.quantity || 1);
+                            const extras = Array.isArray(it.extras)
+                                ? it.extras.reduce((s, e) => s + Number(e.price || 0), 0)
+                                : 0;
+                            return sum + base + extras;
+                        }, 0);
+
+                        return (
+                            <div className="admin-clients-tab">
+                                <h2 className="admin-section-title">Comms Approvals</h2>
+                                <p style={{ color: "#666", fontSize: 13, marginTop: -8, marginBottom: 18 }}>
+                                    Gifting and Barter comms orders over ₹35,000 need your approval before they progress.
+                                </p>
+
+                                {/* ── Pending section ── */}
+                                <h3 className="admin-subsection-title">
+                                    Pending Approval
+                                    <span style={{ color: "#c62828", marginLeft: 8 }}>({pending.length})</span>
+                                </h3>
+                                {pending.length === 0 ? (
+                                    <p style={{ color: "#888", fontSize: 14, padding: "12px 0 20px" }}>
+                                        No comms orders are waiting on your approval.
+                                    </p>
+                                ) : (
+                                    <div className="admin-table-wrapper" style={{ marginBottom: 24 }}>
+                                        <div className="admin-table-container">
+                                            <table className="admin-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Order No</th>
+                                                        <th>Client</th>
+                                                        <th>Engagement</th>
+                                                        <th>Purpose</th>
+                                                        <th>Submitted</th>
+                                                        <th className="amount">Notional ₹</th>
+                                                        <th>Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {pending.map(o => (
+                                                        <tr key={o.id}>
+                                                            <td><strong>{o.order_no || "—"}</strong></td>
+                                                            <td>{o.delivery_name || "—"}</td>
+                                                            <td>{o.comms_engagement_type || "—"}</td>
+                                                            <td>{o.comms_purpose || "—"}</td>
+                                                            <td>{o.created_at ? formatDate(o.created_at) : "—"}</td>
+                                                            <td className="amount">₹{formatIndianNumber(notionalOf(o))}</td>
+                                                            <td>
+                                                                <button
+                                                                    onClick={() => setCommsApprovalModal({ order: o, action: "approve" })}
+                                                                    style={{
+                                                                        background: "#2e7d32", color: "#fff", border: "none",
+                                                                        borderRadius: 6, padding: "6px 14px", fontSize: 12,
+                                                                        fontWeight: 600, cursor: "pointer", marginRight: 6,
+                                                                    }}
+                                                                >Approve</button>
+                                                                <button
+                                                                    onClick={() => setCommsApprovalModal({ order: o, action: "reject" })}
+                                                                    style={{
+                                                                        background: "#c62828", color: "#fff", border: "none",
+                                                                        borderRadius: 6, padding: "6px 14px", fontSize: 12,
+                                                                        fontWeight: 600, cursor: "pointer",
+                                                                    }}
+                                                                >Reject</button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ── Recent reviewed section ── */}
+                                {reviewed.length > 0 && (
+                                    <>
+                                        <h3 className="admin-subsection-title">Recently Reviewed</h3>
+                                        <div className="admin-table-wrapper">
+                                            <div className="admin-table-container">
+                                                <table className="admin-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Order No</th>
+                                                            <th>Client</th>
+                                                            <th>Engagement</th>
+                                                            <th>Decision</th>
+                                                            <th>By</th>
+                                                            <th>Reviewed</th>
+                                                            <th className="amount">Notional ₹</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {reviewed.map(o => (
+                                                            <tr key={o.id}>
+                                                                <td><strong>{o.order_no || "—"}</strong></td>
+                                                                <td>{o.delivery_name || "—"}</td>
+                                                                <td>{o.comms_engagement_type || "—"}</td>
+                                                                <td>
+                                                                    <span style={{
+                                                                        padding: "2px 10px", borderRadius: 12, fontSize: 11, fontWeight: 600,
+                                                                        background: o.approval_status === "approved" ? "rgba(46,125,50,0.12)" : "rgba(198,40,40,0.12)",
+                                                                        color: o.approval_status === "approved" ? "#2e7d32" : "#c62828",
+                                                                    }}>
+                                                                        {o.approval_status === "approved" ? "Approved" : "Rejected"}
+                                                                    </span>
+                                                                </td>
+                                                                <td>{o.approved_by || "—"}</td>
+                                                                <td>{o.approved_at ? formatDate(o.approved_at) : "—"}</td>
+                                                                <td className="amount">₹{formatIndianNumber(notionalOf(o))}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* ── Approval/Reject modal ── */}
+                                {commsApprovalModal && (
+                                    <div
+                                        style={{
+                                            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+                                            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+                                        }}
+                                        onClick={() => !commsApprovalProcessing && setCommsApprovalModal(null)}
+                                    >
+                                        <div
+                                            style={{
+                                                background: "#fff", borderRadius: 12, padding: 24,
+                                                width: "92%", maxWidth: 460,
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <h3 style={{ marginTop: 0, color: commsApprovalModal.action === "approve" ? "#2e7d32" : "#c62828" }}>
+                                                {commsApprovalModal.action === "approve" ? "Approve Comms Order" : "Reject Comms Order"}
+                                            </h3>
+                                            <p style={{ fontSize: 13, color: "#555", lineHeight: 1.5 }}>
+                                                <strong>Order:</strong> {commsApprovalModal.order.order_no}<br />
+                                                <strong>Client:</strong> {commsApprovalModal.order.delivery_name || "—"}<br />
+                                                <strong>Engagement:</strong> {commsApprovalModal.order.comms_engagement_type || "—"}<br />
+                                                <strong>Notional value:</strong> ₹{formatIndianNumber(notionalOf(commsApprovalModal.order))}
+                                            </p>
+                                            {commsApprovalModal.action === "reject" && (
+                                                <div style={{ marginTop: 14 }}>
+                                                    <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
+                                                        Reason for rejection <span style={{ color: "#c62828" }}>*</span>
+                                                    </label>
+                                                    <textarea
+                                                        className="admin-input"
+                                                        rows={3}
+                                                        placeholder="Explain why this order can't proceed…"
+                                                        value={commsApprovalReason}
+                                                        onChange={(e) => setCommsApprovalReason(e.target.value)}
+                                                        style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, resize: "vertical" }}
+                                                    />
+                                                </div>
+                                            )}
+                                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+                                                <button
+                                                    disabled={commsApprovalProcessing}
+                                                    onClick={() => { setCommsApprovalModal(null); setCommsApprovalReason(""); }}
+                                                    style={{ padding: "8px 16px", border: "1px solid #d4d4d4", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}
+                                                >Cancel</button>
+                                                <button
+                                                    disabled={commsApprovalProcessing || (commsApprovalModal.action === "reject" && !commsApprovalReason.trim())}
+                                                    onClick={handleCommsApprovalAction}
+                                                    style={{
+                                                        padding: "8px 16px", border: "none", borderRadius: 6, color: "#fff",
+                                                        background: commsApprovalModal.action === "approve" ? "#2e7d32" : "#c62828",
+                                                        cursor: commsApprovalProcessing ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600,
+                                                        opacity: commsApprovalProcessing ? 0.6 : 1,
+                                                    }}
+                                                >
+                                                    {commsApprovalProcessing ? "Processing…" : (commsApprovalModal.action === "approve" ? "Confirm Approve" : "Confirm Reject")}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })()}

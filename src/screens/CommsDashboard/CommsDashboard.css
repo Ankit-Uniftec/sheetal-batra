@@ -300,6 +300,52 @@
   font-weight: 600;
 }
 
+/* Orders tab — search box + filter chip rows */
+.comms-search {
+  width: 100%;
+  max-width: 460px;
+  padding: 10px 14px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+  font-family: inherit;
+}
+
+.comms-search:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.18);
+}
+
+.comms-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.comms-filter-chip {
+  padding: 6px 14px;
+  border-radius: 18px;
+  border: 1px solid #D4D4D4;
+  background: #fff;
+  color: #555;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.comms-filter-chip:hover { background: #faf6e8; }
+
+.comms-filter-chip.active {
+  background: #d5b85a;
+  border-color: #d5b85a;
+  color: #fff;
+}
+
 /* ─── Mobile ─────────────────────────────────────────────────── */
 @media (max-width: 720px) {
   .comms-hamburger { display: inline-flex; }

@@ -260,17 +260,20 @@ export default function CommsReviewOrder() {
         .single();
       if (insertError) throw insertError;
 
-      // 3) Notify Jahnavi (admin) if the approval gate fired
+      // 3) Notify Jahnavi (admin) if the approval gate fired.
+      // Uses the comms-specific notification type so the recipient and
+      // template are right (B2B_APPROVAL_AWAITED also notifies merchandisers
+      // which doesn't apply to comms).
       if (requiresApproval) {
         try {
-          await sendNotification(NOTIFICATION_TYPES.B2B_APPROVAL_AWAITED, {
+          await sendNotification(NOTIFICATION_TYPES.COMMS_APPROVAL_AWAITED, {
             orderId: insertedOrder.id,
             orderNo: insertedOrder.order_no,
             metadata: {
               client_name: commsPayload.delivery_name,
               submitted_by: profile?.email,
               engagement_type: engagementType,
-              value: itemsSubtotal,
+              value: formatIndianNumber(itemsSubtotal),
             },
           });
         } catch (notifErr) {
