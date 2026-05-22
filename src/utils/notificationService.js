@@ -52,6 +52,10 @@ export const NOTIFICATION_TYPES = {
     COMMS_APPROVAL_AWAITED: "comms_approval_awaited",   // to admin (Jahnavi)
     COMMS_ORDER_APPROVED: "comms_order_approved",       // back to comms team (Nazreen)
     COMMS_ORDER_REJECTED: "comms_order_rejected",       // back to comms team (Nazreen)
+
+    // Comms sourcing return reminders (fired by a scheduled edge function)
+    COMMS_RETURN_DUE_TOMORROW: "comms_return_due_tomorrow",   // 24h before outfit_return_date
+    COMMS_RETURN_OVERDUE: "comms_return_overdue",             // 24h after outfit_return_date with no return
 };
 
 // ==========================================
@@ -135,6 +139,13 @@ const RECIPIENT_MAP = {
     ],
     [NOTIFICATION_TYPES.COMMS_ORDER_REJECTED]: [
         { role: "comms", channel: "in_app" },   // Nazreen learns her order was rejected
+    ],
+    [NOTIFICATION_TYPES.COMMS_RETURN_DUE_TOMORROW]: [
+        { role: "comms", channel: "in_app" },   // Nazreen: outfit return is due tomorrow
+    ],
+    [NOTIFICATION_TYPES.COMMS_RETURN_OVERDUE]: [
+        { role: "comms", channel: "in_app" },   // Nazreen: outfit return is overdue
+        { role: "admin", channel: "in_app" },   // Jahnavi gets escalation visibility
     ],
 };
 
@@ -240,6 +251,18 @@ const TEMPLATES = {
         title: "Comms Order Rejected",
         message: `Order ${meta.order_no} rejected${meta.reason ? ` — ${meta.reason}` : ""}.`,
         priority: "urgent",
+    }),
+
+    // Sourcing return reminders (fired by scheduled edge function)
+    [NOTIFICATION_TYPES.COMMS_RETURN_DUE_TOMORROW]: (meta) => ({
+        title: "Outfit Return Due Tomorrow",
+        message: `Order ${meta.order_no} (${meta.client_name || "—"}) — outfit return is due on ${meta.return_date}.`,
+        priority: "urgent",
+    }),
+    [NOTIFICATION_TYPES.COMMS_RETURN_OVERDUE]: (meta) => ({
+        title: "Outfit Return Overdue",
+        message: `Order ${meta.order_no} (${meta.client_name || "—"}) — outfit return was due ${meta.return_date} and has not been returned.`,
+        priority: "escalation",
     }),
 
 };

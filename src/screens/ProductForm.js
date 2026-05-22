@@ -1776,7 +1776,7 @@ export default function ProductForm() {
 
 
   // ADD PRODUCT
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     if (!selectedProduct) {
       showPopup({
         title: "Product Required",
@@ -1784,6 +1784,68 @@ export default function ProductForm() {
         type: "warning",
       });
       return;
+    }
+
+    // Comms inventory block check — refuse to add a product that's currently
+    // reserved by Nazreen for a shoot/event. Comms-placed orders and stock
+    // orders are exempt: Nazreen shouldn't be blocked by her own reservations,
+    // and stock orders are internal warehouse moves.
+    if (!isCommsOrder && !isStockOrder) {
+      try {
+        const todayIso = new Date().toISOString().slice(0, 10);
+        // Product-level block (non-LXRTS or product-wide LXRTS block)
+        const { data: blocks } = await supabase
+          .from("comms_inventory_blocks")
+          .select("end_date, purpose")
+          .eq("product_id", selectedProduct.id)
+          .eq("status", "active")
+          .gte("end_date", todayIso)
+          .limit(1);
+        if (blocks && blocks.length > 0) {
+          const b = blocks[0];
+          showPopup({
+            title: "Product Reserved",
+            message: `This product is reserved by the Comms team for "${b.purpose}" until ${new Date(b.end_date).toLocaleDateString("en-GB")}. Please pick a different product or contact Nazreen.`,
+            type: "warning",
+            confirmText: "Ok",
+          });
+          return;
+        }
+        // Variant-level block (LXRTS — checks the specific size variant)
+        if (isSyncProduct && selectedSize) {
+          const { data: variants } = await supabase
+            .from("product_variants")
+            .select("id")
+            .eq("product_id", selectedProduct.id)
+            .eq("size", selectedSize)
+            .limit(1);
+          if (variants && variants.length > 0) {
+            const { data: vBlocks } = await supabase
+              .from("comms_inventory_blocks")
+              .select("end_date, purpose")
+              .eq("variant_id", variants[0].id)
+              .eq("status", "active")
+              .gte("end_date", todayIso)
+              .limit(1);
+            if (vBlocks && vBlocks.length > 0) {
+              const b = vBlocks[0];
+              showPopup({
+                title: "Size Reserved",
+                message: `Size ${selectedSize} of this product is reserved by Comms for "${b.purpose}" until ${new Date(b.end_date).toLocaleDateString("en-GB")}. Pick a different size or contact Nazreen.`,
+                type: "warning",
+                confirmText: "Ok",
+              });
+              return;
+            }
+          }
+        }
+      } catch (blockErr) {
+        // Don't block the order on a block-check failure — log and continue.
+        // Better to let the order through than to break placement because of
+        // a Supabase hiccup. If a legitimate block exists, it'll be caught on
+        // the next attempt.
+        console.warn("Comms block check failed (non-blocking):", blockErr);
+      }
     }
 
     // For sync products: validate inventory

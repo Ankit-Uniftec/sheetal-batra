@@ -144,7 +144,7 @@ export default function StoreManagerDashboard() {
                 supabase.from("products").select("*").order("name", { ascending: true }),
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
             ]);
-            if (ordersRes.data) setOrders(ordersRes.data);
+            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
             if (productsRes.data) setProducts(productsRes.data);
             if (spRes.data) setSalespersonTable(spRes.data);
         } catch (err) { console.error("Error fetching data:", err); }

@@ -7,6 +7,12 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import CommsSourcingReturns from "./CommsSourcingReturns";
+import CommsReports from "./CommsReports";
+import CommsPRPerformance from "./CommsPRPerformance";
+import CommsInventory from "./CommsInventory";
+import CommsCalendar from "./CommsCalendar";
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
@@ -45,10 +51,18 @@ export default function CommsDashboard() {
   const [orders, setOrders] = useState([]);
 
   // Orders tab filter state. Engagement filter is "all" or one of the 4
-  // engagement types; status filter slices the lifecycle.
+  // engagement types; status filter slices the lifecycle. Date range is
+  // applied against created_at (order placement date) — "" = no bound.
   const [ordersSearch, setOrdersSearch] = useState("");
   const [engagementFilter, setEngagementFilter] = useState("all");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
+  const [orderDateFrom, setOrderDateFrom] = useState("");
+  const [orderDateTo, setOrderDateTo] = useState("");
+
+  // Per-order PDF loading state — disables the button while the PDF is
+  // being generated/opened. Mirrors AssociateDashboard's pattern.
+  const [pdfLoading, setPdfLoading] = useState(null);
+  const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
   // Auth guard
   useEffect(() => {
@@ -96,6 +110,33 @@ export default function CommsDashboard() {
     navigate("/login");
   };
 
+  // Open the customer / warehouse PDF for a specific order. downloadCustomerPdf
+  // and downloadWarehousePdf cache-bust the URL and window.open it in a new
+  // tab — exactly what Nazreen needs when she clicks the PDF buttons.
+  const handlePrintCustomerPdf = async (e, order) => {
+    e.stopPropagation();
+    setPdfLoading(order.id);
+    try {
+      await downloadCustomerPdf(order);
+    } catch (err) {
+      console.error("Customer PDF open failed:", err);
+    } finally {
+      setPdfLoading(null);
+    }
+  };
+
+  const handlePrintWarehousePdf = async (e, order) => {
+    e.stopPropagation();
+    setWarehousePdfLoading(order.id);
+    try {
+      await downloadWarehousePdf(order, null, true);
+    } catch (err) {
+      console.error("Warehouse PDF open failed:", err);
+    } finally {
+      setWarehousePdfLoading(null);
+    }
+  };
+
   // Counts per engagement type — drives the Overview cards.
   const engagementCounts = useMemo(() => {
     const counts = { Barter: 0, Gifting: 0, Sourcing: 0, "Personal order": 0 };
@@ -112,6 +153,10 @@ export default function CommsDashboard() {
   // Full filtered list for the Orders tab.
   const filteredOrders = useMemo(() => {
     const q = ordersSearch.trim().toLowerCase();
+    // Convert date filters to comparable timestamps. From = start of day,
+    // To = end of day, so the From/To pair is inclusive of both endpoints.
+    const fromTs = orderDateFrom ? new Date(orderDateFrom + "T00:00:00").getTime() : null;
+    const toTs = orderDateTo ? new Date(orderDateTo + "T23:59:59.999").getTime() : null;
     return orders.filter((o) => {
       // Engagement filter
       if (engagementFilter !== "all" && o.comms_engagement_type !== engagementFilter) return false;
@@ -127,6 +172,13 @@ export default function CommsDashboard() {
         if (orderStatusFilter === "completed" && !(s === "completed" || s === "delivered")) return false;
         if (orderStatusFilter === "cancelled" && s !== "cancelled") return false;
       }
+      // Date range filter (applied to created_at — order placement date)
+      if (fromTs != null || toTs != null) {
+        if (!o.created_at) return false;
+        const ts = new Date(o.created_at).getTime();
+        if (fromTs != null && ts < fromTs) return false;
+        if (toTs != null && ts > toTs) return false;
+      }
       // Search by order_no, client name, agency name, POC
       if (q) {
         const hay = [
@@ -136,7 +188,7 @@ export default function CommsDashboard() {
       }
       return true;
     });
-  }, [orders, ordersSearch, engagementFilter, orderStatusFilter]);
+  }, [orders, ordersSearch, engagementFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
 
   // Upcoming sourcing returns — sourcing orders whose return date is in the
   // next 14 days. Helps Nazreen flag follow-ups before the alerts wire up.
@@ -354,49 +406,93 @@ export default function CommsDashboard() {
                 </button>
               </div>
 
-              {/* Search */}
-              <div className="comms-card" style={{ marginBottom: 12 }}>
-                <input
-                  type="text"
-                  className="comms-search"
-                  placeholder="Search by order no, client, agency, POC…"
-                  value={ordersSearch}
-                  onChange={(e) => setOrdersSearch(e.target.value)}
-                />
-
-                {/* Engagement chips */}
-                <div className="comms-chip-row">
-                  {["all", "Barter", "Gifting", "Sourcing", "Personal order"].map((opt) => (
-                    <button
-                      key={opt}
-                      className={`comms-filter-chip ${engagementFilter === opt ? "active" : ""}`}
-                      style={engagementFilter === opt && opt !== "all"
-                        ? { background: engagementColor(opt), borderColor: engagementColor(opt), color: "#fff" }
-                        : undefined}
-                      onClick={() => setEngagementFilter(opt)}
-                    >
-                      {opt === "all" ? "All Engagements" : opt}
-                    </button>
-                  ))}
+              {/* Filters: search + 3 labelled rows in a structured grid */}
+              <div className="comms-filters-card">
+                {/* Search bar — full width, top of the card */}
+                <div className="comms-filters-search">
+                  <span className="comms-filters-search-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search by order no, client, agency, POC…"
+                    value={ordersSearch}
+                    onChange={(e) => setOrdersSearch(e.target.value)}
+                  />
                 </div>
 
-                {/* Status chips */}
-                <div className="comms-chip-row" style={{ marginTop: 6 }}>
-                  {[
-                    { key: "all", label: "All Status" },
-                    { key: "pending_approval", label: "Pending Approval" },
-                    { key: "active", label: "Active" },
-                    { key: "completed", label: "Completed" },
-                    { key: "cancelled", label: "Cancelled" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      className={`comms-filter-chip ${orderStatusFilter === opt.key ? "active" : ""}`}
-                      onClick={() => setOrderStatusFilter(opt.key)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                {/* Engagement row */}
+                <div className="comms-filters-row">
+                  <span className="comms-filters-row-label">Engagement</span>
+                  <div className="comms-filters-row-controls">
+                    {["all", "Barter", "Gifting", "Sourcing", "Personal order"].map((opt) => (
+                      <button
+                        key={opt}
+                        className={`comms-filter-chip ${engagementFilter === opt ? "active" : ""}`}
+                        style={engagementFilter === opt && opt !== "all"
+                          ? { background: engagementColor(opt), borderColor: engagementColor(opt), color: "#fff" }
+                          : undefined}
+                        onClick={() => setEngagementFilter(opt)}
+                      >
+                        {opt === "all" ? "All" : opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status row */}
+                <div className="comms-filters-row">
+                  <span className="comms-filters-row-label">Status</span>
+                  <div className="comms-filters-row-controls">
+                    {[
+                      { key: "all", label: "All" },
+                      { key: "pending_approval", label: "Pending Approval" },
+                      { key: "active", label: "Active" },
+                      { key: "completed", label: "Completed" },
+                      { key: "cancelled", label: "Cancelled" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        className={`comms-filter-chip ${orderStatusFilter === opt.key ? "active" : ""}`}
+                        onClick={() => setOrderStatusFilter(opt.key)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date range row */}
+                <div className="comms-filters-row">
+                  <span className="comms-filters-row-label">Order Date</span>
+                  <div className="comms-filters-row-controls comms-filters-date-controls">
+                    <input
+                      type="date"
+                      className="comms-date-input"
+                      value={orderDateFrom}
+                      onChange={(e) => setOrderDateFrom(e.target.value)}
+                      max={orderDateTo || undefined}
+                      aria-label="From date"
+                    />
+                    <span className="comms-date-sep" aria-hidden="true">→</span>
+                    <input
+                      type="date"
+                      className="comms-date-input"
+                      value={orderDateTo}
+                      onChange={(e) => setOrderDateTo(e.target.value)}
+                      min={orderDateFrom || undefined}
+                      aria-label="To date"
+                    />
+                    {(orderDateFrom || orderDateTo) && (
+                      <button
+                        className="comms-date-clear"
+                        onClick={() => { setOrderDateFrom(""); setOrderDateTo(""); }}
+                      >Clear</button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -408,58 +504,197 @@ export default function CommsDashboard() {
                 {filteredOrders.length === 0 ? (
                   <p className="comms-muted">No orders match the current filters.</p>
                 ) : (
-                  <table className="comms-table">
-                    <thead>
-                      <tr>
-                        <th>Order No</th>
-                        <th>Client</th>
-                        <th>Engagement</th>
-                        <th>Purpose</th>
-                        <th>Order Date</th>
-                        <th>Delivery</th>
-                        <th>Status</th>
-                        <th className="comms-amount">Notional ₹</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredOrders.map((o) => {
-                        const notional = (o.items || []).reduce((sum, it) => {
-                          const base = Number(it.price || 0) * Number(it.quantity || 1);
-                          const extras = Array.isArray(it.extras)
-                            ? it.extras.reduce((s, e) => s + Number(e.price || 0), 0)
-                            : 0;
-                          return sum + base + extras;
-                        }, 0);
-                        const isPending = o.approval_status === "pending_approval";
-                        const isReject = o.approval_status === "rejected";
-                        const statusLabel = isPending ? "Pending Approval"
-                          : isReject ? "Rejected"
-                          : (o.status === "pending" ? "Order Received" : (o.status || "—"));
-                        return (
-                          <tr key={o.id}>
-                            <td><span className="comms-mono">{o.order_no || "—"}</span></td>
-                            <td>{o.delivery_name || "—"}</td>
-                            <td>
-                              <span
-                                className="comms-chip"
-                                style={{
-                                  background: `${engagementColor(o.comms_engagement_type)}1a`,
-                                  color: engagementColor(o.comms_engagement_type),
-                                }}
+                  <div className="comms-order-cards">
+                    {filteredOrders.map((o) => {
+                      const item = o.items?.[0] || {};
+                      const imgSrc = item.image_url || "/placeholder.png";
+                      const notional = (o.items || []).reduce((sum, it) => {
+                        const base = Number(it.price || 0) * Number(it.quantity || 1);
+                        const extras = Array.isArray(it.extras)
+                          ? it.extras.reduce((s, e) => s + Number(e.price || 0), 0)
+                          : 0;
+                        return sum + base + extras;
+                      }, 0);
+                      const isPending = o.approval_status === "pending_approval";
+                      const isReject = o.approval_status === "rejected";
+                      const statusLabel = isPending ? "Pending Approval"
+                        : isReject ? "Rejected"
+                        : (o.status === "pending" || !o.status ? "Order Received"
+                          : (o.status === "order_received" ? "Order Received"
+                            : o.status));
+                      // Status badge color class — borrows convention from
+                      // status semantics: green for delivered/completed, amber for pending, red for cancelled/rejected.
+                      const statusClass = (() => {
+                        const s = (o.status || "").toLowerCase();
+                        if (isPending) return "pending";
+                        if (isReject || s === "cancelled") return "cancelled";
+                        if (s === "delivered" || s === "completed") return "delivered";
+                        return "order-received";
+                      })();
+                      return (
+                        <div key={o.id} className="comms-order-card" data-order-id={o.id}>
+                          <div className="comms-order-header">
+                            <div className="comms-order-header-info">
+                              <div className="comms-order-header-item">
+                                <span className="comms-order-header-label">ORDER NO:</span>
+                                <span className="comms-order-header-value">{o.order_no || "—"}</span>
+                              </div>
+                              <div className="comms-order-header-item">
+                                <span className="comms-order-header-label">ORDER DATE:</span>
+                                <span className="comms-order-header-value">{o.created_at ? formatDate(o.created_at) : "—"}</span>
+                              </div>
+                              <div className="comms-order-header-item">
+                                <span className="comms-order-header-label">DELIVERY:</span>
+                                <span className="comms-order-header-value">{o.delivery_date ? formatDate(o.delivery_date) : "—"}</span>
+                              </div>
+                            </div>
+                            <div className="comms-order-header-actions">
+                              <div className={`comms-order-status-badge comms-status-${statusClass}`}>
+                                {statusLabel}
+                              </div>
+                              <button
+                                className="comms-pdf-btn"
+                                onClick={(e) => handlePrintCustomerPdf(e, o)}
+                                disabled={pdfLoading === o.id}
                               >
-                                {o.comms_engagement_type || "—"}
-                              </span>
-                            </td>
-                            <td>{o.comms_purpose || "—"}</td>
-                            <td>{o.created_at ? formatDate(o.created_at) : "—"}</td>
-                            <td>{o.delivery_date ? formatDate(o.delivery_date) : "—"}</td>
-                            <td>{statusLabel}</td>
-                            <td className="comms-amount">₹{formatIndianNumber(notional)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                {pdfLoading === o.id ? "..." : "📄 Customer PDF"}
+                              </button>
+                              <button
+                                className="comms-pdf-btn"
+                                onClick={(e) => handlePrintWarehousePdf(e, o)}
+                                disabled={warehousePdfLoading === o.id}
+                              >
+                                {warehousePdfLoading === o.id ? "..." : "📄 Warehouse PDF"}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="comms-order-content">
+                            <div className="comms-product-thumb">
+                              <img src={imgSrc} alt={item.product_name || "Product"} />
+                            </div>
+                            <div className="comms-product-details">
+                              <div className="comms-product-row">
+                                <span className="comms-product-label">Product:</span>
+                                <span className="comms-product-value">{item.product_name || "—"}</span>
+                              </div>
+                              <div className="comms-product-row">
+                                <span className="comms-product-label">Client:</span>
+                                <span className="comms-product-value">{o.delivery_name || "—"}</span>
+                              </div>
+                              <div className="comms-product-row">
+                                <span className="comms-product-label">Engagement:</span>
+                                <span
+                                  className="comms-chip"
+                                  style={{
+                                    background: `${engagementColor(o.comms_engagement_type)}1a`,
+                                    color: engagementColor(o.comms_engagement_type),
+                                  }}
+                                >
+                                  {o.comms_engagement_type || "—"}
+                                </span>
+                              </div>
+                              {o.comms_purpose && (
+                                <div className="comms-product-row">
+                                  <span className="comms-product-label">Purpose:</span>
+                                  <span className="comms-product-value">{o.comms_purpose}</span>
+                                </div>
+                              )}
+                              {o.comms_agency_name && (
+                                <div className="comms-product-row">
+                                  <span className="comms-product-label">Agency:</span>
+                                  <span className="comms-product-value">{o.comms_agency_name}</span>
+                                </div>
+                              )}
+
+                              <div className="comms-details-grid">
+                                <div className="comms-detail-item">
+                                  <span className="comms-product-label">Notional ₹:</span>
+                                  <span className="comms-product-value">₹{formatIndianNumber(notional)}</span>
+                                </div>
+                                <div className="comms-detail-item">
+                                  <span className="comms-product-label">Qty:</span>
+                                  <span className="comms-product-value">{o.total_quantity || (o.items || []).reduce((s, it) => s + (it.quantity || 1), 0) || 1}</span>
+                                </div>
+                                {item.top && (
+                                  <div className="comms-detail-item">
+                                    <span className="comms-product-label">Top:</span>
+                                    <span className="comms-product-value">
+                                      {item.top}
+                                      {item.top_color?.hex && (
+                                        <>
+                                          <span
+                                            style={{
+                                              display: 'inline-block', width: 12, height: 12,
+                                              backgroundColor: item.top_color.hex, borderRadius: '50%',
+                                              marginLeft: 6, border: '1px solid #ccc', verticalAlign: 'middle',
+                                            }}
+                                          />
+                                          {item.top_color.name && <span style={{ marginLeft: 4 }}>{item.top_color.name}</span>}
+                                        </>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                                {item.bottom && (
+                                  <div className="comms-detail-item">
+                                    <span className="comms-product-label">Bottom:</span>
+                                    <span className="comms-product-value">
+                                      {item.bottom}
+                                      {item.bottom_color?.hex && (
+                                        <>
+                                          <span
+                                            style={{
+                                              display: 'inline-block', width: 12, height: 12,
+                                              backgroundColor: item.bottom_color.hex, borderRadius: '50%',
+                                              marginLeft: 6, border: '1px solid #ccc', verticalAlign: 'middle',
+                                            }}
+                                          />
+                                          {item.bottom_color.name && <span style={{ marginLeft: 4 }}>{item.bottom_color.name}</span>}
+                                        </>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                                {item.size && (
+                                  <div className="comms-detail-item">
+                                    <span className="comms-product-label">Size:</span>
+                                    <span className="comms-product-value">{item.size}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {item.extras && item.extras.length > 0 && (
+                                <div className="comms-product-row">
+                                  <span className="comms-product-label">Extras:</span>
+                                  <span className="comms-product-value">
+                                    {item.extras.map((extra, idx) => (
+                                      <span key={idx}>
+                                        {extra.name}
+                                        {extra.color?.hex && (
+                                          <>
+                                            <span
+                                              style={{
+                                                display: 'inline-block', width: 12, height: 12,
+                                                backgroundColor: extra.color.hex, borderRadius: '50%',
+                                                marginLeft: 6, border: '1px solid #ccc', verticalAlign: 'middle',
+                                              }}
+                                            />
+                                            {extra.color.name && <span style={{ marginLeft: 4 }}>{extra.color.name}</span>}
+                                          </>
+                                        )}
+                                        {idx < item.extras.length - 1 && <span style={{ margin: '0 8px' }}>|</span>}
+                                      </span>
+                                    ))}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </>
@@ -468,61 +703,41 @@ export default function CommsDashboard() {
           {activeTab === "sourcing_returns" && (
             <>
               <h2 className="comms-section-title">Sourcing Returns</h2>
-              {renderStub("Per-product return tracking for sourcing orders", [
-                "List of sourcing orders due for return",
-                "Per-product: return status, condition, damage notes",
-                "New product location after return",
-                "Auto-update inventory on return (calls increment_inventory RPC)",
-              ])}
+              <CommsSourcingReturns
+                orders={orders}
+                onOrderUpdated={(updated) => {
+                  setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o));
+                }}
+                showPopup={showPopup}
+              />
             </>
           )}
 
           {activeTab === "inventory" && (
             <>
               <h2 className="comms-section-title">Inventory</h2>
-              {renderStub("Live inventory view + export", [
-                "Read products + product_variants for all locations",
-                "Filter by category, store, warehouse, consignment",
-                "Export to Excel (image, name, location, size, color, MRP)",
-                "Temporary-block-with-timeline UX (design TBD)",
-              ])}
+              <CommsInventory profile={profile} showPopup={showPopup} />
             </>
           )}
 
           {activeTab === "reports" && (
             <>
               <h2 className="comms-section-title">Reports</h2>
-              {renderStub("Three report formats with CSV/Excel export", [
-                "Monthly Report — Agency & Individual",
-                "Monthly Report — Private Orders",
-                "PR Performance Report (aggregate)",
-              ])}
+              <CommsReports orders={orders} showPopup={showPopup} />
             </>
           )}
 
           {activeTab === "pr_performance" && (
             <>
               <h2 className="comms-section-title">PR Performance</h2>
-              {renderStub("Per-order PR tracking form", [
-                "Active for delivered Gifting/Barter/Sourcing orders",
-                "Outfit used Yes/No, deliverables Yes/No/Partial",
-                "Coverage type multi-select (IG Post, Reel, Magazine, etc.)",
-                "Upload links + images",
-                "Estimated reach + impressions + outcome impact",
-                "Writes to comms_pr_performance table",
-              ])}
+              <CommsPRPerformance orders={orders} showPopup={showPopup} />
             </>
           )}
 
           {activeTab === "my_calendar" && (
             <>
               <h2 className="comms-section-title">My Calendar</h2>
-              {renderStub("Personal notes calendar for the comms team", [
-                "Editable events (follow-ups, shoots, etc.)",
-                "Read/write to comms_calendar_events table",
-                "Linkable to specific orders",
-                "Alert notifications for upcoming events",
-              ])}
+              <CommsCalendar profile={profile} orders={orders} showPopup={showPopup} />
             </>
           )}
         </main>

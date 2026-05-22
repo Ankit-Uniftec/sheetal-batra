@@ -247,7 +247,7 @@ export default function GMDashboard() {
                 supabase.from("vendors").select("*"),
                 supabase.from("consignment_inventory").select("*"),
             ]);
-            if (ordersRes.data) setOrders(ordersRes.data);
+            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
             if (productsRes.data) setProducts(productsRes.data);
             if (spRes.data) setSalespersonTable(spRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);

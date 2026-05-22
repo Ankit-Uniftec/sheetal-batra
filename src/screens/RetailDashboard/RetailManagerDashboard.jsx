@@ -177,7 +177,7 @@ export default function RetailManagerDashboard() {
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 supabase.from("products").select("*").order("name", { ascending: true }),
             ]);
-            if (ordersRes.data) setOrders(ordersRes.data);
+            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
             if (productsRes.data) setProducts(productsRes.data);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }

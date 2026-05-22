@@ -201,7 +201,7 @@ export default function AssistantCmoDashboard() {
         supabase.from("profiles").select("id, full_name, email, dob, loyalty_points, created_at"),
         supabase.from("consignment_inventory").select("*"),
       ]);
-      if (ordersRes.data) setOrders(ordersRes.data);
+      if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
       if (productsRes.data) setProducts(productsRes.data);
       if (profilesRes.data) setProfiles(profilesRes.data);
       if (consRes.data) setConsignment(consRes.data);

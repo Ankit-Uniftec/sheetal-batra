@@ -264,6 +264,8 @@ const WarehouseDashboard = () => {
       const filtered = (data || []).filter(o => {
         // Private orders are not visible in warehouse — handled outside warehouse flow
         if (o.is_private_order) return false;
+        // Comms orders never enter the warehouse pipeline (shipped from COMMS store directly)
+        if (o.is_comms) return false;
         // B2B orders only visible after merchandiser approval
         if (o.is_b2b) return o.approval_status === "approved";
         return true;

@@ -149,7 +149,7 @@ export default function HeadOfDesignDashboard() {
         fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
         supabase.from("vendors").select("id, store_brand_name, vendor_code, location"),
       ]);
-      if (!ordersRes.error) setOrders(ordersRes.data || []);
+      if (!ordersRes.error) setOrders((ordersRes.data || []).filter(o => !o.is_comms));
       if (!vendorsRes.error) setVendors(vendorsRes.data || []);
       setLoading(false);
     };

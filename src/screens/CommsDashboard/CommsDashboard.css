@@ -346,6 +346,463 @@
   color: #fff;
 }
 
+/* Date range filter (sits below the status chip row in the Orders tab) */
+.comms-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.comms-date-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.comms-date-input {
+  padding: 6px 10px;
+  border: 1px solid #D4D4D4;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: #333;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.comms-date-input:focus {
+  border-color: #d5b85a;
+}
+
+.comms-date-sep {
+  color: #888;
+  font-size: 14px;
+}
+
+.comms-date-clear {
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #c62828;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.comms-date-clear:hover {
+  background: #ffebee;
+  border-color: #ef9a9a;
+}
+
+/* ─── Orders tab — structured filters card ──────────────────── */
+.comms-filters-card {
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+/* Search box at top of the filters card */
+.comms-filters-search {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.comms-filters-search input {
+  width: 100%;
+  padding: 10px 14px 10px 38px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+  color: #333;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.comms-filters-search input:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.18);
+}
+
+.comms-filters-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #b8a886;
+  display: inline-flex;
+}
+
+/* One filter row = small label on the left, controls on the right */
+.comms-filters-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid #f5f0e3;
+}
+
+.comms-filters-row:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.comms-filters-row:last-of-type {
+  padding-bottom: 0;
+}
+
+.comms-filters-row-label {
+  flex: 0 0 100px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8B7355;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.comms-filters-row-controls {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.comms-filters-date-controls {
+  gap: 10px;
+}
+
+/* Mobile: stack label above controls so chips don't get squeezed */
+@media (max-width: 720px) {
+  .comms-filters-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .comms-filters-row-label {
+    flex-basis: auto;
+  }
+}
+
+/* ─── My Calendar tab ────────────────────────────────────────── */
+.comms-cal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.comms-cal-group {
+  border-left: 3px solid #d5b85a;
+  padding-left: 14px;
+}
+
+.comms-cal-group-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8B7355;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comms-cal-today-pill {
+  font-size: 10px;
+  font-weight: 700;
+  background: #d5b85a;
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.comms-cal-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comms-cal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #faf6e8;
+  border: 1px solid #f0e8d4;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.comms-cal-type-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.comms-cal-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comms-cal-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.comms-cal-item-desc {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.comms-cal-item-meta {
+  font-size: 11px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.comms-cal-type-label {
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.comms-cal-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.comms-cal-action-btn {
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.comms-cal-action-btn:hover {
+  background: #f5ecd0;
+  border-color: #d5b85a;
+  color: #8B7355;
+}
+
+.comms-cal-action-btn.comms-cal-delete {
+  color: #c62828;
+}
+
+.comms-cal-action-btn.comms-cal-delete:hover {
+  background: #ffebee;
+  border-color: #ef9a9a;
+  color: #c62828;
+}
+
+/* ─── Orders tab — SA-style order cards ──────────────────────── */
+.comms-order-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.comms-order-card {
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 16px 18px;
+  transition: box-shadow 0.15s;
+}
+
+.comms-order-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.comms-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0e8d4;
+  margin-bottom: 14px;
+}
+
+.comms-order-header-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  flex: 1;
+}
+
+.comms-order-header-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.comms-order-header-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #888;
+  letter-spacing: 0.5px;
+}
+
+.comms-order-header-value {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.comms-order-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.comms-order-status-badge {
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.comms-status-order-received {
+  background: rgba(213, 184, 90, 0.15);
+  color: #8B7355;
+}
+
+.comms-status-delivered {
+  background: rgba(46, 125, 50, 0.15);
+  color: #2e7d32;
+}
+
+.comms-status-cancelled {
+  background: rgba(198, 40, 40, 0.12);
+  color: #c62828;
+}
+
+.comms-status-pending {
+  background: rgba(239, 108, 0, 0.15);
+  color: #ef6c00;
+}
+
+.comms-pdf-btn {
+  padding: 6px 12px;
+  background: #faf6e8;
+  color: #8B7355;
+  border: 1px solid #d5b85a;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.comms-pdf-btn:hover:not(:disabled) {
+  background: #d5b85a;
+  color: #fff;
+}
+
+.comms-pdf-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.comms-order-content {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.comms-product-thumb {
+  flex: 0 0 110px;
+  width: 110px;
+  height: 130px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #faf6e8;
+  border: 1px solid #f0e8d4;
+}
+
+.comms-product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comms-product-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comms-product-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.comms-product-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+}
+
+.comms-product-value {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+}
+
+.comms-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 14px;
+  margin-top: 4px;
+}
+
+.comms-detail-item {
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+  align-items: center;
+}
+
+/* Mobile tweaks for the order card */
+@media (max-width: 720px) {
+  .comms-order-content {
+    flex-direction: column;
+  }
+  .comms-product-thumb {
+    width: 100%;
+    height: 200px;
+    flex: 0 0 auto;
+  }
+}
+
 /* ─── Mobile ─────────────────────────────────────────────────── */
 @media (max-width: 720px) {
   .comms-hamburger { display: inline-flex; }

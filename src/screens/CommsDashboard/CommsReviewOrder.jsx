@@ -6,7 +6,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { generateAllPdfs } from "../../utils/pdfUtils";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import config from "../../config/config";
 
@@ -260,6 +260,85 @@ export default function CommsReviewOrder() {
         .single();
       if (insertError) throw insertError;
 
+      // 2.5) Decrement inventory for each item — mirrors the B2C logic in
+      // ReviewDetail.js:719-800. Wrapped in try/catch so inventory failures
+      // never block order placement (same convention as B2C).
+      //
+      // Skip for pending-approval orders so we don't reduce stock for orders
+      // that may be rejected. Inventory will decrement at the moment Jahnavi
+      // approves (Phase 3+ — for now, approved orders need a manual stock
+      // adjustment if you care about pre-approval stock-out prevention).
+      //
+      // All comms engagement types (Barter/Gifting/Sourcing/Personal) deduct
+      // inventory on placement. Only Sourcing increments back on return —
+      // handled by the Sourcing Returns tab.
+      if (!requiresApproval) {
+        try {
+          for (const item of (insertedOrder.items || [])) {
+            if (!item.product_id) continue;
+            const quantityOrdered = item.quantity || 1;
+            if (item.sync_enabled) {
+              // LXRTS / Shopify-synced product — per-variant inventory by size.
+              const { data: variants } = await supabase
+                .from("product_variants")
+                .select("id, inventory, size")
+                .eq("product_id", item.product_id)
+                .eq("size", item.size)
+                .gt("inventory", 0)
+                .order("inventory", { ascending: false })
+                .limit(1);
+              if (variants && variants.length > 0) {
+                const variant = variants[0];
+                const newInventory = Math.max(0, variant.inventory - quantityOrdered);
+                await supabase
+                  .from("product_variants")
+                  .update({ inventory: newInventory })
+                  .eq("id", variant.id);
+                // Shopify sync (same edge function B2C uses)
+                try {
+                  await fetch(
+                    `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "apikey": config.SUPABASE_KEY,
+                        "Authorization": `Bearer ${config.SUPABASE_KEY}`,
+                      },
+                      body: JSON.stringify({
+                        action: "reduce",
+                        product_id: item.product_id,
+                        size: item.size,
+                        quantity: quantityOrdered,
+                      }),
+                    }
+                  );
+                } catch (shopifyErr) {
+                  console.warn("Shopify sync failed (non-blocking):", shopifyErr);
+                }
+              }
+            } else {
+              // Regular product — single inventory column on products.
+              const { data: productData } = await supabase
+                .from("products")
+                .select("inventory")
+                .eq("id", item.product_id)
+                .single();
+              if (productData) {
+                const currentInventory = productData.inventory || 0;
+                const newInventory = Math.max(0, currentInventory - quantityOrdered);
+                await supabase
+                  .from("products")
+                  .update({ inventory: newInventory })
+                  .eq("id", item.product_id);
+              }
+            }
+          }
+        } catch (inventoryErr) {
+          console.warn("Comms inventory decrement failed (non-blocking):", inventoryErr);
+        }
+      }
+
       // 3) Notify Jahnavi (admin) if the approval gate fired.
       // Uses the comms-specific notification type so the recipient and
       // template are right (B2B_APPROVAL_AWAITED also notifies merchandisers
@@ -289,22 +368,15 @@ export default function CommsReviewOrder() {
       // 5) Generate PDFs in the background, then send the customer PDF to
       //    Nazreen on WhatsApp. Fire-and-forget — PDF or WhatsApp errors
       //    must not block the "Order Placed" UX.
+      //
+      // Uses generateAllPdfs (not downloadCustomerPdf/downloadWarehousePdf)
+      // because the "download" helpers also call window.open to display the
+      // PDFs in new tabs — fine for retail SAs, noisy for comms. generateAllPdfs
+      // just builds + uploads + returns the URLs.
       (async () => {
         try {
           const orderForPdf = { ...insertedOrder, items: insertedOrder.items || [] };
-          await Promise.allSettled([
-            downloadCustomerPdf(orderForPdf, null, true),
-            downloadWarehousePdf(orderForPdf, null, true),
-          ]);
-
-          // Re-read the row to pick up the customer_url written by the PDF
-          // utility. Without this we'd be sending the pre-PDF row that has no url.
-          const { data: refreshed } = await supabase
-            .from("orders")
-            .select("customer_url")
-            .eq("id", insertedOrder.id)
-            .maybeSingle();
-          const pdfUrl = refreshed?.customer_url || null;
+          const { customer_url: pdfUrl } = await generateAllPdfs(orderForPdf, null) || {};
 
           if (pdfUrl) {
             try {

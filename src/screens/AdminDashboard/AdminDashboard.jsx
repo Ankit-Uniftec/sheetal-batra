@@ -738,13 +738,16 @@ export default function AdminDashboard() {
         return ((current - previous) / previous) * 100;
     };
 
-    // Dashboard Stats (ALL orders: store + website/LXRTS + B2B)
+    // Operational orders exclude comms — they have their own dashboard + approvals tab below.
+    const nonCommsOrders = useMemo(() => orders.filter(o => !o.is_comms), [orders]);
+
+    // Dashboard Stats (ALL orders: store + website/LXRTS + B2B). Comms orders are excluded — they live in the Comms Approvals tab.
     const dashboardStats = useMemo(() => {
         const dateRange = getDateRange(timeline);
         const comparisonRange = getComparisonDateRange(timeline, comparison);
 
-        const currentOrders = filterOrdersByDateRange(orders, dateRange);
-        const previousOrders = comparisonRange ? filterOrdersByDateRange(orders, comparisonRange) : [];
+        const currentOrders = filterOrdersByDateRange(nonCommsOrders, dateRange);
+        const previousOrders = comparisonRange ? filterOrdersByDateRange(nonCommsOrders, comparisonRange) : [];
 
         const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
         const totalOrders = currentOrders.length;
@@ -830,7 +833,7 @@ export default function AdminDashboard() {
     // Analytics Data
     const analyticsData = useMemo(() => {
         const dateRange = getAnalyticsDateRange(analyticsTimeline);
-        const validOrders = orders.filter(o => {
+        const validOrders = nonCommsOrders.filter(o => {
             if (o.status === "cancelled") return false;
             const orderDate = new Date(o.created_at);
             return orderDate >= dateRange.start && orderDate <= dateRange.end;
@@ -899,7 +902,7 @@ export default function AdminDashboard() {
             .slice(0, 10);
 
         // 5. Alteration by Outfit (filter alteration orders)
-        const alterationOrders = orders.filter(o => {
+        const alterationOrders = nonCommsOrders.filter(o => {
             if (!o.is_alteration) return false;
             const orderDate = new Date(o.created_at);
             return orderDate >= dateRange.start && orderDate <= dateRange.end;
@@ -944,7 +947,7 @@ export default function AdminDashboard() {
         setShowAnalyticsCustomPicker(value === "custom");
     };
 
-    const recentOrders = useMemo(() => orders.filter(o => !isLxrtsOrder(o)).slice(0, recentOrdersCount), [orders, recentOrdersCount]);
+    const recentOrders = useMemo(() => nonCommsOrders.filter(o => !isLxrtsOrder(o)).slice(0, recentOrdersCount), [nonCommsOrders, recentOrdersCount]);
 
     // Inventory
     const filteredProducts = useMemo(() => {
@@ -1055,15 +1058,15 @@ export default function AdminDashboard() {
     // Orders
     const salespersons = useMemo(() => {
         const spSet = new Set();
-        orders.forEach(o => {
+        nonCommsOrders.forEach(o => {
             const sp = getOrderSalesperson(o);
             if (sp && isPersonName(sp)) spSet.add(sp);
         });
         return Array.from(spSet).sort();
-    }, [orders, knownStoreNames]);
+    }, [nonCommsOrders, knownStoreNames]);
 
     const filteredByStatus = useMemo(() => {
-        return orders.filter(o => {
+        return nonCommsOrders.filter(o => {
             if (isLxrtsOrder(o)) return false;
             const status = o.status?.toLowerCase();
             switch (statusTab) {
@@ -1135,7 +1138,7 @@ export default function AdminDashboard() {
     }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
 
     const orderTabCounts = useMemo(() => {
-        const validOrders = orders.filter(o => !isLxrtsOrder(o));
+        const validOrders = nonCommsOrders.filter(o => !isLxrtsOrder(o));
         return {
             all: validOrders.length,
             unfulfilled: validOrders.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length,
@@ -1269,7 +1272,7 @@ export default function AdminDashboard() {
     // Accounts
     const accountsLineItems = useMemo(() => {
         const items = [];
-        orders.forEach(order => {
+        nonCommsOrders.forEach(order => {
             if (isLxrtsOrder(order)) return;
             const orderItems = order.items || [];
             orderItems.forEach((item, idx) => {
@@ -1298,7 +1301,7 @@ export default function AdminDashboard() {
             });
         });
         return items;
-    }, [orders]);
+    }, [nonCommsOrders]);
 
     const filteredAccountItems = useMemo(() => {
         let result = accountsLineItems;
@@ -1338,7 +1341,7 @@ export default function AdminDashboard() {
     // ═══════════════════════════════════════════════════════════
     const enhancedDashboardStats = useMemo(() => {
         const dateRange = getDateRange(timeline);
-        const validOrders = orders.filter(o => {
+        const validOrders = nonCommsOrders.filter(o => {
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });
@@ -1372,7 +1375,7 @@ export default function AdminDashboard() {
     // ═══════════════════════════════════════════════════════════
     const orderValueTrend = useMemo(() => {
         const dateRange = getDateRange(timeline);
-        const validOrders = orders.filter(o => {
+        const validOrders = nonCommsOrders.filter(o => {
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });
@@ -1394,7 +1397,7 @@ export default function AdminDashboard() {
     // ═══════════════════════════════════════════════════════════
     const enhancedAnalytics = useMemo(() => {
         const dateRange = getAnalyticsDateRange(analyticsTimeline);
-        const validOrders = orders.filter(o => {
+        const validOrders = nonCommsOrders.filter(o => {
             if (o.status === "cancelled") return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
@@ -1436,7 +1439,7 @@ export default function AdminDashboard() {
         const bottomColors = [...sortedColors].sort((a, b) => a.sales - b.sales).slice(0, 5);
 
         // Alterations: flagged + avg per outfit
-        const alterationOrders = orders.filter(o => {
+        const alterationOrders = nonCommsOrders.filter(o => {
             if (!o.is_alteration) return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
@@ -1462,7 +1465,7 @@ export default function AdminDashboard() {
     // NEW: CLIENT ANALYTICS
     // ═══════════════════════════════════════════════════════════
     const clientAnalytics = useMemo(() => {
-        const allOrders = orders;
+        const allOrders = nonCommsOrders;
         const clientMap = {};
         const now = new Date();
         const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate());
@@ -1556,7 +1559,7 @@ export default function AdminDashboard() {
             topClients: [...clients].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 10),
             storeList,
         };
-    }, [orders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy, clientsStoreFilter]);
+    }, [nonCommsOrders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy, clientsStoreFilter]);
 
     // ═══════════════════════════════════════════════════════════
     // CLIENT BOOK — flat directory using PROFILES as source of truth, joined
@@ -1578,7 +1581,7 @@ export default function AdminDashboard() {
                 entry.lastOrderAt = order.created_at;
             }
         };
-        orders.forEach((o) => {
+        nonCommsOrders.forEach((o) => {
             const phone = (o.delivery_phone || o.phone || "").trim();
             if (phone) addToIndex(`phone:${phone}`, o);
             if (o.user_id) addToIndex(`uid:${o.user_id}`, o);
@@ -1695,7 +1698,7 @@ export default function AdminDashboard() {
     // NEW: B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
-        const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B");
+        const allB2bOrders = nonCommsOrders.filter(o => getOrderChannel(o) === "B2B");
 
         const dateRange = getDateRange(timeline);
         let currentB2b = allB2bOrders.filter(o => {
@@ -1802,7 +1805,7 @@ export default function AdminDashboard() {
     // ═══════════════════════════════════════════════════════════
     const enhancedInventoryStats = useMemo(() => {
         const now = new Date();
-        const activeOrders = orders.filter(o =>
+        const activeOrders = nonCommsOrders.filter(o =>
             !isLxrtsOrder(o) &&
             o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled"
         );
@@ -1832,7 +1835,7 @@ export default function AdminDashboard() {
     // ═══════════════════════════════════════════════════════════
     const financialStats = useMemo(() => {
         const dateRange = getDateRange(timeline);
-        const validOrders = orders.filter(o => {
+        const validOrders = nonCommsOrders.filter(o => {
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });
@@ -1868,7 +1871,7 @@ export default function AdminDashboard() {
         // Calculate actual monthly revenue from orders
         const monthlyRevenue = {};
         const currentYear = new Date().getFullYear();
-        orders.filter(o => new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
+        nonCommsOrders.filter(o => new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
             const m = new Date(o.created_at).getMonth();
             if (!monthlyRevenue[m]) monthlyRevenue[m] = 0;
             monthlyRevenue[m] += Number(o.grand_total || 0);
@@ -1888,7 +1891,7 @@ export default function AdminDashboard() {
             end: new Date(dateRange.start.getTime() - 1),
         };
         const storeGrowth = {};
-        orders.forEach(o => {
+        nonCommsOrders.forEach(o => {
             const store = getOrderChannel(o);
             const d = new Date(o.created_at);
             if (!storeGrowth[store]) storeGrowth[store] = { name: store, current: 0, previous: 0 };
@@ -1901,7 +1904,7 @@ export default function AdminDashboard() {
         })).sort((a, b) => Number(b.growth) - Number(a.growth));
 
         return { monthlyData, storeGrowthList };
-    }, [orders, timeline, customDateFrom, customDateTo]);
+    }, [nonCommsOrders, timeline, customDateFrom, customDateTo]);
 
     const handleGeneratePdf = async (order, type = "customer") => {
         setPdfLoading(order.id);
