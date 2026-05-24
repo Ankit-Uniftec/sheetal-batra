@@ -59,7 +59,7 @@ export const sendWhatsApp = async ({
 
 // Template constants
 export const WA_TEMPLATES = {
-  OORDER_PLACED: "store_orderplaced_dev",
+  ORDER_PLACED: "store_orderplaced_dev",
   ALTERATION: "store_alteration",
   STORE_CREDIT: "store_credit_issued",
   ORDER_CANCELLED: "store_order_cancelled",
