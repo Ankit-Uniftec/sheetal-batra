@@ -89,7 +89,7 @@ export default function CeoAssistantDashboard() {
         fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
         supabase.from("salesperson").select("saleperson, role, email, phone, store_name"),
       ]);
-      if (ordersRes.data) setOrders(ordersRes.data);
+      if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
       if (spRes.data) setSalespersonTable(spRes.data);
     } catch (err) {
       console.error("Error fetching data:", err);

@@ -11,6 +11,7 @@ import config from "../config/config";
 import { generateAllPdfs } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
+import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 
 // Auto Signature Logo URL
 const AUTO_SIGNATURE_URL = "https://qlqvchcvuwjnfranqcmx.supabase.co/storage/v1/object/public/signature/logo.png";
@@ -619,6 +620,28 @@ export default function ReviewDetail() {
         },
         attachments: notifAttachments,
       });
+
+      // Notify Private SA — if Private store order
+      if (normalizedOrder.salesperson_store === "Private") {
+        sendNotification(NOTIFICATION_TYPES.PVT_ORDER_PLACED, {
+          orderId: insertedOrder.id,
+          orderNo: insertedOrder.order_no,
+          metadata: {
+            client_name: normalizedOrder.delivery_name,
+            is_urgent: normalizedOrder.is_urgent || false,
+            store: "Private",
+          },
+        }).catch(err => console.error("PVT notification error:", err));
+      }
+
+      // WhatsApp to client — Order Placed
+      sendWhatsApp({
+        customerName: normalizedOrder.delivery_name,
+        customerPhone: normalizedOrder.delivery_phone,
+        customerCountry: normalizedOrder.delivery_country,
+        template: WA_TEMPLATES.ORDER_PLACED,
+        pdfUrl: insertedOrder.customer_url,
+      }).catch(err => console.error("WA order placed error:", err));
     } catch (notifErr) {
       console.error("❌ Notification error (non-blocking):", notifErr);
     }

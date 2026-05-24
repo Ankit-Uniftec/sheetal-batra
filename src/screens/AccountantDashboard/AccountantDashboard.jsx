@@ -140,7 +140,7 @@ export default function AccountantDashboard() {
       const { data, error } = await fetchAllRows("orders", (q) =>
         q.select("*").order("created_at", { ascending: false })
       );
-      if (!error) setOrders(data || []);
+      if (!error) setOrders((data || []).filter(o => !o.is_comms));
       setLoading(false);
     };
     checkAuthAndFetch();

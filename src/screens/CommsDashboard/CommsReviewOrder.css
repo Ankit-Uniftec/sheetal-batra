@@ -1,0 +1,250 @@
+/* CommsReviewOrder — review + submit screen for comms orders.
+   Prefix: cro- (Comms Review Order). Matches the rest of the comms screens. */
+
+.cro-page {
+  min-height: 100vh;
+  background: url("../../images/Screen1bg.png") no-repeat center center fixed;
+  background-size: cover;
+  font-family: "Futura", sans-serif;
+  color: #333;
+}
+
+.cro-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8B7355;
+  font-size: 16px;
+  font-family: "Futura", sans-serif;
+}
+
+.cro-header {
+  background: #fff;
+  border-bottom: 1px solid #D4D4D4;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.cro-logo { height: 40px; width: auto; }
+
+.cro-title {
+  margin: 0;
+  font-family: "Athleas", "Futura", serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: #d5b85a;
+  flex: 1;
+  text-align: center;
+}
+
+.cro-back {
+  background: transparent;
+  border: none;
+  color: #8B7355;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cro-back:hover { color: #d5b85a; }
+
+.cro-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 22px 24px 60px;
+}
+
+/* Approval banner (>Rs 35,000 Gifting/Barter) */
+.cro-approval-banner {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: #6d4c00;
+  line-height: 1.5;
+}
+
+.cro-approval-banner strong { color: #c97f00; }
+
+.cro-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+}
+
+.cro-card-title {
+  font-family: "Athleas", "Futura", serif;
+  color: #d5b85a;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 14px 0;
+}
+
+.cro-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 22px;
+}
+
+/* Read-only summary fields */
+.cro-readonly-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cro-readonly-label {
+  font-size: 12px;
+  color: #888;
+  font-weight: 500;
+}
+
+.cro-readonly-value {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+/* Form fields */
+.cro-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cro-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.cro-req { color: #c62828; font-weight: 700; }
+
+.cro-input {
+  padding: 10px 12px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  color: #333;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.cro-input:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.18);
+}
+
+.cro-input:disabled {
+  background: #f5f5f5;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.cro-textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+/* Products table */
+.cro-products-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cro-products-table th,
+.cro-products-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.cro-products-table thead th {
+  background: #faf6e8;
+  color: #8B7355;
+  font-weight: 600;
+}
+
+.cro-amount { text-align: right; font-variant-numeric: tabular-nums; }
+.cro-amount-label { text-align: right; font-weight: 500; color: #555; }
+.cro-amount-strong { font-weight: 700; color: #333; }
+.cro-grand-total-label { font-weight: 700; color: #8B7355; }
+.cro-grand-total {
+  font-weight: 700;
+  color: #d5b85a;
+  font-size: 15px;
+}
+
+.cro-helper {
+  font-size: 12px;
+  color: #777;
+  margin: 10px 0 0 0;
+  font-style: italic;
+}
+
+/* Actions */
+.cro-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.cro-btn-primary,
+.cro-btn-secondary {
+  padding: 11px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.cro-btn-primary {
+  background: #d5b85a;
+  border: 1px solid #d5b85a;
+  color: #fff;
+}
+
+.cro-btn-primary:hover:not(:disabled) { background: #c9a94e; }
+.cro-btn-primary:disabled {
+  background: #e8d99a;
+  border-color: #e8d99a;
+  cursor: not-allowed;
+}
+
+.cro-btn-secondary {
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  color: #555;
+}
+
+.cro-btn-secondary:hover:not(:disabled) {
+  background: #faf6e8;
+  border-color: #d5b85a;
+}
+
+/* Mobile */
+@media (max-width: 720px) {
+  .cro-title { font-size: 18px; }
+  .cro-back { display: none; }
+  .cro-grid-2 { grid-template-columns: 1fr; }
+  .cro-main { padding: 14px 14px 40px; }
+  .cro-actions { flex-direction: column-reverse; }
+  .cro-btn-primary, .cro-btn-secondary { width: 100%; }
+}

@@ -1,0 +1,1003 @@
+/* ============================================================
+   Comms Dashboard styles (Phase 1 skeleton)
+   Prefix: comms-
+   Tokens: gold #d5b85a accent, #FFFFFFB0 card backgrounds, #D4D4D4 borders
+   Mirrors the layout patterns from StoreManagerDashboard / AssistantCmoDashboard.
+   ============================================================ */
+
+.comms-page {
+  min-height: 100vh;
+  background: url("../../images/Screen1bg.png") no-repeat center center fixed;
+  background-size: cover;
+  font-family: "Futura", sans-serif;
+  color: #333;
+}
+
+.comms-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Futura", sans-serif;
+  color: #8B7355;
+  font-size: 16px;
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+.comms-header {
+  background: #fff;
+  border-bottom: 1px solid #D4D4D4;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.comms-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.comms-logo {
+  height: 40px;
+  width: auto;
+}
+
+.comms-title {
+  margin: 0;
+  font-family: "Athleas", "Futura", serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: #d5b85a;
+}
+
+.comms-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.comms-user-name {
+  font-size: 14px;
+  color: #8B7355;
+  font-weight: 500;
+}
+
+.comms-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.comms-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #8B7355;
+  border-radius: 2px;
+}
+
+/* ─── Body / Layout ──────────────────────────────────────────── */
+.comms-body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: calc(100vh - 70px);
+}
+
+/* ─── Sidebar ────────────────────────────────────────────────── */
+.comms-sidebar {
+  background: #FFFFFFB0;
+  border-right: 1px solid #D4D4D4;
+  padding: 20px 14px;
+}
+
+.comms-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comms-nav-item {
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.comms-nav-item:hover {
+  background: #faf6e8;
+  color: #8B7355;
+}
+
+.comms-nav-item.active {
+  background: #d5b85a;
+  color: #fff;
+}
+
+.comms-nav-logout {
+  margin-top: 18px;
+  color: #c62828;
+}
+
+.comms-nav-logout:hover {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* ─── Main content ───────────────────────────────────────────── */
+.comms-main {
+  padding: 24px 28px;
+  overflow-x: auto;
+}
+
+.comms-section-title {
+  font-family: "Athleas", "Futura", serif;
+  color: #d5b85a;
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.comms-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
+}
+
+.comms-card-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #8B7355;
+}
+
+.comms-muted {
+  font-size: 13px;
+  color: #666;
+  margin: 0 0 10px 0;
+}
+
+.comms-stub-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.comms-stub-list li {
+  padding: 1px 0;
+}
+
+/* ─── Overview tab pieces ───────────────────────────────────── */
+.comms-overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.comms-overview-header .comms-section-title {
+  margin: 0;
+}
+
+.comms-primary-btn {
+  background: #d5b85a;
+  border: 1px solid #d5b85a;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.comms-primary-btn:hover {
+  background: #c9a94e;
+}
+
+.comms-cards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.comms-stat-card {
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  border-left: 4px solid #d5b85a;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.comms-stat-label {
+  font-size: 12px;
+  color: #777;
+  margin: 0 0 4px 0;
+  font-weight: 500;
+}
+
+.comms-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+  margin: 0;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.comms-stat-sub {
+  font-size: 11px;
+  color: #888;
+  margin: 4px 0 0 0;
+}
+
+.comms-card-subtitle {
+  font-size: 12px;
+  color: #888;
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+.comms-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.comms-table th,
+.comms-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.comms-table thead th {
+  background: #faf6e8;
+  color: #8B7355;
+  font-weight: 600;
+}
+
+.comms-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.comms-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.comms-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Orders tab — search box + filter chip rows */
+.comms-search {
+  width: 100%;
+  max-width: 460px;
+  padding: 10px 14px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+  font-family: inherit;
+}
+
+.comms-search:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.18);
+}
+
+.comms-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.comms-filter-chip {
+  padding: 6px 14px;
+  border-radius: 18px;
+  border: 1px solid #D4D4D4;
+  background: #fff;
+  color: #555;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.comms-filter-chip:hover { background: #faf6e8; }
+
+.comms-filter-chip.active {
+  background: #d5b85a;
+  border-color: #d5b85a;
+  color: #fff;
+}
+
+/* Date range filter (sits below the status chip row in the Orders tab) */
+.comms-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.comms-date-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.comms-date-input {
+  padding: 6px 10px;
+  border: 1px solid #D4D4D4;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: #333;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.comms-date-input:focus {
+  border-color: #d5b85a;
+}
+
+.comms-date-sep {
+  color: #888;
+  font-size: 14px;
+}
+
+.comms-date-clear {
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #c62828;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.comms-date-clear:hover {
+  background: #ffebee;
+  border-color: #ef9a9a;
+}
+
+/* ─── Orders tab — structured filters card ──────────────────── */
+.comms-filters-card {
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+/* Search box at top of the filters card */
+.comms-filters-search {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.comms-filters-search input {
+  width: 100%;
+  padding: 10px 14px 10px 38px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+  color: #333;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.comms-filters-search input:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.18);
+}
+
+.comms-filters-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #b8a886;
+  display: inline-flex;
+}
+
+/* One filter row = small label on the left, controls on the right */
+.comms-filters-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid #f5f0e3;
+}
+
+.comms-filters-row:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.comms-filters-row:last-of-type {
+  padding-bottom: 0;
+}
+
+.comms-filters-row-label {
+  flex: 0 0 100px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8B7355;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.comms-filters-row-controls {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.comms-filters-date-controls {
+  gap: 10px;
+}
+
+/* Mobile: stack label above controls so chips don't get squeezed */
+@media (max-width: 720px) {
+  .comms-filters-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .comms-filters-row-label {
+    flex-basis: auto;
+  }
+}
+
+/* ─── My Calendar tab ────────────────────────────────────────── */
+.comms-cal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.comms-cal-group {
+  border-left: 3px solid #d5b85a;
+  padding-left: 14px;
+}
+
+.comms-cal-group-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8B7355;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comms-cal-today-pill {
+  font-size: 10px;
+  font-weight: 700;
+  background: #d5b85a;
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.comms-cal-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comms-cal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #faf6e8;
+  border: 1px solid #f0e8d4;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.comms-cal-type-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.comms-cal-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comms-cal-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.comms-cal-item-desc {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.comms-cal-item-meta {
+  font-size: 11px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.comms-cal-type-label {
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.comms-cal-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.comms-cal-action-btn {
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.comms-cal-action-btn:hover {
+  background: #f5ecd0;
+  border-color: #d5b85a;
+  color: #8B7355;
+}
+
+.comms-cal-action-btn.comms-cal-delete {
+  color: #c62828;
+}
+
+.comms-cal-action-btn.comms-cal-delete:hover {
+  background: #ffebee;
+  border-color: #ef9a9a;
+  color: #c62828;
+}
+
+/* ─── My Calendar tab — month grid ───────────────────────────── */
+.comms-cal-month {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.comms-cal-month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.comms-cal-month-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.comms-cal-nav-btn {
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #555;
+}
+
+.comms-cal-nav-btn:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+.comms-cal-weekrow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.comms-cal-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 0;
+}
+
+.comms-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.comms-cal-cell {
+  position: relative;
+  min-height: 64px;
+  border: 1px solid #ececec;
+  border-radius: 6px;
+  background: #fafafa;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: background 0.12s, border-color 0.12s;
+  overflow: hidden;
+}
+
+.comms-cal-cell:hover {
+  background: #f0f0f0;
+  border-color: #c8c8c8;
+}
+
+.comms-cal-empty {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+.comms-cal-empty:hover {
+  background: transparent;
+}
+
+.comms-cal-cell-num {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.comms-cal-today {
+  background: #fff8e1;
+  border-color: #d5b85a;
+}
+
+.comms-cal-today .comms-cal-cell-num {
+  color: #b8941f;
+  font-weight: 700;
+}
+
+.comms-cal-selected {
+  background: #fff;
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.25);
+}
+
+.comms-cal-has-events {
+  background: #fff;
+}
+
+.comms-cal-cell-count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #d5b85a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 6px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.comms-cal-cell-dots {
+  display: flex;
+  gap: 3px;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.comms-cal-cell-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+@media (max-width: 640px) {
+  .comms-cal-cell {
+    min-height: 48px;
+    padding: 4px;
+  }
+  .comms-cal-cell-num {
+    font-size: 11px;
+  }
+  .comms-cal-cell-count {
+    font-size: 9px;
+    padding: 0 4px;
+    min-width: 14px;
+    top: 2px;
+    right: 2px;
+  }
+  .comms-cal-cell-dot {
+    width: 5px;
+    height: 5px;
+  }
+}
+
+/* ─── Orders tab — SA-style order cards ──────────────────────── */
+.comms-order-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.comms-order-card {
+  background: #fff;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 16px 18px;
+  transition: box-shadow 0.15s;
+}
+
+.comms-order-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.comms-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0e8d4;
+  margin-bottom: 14px;
+}
+
+.comms-order-header-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  flex: 1;
+}
+
+.comms-order-header-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.comms-order-header-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #888;
+  letter-spacing: 0.5px;
+}
+
+.comms-order-header-value {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.comms-order-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.comms-order-status-badge {
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.comms-status-order-received {
+  background: rgba(213, 184, 90, 0.15);
+  color: #8B7355;
+}
+
+.comms-status-delivered {
+  background: rgba(46, 125, 50, 0.15);
+  color: #2e7d32;
+}
+
+.comms-status-cancelled {
+  background: rgba(198, 40, 40, 0.12);
+  color: #c62828;
+}
+
+.comms-status-pending {
+  background: rgba(239, 108, 0, 0.15);
+  color: #ef6c00;
+}
+
+.comms-pdf-btn {
+  padding: 6px 12px;
+  background: #faf6e8;
+  color: #8B7355;
+  border: 1px solid #d5b85a;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.comms-pdf-btn:hover:not(:disabled) {
+  background: #d5b85a;
+  color: #fff;
+}
+
+.comms-pdf-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.comms-order-content {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.comms-product-thumb {
+  flex: 0 0 110px;
+  width: 110px;
+  height: 130px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #faf6e8;
+  border: 1px solid #f0e8d4;
+}
+
+.comms-product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comms-product-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comms-product-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.comms-product-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+}
+
+.comms-product-value {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+}
+
+.comms-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 14px;
+  margin-top: 4px;
+}
+
+.comms-detail-item {
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+  align-items: center;
+}
+
+/* Mobile tweaks for the order card */
+@media (max-width: 720px) {
+  .comms-order-content {
+    flex-direction: column;
+  }
+  .comms-product-thumb {
+    width: 100%;
+    height: 200px;
+    flex: 0 0 auto;
+  }
+}
+
+/* ─── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .comms-hamburger { display: inline-flex; }
+  .comms-title { font-size: 18px; }
+  .comms-user-name { display: none; }
+
+  .comms-body {
+    grid-template-columns: 1fr;
+  }
+
+  .comms-sidebar {
+    position: fixed;
+    top: 70px;
+    left: 0;
+    bottom: 0;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 20;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    background: #fff;
+  }
+
+  .comms-sidebar-open {
+    transform: translateX(0);
+  }
+
+  .comms-main {
+    padding: 18px 16px;
+  }
+}

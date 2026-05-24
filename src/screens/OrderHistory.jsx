@@ -11,6 +11,7 @@ import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import config from "../config/config";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
+import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 
 // Measurement categories and fields (same as Screen4)
 const CATEGORY_KEY_MAP = {
@@ -601,6 +602,14 @@ export default function OrderHistory() {
       closeActionModal();
       showPopup({ type: "success", title: "Order Cancelled", message: "Order has been cancelled successfully!", confirmText: "OK" });
 
+      // WhatsApp to client — Order Cancelled
+      sendWhatsApp({
+        customerName: order.delivery_name,
+        customerPhone: order.delivery_phone,
+        customerCountry: order.delivery_country,
+        template: WA_TEMPLATES.ORDER_CANCELLED,
+      }).catch(err => console.error("WA cancelled error:", err));
+
       // Notify warehouse — Order Cancelled (#21)
       sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
         orderId: order.id,
@@ -633,8 +642,16 @@ export default function OrderHistory() {
       closeActionModal();
       showPopup({ type: "success", title: "Order Revoked", message: "Order revoked successfully! Full refund will be initiated.", confirmText: "OK" });
 
-      // Notify warehouse — Order Cancelled
-      sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
+      // WhatsApp to client — Order Cancelled
+      sendWhatsApp({
+        customerName: order.delivery_name,
+        customerPhone: order.delivery_phone,
+        customerCountry: order.delivery_country,
+        template: WA_TEMPLATES.ORDER_CANCELLED,
+      }).catch(err => console.error("WA cancelled error:", err));
+
+      // Notify warehouse — Order Revoked
+      sendNotification(NOTIFICATION_TYPES.ORDER_REVOKED_WAREHOUSE, {
         orderId: order.id,
         orderNo: order.order_no,
         metadata: { client_name: order.delivery_name, reason: "Brand-Initiated Revoke" },
@@ -645,7 +662,12 @@ export default function OrderHistory() {
       sendNotification(NOTIFICATION_TYPES.ORDER_REVOKED, {
         orderId: order.id,
         orderNo: order.order_no,
-        metadata: { client_name: order.delivery_name, reason: "Brand-Initiated Revoke" },
+        metadata: {
+          client_name: order.delivery_name,
+          reason: "Brand-Initiated (Pre-Delivery) - Unable to fulfil order",
+          sa_name: order.salesperson || "N/A",
+        },
+        attachments: order.customer_url ? [{ type: "order_pdf", url: order.customer_url }] : [],
       }).catch(err => console.error("Revoke notification error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
@@ -886,6 +908,14 @@ export default function OrderHistory() {
         message: `₹${formatIndianNumber(creditAmount)} store credits added to account. Valid for 12 months.${partialNote}${giftingNote}`,
         confirmText: "OK"
       });
+
+      // WhatsApp to client — Store Credit Issued
+      sendWhatsApp({
+        customerName: order.delivery_name,
+        customerPhone: order.delivery_phone,
+        customerCountry: order.delivery_country,
+        template: WA_TEMPLATES.STORE_CREDIT,
+      }).catch(err => console.error("WA store credit error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
@@ -1205,6 +1235,31 @@ export default function OrderHistory() {
       setEditingOrder(null);
       setEditMeasurements({});
       showPopup({ type: "success", title: "Order Updated", message: "Order has been updated successfully!", confirmText: "OK" });
+
+      // WhatsApp to client — Order Edited
+      sendWhatsApp({
+        customerName: editingOrder.delivery_name,
+        customerPhone: editingOrder.delivery_phone,
+        customerCountry: editingOrder.delivery_country,
+        template: WA_TEMPLATES.ORDER_EDITED,
+        pdfUrl: freshOrder?.customer_url,
+      }).catch(err => console.error("WA edited error:", err));
+
+      // Notify warehouse — Order Edited
+      sendNotification(NOTIFICATION_TYPES.ORDER_EDITED, {
+        orderId: editingOrder.id,
+        orderNo: editingOrder.order_no,
+        metadata: { client_name: editingOrder.delivery_name },
+      }).catch(err => console.error("Edit notification error:", err));
+
+      // Notify Private SA — if Private store order
+      if (editingOrder.salesperson_store === "Private") {
+        sendNotification(NOTIFICATION_TYPES.PVT_ORDER_EDITED, {
+          orderId: editingOrder.id,
+          orderNo: editingOrder.order_no,
+          metadata: { client_name: editingOrder.delivery_name },
+        }).catch(err => console.error("PVT edit notification error:", err));
+      }
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });
     } finally {
