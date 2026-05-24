@@ -9,6 +9,8 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
+import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
+import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import AlterationModal from "../components/AlterationModal";
 
 // Size options
@@ -359,6 +361,26 @@ export default function OrderDetailPage() {
         }`,
         confirmText: "OK",
       });
+
+      // Notify warehouse — Alteration Created
+      if (alterationData.alteration_location === "Warehouse") {
+        sendNotification(NOTIFICATION_TYPES.ALTERATION_CREATED, {
+          orderId: insertedOrder.id,
+          orderNo: alterationOrderNo,
+          metadata: {
+            client_name: order.delivery_name,
+            parent_order: order.order_no,
+          },
+        }).catch(err => console.error("Alteration notification error:", err));
+
+        // WhatsApp to client — Alteration
+        sendWhatsApp({
+          customerName: order.delivery_name,
+          customerPhone: order.delivery_phone,
+          customerCountry: order.delivery_country,
+          template: WA_TEMPLATES.ALTERATION,
+        }).catch(err => console.error("WA alteration error:", err));
+      }
 
     } catch (err) {
       console.error("Error creating alteration:", err);

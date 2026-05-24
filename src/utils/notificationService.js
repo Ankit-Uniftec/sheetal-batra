@@ -56,6 +56,13 @@ export const NOTIFICATION_TYPES = {
     // Comms sourcing return reminders (fired by a scheduled edge function)
     COMMS_RETURN_DUE_TOMORROW: "comms_return_due_tomorrow",   // 24h before outfit_return_date
     COMMS_RETURN_OVERDUE: "comms_return_overdue",             // 24h after outfit_return_date with no return
+
+    ORDER_EDITED: "order_edited",
+
+    PVT_ORDER_PLACED: "pvt_order_placed",
+    PVT_ORDER_EDITED: "pvt_order_edited",
+    PVT_DELIVERY_TODAY: "pvt_delivery_today",
+    PVT_DELIVERY_T2: "pvt_delivery_t2",
 };
 
 // ==========================================
@@ -146,6 +153,16 @@ const RECIPIENT_MAP = {
     [NOTIFICATION_TYPES.COMMS_RETURN_OVERDUE]: [
         { role: "comms", channel: "in_app" },   // Nazreen: outfit return is overdue
         { role: "admin", channel: "in_app" },   // Jahnavi gets escalation visibility
+    ],
+    [NOTIFICATION_TYPES.ORDER_EDITED]: [
+        { designation: "Offline Production Head", channel: "in_app" },
+        { designation: "Offline Production Assistant", channel: "in_app" },
+    ],
+    [NOTIFICATION_TYPES.PVT_ORDER_PLACED]: [
+        { designation: "Private SA", channel: "in_app" },
+    ],
+    [NOTIFICATION_TYPES.PVT_ORDER_EDITED]: [
+        { designation: "Private SA", channel: "in_app" },
     ],
 };
 
@@ -264,7 +281,21 @@ const TEMPLATES = {
         message: `Order ${meta.order_no} (${meta.client_name || "—"}) — outfit return was due ${meta.return_date} and has not been returned.`,
         priority: "escalation",
     }),
-
+    [NOTIFICATION_TYPES.ORDER_EDITED]: (meta) => ({
+        title: "Order Edited",
+        message: `Existing order has been edited — ${meta.order_no}`,
+        priority: "normal",
+    }),
+    [NOTIFICATION_TYPES.PVT_ORDER_PLACED]: (meta) => ({
+        title: "New Private Order Placed",
+        message: `New Order Placed — ${meta.order_no}${meta.is_urgent ? " 🔥 URGENT" : ""}`,
+        priority: meta.is_urgent ? "urgent" : "normal",
+    }),
+    [NOTIFICATION_TYPES.PVT_ORDER_EDITED]: (meta) => ({
+        title: "Private Order Edited",
+        message: `Existing order has been edited — ${meta.order_no}`,
+        priority: "normal",
+    }),
 };
 
 // ==========================================
