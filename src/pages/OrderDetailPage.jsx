@@ -362,7 +362,7 @@ export default function OrderDetailPage() {
         confirmText: "OK",
       });
 
-      // Notify warehouse — Alteration Created
+      // Notify warehouse — Alteration Created (only for warehouse alterations)
       if (alterationData.alteration_location === "Warehouse") {
         sendNotification(NOTIFICATION_TYPES.ALTERATION_CREATED, {
           orderId: insertedOrder.id,
@@ -372,15 +372,15 @@ export default function OrderDetailPage() {
             parent_order: order.order_no,
           },
         }).catch(err => console.error("Alteration notification error:", err));
-
-        // WhatsApp to client — Alteration
-        sendWhatsApp({
-          customerName: order.delivery_name,
-          customerPhone: order.delivery_phone,
-          customerCountry: order.delivery_country,
-          template: WA_TEMPLATES.ALTERATION,
-        }).catch(err => console.error("WA alteration error:", err));
       }
+
+      // WhatsApp to client — Alteration (all alterations, regardless of location)
+      sendWhatsApp({
+        customerName: order.delivery_name,
+        customerPhone: order.delivery_phone,
+        customerCountry: order.delivery_country,
+        template: WA_TEMPLATES.ALTERATION,
+      }).catch(err => console.error("WA alteration error:", err));
 
     } catch (err) {
       console.error("Error creating alteration:", err);
