@@ -11,6 +11,7 @@ import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
+import { itemFinalAmount } from "../../utils/itemNetAmount";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -296,7 +297,7 @@ export default function GMDashboard() {
     // HELPER FUNCTIONS
     // ═══════════════════════════════════════════════════════════
     const getPaymentStatus = (order) => {
-        const total = order.grand_total || order.net_total || 0;
+        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
         const advance = order.advance_payment || 0;
         if (advance >= total) return "paid";
         if (advance > 0) return "partial";
@@ -430,16 +431,16 @@ export default function GMDashboard() {
         const currentOrders = filterOrdersByDateRange(orders.filter(o => !isLxrtsOrder(o)), dateRange);
         const prevOrders = compRange ? filterOrdersByDateRange(orders.filter(o => !isLxrtsOrder(o)), compRange) : [];
 
-        const totalRevenue = currentOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = currentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = currentOrders.length;
-        const prevRevenue = prevOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const prevRevenue = prevOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
         // Store-wise breakdown
         const storeMap = {};
         currentOrders.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!storeMap[store]) storeMap[store] = { name: store, revenue: 0, orders: 0, items: 0 };
-            storeMap[store].revenue += Number(o.grand_total || 0);
+            storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             storeMap[store].orders += 1;
             storeMap[store].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
         });
@@ -452,7 +453,7 @@ export default function GMDashboard() {
             if (!sp || !isPersonName(sp)) return;
             const store = o.salesperson_store || "Other";
             if (!saMap[sp]) saMap[sp] = { name: sp, store, revenue: 0, orders: 0, items: 0, discount: 0 };
-            saMap[sp].revenue += Number(o.grand_total || 0);
+            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);
@@ -465,7 +466,7 @@ export default function GMDashboard() {
         prevOrders.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!prevStoreMap[store]) prevStoreMap[store] = { revenue: 0 };
-            prevStoreMap[store].revenue += Number(o.grand_total || 0);
+            prevStoreMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const storeGrowth = storeBreakdown.map(s => ({
             ...s,
@@ -515,7 +516,7 @@ export default function GMDashboard() {
             const key = d.toISOString().split("T")[0];
             const label = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!buckets[key]) buckets[key] = { date: label, fullDate: key, revenue: 0, orders: 0, delhiRevenue: 0, ludhianaRevenue: 0, b2bRevenue: 0 };
-            const amount = Number(o.grand_total || 0);
+            const amount = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             buckets[key].revenue += amount;
             buckets[key].orders += 1;
             const store = (o.salesperson_store || "").toLowerCase();
@@ -534,8 +535,8 @@ export default function GMDashboard() {
         const dateRange = getDateRange(timeline);
         const currentB2b = allB2bOrders.filter(o => { const d = new Date(o.created_at); return d >= dateRange.start && d <= dateRange.end; });
 
-        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const totalAllRevenue = filterOrdersByDateRange(orders, dateRange).reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalAllRevenue = filterOrdersByDateRange(orders, dateRange).reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const b2bContribution = totalAllRevenue > 0 ? ((totalB2bRevenue / totalAllRevenue) * 100).toFixed(1) : 0;
 
         const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
@@ -547,10 +548,10 @@ export default function GMDashboard() {
             const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
             const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
-            clientSales[client].sales += Number(o.grand_total || 0);
+            clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             clientSales[client].orders += 1;
             clientSales[client].advance += Number(o.advance_payment || 0);
-            clientSales[client].balance += Math.max(0, Number(o.grand_total || 0) - Number(o.advance_payment || 0));
+            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));
         });
         const allClientSales = Object.values(clientSales).sort((a, b) => b.sales - a.sales);
 
@@ -562,14 +563,14 @@ export default function GMDashboard() {
         const b2bTotalPages = Math.ceil(filteredB2b.length / ITEMS_PER_PAGE);
         const currentB2bClients = filteredB2b.slice((b2bPage - 1) * ITEMS_PER_PAGE, b2bPage * ITEMS_PER_PAGE);
 
-        // Product analysis
+        // Product analysis (net of proportional order discount)
         const productSales = {};
         currentB2b.forEach(o => {
             (o.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, qty: 0, revenue: 0 };
                 productSales[name].qty += Number(item.quantity || 1);
-                productSales[name].revenue += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].revenue += itemFinalAmount(o, item);
             });
         });
         const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
@@ -577,13 +578,13 @@ export default function GMDashboard() {
         // Growth
         const periodMs = dateRange.end - dateRange.start;
         const prevB2b = allB2bOrders.filter(o => { const d = new Date(o.created_at); return d >= new Date(dateRange.start.getTime() - periodMs) && d < dateRange.start; });
-        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
         return {
             totalB2bRevenue, totalB2bOrders: currentB2b.length, b2bContribution,
-            buyoutCount: buyoutOrders.length, buyoutValue: buyoutOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            consignmentCount: consignmentOrders.length, consignmentValue: consignmentOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            clientOrderCount: clientOrderOrders.length, clientOrderValue: clientOrderOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            buyoutCount: buyoutOrders.length, buyoutValue: buyoutOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            consignmentCount: consignmentOrders.length, consignmentValue: consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            clientOrderCount: clientOrderOrders.length, clientOrderValue: clientOrderOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             currentB2bClients, b2bTotalPages, allClientSales, topB2bProducts,
             advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
             revenueGrowth: calculateGrowth(totalB2bRevenue, prevRevenue),
@@ -669,17 +670,17 @@ export default function GMDashboard() {
             if (o.refund_reason) saIssues[sp].refunds++;
             if (o.exchange_reason) saIssues[sp].exchanges++;
             if (o.revoked_at) saIssues[sp].revokes++;
-            saIssues[sp].totalValue += Number(o.grand_total || 0);
+            saIssues[sp].totalValue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const saIssuesList = Object.values(saIssues).sort((a, b) => (b.cancellations + b.returns + b.refunds + b.exchanges + b.revokes) - (a.cancellations + a.returns + a.refunds + a.exchanges + a.revokes));
 
-        const totalIssueValue = [...cancelled, ...returned, ...refunded, ...exchanged].reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalIssueValue = [...cancelled, ...returned, ...refunded, ...exchanged].reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
         return {
-            cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             revokedCount: revoked.length,
             totalIssueValue,
             cancellationReasons: analyzeReasons(cancelled, "cancellation_reason"),
@@ -695,20 +696,24 @@ export default function GMDashboard() {
     // ═══════════════════════════════════════════════════════════
     const accountsLineItems = useMemo(() => {
         const items = [];
+        const GST_RATE = 0.05;
         orders.forEach(order => {
             if (isLxrtsOrder(order)) return;
-            (order.items || []).forEach((item, idx) => {
-                const productPrice = item.price || 0;
-                const quantity = item.quantity || 1;
+            const orderItems = order.items || [];
+            // Allocate discount proportionally by GST-inclusive item gross.
+            const orderGrossSum = orderItems.reduce(
+                (s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0
+            );
+            const orderDiscount = Number(order.discount_amount || 0);
+            orderItems.forEach((item, idx) => {
+                const productPrice = Number(item.price || 0);
+                const quantity = Number(item.quantity || 1);
                 const grossValue = productPrice * quantity;
-                const orderSubtotal = order.subtotal || order.grand_total || 0;
-                const orderDiscount = order.discount_amount || 0;
-                const discountRatio = orderSubtotal > 0 ? grossValue / orderSubtotal : 0;
-                const productDiscount = orderDiscount * discountRatio;
-                const taxableValue = grossValue - productDiscount;
-                const gstRate = 0.05;
-                const gst = taxableValue * gstRate;
-                const invoiceValue = taxableValue + gst;
+                const discountRatio = orderGrossSum > 0 ? grossValue / orderGrossSum : 0;
+                const productDiscount = Math.min(grossValue, orderDiscount * discountRatio);
+                const invoiceValue = Math.max(0, grossValue - productDiscount);
+                const taxableValue = invoiceValue / (1 + GST_RATE);
+                const gst = invoiceValue - taxableValue;
                 items.push({
                     id: `${order.id}-${idx}`, order_no: order.order_no, order_date: order.created_at,
                     sa_name: getOrderSalesperson(order) || "-", client_name: order.delivery_name || "-",
@@ -797,7 +802,7 @@ export default function GMDashboard() {
             });
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-            result = result.filter(order => { const total = order.grand_total || order.net_total || 0; return total >= filters.minPrice && total <= filters.maxPrice; });
+            result = result.filter(order => { const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0; return total >= filters.minPrice && total <= filters.maxPrice; });
         }
         if (filters.payment.length > 0) result = result.filter(order => filters.payment.includes(getPaymentStatus(order)));
         if (filters.priority.length > 0) result = result.filter(order => filters.priority.includes(getPriority(order)));
@@ -815,8 +820,8 @@ export default function GMDashboard() {
             switch (sortBy) {
                 case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
                 case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
-                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
+                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
                 default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
             }
         });
@@ -865,7 +870,7 @@ export default function GMDashboard() {
         const rows = filteredOrders.map(order => {
             const item = order.items?.[0] || {};
             return [order.order_no || "", item.product_name || "", order.delivery_name || "", order.delivery_phone || "",
-            item.size || "", order.grand_total || 0, order.salesperson || "", order.salesperson_store || "",
+            item.size || "", order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0, order.salesperson || "", order.salesperson_store || "",
             order.status || "", order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
             order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : ""].map(v => `"${String(v).replace(/"/g, '""')}"`);
         });
@@ -1529,7 +1534,7 @@ export default function GMDashboard() {
                                                             <td><span className="order-id">{order.order_no || "-"}</span>{isUrgent && <span className="urgent-badge">URGENT</span>}</td>
                                                             <td>{order.delivery_name || "-"}</td>
                                                             <td className="product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                            <td>{"\u20B9"}{formatIndianNumber(order.grand_total || 0)}</td>
+                                                            <td>{"\u20B9"}{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                             <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
                                                             <td><span className={`status-badge ${order.status}`}>{order.status || "pending"}</span></td>
                                                             <td>{getOrderSalesperson(order) || "-"}</td>

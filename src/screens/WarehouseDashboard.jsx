@@ -476,7 +476,7 @@ const WarehouseDashboard = () => {
     // Price range filter
     if (filters.minPrice > 0 || filters.maxPrice < 500000) {
       result = result.filter((order) => {
-        const total = order.grand_total || order.net_total || 0;
+        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
         return total >= filters.minPrice && total <= filters.maxPrice;
       });
     }
@@ -516,9 +516,9 @@ const WarehouseDashboard = () => {
         case "delivery":
           return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
         case "amount_high":
-          return (b.grand_total || 0) - (a.grand_total || 0);
+          return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
         case "amount_low":
-          return (a.grand_total || 0) - (b.grand_total || 0);
+          return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
         default:
           return getOrderNum(b.order_no) - getOrderNum(a.order_no);
       }

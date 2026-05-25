@@ -247,7 +247,7 @@ export default function HeadOfDesignDashboard() {
   );
 
   const b2bStats = useMemo(() => {
-    const totalValue = b2bAll.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+    const totalValue = b2bAll.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
     const pending  = b2bAll.filter(o => o.approval_status === "pending").length;
     const approved = b2bAll.filter(o => o.approval_status === "approved").length;
     const rejected = b2bAll.filter(o => o.approval_status === "rejected").length;
@@ -278,7 +278,7 @@ export default function HeadOfDesignDashboard() {
         };
       }
       map[vid].orders += 1;
-      map[vid].value += Number(o.grand_total || 0);
+      map[vid].value += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       if (o.approval_status === "pending") map[vid].pending += 1;
     });
     return Object.values(map).sort((a, b) => b.value - a.value);
@@ -489,7 +489,7 @@ export default function HeadOfDesignDashboard() {
                                 {s?.label || "—"}
                               </span>
                             </td>
-                            <td className="amount">{"₹"}{formatIndianNumber(o.grand_total || 0)}</td>
+                            <td className="amount">{"₹"}{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td>
                           </tr>
                         );
                       })}
@@ -682,7 +682,7 @@ export default function HeadOfDesignDashboard() {
                               </span>
                             </td>
                             <td>{o.delivery_date ? formatDate(o.delivery_date) : "—"}</td>
-                            <td className="amount">{"₹"}{formatIndianNumber(o.grand_total || 0)}</td>
+                            <td className="amount">{"₹"}{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td>
                           </tr>
                         );
                       })}

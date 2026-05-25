@@ -11,6 +11,7 @@ import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
+import { itemFinalAmount } from "../../utils/itemNetAmount";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -305,7 +306,7 @@ export default function CEODashboard() {
 
     // Helper functions
     const getPaymentStatus = (order) => {
-        const total = order.grand_total || order.net_total || 0;
+        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
         const advance = order.advance_payment || 0;
         if (advance >= total) return "paid";
         if (advance > 0) return "partial";
@@ -500,14 +501,14 @@ export default function CEODashboard() {
         const currentOrders = filterOrdersByDateRange(orders, dateRange);
         const previousOrders = comparisonRange ? filterOrdersByDateRange(orders, comparisonRange) : [];
 
-        const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = currentOrders.length;
         const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
         const deliveredOrders = currentOrders.filter(o => o.status === "delivered").length;
         const cancelledOrders = currentOrders.filter(o => o.status === "cancelled").length;
 
-        const prevRevenue = previousOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const prevRevenue = previousOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const prevTotalOrders = previousOrders.length;
         const prevPendingOrders = previousOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const prevPreparedOrders = previousOrders.filter(o => o.status === "completed").length;
@@ -590,13 +591,13 @@ export default function CEODashboard() {
             return orderDate >= dateRange.start && orderDate <= dateRange.end;
         });
 
-        // 1. Sales by Top 10 Products
+        // 1. Sales by Top 10 Products (net of proportional order discount)
         const productSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].sales += itemFinalAmount(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
@@ -604,13 +605,13 @@ export default function CEODashboard() {
             .sort((a, b) => b.sales - a.sales)
             .slice(0, 10);
 
-        // 2. Sales by Top 10 Colors
+        // 2. Sales by Top 10 Colors (net of proportional order discount)
         const colorSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name || "Unknown";
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
+                const itemSales = itemFinalAmount(order, item);
 
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
@@ -633,7 +634,7 @@ export default function CEODashboard() {
         validOrders.forEach(order => {
             const store = getOrderChannel(order);
             if (!storeSales[store]) storeSales[store] = { name: store, sales: 0, count: 0 };
-            storeSales[store].sales += Number(order.grand_total || 0);
+            storeSales[store].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             storeSales[store].count += 1;
         });
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);
@@ -644,7 +645,7 @@ export default function CEODashboard() {
             const sp = getOrderSalesperson(order);
             if (!sp || !isPersonName(sp)) return;
             if (!salespersonData[sp]) salespersonData[sp] = { name: sp, sales: 0, discount: 0, count: 0 };
-            salespersonData[sp].sales += Number(order.grand_total || 0);
+            salespersonData[sp].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             salespersonData[sp].discount += Number(order.discount_amount || 0);
             salespersonData[sp].count += 1;
         });
@@ -860,7 +861,7 @@ export default function CEODashboard() {
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(order => {
-                const total = order.grand_total || order.net_total || 0;
+                const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
                 return total >= filters.minPrice && total <= filters.maxPrice;
             });
         }
@@ -880,8 +881,8 @@ export default function CEODashboard() {
             switch (sortBy) {
                 case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
                 case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
-                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
+                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
                 default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
             }
         });
@@ -945,7 +946,7 @@ export default function CEODashboard() {
                 order.delivery_phone || "",
                 order.delivery_email || order.email || "",
                 item.size || "",
-                order.grand_total || order.net_total || 0,
+                order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0,
                 item.top_color?.name || item.color?.name || "",
                 item.bottom_color?.name || "",
                 order.salesperson || "",
@@ -979,21 +980,26 @@ export default function CEODashboard() {
     // Accounts
     const accountsLineItems = useMemo(() => {
         const items = [];
+        const GST_RATE = 0.05;
         orders.forEach(order => {
             if (isLxrtsOrder(order)) return;
             const orderItems = order.items || [];
+            // Discount allocated proportionally across line items by their
+            // GST-inclusive gross — same basis as `gross` so the ratio is unit-free.
+            const orderGrossSum = orderItems.reduce(
+                (s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0
+            );
+            const orderDiscount = Number(order.discount_amount || 0);
             orderItems.forEach((item, idx) => {
-                const productPrice = item.price || 0;
-                const quantity = item.quantity || 1;
+                const productPrice = Number(item.price || 0);
+                const quantity = Number(item.quantity || 1);
+                // item.price is the GST-inclusive MRP shown on the customer invoice.
                 const grossValue = productPrice * quantity;
-                const orderSubtotal = order.subtotal || order.grand_total || 0;
-                const orderDiscount = order.discount_amount || 0;
-                const discountRatio = orderSubtotal > 0 ? grossValue / orderSubtotal : 0;
-                const productDiscount = orderDiscount * discountRatio;
-                const taxableValue = grossValue - productDiscount;
-                const gstRate = 0.05;
-                const gst = taxableValue * gstRate;
-                const invoiceValue = taxableValue + gst;
+                const discountRatio = orderGrossSum > 0 ? grossValue / orderGrossSum : 0;
+                const productDiscount = Math.min(grossValue, orderDiscount * discountRatio);
+                const invoiceValue = Math.max(0, grossValue - productDiscount);
+                const taxableValue = invoiceValue / (1 + GST_RATE);
+                const gst = invoiceValue - taxableValue;
 
                 items.push({
                     id: `${order.id}-${idx}`, order_no: order.order_no, order_date: order.created_at,
@@ -1053,7 +1059,7 @@ export default function CEODashboard() {
             return d >= dateRange.start && d <= dateRange.end;
         });
 
-        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = validOrders.length;
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
         const totalItems = validOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
@@ -1063,7 +1069,7 @@ export default function CEODashboard() {
         validOrders.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.grand_total || 0);
+            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -1091,7 +1097,7 @@ export default function CEODashboard() {
             const d = new Date(o.created_at);
             const key = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
-            buckets[key].revenue += Number(o.grand_total || 0);
+            buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             buckets[key].orders += 1;
         });
         return Object.values(buckets)
@@ -1110,26 +1116,26 @@ export default function CEODashboard() {
             return d >= dateRange.start && d <= dateRange.end;
         });
 
-        // Products
+        // Products (net of proportional order discount)
         const productSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].sales += itemFinalAmount(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
         const sortedProducts = Object.values(productSales).sort((a, b) => b.sales - a.sales);
         const bottomProducts = [...sortedProducts].sort((a, b) => a.sales - b.sales).slice(0, 10);
 
-        // Colors
+        // Colors (net of proportional order discount)
         const colorSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name;
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
+                const itemSales = itemFinalAmount(order, item);
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
                     colorSales[topColor].sales += bottomColor ? itemSales / 2 : itemSales;
@@ -1191,7 +1197,7 @@ export default function CEODashboard() {
                 };
             }
             const c = clientMap[phone];
-            const amount = Number(order.grand_total || 0);
+            const amount = Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             c.totalSpend += amount;
             c.orderCount += 1;
             c.items += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
@@ -1292,9 +1298,9 @@ export default function CEODashboard() {
         const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
         const consignmentOrders = currentB2b.filter(o => o.b2b_order_type === "Consignment");
         const clientOrderOrders = currentB2b.filter(o => o.b2b_order_type === "Client Order");
-        const buyoutValue = buyoutOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const consignmentValue = consignmentOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const clientOrderValue = clientOrderOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const buyoutValue = buyoutOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const consignmentValue = consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const clientOrderValue = clientOrderOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
         // Client sales map
         const clientSales = {};
@@ -1302,10 +1308,10 @@ export default function CEODashboard() {
             const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
             const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
-            clientSales[client].sales += Number(o.grand_total || 0);
+            clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             clientSales[client].orders += 1;
             clientSales[client].advance += Number(o.advance_payment || 0);
-            clientSales[client].balance += Math.max(0, Number(o.grand_total || 0) - Number(o.advance_payment || 0));
+            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));
             if (o.created_at < clientSales[client].firstSeen) clientSales[client].firstSeen = o.created_at;
         });
 
@@ -1317,8 +1323,8 @@ export default function CEODashboard() {
             const d = new Date(o.created_at);
             return d >= prevStart && d < prevEnd;
         });
-        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const revenueGrowth = prevRevenue > 0 ? ((totalB2bRevenue - prevRevenue) / prevRevenue * 100) : 0;
         const ordersGrowth = prevB2b.length > 0 ? ((currentB2b.length - prevB2b.length) / prevB2b.length * 100) : 0;
 
@@ -1343,7 +1349,7 @@ export default function CEODashboard() {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, qty: 0, revenue: 0 };
                 productSales[name].qty += Number(item.quantity || 1);
-                productSales[name].revenue += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].revenue += itemFinalAmount(o, item);
             });
         });
         const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
@@ -1415,7 +1421,7 @@ export default function CEODashboard() {
         });
 
         const totalDiscount = validOrders.reduce((s, o) => s + Number(o.discount_amount || 0), 0);
-        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const grossRevenue = totalRevenue + totalDiscount;
         const discountPercent = grossRevenue > 0 ? ((totalDiscount / grossRevenue) * 100).toFixed(1) : 0;
 
@@ -1425,7 +1431,7 @@ export default function CEODashboard() {
             const ch = getOrderChannel(o);
             if (!channelDiscounts[ch]) channelDiscounts[ch] = { name: ch, discount: 0, revenue: 0 };
             channelDiscounts[ch].discount += Number(o.discount_amount || 0);
-            channelDiscounts[ch].revenue += Number(o.grand_total || 0);
+            channelDiscounts[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
 
         return {
@@ -1448,7 +1454,7 @@ export default function CEODashboard() {
         orders.filter(o => new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
             const m = new Date(o.created_at).getMonth();
             if (!monthlyRevenue[m]) monthlyRevenue[m] = 0;
-            monthlyRevenue[m] += Number(o.grand_total || 0);
+            monthlyRevenue[m] += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
 
         const monthlyData = months.map((m, i) => ({
@@ -1469,8 +1475,8 @@ export default function CEODashboard() {
             const store = getOrderChannel(o);
             const d = new Date(o.created_at);
             if (!storeGrowth[store]) storeGrowth[store] = { name: store, current: 0, previous: 0 };
-            if (d >= dateRange.start && d <= dateRange.end) storeGrowth[store].current += Number(o.grand_total || 0);
-            else if (d >= prevRange.start && d <= prevRange.end) storeGrowth[store].previous += Number(o.grand_total || 0);
+            if (d >= dateRange.start && d <= dateRange.end) storeGrowth[store].current += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            else if (d >= prevRange.start && d <= prevRange.end) storeGrowth[store].previous += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const storeGrowthList = Object.values(storeGrowth).map(s => ({
             ...s,
@@ -1502,7 +1508,7 @@ export default function CEODashboard() {
         current.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!storeMap[store]) storeMap[store] = { name: store, revenue: 0, orders: 0, items: 0 };
-            storeMap[store].revenue += Number(o.grand_total || 0);
+            storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             storeMap[store].orders += 1;
             storeMap[store].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
         });
@@ -1515,7 +1521,7 @@ export default function CEODashboard() {
             if (!sp || !isPersonName(sp)) return;
             const store = o.salesperson_store || "Other";
             if (!saMap[sp]) saMap[sp] = { name: sp, store, revenue: 0, orders: 0, items: 0, discount: 0, newClients: 0 };
-            saMap[sp].revenue += Number(o.grand_total || 0);
+            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);
@@ -1528,7 +1534,7 @@ export default function CEODashboard() {
             const d = new Date(o.created_at);
             const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
             if (!dayMap[dayName]) dayMap[dayName] = { name: dayName, revenue: 0, orders: 0 };
-            dayMap[dayName].revenue += Number(o.grand_total || 0);
+            dayMap[dayName].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             dayMap[dayName].orders += 1;
         });
         const topDays = Object.values(dayMap).sort((a, b) => b.revenue - a.revenue);
@@ -1539,10 +1545,10 @@ export default function CEODashboard() {
             const sp = getOrderSalesperson(o);
             if (!sp || !isPersonName(sp)) return;
             if (!saIssues[sp]) saIssues[sp] = { name: sp, refunds: 0, returns: 0, exchanges: 0, cancellations: 0, total: 0 };
-            if (o.refund_reason) { saIssues[sp].refunds++; saIssues[sp].total += Number(o.grand_total || 0); }
-            if (o.return_reason) { saIssues[sp].returns++; saIssues[sp].total += Number(o.grand_total || 0); }
-            if (o.exchange_reason) { saIssues[sp].exchanges++; saIssues[sp].total += Number(o.grand_total || 0); }
-            if (o.status === "cancelled") { saIssues[sp].cancellations++; saIssues[sp].total += Number(o.grand_total || 0); }
+            if (o.refund_reason) { saIssues[sp].refunds++; saIssues[sp].total += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0); }
+            if (o.return_reason) { saIssues[sp].returns++; saIssues[sp].total += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0); }
+            if (o.exchange_reason) { saIssues[sp].exchanges++; saIssues[sp].total += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0); }
+            if (o.status === "cancelled") { saIssues[sp].cancellations++; saIssues[sp].total += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0); }
         });
         const saIssuesList = Object.values(saIssues).sort((a, b) => (b.refunds + b.returns + b.exchanges + b.cancellations) - (a.refunds + a.returns + a.exchanges + a.cancellations));
         const maxIssueSA = saIssuesList.length > 0 ? saIssuesList[0] : null;
@@ -1556,8 +1562,8 @@ export default function CEODashboard() {
             const store = o.salesperson_store || "Other";
             if (!dailySales[key]) dailySales[key] = { date: label, fullDate: key };
             if (!dailySales[key][store]) dailySales[key][store] = 0;
-            dailySales[key][store] += Number(o.grand_total || 0);
-            dailySales[key].total = (dailySales[key].total || 0) + Number(o.grand_total || 0);
+            dailySales[key][store] += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            dailySales[key].total = (dailySales[key].total || 0) + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const dailySalesData = Object.values(dailySales).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
@@ -1572,7 +1578,7 @@ export default function CEODashboard() {
         const webOrders = orders.filter(o => isLxrtsOrder(o));
         const current = filterOrdersByDateRange(webOrders, dateRange);
 
-        const totalRevenue = current.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = current.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = current.length;
         const totalQty = current.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
         const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
@@ -1580,7 +1586,7 @@ export default function CEODashboard() {
         // Growth
         const periodMs = dateRange.end - dateRange.start;
         const prevWeb = webOrders.filter(o => { const d = new Date(o.created_at); return d >= new Date(dateRange.start.getTime() - periodMs) && d < dateRange.start; });
-        const prevRevenue = prevWeb.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const prevRevenue = prevWeb.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const revenueGrowth = calculateGrowth(totalRevenue, prevRevenue);
         const ordersGrowth = calculateGrowth(totalOrders, prevWeb.length);
 
@@ -1609,7 +1615,7 @@ export default function CEODashboard() {
             const weekStart = new Date(d); weekStart.setDate(d.getDate() - d.getDay());
             const key = weekStart.toISOString().split("T")[0];
             if (!weeklyMap[key]) weeklyMap[key] = { week: `${weekStart.getDate()}/${weekStart.getMonth() + 1}`, revenue: 0, orders: 0 };
-            weeklyMap[key].revenue += Number(o.grand_total || 0);
+            weeklyMap[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             weeklyMap[key].orders += 1;
         });
         const weeklyTrend = Object.values(weeklyMap).sort((a, b) => a.week.localeCompare(b.week));
@@ -3286,7 +3292,7 @@ export default function CEODashboard() {
                                                             <td><span className="order-id">{order.order_no || "-"}</span>{isUrgent && <span className="urgent-badge">URGENT</span>}</td>
                                                             <td>{order.delivery_name || "-"}</td>
                                                             <td className="product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                            <td>₹{formatIndianNumber(order.grand_total || 0)}</td>
+                                                            <td>₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                             <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
                                                             <td>
                                                                 <select className="status-select" value={order.status === "pending" ? "order_received" : (order.status || "order_received")} onChange={(e) => updateOrderStatus(order.id, e.target.value)} disabled={statusUpdating === order.id}>

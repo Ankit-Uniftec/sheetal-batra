@@ -292,7 +292,7 @@ export default function AssistantCmoDashboard() {
       const store = getOrderStore(o);
       if (!storeMap[store]) storeMap[store] = { name: store, orderCount: 0, revenue: 0, refundCount: 0, cancelCount: 0, returnCount: 0 };
       storeMap[store].orderCount += 1;
-      if (isRevenueOrder(o)) storeMap[store].revenue += Number(o.grand_total || 0);
+      if (isRevenueOrder(o)) storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       if (o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded") storeMap[store].refundCount += 1;
       if (o.status === "cancelled") storeMap[store].cancelCount += 1;
       if (o.return_reason || o.status === "returned") storeMap[store].returnCount += 1;
@@ -334,9 +334,9 @@ export default function AssistantCmoDashboard() {
     const refunds = _orders.filter((o) => o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded");
     const cancellations = _orders.filter((o) => o.status === "cancelled");
     const returns = _orders.filter((o) => o.return_reason || o.status === "returned");
-    const refundValue = refunds.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-    const cancelValue = cancellations.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-    const returnValue = returns.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+    const refundValue = refunds.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+    const cancelValue = cancellations.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+    const returnValue = returns.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
     // Discount impact
     let totalDiscount = 0;
@@ -387,7 +387,7 @@ export default function AssistantCmoDashboard() {
     _orders.forEach((o) => {
       if (o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded") {
         totalRefundQty += 1;
-        totalRefundValue += Number(o.grand_total || 0);
+        totalRefundValue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       }
     });
 
@@ -438,7 +438,7 @@ export default function AssistantCmoDashboard() {
       if (!isRevenueOrder(o)) return;
       const d = new Date(o.delivered_at || o.created_at);
       if (isNaN(d.getTime())) return;
-      const amt = Number(o.grand_total || 0);
+      const amt = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
 
       if (d.toDateString() === today) { todayRev += amt; }
       if (d.toDateString() === yesterday) yesterdayRev += amt;
@@ -467,7 +467,7 @@ export default function AssistantCmoDashboard() {
       if (d.getFullYear() !== thisYear) return;
       const store = getOrderStore(o);
       if (!aovStoreMap[store]) aovStoreMap[store] = { name: store, revenue: 0, count: 0 };
-      aovStoreMap[store].revenue += Number(o.grand_total || 0);
+      aovStoreMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       aovStoreMap[store].count += 1;
     });
     const aovByStore = Object.values(aovStoreMap)
@@ -488,7 +488,7 @@ export default function AssistantCmoDashboard() {
         if (!isRevenueOrder(o)) return;
         const od = new Date(o.delivered_at || o.created_at);
         if (od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear()) {
-          monthRev += Number(o.grand_total || 0);
+          monthRev += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         }
       });
       monthsTrend.push({ month: label, revenue: Math.round(monthRev) });
@@ -676,8 +676,8 @@ export default function AssistantCmoDashboard() {
       switch (orderSortBy) {
         case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
         case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-        case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
-        case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+        case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
+        case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
         default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
       }
     });
@@ -724,7 +724,7 @@ export default function AssistantCmoDashboard() {
         getOrderStore(o),
         item.product_name || "",
         o.status || "",
-        o.grand_total || 0,
+        o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0,
         o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
       ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
     });
@@ -903,7 +903,7 @@ export default function AssistantCmoDashboard() {
     let returnValue = 0;
 
     orders.forEach((o) => {
-      const amt = Number(o.grand_total || 0);
+      const amt = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       const disc = Number(o.discount_amount || 0);
       if (disc > 0) {
         totalDiscount += disc;
@@ -1499,7 +1499,7 @@ export default function AssistantCmoDashboard() {
                               <td>{o.salesperson || "—"}</td>
                               <td>{getOrderStore(o)}</td>
                               <td>{o.status || "—"}</td>
-                              <td>₹{formatIndianNumber(o.grand_total || 0)}</td>
+                              <td>₹{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td>
                             </tr>
                           );
                         })

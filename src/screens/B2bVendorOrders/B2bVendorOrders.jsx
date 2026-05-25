@@ -76,7 +76,7 @@ export default function B2bVendorOrders() {
                 setTotalPages(Math.ceil(allOrders.length / ORDERS_PER_PAGE));
 
                 // Calculate stats
-                const totalRevenue = allOrders.reduce((sum, o) => sum + (o.grand_total || 0), 0);
+                const totalRevenue = allOrders.reduce((sum, o) => sum + (o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
                 const pendingOrders = allOrders.filter(o => o.approval_status === "pending").length;
 
                 setStats({
@@ -265,7 +265,7 @@ export default function B2bVendorOrders() {
                                     <div className="order-card-footer">
                                         <span className="order-date">{formatDate(order.created_at)}</span>
                                         <span className="order-total">
-                                            ₹{formatIndianNumber(order.grand_total || 0)}
+                                            ₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}
                                         </span>
                                     </div>
                                 </div>

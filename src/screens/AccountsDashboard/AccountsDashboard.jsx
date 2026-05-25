@@ -78,24 +78,25 @@ export default function AccountsDashboard() {
   // Flatten orders into line items (products + extras as separate rows)
   const lineItems = useMemo(() => {
     const items = [];
+    const GST_RATE = 0.05;
 
     orders.forEach((order) => {
       const orderItems = order.items || [];
+      // Allocate discount proportionally by GST-inclusive item gross.
+      const orderGrossSum = orderItems.reduce(
+        (s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0
+      );
+      const orderDiscount = Number(order.discount_amount || 0);
 
       orderItems.forEach((item, itemIndex) => {
-        const productPrice = item.price || 0;
-        const quantity = item.quantity || 1;
+        const productPrice = Number(item.price || 0);
+        const quantity = Number(item.quantity || 1);
         const grossValue = productPrice * quantity;
-
-        const orderSubtotal = order.subtotal || order.grand_total || 0;
-        const orderDiscount = order.discount_amount || 0;
-        const discountRatio = orderSubtotal > 0 ? grossValue / orderSubtotal : 0;
-        const productDiscount = orderDiscount * discountRatio;
-
-        const taxableValue = grossValue - productDiscount;
-        const gstRate = 0.05;
-        const gst = taxableValue * gstRate;
-        const invoiceValue = taxableValue + gst;
+        const discountRatio = orderGrossSum > 0 ? grossValue / orderGrossSum : 0;
+        const productDiscount = Math.min(grossValue, orderDiscount * discountRatio);
+        const invoiceValue = Math.max(0, grossValue - productDiscount);
+        const taxableValue = invoiceValue / (1 + GST_RATE);
+        const gst = invoiceValue - taxableValue;
 
         items.push({
           id: `${order.id}-product-${itemIndex}`,
@@ -125,12 +126,12 @@ export default function AccountsDashboard() {
 
         const extras = item.extras || [];
         extras.forEach((extra, extraIndex) => {
-          const extraPrice = extra.price || 0;
+          const extraPrice = Number(extra.price || 0);
           const extraGross = extraPrice * quantity;
           const extraDiscount = orderDiscount > 0 ? extraGross * discountRatio : 0;
-          const extraTaxable = extraGross - extraDiscount;
-          const extraGst = extraTaxable * gstRate;
-          const extraInvoice = extraTaxable + extraGst;
+          const extraInvoice = Math.max(0, extraGross - extraDiscount);
+          const extraTaxable = extraInvoice / (1 + GST_RATE);
+          const extraGst = extraInvoice - extraTaxable;
 
           items.push({
             id: `${order.id}-extra-${itemIndex}-${extraIndex}`,

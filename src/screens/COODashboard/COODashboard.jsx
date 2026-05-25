@@ -208,7 +208,7 @@ export default function COODashboard() {
     const isPersonName = (name) => name && name !== "-" && name !== "Unknown" && !knownStoreNames.has(name);
     const salespersons = useMemo(() => { const s = new Set(); nonLxrtsOrders.forEach(o => { const sp = getOrderSalesperson(o); if (sp && isPersonName(sp)) s.add(sp); }); return [...s].sort(); }, [nonLxrtsOrders, knownStoreNames]);
 
-    const getPaymentStatus = (order) => { const t = order.grand_total || 0; const a = order.advance_payment || 0; if (a >= t) return "paid"; if (a > 0) return "partial"; return "unpaid"; };
+    const getPaymentStatus = (order) => { const t = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0; const a = order.advance_payment || 0; if (a >= t) return "paid"; if (a > 0) return "partial"; return "unpaid"; };
     const getPriority = (order) => (order.is_urgent || order.order_flag === "Urgent") ? "urgent" : "normal";
     const getOrderType = (order) => { if (order.is_alteration) return "alteration"; const item = order.items?.[0]; if (item?.order_type === "Custom" || item?.payment_order_type === "Custom") return "custom"; return "standard"; };
 
@@ -340,9 +340,9 @@ export default function COODashboard() {
         const current = filterByDate(orders, dr);
         const prev = prevDr ? filterByDate(orders, prevDr) : [];
 
-        const totalRevenue = current.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const prevRevenue = prev.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const totalRefund = current.filter(o => o.refund_reason).reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = current.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const prevRevenue = prev.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRefund = current.filter(o => o.refund_reason).reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const refundCount = current.filter(o => o.refund_reason).length;
 
         // Channel split
@@ -350,7 +350,7 @@ export default function COODashboard() {
         current.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.grand_total || 0);
+            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -426,10 +426,10 @@ export default function COODashboard() {
             qcFailedCount: qcFailed.length, qcFailReasons: analyzeReasons(qcFailed, "qc_fail_reason"),
             reworkCount: rework.length, reworkRate: reworkRate.toFixed(1),
             alterationCount: alterations.length,
-            cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             revokedCount: revoked.length,
             returnReasons: analyzeReasons(returned, "return_reason"),
             refundReasons: analyzeReasons(refunded, "refund_reason"),
@@ -518,7 +518,7 @@ export default function COODashboard() {
         const dr = getDateRange(timeline);
         const period = filterByDate(nonLxrtsOrders, dr);
 
-        const totalGrand = period.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalGrand = period.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalAdvance = period.reduce((s, o) => s + Number(o.advance_payment || 0), 0);
         const totalPending = totalGrand - totalAdvance;
 
@@ -527,9 +527,9 @@ export default function COODashboard() {
         period.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelPayments[ch]) channelPayments[ch] = { name: ch, total: 0, advance: 0, pending: 0 };
-            channelPayments[ch].total += Number(o.grand_total || 0);
+            channelPayments[ch].total += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             channelPayments[ch].advance += Number(o.advance_payment || 0);
-            channelPayments[ch].pending += Math.max(0, Number(o.grand_total || 0) - Number(o.advance_payment || 0));
+            channelPayments[ch].pending += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));
         });
         const byChannel = Object.values(channelPayments).sort((a, b) => b.total - a.total);
 
@@ -548,17 +548,17 @@ export default function COODashboard() {
                 const name = m.mode || m.name || "Unknown";
                 if (!modeMap[name]) modeMap[name] = { name, count: 0, value: 0 };
                 modeMap[name].count += 1;
-                modeMap[name].value += Number(m.amount || 0) || Number(o.grand_total || 0) / modes.length;
+                modeMap[name].value += Number(m.amount || 0) || Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) / modes.length;
             });
         });
         const byPaymentMode = Object.values(modeMap).sort((a, b) => b.value - a.value);
 
         // Unpaid orders (COD / no advance)
         const unpaidOrders = period.filter(o => {
-            const total = o.grand_total || 0;
+            const total = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0;
             const advance = o.advance_payment || 0;
             return advance < total && o.status !== "cancelled";
-        }).sort((a, b) => (Number(b.grand_total || 0) - Number(b.advance_payment || 0)) - (Number(a.grand_total || 0) - Number(a.advance_payment || 0)));
+        }).sort((a, b) => (Number(b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - Number(b.advance_payment || 0)) - (Number(a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - Number(a.advance_payment || 0)));
 
         return { totalGrand, totalAdvance, totalPending, byChannel, byPaymentMode, unpaidCount: unpaidOrders.length };
     }, [nonLxrtsOrders, timeline, customDateFrom, customDateTo]);
@@ -598,7 +598,7 @@ export default function COODashboard() {
             });
         }
         if (filters.dateFrom || filters.dateTo) { result = result.filter(o => { const d = new Date(o.created_at); if (filters.dateFrom && d < new Date(filters.dateFrom)) return false; if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false; return true; }); }
-        if (filters.minPrice > 0 || filters.maxPrice < 500000) { result = result.filter(o => { const t = o.grand_total || 0; return t >= filters.minPrice && t <= filters.maxPrice; }); }
+        if (filters.minPrice > 0 || filters.maxPrice < 500000) { result = result.filter(o => { const t = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0; return t >= filters.minPrice && t <= filters.maxPrice; }); }
         if (filters.payment.length > 0) result = result.filter(o => filters.payment.includes(getPaymentStatus(o)));
         if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
         if (filters.store.length > 0) result = result.filter(o => filters.store.includes(o.salesperson_store));
@@ -613,8 +613,8 @@ export default function COODashboard() {
             switch (sortBy) {
                 case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
                 case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
-                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
+                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
                 default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
             }
         });
@@ -644,7 +644,7 @@ export default function COODashboard() {
     const handleExportCSV = () => {
         if (filteredOrders.length === 0) return;
         const headers = ["Order No", "Product", "Customer", "Phone", "Amount", "SA", "Store", "Status", "Order Date", "Delivery Date"];
-        const rows = filteredOrders.map(o => { const it = o.items?.[0] || {}; return [o.order_no || "", it.product_name || "", o.delivery_name || "", o.delivery_phone || "", o.grand_total || 0, o.salesperson || "", o.salesperson_store || "", o.status || "", o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "", o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : ""].map(v => `"${String(v).replace(/"/g, '""')}"`); });
+        const rows = filteredOrders.map(o => { const it = o.items?.[0] || {}; return [o.order_no || "", it.product_name || "", o.delivery_name || "", o.delivery_phone || "", o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0, o.salesperson || "", o.salesperson_store || "", o.status || "", o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "", o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : ""].map(v => `"${String(v).replace(/"/g, '""')}"`); });
         const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
         const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `coo_orders_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
@@ -975,7 +975,7 @@ export default function COODashboard() {
                                 <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Status</th><th>Store</th><th>Date</th><th>Actions</th></tr></thead>
                                 <tbody>{currentOrders.length === 0 ? <tr><td colSpan="9" className="no-data">No orders</td></tr> : currentOrders.map(o => {
                                     const urg = getPriority(o) === "urgent"; return (
-                                        <tr key={o.id} className={urg ? "urgent-row" : ""}><td><span className="order-id">{o.order_no || "-"}</span>{urg && <span className="urgent-badge">URGENT</span>}</td><td>{o.delivery_name || "-"}</td><td className="product-cell">{o.items?.[0]?.product_name || "-"}</td><td>{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td><td><span className={`payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o).charAt(0).toUpperCase() + getPaymentStatus(o).slice(1)}</span></td><td><select className="status-select" value={o.status || "pending"} onChange={(e) => updateOrderStatus(o.id, e.target.value)} disabled={statusUpdating === o.id}>{ORDER_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></td><td>{o.salesperson_store || "-"}</td><td>{formatDate(o.created_at)}</td><td><div className="action-buttons"><button className="action-btn pdf" onClick={() => handleGeneratePdf(o)} disabled={pdfLoading === o.id}>{pdfLoading === o.id ? "..." : "PDF"}</button></div></td></tr>
+                                        <tr key={o.id} className={urg ? "urgent-row" : ""}><td><span className="order-id">{o.order_no || "-"}</span>{urg && <span className="urgent-badge">URGENT</span>}</td><td>{o.delivery_name || "-"}</td><td className="product-cell">{o.items?.[0]?.product_name || "-"}</td><td>{"\u20B9"}{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td><td><span className={`payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o).charAt(0).toUpperCase() + getPaymentStatus(o).slice(1)}</span></td><td><select className="status-select" value={o.status || "pending"} onChange={(e) => updateOrderStatus(o.id, e.target.value)} disabled={statusUpdating === o.id}>{ORDER_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></td><td>{o.salesperson_store || "-"}</td><td>{formatDate(o.created_at)}</td><td><div className="action-buttons"><button className="action-btn pdf" onClick={() => handleGeneratePdf(o)} disabled={pdfLoading === o.id}>{pdfLoading === o.id ? "..." : "PDF"}</button></div></td></tr>
                                     );
                                 })}</tbody>
                             </table></div></div>

@@ -460,7 +460,7 @@ export default function EditOrder() {
                   </div>
                   <div className="eo-field">
                     <label>Amount:</label>
-                    <span>₹{formatIndianNumber(order.grand_total)}</span>
+                    <span>₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
                   </div>
                   <div className="eo-field">
                     <label>Qty:</label>
@@ -604,7 +604,7 @@ export default function EditOrder() {
           <div className="eo-row">
             <div className="eo-field">
               <label>Total Amount:</label>
-              <span>₹{formatIndianNumber(order.grand_total)}</span>
+              <span>₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
             </div>
             <div className="eo-field">
               <label>Advance Payment:</label>

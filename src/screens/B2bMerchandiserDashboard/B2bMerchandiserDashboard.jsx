@@ -125,10 +125,10 @@ export default function B2bMerchandiserDashboard() {
         const rejected = orders.filter(o => o.approval_status === "rejected");
         const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
         const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
-        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-        const buyoutValue = orders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-        const clientOrderValue = orders.filter(o => o.b2b_order_type === "Client Order").reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const buyoutValue = orders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const clientOrderValue = orders.filter(o => o.b2b_order_type === "Client Order").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         return { salesRevenue, totalOrders: orders.length, salesCount: salesOrders.length, pending, approved, rejected, buyoutValue, clientOrderValue, consignmentValue, consignmentCount: consignmentOrders.length };
     }, [orders]);
 
@@ -185,13 +185,13 @@ export default function B2bMerchandiserDashboard() {
 
         currentOrders.forEach(o => {
             if (o.vendor_id && vendorData[o.vendor_id]) {
-                vendorData[o.vendor_id].current += Number(o.grand_total || 0);
+                vendorData[o.vendor_id].current += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
                 vendorData[o.vendor_id].currentOrders += 1;
             }
         });
         prevOrders.forEach(o => {
             if (o.vendor_id && vendorData[o.vendor_id]) {
-                vendorData[o.vendor_id].prev += Number(o.grand_total || 0);
+                vendorData[o.vendor_id].prev += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
                 vendorData[o.vendor_id].prevOrders += 1;
             }
         });
@@ -568,19 +568,19 @@ export default function B2bMerchandiserDashboard() {
                                         </div>
                                         <div className="merch-target-item">
                                             <span className="merch-target-label">Achieved</span>
-                                            <span className="merch-target-val merch-green">{`\u20B9${formatIndianNumber(stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0))}`}</span>
+                                            <span className="merch-target-val merch-green">{`\u20B9${formatIndianNumber(stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0))}`}</span>
                                         </div>
                                         <div className="merch-target-item">
                                             <span className="merch-target-label">Remaining</span>
-                                            <span className={`merch-target-val ${((profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0)) > 0 ? "merch-red" : "merch-green"}`}>
-                                                {`\u20B9${formatIndianNumber(Math.max(0, (profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0)))}`}
+                                            <span className={`merch-target-val ${((profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0)) > 0 ? "merch-red" : "merch-green"}`}>
+                                                {`\u20B9${formatIndianNumber(Math.max(0, (profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0)))}`}
                                             </span>
                                         </div>
                                     </div>
                                     <div className="merch-target-bar">
-                                        <div className="merch-target-fill" style={{ width: `${Math.min(100, (profile?.sales_target > 0 ? (stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0) / profile.sales_target) * 100 : 0))}%` }}></div>
+                                        <div className="merch-target-fill" style={{ width: `${Math.min(100, (profile?.sales_target > 0 ? (stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0) / profile.sales_target) * 100 : 0))}%` }}></div>
                                     </div>
-                                    <p className="merch-target-pct">{profile?.sales_target > 0 ? ((stats.approved.reduce((s, o) => s + Number(o.grand_total || 0), 0) / profile.sales_target) * 100).toFixed(1) : 0}% achieved</p>
+                                    <p className="merch-target-pct">{profile?.sales_target > 0 ? ((stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0) / profile.sales_target) * 100).toFixed(1) : 0}% achieved</p>
                                 </div>
                             </div>
                         </div>
@@ -600,7 +600,7 @@ export default function B2bMerchandiserDashboard() {
                                                 <b className="merch-gold-text">{order.order_no}</b>
                                                 <span className={`merch-type-tag ${order.b2b_order_type === "Buyout" ? "merch-tag-buyout" : "merch-tag-consignment"}`}>{order.b2b_order_type || "\u2014"}</span>
                                             </div>
-                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>PO: {order.po_number || "\u2014"} {"\u00B7"} {`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</p>
+                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>PO: {order.po_number || "\u2014"} {"\u00B7"} {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</p>
                                             <div className="merch-pending-btns">
                                                 <button className="merch-approve-sm" onClick={() => setApprovalModal({ order, action: "approve" })}>{"\u2713"}</button>
                                                 <button className="merch-reject-sm" onClick={() => setApprovalModal({ order, action: "reject" })}>{"\u2715"}</button>
@@ -625,7 +625,7 @@ export default function B2bMerchandiserDashboard() {
                                                 <p><b>Order No:</b> {o.order_no}</p>
                                                 <p><b>PO:</b> {o.po_number || "\u2014"} &nbsp;|&nbsp; <b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"}</p>
                                                 <p><b>Type:</b> {o.b2b_order_type || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={getStatusBadgeClass(o.approval_status)}>{o.approval_status || "Pending"}</span></p>
-                                                <p><b>Total:</b> {`\u20B9${formatIndianNumber(o.grand_total || 0)}`} &nbsp;|&nbsp; <b>Date:</b> {formatDate(o.created_at)}</p>
+                                                <p><b>Total:</b> {`\u20B9${formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}`} &nbsp;|&nbsp; <b>Date:</b> {formatDate(o.created_at)}</p>
                                             </div>
                                         ))
                                     )}
@@ -668,7 +668,7 @@ export default function B2bMerchandiserDashboard() {
                                                     <div className="merch-appr-row"><span className="merch-appr-dlabel">Vendor:</span><span className="merch-appr-dvalue">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>
                                                     <div className="merch-appr-row"><span className="merch-appr-dlabel">Merchandiser:</span><span className="merch-appr-dvalue">{order.merchandiser_name || "\u2014"}</span></div>
                                                     <div className="merch-appr-grid">
-                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Amount:</span><span className="merch-appr-dvalue">{`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</span></div>
+                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Amount:</span><span className="merch-appr-dvalue">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Qty:</span><span className="merch-appr-dvalue">{order.total_quantity || 1}</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Markdown:</span><span className="merch-appr-dvalue">{order.markdown_percent || 0}%</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Delivery:</span><span className="merch-appr-dvalue">{formatDate(order.delivery_date) || "\u2014"}</span></div>
@@ -737,7 +737,7 @@ export default function B2bMerchandiserDashboard() {
                                                 <div className="merch-ocard-row"><span className="merch-ocard-dlabel">Vendor:</span><span className="merch-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>
                                                 <div className="merch-ocard-row"><span className="merch-ocard-dlabel">Merchandiser:</span><span className="merch-ocard-dval">{order.merchandiser_name || "\u2014"}</span></div>
                                                 <div className="merch-ocard-grid">
-                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.grand_total || 0)}`}</span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Qty:</span><span className="merch-ocard-dval">{order.total_quantity || 1}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Markdown:</span><span className="merch-ocard-dval">{order.markdown_percent || 0}%</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Delivery:</span><span className="merch-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
@@ -842,7 +842,7 @@ export default function B2bMerchandiserDashboard() {
                         <h2 className="merch-tab-title">Consignment Orders</h2>
                         <div className="merch-consignment-stats">
                             <div className="merch-cstat"><span className="merch-cstat-val">{orders.filter(o => o.b2b_order_type === "Consignment").length}</span><span className="merch-cstat-label">Total</span></div>
-                            <div className="merch-cstat"><span className="merch-cstat-val">{`\u20B9${formatIndianNumber(orders.filter(o => o.b2b_order_type === "Consignment").reduce((s, o) => s + Number(o.grand_total || 0), 0))}`}</span><span className="merch-cstat-label">Value</span></div>
+                            <div className="merch-cstat"><span className="merch-cstat-val">{`\u20B9${formatIndianNumber(orders.filter(o => o.b2b_order_type === "Consignment").reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0))}`}</span><span className="merch-cstat-label">Value</span></div>
                             <div className="merch-cstat"><span className="merch-cstat-val">{orders.filter(o => o.b2b_order_type === "Consignment" && o.approval_status === "pending").length}</span><span className="merch-cstat-label">Pending</span></div>
                             <div className="merch-cstat"><span className="merch-cstat-val">{orders.filter(o => o.b2b_order_type === "Consignment" && o.approval_status === "approved").length}</span><span className="merch-cstat-label">Approved</span></div>
                         </div>
@@ -854,7 +854,7 @@ export default function B2bMerchandiserDashboard() {
                                     <div key={order.id} className="merch-order-item" onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
                                         <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
                                         <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={getStatusBadgeClass(order.approval_status)}>{order.approval_status || "Pending"}</span></p>
-                                        <p><b>Total:</b> {`\u20B9${formatIndianNumber(order.grand_total || 0)}`} &nbsp;|&nbsp; <b>Qty:</b> {order.total_quantity || 0} &nbsp;|&nbsp; <b>Date:</b> {formatDate(order.created_at)}</p>
+                                        <p><b>Total:</b> {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`} &nbsp;|&nbsp; <b>Qty:</b> {order.total_quantity || 0} &nbsp;|&nbsp; <b>Date:</b> {formatDate(order.created_at)}</p>
                                     </div>
                                 ))
                             )}
@@ -1050,7 +1050,7 @@ export default function B2bMerchandiserDashboard() {
                                 <p><b>Order:</b> {approvalModal.order.order_no}</p>
                                 <p><b>PO:</b> {approvalModal.order.po_number || "N/A"}</p>
                                 <p><b>Type:</b> {approvalModal.order.b2b_order_type || "N/A"}</p>
-                                <p><b>Total:</b> <span className="merch-gold-text">{`\u20B9${formatIndianNumber(approvalModal.order.grand_total || 0)}`}</span></p>
+                                <p><b>Total:</b> <span className="merch-gold-text">{`\u20B9${formatIndianNumber(approvalModal.order.net_total ?? approvalModal.order.grand_total_after_discount ?? approvalModal.order.grand_total ?? 0)}`}</span></p>
                             </div>
                             {approvalModal.order.credit_exceeded && (
                                 <div className="merch-modal-credit-warning">
@@ -1059,7 +1059,7 @@ export default function B2bMerchandiserDashboard() {
                                     <div className="merch-modal-credit-info">
                                         <span>Credit Limit: {"\u20B9"}{formatIndianNumber(vendorMap[approvalModal.order.vendor_id]?.credit_limit || 0)}</span>
                                         <span>Currently Used: {"\u20B9"}{formatIndianNumber(vendorMap[approvalModal.order.vendor_id]?.current_credit_used || 0)}</span>
-                                        <span>Order Value: {"\u20B9"}{formatIndianNumber(approvalModal.order.grand_total || 0)}</span>
+                                        <span>Order Value: {"\u20B9"}{formatIndianNumber(approvalModal.order.net_total ?? approvalModal.order.grand_total_after_discount ?? approvalModal.order.grand_total ?? 0)}</span>
                                     </div>
                                 </div>
                             )}

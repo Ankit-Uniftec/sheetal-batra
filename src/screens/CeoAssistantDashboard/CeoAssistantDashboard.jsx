@@ -137,9 +137,9 @@ export default function CeoAssistantDashboard() {
       }
       stores[store].orderCount += 1;
       if (o.status === "delivered" || o.status === "completed") {
-        stores[store].revenue += Number(o.grand_total || 0);
+        stores[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       }
-      const amt = Number(o.grand_total || 0);
+      const amt = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       if (o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded") {
         stores[store].refundCount += 1;
         stores[store].refundAmount += amt;

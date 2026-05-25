@@ -129,8 +129,8 @@ export default function B2bProductionDashboard() {
             inProd: inProduction.length,
             ready: readyForDispatch.length,
             dispatched: dispatched.length,
-            salesValue: salesOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            consignmentValue: consignmentOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            salesValue: salesOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            consignmentValue: consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             consignmentCount: consignmentOrders.length,
         };
     }, [orders, pendingProduction, inProduction, readyForDispatch, dispatched]);

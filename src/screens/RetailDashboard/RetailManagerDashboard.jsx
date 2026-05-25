@@ -11,6 +11,7 @@ import {
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import { itemFinalAmount } from "../../utils/itemNetAmount";
 
 // Timeline options
 const TIMELINE_OPTIONS = [
@@ -228,7 +229,7 @@ export default function RetailManagerDashboard() {
     };
 
     const getPaymentStatus = (order) => {
-        const total = order.grand_total || order.net_total || 0;
+        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
         const advance = order.advance_payment || 0;
         if (advance >= total) return "paid";
         if (advance > 0) return "partial";
@@ -332,10 +333,10 @@ export default function RetailManagerDashboard() {
         const cur = filterByDateRange(retailOrders, dateRange);
         const prev = compRange ? filterByDateRange(retailOrders, compRange) : [];
 
-        const totalRevenue = cur.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = cur.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = cur.length;
         const deliveredOrders = cur.filter(o => o.status === "delivered").length;
-        const prevRevenue = prev.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const prevRevenue = prev.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const prevOrders = prev.length;
         const prevDelivered = prev.filter(o => o.status === "delivered").length;
 
@@ -347,7 +348,7 @@ export default function RetailManagerDashboard() {
         cur.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.grand_total || 0);
+            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -362,19 +363,19 @@ export default function RetailManagerDashboard() {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].sales += itemFinalAmount(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
         const topProducts = Object.values(productSales).sort((a, b) => b.sales - a.sales).slice(0, 10);
 
-        // Top colours
+        // Top colours (net of proportional order discount)
         const colorSales = {};
         cur.forEach(order => {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name || "Unknown";
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
+                const itemSales = itemFinalAmount(order, item);
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
                     colorSales[topColor].sales += itemSales / (bottomColor ? 2 : 1);
@@ -416,7 +417,7 @@ export default function RetailManagerDashboard() {
                 const d = new Date(o.created_at);
                 const key = `${d.getDate()}/${d.getMonth() + 1}`;
                 if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
-                buckets[key].revenue += Number(o.grand_total || 0);
+                buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
                 buckets[key].orders += 1;
             });
             return Object.values(buckets).sort((a, b) => a.fullDate.localeCompare(b.fullDate)).map(b => ({
@@ -438,20 +439,20 @@ export default function RetailManagerDashboard() {
             const d = new Date(o.created_at);
             const key = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!combinedMap[key]) combinedMap[key] = { date: key, fullDate: d.toISOString().split("T")[0], delhi: 0, ludhiana: 0 };
-            combinedMap[key].delhi += Number(o.grand_total || 0);
+            combinedMap[key].delhi += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         ludhianaOrders.forEach(o => {
             const d = new Date(o.created_at);
             const key = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!combinedMap[key]) combinedMap[key] = { date: key, fullDate: d.toISOString().split("T")[0], delhi: 0, ludhiana: 0 };
-            combinedMap[key].ludhiana += Number(o.grand_total || 0);
+            combinedMap[key].ludhiana += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const combinedDaily = Object.values(combinedMap).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
         return {
             delhiDaily, ludhianaDaily, combinedDaily,
-            delhiTotal: delhiOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            ludhianaTotal: ludhianaOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            delhiTotal: delhiOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            ludhianaTotal: ludhianaOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             delhiOrders: delhiOrders.length,
             ludhianaOrders: ludhianaOrders.length,
         };
@@ -468,13 +469,13 @@ export default function RetailManagerDashboard() {
             return d >= dateRange.start && d <= dateRange.end;
         });
 
-        // Products
+        // Products (net of proportional order discount)
         const productSales = {};
         valid.forEach(order => {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].sales += itemFinalAmount(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
@@ -482,13 +483,13 @@ export default function RetailManagerDashboard() {
         const topProducts = sorted.slice(0, 10);
         const bottomProducts = [...sorted].sort((a, b) => a.sales - b.sales).slice(0, 10);
 
-        // Colors
+        // Colors (net of proportional order discount)
         const colorSales = {};
         valid.forEach(order => {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name;
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
+                const itemSales = itemFinalAmount(order, item);
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
                     colorSales[topColor].sales += bottomColor ? itemSales / 2 : itemSales;
@@ -511,7 +512,7 @@ export default function RetailManagerDashboard() {
             const sp = getOrderSalesperson(order);
             if (!sp || !isPersonName(sp)) return;
             if (!spData[sp]) spData[sp] = { name: sp, sales: 0, discount: 0, count: 0 };
-            spData[sp].sales += Number(order.grand_total || 0);
+            spData[sp].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             spData[sp].discount += Number(order.discount_amount || 0);
             spData[sp].count += 1;
         });
@@ -522,7 +523,7 @@ export default function RetailManagerDashboard() {
         valid.forEach(order => {
             const store = getOrderChannel(order);
             if (!storeSales[store]) storeSales[store] = { name: store, sales: 0, count: 0 };
-            storeSales[store].sales += Number(order.grand_total || 0);
+            storeSales[store].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             storeSales[store].count += 1;
         });
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);
@@ -583,7 +584,7 @@ export default function RetailManagerDashboard() {
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(order => {
-                const total = order.grand_total || order.net_total || 0;
+                const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
                 return total >= filters.minPrice && total <= filters.maxPrice;
             });
         }
@@ -603,8 +604,8 @@ export default function RetailManagerDashboard() {
             switch (sortBy) {
                 case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
                 case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
-                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
+                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
                 default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
             }
         });
@@ -1349,7 +1350,7 @@ export default function RetailManagerDashboard() {
                                                             {isUrgent && <span className="rm-urgent-badge">URGENT</span>}
                                                         </td>
                                                         <td className="rm-product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                        <td>{"\u20B9"}{formatIndianNumber(order.grand_total || 0)}</td>
+                                                        <td>{"\u20B9"}{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                         <td>
                                                             <span className={`rm-payment-badge ${getPaymentStatus(order)}`}>
                                                                 {getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}
