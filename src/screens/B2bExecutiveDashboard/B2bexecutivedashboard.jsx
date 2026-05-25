@@ -95,8 +95,8 @@ export default function B2bExecutiveDashboard() {
 
         const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
         const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
-        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = orders.length;
         const pendingOrders = orders.filter(o => o.approval_status === "pending");
         const thisMonthOrders = orders.filter(o => o.created_at >= monthStart);
@@ -342,7 +342,7 @@ export default function B2bExecutiveDashboard() {
                                                 <p><b>Order No:</b> {o.order_no}</p>
                                                 <p><b>PO Number:</b> {o.po_number || "—"}</p>
                                                 <p><b>Type:</b> {o.b2b_order_type || "—"} &nbsp; | &nbsp; <b>Status:</b> <span className={getStatusBadgeClass(o.approval_status)}>{o.approval_status || "Pending"}</span></p>
-                                                <p><b>Total:</b> ₹{formatIndianNumber(o.grand_total || 0)} &nbsp; | &nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "—"}</p>
+                                                <p><b>Total:</b> ₹{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)} &nbsp; | &nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "—"}</p>
                                             </div>
                                         ))
                                     )}
@@ -466,7 +466,7 @@ export default function B2bExecutiveDashboard() {
                                                 <div className="b2b-details-grid">
                                                     <div className="b2b-detail-item">
                                                         <span className="b2b-order-label">Amount:</span>
-                                                        <span className="b2b-field-value">₹{formatIndianNumber(order.grand_total || 0)}</span>
+                                                        <span className="b2b-field-value">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
                                                     </div>
                                                     <div className="b2b-detail-item">
                                                         <span className="b2b-order-label">Qty:</span>

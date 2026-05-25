@@ -12,6 +12,7 @@ import { usePopup } from "../components/Popup";
 import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
+import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -62,6 +63,10 @@ export default function Dashboard() {
   // Edit modal state
   const [editingOrder, setEditingOrder] = useState(null);
   const [editFormData, setEditFormData] = useState({});
+
+  // Delivery payment modal — captures balance + mode breakdown before marking delivered.
+  const [deliveryModalOrder, setDeliveryModalOrder] = useState(null);
+  const [deliveryModalSaving, setDeliveryModalSaving] = useState(false);
 
   // Action dropdowns state
   const [selectedCancellation, setSelectedCancellation] = useState({});
@@ -114,7 +119,7 @@ export default function Dashboard() {
     const totalRevenue = displayOrders.reduce((sum, o) => {
       if (!o.created_at) return sum;
       return new Date(o.created_at) >= monthStart
-        ? sum + Number(o.grand_total || 0)
+        ? sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)
         : sum;
     }, 0);
     const totalOrders = displayOrders.length;
@@ -476,52 +481,122 @@ export default function Dashboard() {
     }
   };
 
-  // Mark as Delivered
+  // Mark as Delivered — for orders with a balance due (regular store / Private / Comms Personal),
+  // open the DeliveryPaymentModal to capture mode/amount breakdown first. B2B, stock orders, and
+  // already-fully-paid orders skip the modal and mark delivered directly.
+  const directMarkDelivered = async (order) => {
+    setActionLoading(order.id);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "delivered",
+          delivered_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+
+      if (error) throw error;
+
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, status: "delivered", delivered_at: new Date().toISOString() } : o
+      ));
+
+      showPopup({
+        type: "success",
+        title: "Order Delivered",
+        message: "Order marked as delivered!",
+        confirmText: "OK",
+      });
+    } catch (err) {
+      console.error("Mark delivered error:", err);
+      showPopup({
+        type: "error",
+        title: "Error",
+        message: "Failed to update: " + err.message,
+        confirmText: "OK",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleMarkDelivered = async (e, order) => {
     e.stopPropagation();
 
-    showPopup({
-      type: "confirm",
-      title: "Mark as Delivered",
-      message: "Mark this order as delivered?",
-      confirmText: "Yes, Deliver",
-      cancelText: "Cancel",
-      onConfirm: async () => {
-        setActionLoading(order.id);
-        try {
-          const { error } = await supabase
-            .from("orders")
-            .update({
-              status: "delivered",
-              delivered_at: new Date().toISOString(),
-            })
-            .eq("id", order.id);
+    // For balance-due we need the post-discount total — what the customer
+    // ACTUALLY owes — not the MRP. Otherwise an order with a 25% discount
+    // would still ask the SA to collect the full MRP balance at delivery.
+    const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
+    const advancePaid = Number(order?.advance_payment) || 0;
+    const balanceDue = orderTotal - advancePaid;
+    const skipPaymentModal =
+      order?.is_b2b ||
+      order?.is_stock_order ||
+      balanceDue <= 0;
 
-          if (error) throw error;
+    if (skipPaymentModal) {
+      showPopup({
+        type: "confirm",
+        title: "Mark as Delivered",
+        message: "Mark this order as delivered?",
+        confirmText: "Yes, Deliver",
+        cancelText: "Cancel",
+        onConfirm: () => directMarkDelivered(order),
+      });
+      return;
+    }
 
-          setOrders(prev => prev.map(o =>
-            o.id === order.id ? { ...o, status: "delivered", delivered_at: new Date().toISOString() } : o
-          ));
+    setDeliveryModalOrder(order);
+  };
 
-          showPopup({
-            type: "success",
-            title: "Order Delivered",
-            message: "Order marked as delivered!",
-            confirmText: "OK",
-          });
-        } catch (err) {
-          console.error("Mark delivered error:", err);
-          showPopup({
-            type: "error",
-            title: "Error",
-            message: "Failed to update: " + err.message,
-            confirmText: "OK",
-          });
-        } finally {
-          setActionLoading(null);
-        }
-      },
-    });
+  const handleDeliveryPaymentConfirm = async ({ paidAt, rows }) => {
+    const order = deliveryModalOrder;
+    if (!order) return;
+    setDeliveryModalSaving(true);
+    try {
+      const paymentRows = rows.map((r) => ({
+        order_id: order.id,
+        kind: "balance",
+        payment_mode: r.mode,
+        amount: r.amount,
+        paid_at: paidAt,
+        recorded_by: salesperson?.email || null,
+      }));
+
+      const { error: payErr } = await supabase
+        .from("order_payments")
+        .insert(paymentRows);
+      if (payErr) throw payErr;
+
+      const deliveredAt = new Date().toISOString();
+      const { error: ordErr } = await supabase
+        .from("orders")
+        .update({ status: "delivered", delivered_at: deliveredAt })
+        .eq("id", order.id);
+      if (ordErr) throw ordErr;
+
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, status: "delivered", delivered_at: deliveredAt } : o
+      ));
+      setDeliveryModalOrder(null);
+
+      showPopup({
+        type: "success",
+        title: "Order Delivered",
+        message: "Balance recorded and order marked as delivered.",
+        confirmText: "OK",
+      });
+    } catch (err) {
+      console.error("Delivery payment error:", err);
+      showPopup({
+        type: "error",
+        title: "Failed",
+        message: "Could not record payment: " + err.message,
+        confirmText: "OK",
+      });
+    } finally {
+      setDeliveryModalSaving(false);
+    }
   };
 
   // Handle Cancellation
@@ -928,6 +1003,15 @@ export default function Dashboard() {
     <div className="ad-dashboardContent">
       {/* Popup Component */}
       {PopupComponent}
+
+      {deliveryModalOrder && (
+        <DeliveryPaymentModal
+          order={deliveryModalOrder}
+          saving={deliveryModalSaving}
+          onCancel={() => { if (!deliveryModalSaving) setDeliveryModalOrder(null); }}
+          onConfirm={handleDeliveryPaymentConfirm}
+        />
+      )}
 
       {showPasswordModal && (
         <div className="ad-password-modal">
@@ -1361,7 +1445,7 @@ export default function Dashboard() {
                           <div className="ad-details-grid">
                             <div className="ad-detail-item">
                               <span className="ad-order-label">Amount:</span>
-                              <span className="ad-value">₹{formatIndianNumber(order.grand_total)}</span>
+                              <span className="ad-value">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
                             </div>
                             <div className="ad-detail-item">
                               <span className="ad-order-label">Qty:</span>

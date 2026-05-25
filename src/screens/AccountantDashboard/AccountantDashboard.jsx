@@ -190,7 +190,7 @@ export default function AccountantDashboard() {
       const ch = getOrderChannel(o);
       if (!map[ch]) map[ch] = { name: ch, orders: 0, revenue: 0 };
       map[ch].orders += 1;
-      map[ch].revenue += Number(o.grand_total || 0);
+      map[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
     });
     const list = Object.values(map).sort((a, b) => b.revenue - a.revenue);
     const totalRevenue = list.reduce((s, c) => s + c.revenue, 0);
@@ -249,7 +249,7 @@ export default function AccountantDashboard() {
     const exchanged = periodOrders.filter(o => o.exchange_reason);
     const revoked   = periodOrders.filter(o => o.revoked_at);
 
-    const sum = (list) => list.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+    const sum = (list) => list.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
     const allIssues = [...cancelled, ...refunded, ...returned, ...exchanged, ...revoked];
     const seenIds = new Set();
@@ -264,7 +264,7 @@ export default function AccountantDashboard() {
       const ch = getOrderChannel(o);
       if (!byChannel[ch]) byChannel[ch] = { name: ch, count: 0, value: 0 };
       byChannel[ch].count += 1;
-      byChannel[ch].value += Number(o.grand_total || 0);
+      byChannel[ch].value += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
     });
     const channelBreakdown = Object.values(byChannel).sort((a, b) => b.count - a.count);
 
@@ -629,7 +629,7 @@ export default function AccountantDashboard() {
                                 {s?.label || "—"}
                               </span>
                             </td>
-                            <td className="amount">{"₹"}{formatIndianNumber(o.grand_total || 0)}</td>
+                            <td className="amount">{"₹"}{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td>
                           </tr>
                         );
                       })}
@@ -753,7 +753,7 @@ export default function AccountantDashboard() {
                                 </span>
                               </td>
                               <td className="acct-cell-trunc" title={reason}>{reason}</td>
-                              <td className="amount">{"₹"}{formatIndianNumber(o.grand_total || 0)}</td>
+                              <td className="amount">{"₹"}{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td>
                             </tr>
                           );
                         })}

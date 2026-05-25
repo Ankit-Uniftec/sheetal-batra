@@ -13,6 +13,7 @@ import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
+import { itemFinalAmount } from "../../utils/itemNetAmount";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -551,7 +552,7 @@ export default function AdminDashboard() {
 
     // Helper functions
     const getPaymentStatus = (order) => {
-        const total = order.grand_total || order.net_total || 0;
+        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
         const advance = order.advance_payment || 0;
         if (advance >= total) return "paid";
         if (advance > 0) return "partial";
@@ -749,14 +750,14 @@ export default function AdminDashboard() {
         const currentOrders = filterOrdersByDateRange(nonCommsOrders, dateRange);
         const previousOrders = comparisonRange ? filterOrdersByDateRange(nonCommsOrders, comparisonRange) : [];
 
-        const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = currentOrders.length;
         const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
         const deliveredOrders = currentOrders.filter(o => o.status === "delivered").length;
         const cancelledOrders = currentOrders.filter(o => o.status === "cancelled").length;
 
-        const prevRevenue = previousOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const prevRevenue = previousOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const prevTotalOrders = previousOrders.length;
         const prevPendingOrders = previousOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const prevPreparedOrders = previousOrders.filter(o => o.status === "completed").length;
@@ -839,13 +840,13 @@ export default function AdminDashboard() {
             return orderDate >= dateRange.start && orderDate <= dateRange.end;
         });
 
-        // 1. Sales by Top 10 Products
+        // 1. Sales by Top 10 Products (net of proportional order discount)
         const productSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].sales += itemFinalAmount(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
@@ -853,13 +854,13 @@ export default function AdminDashboard() {
             .sort((a, b) => b.sales - a.sales)
             .slice(0, 10);
 
-        // 2. Sales by Top 10 Colors
+        // 2. Sales by Top 10 Colors (net of proportional order discount)
         const colorSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name || "Unknown";
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
+                const itemSales = itemFinalAmount(order, item);
 
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
@@ -882,7 +883,7 @@ export default function AdminDashboard() {
         validOrders.forEach(order => {
             const store = getOrderChannel(order);
             if (!storeSales[store]) storeSales[store] = { name: store, sales: 0, count: 0 };
-            storeSales[store].sales += Number(order.grand_total || 0);
+            storeSales[store].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             storeSales[store].count += 1;
         });
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);
@@ -893,7 +894,7 @@ export default function AdminDashboard() {
             const sp = getOrderSalesperson(order);
             if (!sp || !isPersonName(sp)) return;
             if (!salespersonData[sp]) salespersonData[sp] = { name: sp, sales: 0, discount: 0, count: 0 };
-            salespersonData[sp].sales += Number(order.grand_total || 0);
+            salespersonData[sp].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             salespersonData[sp].discount += Number(order.discount_amount || 0);
             salespersonData[sp].count += 1;
         });
@@ -1109,7 +1110,7 @@ export default function AdminDashboard() {
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(order => {
-                const total = order.grand_total || order.net_total || 0;
+                const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
                 return total >= filters.minPrice && total <= filters.maxPrice;
             });
         }
@@ -1129,8 +1130,8 @@ export default function AdminDashboard() {
             switch (sortBy) {
                 case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
                 case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
-                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
+                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
                 default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
             }
         });
@@ -1194,7 +1195,7 @@ export default function AdminDashboard() {
                 order.delivery_phone || "",
                 order.delivery_email || order.email || "",
                 item.size || "",
-                order.grand_total || order.net_total || 0,
+                order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0,
                 item.top_color?.name || item.color?.name || "",
                 item.bottom_color?.name || "",
                 order.salesperson || "",
@@ -1272,21 +1273,28 @@ export default function AdminDashboard() {
     // Accounts
     const accountsLineItems = useMemo(() => {
         const items = [];
+        const GST_RATE = 0.05;
         nonCommsOrders.forEach(order => {
             if (isLxrtsOrder(order)) return;
             const orderItems = order.items || [];
+            // Discount is allocated proportionally across line items by their
+            // GST-inclusive gross — same basis as `gross` so the ratio is unit-free.
+            const orderGrossSum = orderItems.reduce(
+                (s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0
+            );
+            const orderDiscount = Number(order.discount_amount || 0);
             orderItems.forEach((item, idx) => {
-                const productPrice = item.price || 0;
-                const quantity = item.quantity || 1;
+                const productPrice = Number(item.price || 0);
+                const quantity = Number(item.quantity || 1);
+                // item.price is the GST-inclusive MRP that prices on the customer's invoice.
                 const grossValue = productPrice * quantity;
-                const orderSubtotal = order.subtotal || order.grand_total || 0;
-                const orderDiscount = order.discount_amount || 0;
-                const discountRatio = orderSubtotal > 0 ? grossValue / orderSubtotal : 0;
-                const productDiscount = orderDiscount * discountRatio;
-                const taxableValue = grossValue - productDiscount;
-                const gstRate = 0.05;
-                const gst = taxableValue * gstRate;
-                const invoiceValue = taxableValue + gst;
+                const discountRatio = orderGrossSum > 0 ? grossValue / orderGrossSum : 0;
+                const productDiscount = Math.min(grossValue, orderDiscount * discountRatio);
+                // Invoice value = what the customer was billed for this line (GST-inclusive).
+                const invoiceValue = Math.max(0, grossValue - productDiscount);
+                // Strip GST out to get the accounting decomposition.
+                const taxableValue = invoiceValue / (1 + GST_RATE);
+                const gst = invoiceValue - taxableValue;
 
                 items.push({
                     id: `${order.id}-${idx}`, order_no: order.order_no, order_date: order.created_at,
@@ -1346,7 +1354,7 @@ export default function AdminDashboard() {
             return d >= dateRange.start && d <= dateRange.end;
         });
 
-        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = validOrders.length;
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
         const totalItems = validOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
@@ -1356,7 +1364,7 @@ export default function AdminDashboard() {
         validOrders.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.grand_total || 0);
+            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -1384,7 +1392,7 @@ export default function AdminDashboard() {
             const d = new Date(o.created_at);
             const key = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
-            buckets[key].revenue += Number(o.grand_total || 0);
+            buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             buckets[key].orders += 1;
         });
         return Object.values(buckets)
@@ -1403,26 +1411,26 @@ export default function AdminDashboard() {
             return d >= dateRange.start && d <= dateRange.end;
         });
 
-        // Products
+        // Products (net of proportional order discount)
         const productSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].sales += itemFinalAmount(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
         const sortedProducts = Object.values(productSales).sort((a, b) => b.sales - a.sales);
         const bottomProducts = [...sortedProducts].sort((a, b) => a.sales - b.sales).slice(0, 10);
 
-        // Colors
+        // Colors (net of proportional order discount)
         const colorSales = {};
         validOrders.forEach(order => {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name;
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = Number(item.price || 0) * Number(item.quantity || 1);
+                const itemSales = itemFinalAmount(order, item);
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
                     colorSales[topColor].sales += bottomColor ? itemSales / 2 : itemSales;
@@ -1484,7 +1492,7 @@ export default function AdminDashboard() {
                 };
             }
             const c = clientMap[phone];
-            const amount = Number(order.grand_total || 0);
+            const amount = Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             c.totalSpend += amount;
             c.orderCount += 1;
             c.items += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
@@ -1718,9 +1726,9 @@ export default function AdminDashboard() {
         const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
         const consignmentOrders = currentB2b.filter(o => o.b2b_order_type === "Consignment");
         const clientOrderOrders = currentB2b.filter(o => o.b2b_order_type === "Client Order");
-        const buyoutValue = buyoutOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const consignmentValue = consignmentOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const clientOrderValue = clientOrderOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const buyoutValue = buyoutOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const consignmentValue = consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const clientOrderValue = clientOrderOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
         // Client sales map
         const clientSales = {};
@@ -1728,10 +1736,10 @@ export default function AdminDashboard() {
             const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
             const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
-            clientSales[client].sales += Number(o.grand_total || 0);
+            clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             clientSales[client].orders += 1;
             clientSales[client].advance += Number(o.advance_payment || 0);
-            clientSales[client].balance += Math.max(0, Number(o.grand_total || 0) - Number(o.advance_payment || 0));
+            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));
             if (o.created_at < clientSales[client].firstSeen) clientSales[client].firstSeen = o.created_at;
         });
 
@@ -1743,8 +1751,8 @@ export default function AdminDashboard() {
             const d = new Date(o.created_at);
             return d >= prevStart && d < prevEnd;
         });
-        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
-        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const revenueGrowth = prevRevenue > 0 ? ((totalB2bRevenue - prevRevenue) / prevRevenue * 100) : 0;
         const ordersGrowth = prevB2b.length > 0 ? ((currentB2b.length - prevB2b.length) / prevB2b.length * 100) : 0;
 
@@ -1769,7 +1777,7 @@ export default function AdminDashboard() {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, qty: 0, revenue: 0 };
                 productSales[name].qty += Number(item.quantity || 1);
-                productSales[name].revenue += Number(item.price || 0) * Number(item.quantity || 1);
+                productSales[name].revenue += itemFinalAmount(o, item);
             });
         });
         const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
@@ -1841,7 +1849,7 @@ export default function AdminDashboard() {
         });
 
         const totalDiscount = validOrders.reduce((s, o) => s + Number(o.discount_amount || 0), 0);
-        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const grossRevenue = totalRevenue + totalDiscount;
         const discountPercent = grossRevenue > 0 ? ((totalDiscount / grossRevenue) * 100).toFixed(1) : 0;
 
@@ -1851,7 +1859,7 @@ export default function AdminDashboard() {
             const ch = getOrderChannel(o);
             if (!channelDiscounts[ch]) channelDiscounts[ch] = { name: ch, discount: 0, revenue: 0 };
             channelDiscounts[ch].discount += Number(o.discount_amount || 0);
-            channelDiscounts[ch].revenue += Number(o.grand_total || 0);
+            channelDiscounts[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
 
         return {
@@ -1874,7 +1882,7 @@ export default function AdminDashboard() {
         nonCommsOrders.filter(o => new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
             const m = new Date(o.created_at).getMonth();
             if (!monthlyRevenue[m]) monthlyRevenue[m] = 0;
-            monthlyRevenue[m] += Number(o.grand_total || 0);
+            monthlyRevenue[m] += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
 
         const monthlyData = months.map((m, i) => ({
@@ -1895,8 +1903,8 @@ export default function AdminDashboard() {
             const store = getOrderChannel(o);
             const d = new Date(o.created_at);
             if (!storeGrowth[store]) storeGrowth[store] = { name: store, current: 0, previous: 0 };
-            if (d >= dateRange.start && d <= dateRange.end) storeGrowth[store].current += Number(o.grand_total || 0);
-            else if (d >= prevRange.start && d <= prevRange.end) storeGrowth[store].previous += Number(o.grand_total || 0);
+            if (d >= dateRange.start && d <= dateRange.end) storeGrowth[store].current += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            else if (d >= prevRange.start && d <= prevRange.end) storeGrowth[store].previous += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const storeGrowthList = Object.values(storeGrowth).map(s => ({
             ...s,
@@ -3449,7 +3457,7 @@ export default function AdminDashboard() {
                                                             <td><span className="order-id">{order.order_no || "-"}</span>{isUrgent && <span className="urgent-badge">URGENT</span>}</td>
                                                             <td>{order.delivery_name || "-"}</td>
                                                             <td className="product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                            <td>₹{formatIndianNumber(order.grand_total || 0)}</td>
+                                                            <td>₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                             <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
                                                             <td>
                                                                 <select className="status-select" value={order.status === "pending" ? "order_received" : (order.status || "order_received")} onChange={(e) => updateOrderStatus(order.id, e.target.value)} disabled={statusUpdating === order.id}>

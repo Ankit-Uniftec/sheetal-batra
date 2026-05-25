@@ -683,7 +683,7 @@ export default function OrderHistory() {
 
     // If all items selected, use order total
     if (selectedIndices.length === items.length) {
-      return Number(order.grand_total_after_discount || order.grand_total) || 0;
+      return Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
     }
 
     // Calculate proportional value based on item prices
@@ -716,7 +716,7 @@ export default function OrderHistory() {
     }, 0);
 
     // Proportional share of the actual paid amount
-    const orderTotal = Number(order.grand_total_after_discount || order.grand_total) || 0;
+    const orderTotal = Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
     return Math.round((selectedItemsPrice / totalItemsPrice) * orderTotal);
   };
 
@@ -1535,7 +1535,7 @@ export default function OrderHistory() {
             <div className="oh-modal-body">
               <p className="oh-modal-order-info">
                 <strong>Order:</strong> {actionModal.order?.order_no} |
-                <strong> Amount:</strong> ₹{formatIndianNumber(actionModal.order?.grand_total)}
+                <strong> Amount:</strong> ₹{formatIndianNumber(actionModal.order?.net_total ?? actionModal.order?.grand_total_after_discount ?? actionModal.order?.grand_total ?? 0)}
               </p>
 
               {/* Cancel Order Form */}
@@ -2017,7 +2017,7 @@ export default function OrderHistory() {
                         <div className="oh-details-row">
                           <div className="oh-detail">
                             <span className="oh-label">Amount</span>
-                            <span className="oh-value oh-amount">₹{formatIndianNumber(order.grand_total)}</span>
+                            <span className="oh-value oh-amount">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
                           </div>
                           <div className="oh-detail">
                             <span className="oh-label">Qty</span>

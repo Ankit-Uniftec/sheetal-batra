@@ -227,7 +227,7 @@ export default function StoreManagerDashboard() {
     const isPersonName = (name) => name && name !== "-" && name !== "Unknown" && !knownStoreNames.has(name);
 
     const getPaymentStatus = (order) => {
-        const total = order.grand_total || order.net_total || 0;
+        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
         const advance = order.advance_payment || 0;
         if (advance >= total) return "paid";
         if (advance > 0) return "partial";
@@ -272,7 +272,7 @@ export default function StoreManagerDashboard() {
         const dateRange = getDateRange(timeline);
         const period = filterByDate(storeOrders, dateRange);
 
-        const totalRevenue = period.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+        const totalRevenue = period.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = period.length;
         const totalItems = period.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
         const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
@@ -298,7 +298,7 @@ export default function StoreManagerDashboard() {
             const key = d.toISOString().split("T")[0];
             const label = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!buckets[key]) buckets[key] = { date: label, fullDate: key, revenue: 0, orders: 0 };
-            buckets[key].revenue += Number(o.grand_total || 0);
+            buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             buckets[key].orders += 1;
         });
         const dailySales = Object.values(buckets)
@@ -325,7 +325,7 @@ export default function StoreManagerDashboard() {
             const sp = getOrderSalesperson(o);
             if (!sp || !isPersonName(sp)) return;
             if (!saMap[sp]) saMap[sp] = { name: sp, revenue: 0, orders: 0, items: 0, discount: 0, delivered: 0, cancelled: 0 };
-            saMap[sp].revenue += Number(o.grand_total || 0);
+            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);
@@ -393,7 +393,7 @@ export default function StoreManagerDashboard() {
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(o => {
-                const total = o.grand_total || o.net_total || 0;
+                const total = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0;
                 return total >= filters.minPrice && total <= filters.maxPrice;
             });
         }
@@ -411,8 +411,8 @@ export default function StoreManagerDashboard() {
             switch (sortBy) {
                 case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
                 case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.grand_total || 0) - (a.grand_total || 0);
-                case "amount_low": return (a.grand_total || 0) - (b.grand_total || 0);
+                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
+                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
                 default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
             }
         });
@@ -486,9 +486,8 @@ export default function StoreManagerDashboard() {
             const discount = Number(o.discount_amount || 0);
             const credit = Number(o.store_credit_used || 0);
             const advance = Number(o.advance_payment || 0);
-            // Real-time net sale = grand_total minus discount and store credit
-            // (advance is what customer paid so far; net is what was actually
-            // realised from the customer for the goods).
+            // Order Value column is the MRP (grand_total); Net Sale is what was
+            // actually realised after discount and store credit.
             const netSale = grand - discount - credit;
             return [
                 o.order_no || "",
@@ -561,7 +560,7 @@ export default function StoreManagerDashboard() {
             if (o.refund_reason) saIssues[sp].refunds++;
             if (o.exchange_reason) saIssues[sp].exchanges++;
             if (o.revoked_at) saIssues[sp].revokes++;
-            saIssues[sp].value += Number(o.grand_total || 0);
+            saIssues[sp].value += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
 
         // SA who handled the most cancellations (top of saIssues sorted by cancellation count)
@@ -571,10 +570,10 @@ export default function StoreManagerDashboard() {
             .sort((a, b) => b.cancellations - a.cancellations)[0] || null;
 
         return {
-            cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.grand_total || 0), 0),
-            exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.grand_total || 0), 0),
+            cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             revokedCount: revoked.length,
             // ↓ raw arrays kept so the drill-down list can render the actual orders
             cancelled, returned, refunded, exchanged, revoked,
@@ -636,7 +635,7 @@ export default function StoreManagerDashboard() {
                 };
             }
             const c = clientMap[phone];
-            c.totalSpend += Number(order.grand_total || 0);
+            c.totalSpend += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             c.orderCount += 1;
             c.qty += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             // Refunds — there's no refund_amount column. The refund flow
@@ -648,7 +647,7 @@ export default function StoreManagerDashboard() {
                 !!order.refund_reason ||
                 !!order.refund_status;
             if (isRefund) {
-                c.refunds += Number(order.grand_total || 0);
+                c.refunds += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
             }
             // Store credit applied to the order at checkout
             c.storeCredit += Number(order.store_credit_used || 0);
@@ -1357,7 +1356,7 @@ export default function StoreManagerDashboard() {
                                                                 <td>{o.delivery_name || "-"}</td>
                                                                 <td>{getOrderSalesperson(o) || "-"}</td>
                                                                 <td>{formatDate(o.created_at)}</td>
-                                                                <td className="amount">{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
+                                                                <td className="amount">{"\u20B9"}{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td>
                                                                 <td>{o[reasonField] || "\u2014"}</td>
                                                             </tr>
                                                         ))}

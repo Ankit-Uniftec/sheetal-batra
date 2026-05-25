@@ -180,8 +180,8 @@ export default function B2bOrderHistory() {
     const stats = useMemo(() => {
         const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
         const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
-        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const pendingCount = orders.filter(o => o.approval_status === "pending").length;
         const approvedCount = orders.filter(o => o.approval_status === "approved").length;
         return { salesRevenue, consignmentValue, consignmentCount: consignmentOrders.length, pendingCount, approvedCount };
@@ -377,7 +377,7 @@ export default function B2bOrderHistory() {
                                             <div className="b2boh-details-row">
                                                 <div className="b2boh-detail">
                                                     <span className="b2boh-label">Amount</span>
-                                                    <span className="b2boh-value b2boh-amount">₹{formatIndianNumber(order.grand_total || 0)}</span>
+                                                    <span className="b2boh-value b2boh-amount">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
                                                 </div>
                                                 <div className="b2boh-detail">
                                                     <span className="b2boh-label">Qty</span>
