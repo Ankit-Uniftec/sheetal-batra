@@ -102,20 +102,15 @@ const checkNonReturnable = (order) => {
     order.delivery_country.toLowerCase() !== "india";
   if (isInternational) reasons.push("International order");
 
-  // 3. Discounted / sale items
-  const isDiscounted = Number(order.discount_percent) > 0 ||
-    Number(order.discount_amount) > 0;
-  if (isDiscounted) reasons.push("Discounted/sale item");
-
-  // 4. Orders paid with store credits (skip for gifting orders — they have separate rules)
+  // 3. Orders paid with store credits (skip for gifting orders — they have separate rules)
   const paidWithStoreCredit = Number(order.store_credit_used) > 0;
   if (paidWithStoreCredit && !order.is_gifting) reasons.push("Store credit order");
 
-  // 5. Gift certificate orders (different from gifting orders)
+  // 4. Gift certificate orders (different from gifting orders)
   const isGiftCertificate = order.is_gift_certificate || item.is_gift_certificate;
   if (isGiftCertificate && !order.is_gifting) reasons.push("Gift certificate");
 
-  // 6. Orders with extras (customized items)
+  // 5. Orders with extras (customized items)
   const hasExtras = item.extras && item.extras.length > 0;
   if (hasExtras) reasons.push("Customized with extras");
 
