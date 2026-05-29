@@ -15,6 +15,48 @@ import AddProduct from "../../components/AddProduct/AddProduct";
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
 
+// Shopify CDN supports per-request resizing by injecting `_WxH` before the
+// extension. A 1500×1500 product photo (~250KB) becomes a 96×96 thumbnail
+// (~5KB) without us touching the original asset. Non-Shopify URLs (e.g.
+// Supabase storage, vendor CDNs) are returned unchanged.
+const shopifyThumb = (url, size = 96) => {
+  if (!url || typeof url !== "string") return url;
+  if (!url.includes("cdn.shopify.com")) return url;
+  // Strip any existing _WxH suffix so we don't double-resize.
+  const cleaned = url.replace(/_\d+x\d+(?=\.[a-zA-Z]+(\?|$))/, "");
+  return cleaned.replace(/(\.[a-zA-Z]+)(\?|$)/, `_${size}x${size}$1$2`);
+};
+
+// Per-row image with a shimmer placeholder while loading. Clicking opens the
+// full-size image in a lightbox (handler passed by the parent).
+function InventoryThumb({ src, alt, onClick }) {
+  const [loaded, setLoaded] = React.useState(false);
+  const [errored, setErrored] = React.useState(false);
+
+  if (!src || errored) {
+    return <div className="inv-thumb-placeholder">—</div>;
+  }
+  return (
+    <button
+      type="button"
+      className="inv-thumb-wrap"
+      onClick={onClick}
+      aria-label="View full image"
+    >
+      {!loaded && <div className="inv-thumb-skeleton" />}
+      <img
+        src={shopifyThumb(src, 96)}
+        alt={alt || "Product"}
+        className={`inv-thumb ${loaded ? "loaded" : "loading"}`}
+        loading="lazy"
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setErrored(true)}
+      />
+    </button>
+  );
+}
+
 export default function InventoryDashboard() {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
@@ -22,6 +64,9 @@ export default function InventoryDashboard() {
   // ==================== SIDEBAR & TABS ====================
   const [activeTab, setActiveTab] = useState("inventory");
   const [showSidebar, setShowSidebar] = useState(false);
+
+  // Lightbox state — holds the URL of the image being viewed, or null when closed.
+  const [lightboxUrl, setLightboxUrl] = useState(null);
 
   // When the user clicks an order on the Calendar tab, we switch to the
   // Stock Orders tab and pass the id down so that tab can scroll to and
@@ -36,6 +81,12 @@ export default function InventoryDashboard() {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Filter panel state — multi-select buckets for stock status and sync flag.
+  // Empty arrays = no filter on that dimension.
+  const [showFilters, setShowFilters] = useState(false);
+  const [stockFilters, setStockFilters] = useState([]); // 'out' | 'low' | 'in'
+  const [syncFilter, setSyncFilter] = useState("all"); // 'all' | 'lxrts' | 'regular'
 
   // ==================== NEW LXRTS STATES ====================
   const [variantInventory, setVariantInventory] = useState({}); // { productId: { S: 4, M: 2, ... } }
@@ -391,13 +442,42 @@ export default function InventoryDashboard() {
   };
 
   // ==================== FILTER & PAGINATION ====================
+  // Returns the effective stock count for a product. LXRTS pulls from variants,
+  // regular products use the inventory column on `products`.
+  const getStock = (p) =>
+    p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+
+  // 'out' (=0), 'low' (1-4), 'in' (5+). Used by sort + filter.
+  const stockBucket = (qty) => (qty === 0 ? "out" : qty < 5 ? "low" : "in");
+
   const filteredProducts = useMemo(() => {
-    return products.filter(
-      (p) =>
-        p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.sku_id?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [products, searchTerm]);
+    const q = searchTerm.toLowerCase();
+
+    const matches = products.filter((p) => {
+      // Search
+      if (q) {
+        const hit = p.name?.toLowerCase().includes(q) ||
+                    p.sku_id?.toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      // Sync filter
+      if (syncFilter === "lxrts" && !p.sync_enabled) return false;
+      if (syncFilter === "regular" && p.sync_enabled) return false;
+      // Stock filter
+      if (stockFilters.length > 0) {
+        if (!stockFilters.includes(stockBucket(getStock(p)))) return false;
+      }
+      return true;
+    });
+
+    // Sort: low/out-of-stock first so they're impossible to miss.
+    const rank = (p) => {
+      const b = stockBucket(getStock(p));
+      return b === "out" ? 0 : b === "low" ? 1 : 2;
+    };
+    return [...matches].sort((a, b) => rank(a) - rank(b));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, searchTerm, syncFilter, stockFilters, variantInventory]);
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -406,7 +486,15 @@ export default function InventoryDashboard() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, syncFilter, stockFilters]);
+
+  // Close the lightbox on Escape — a tiny convenience but expected behavior.
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const onKey = (e) => { if (e.key === "Escape") setLightboxUrl(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxUrl]);
 
   // ==================== STATS (UPDATED — includes LXRTS variants) ====================
   const stats = useMemo(() => {
@@ -506,6 +594,23 @@ export default function InventoryDashboard() {
   return (
     <div className="inv-page">
       {PopupComponent}
+
+      {lightboxUrl && (
+        <div className="inv-lightbox" onClick={() => setLightboxUrl(null)}>
+          <button
+            type="button"
+            className="inv-lightbox-close"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close image"
+          >×</button>
+          <img
+            src={lightboxUrl}
+            alt="Product full view"
+            className="inv-lightbox-img"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Header */}
       <header className="inv-header">
@@ -625,6 +730,16 @@ export default function InventoryDashboard() {
               {filteredProducts.length} products
             </div>
             <button
+              className={`inv-filter-btn ${showFilters ? "active" : ""} ${(stockFilters.length > 0 || syncFilter !== "all") ? "has-active" : ""}`}
+              onClick={() => setShowFilters((v) => !v)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+              Filters
+              {(stockFilters.length + (syncFilter !== "all" ? 1 : 0)) > 0 && (
+                <span className="inv-filter-count">{stockFilters.length + (syncFilter !== "all" ? 1 : 0)}</span>
+              )}
+            </button>
+            <button
               className="inv-refresh-btn"
               onClick={handleRefreshLxrts}
               disabled={lxrtsSyncLoading}
@@ -645,12 +760,69 @@ export default function InventoryDashboard() {
           </div>
         </div>
 
+        {showFilters && (
+          <div className="inv-filter-panel">
+            <div className="inv-filter-group">
+              <div className="inv-filter-label">Stock status</div>
+              <div className="inv-filter-chips">
+                {[
+                  { value: "out", label: `Out of stock (${stats.outOfStock})` },
+                  { value: "low", label: `Low stock (${stats.lowStock})` },
+                  { value: "in", label: "In stock" },
+                ].map((opt) => {
+                  const on = stockFilters.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      className={`inv-chip ${on ? "on" : ""}`}
+                      onClick={() => {
+                        setStockFilters((prev) =>
+                          prev.includes(opt.value)
+                            ? prev.filter((v) => v !== opt.value)
+                            : [...prev, opt.value]
+                        );
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="inv-filter-group">
+              <div className="inv-filter-label">Type</div>
+              <div className="inv-filter-chips">
+                {[
+                  { value: "all", label: "All" },
+                  { value: "lxrts", label: "LXRTS" },
+                  { value: "regular", label: "Regular" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    className={`inv-chip ${syncFilter === opt.value ? "on" : ""}`}
+                    onClick={() => setSyncFilter(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(stockFilters.length > 0 || syncFilter !== "all") && (
+              <button
+                className="inv-filter-clear"
+                onClick={() => { setStockFilters([]); setSyncFilter("all"); }}
+              >Clear filters</button>
+            )}
+          </div>
+        )}
+
         {/* Table */}
         <div className="inv-table-container">
           <table className="inv-table">
             <thead>
               <tr>
                 <th className="inv-th-expand"></th>
+                <th className="inv-th-image">Image</th>
                 <th>SKU Code</th>
                 <th>Name</th>
                 <th>Top</th>
@@ -665,9 +837,9 @@ export default function InventoryDashboard() {
             <tbody>
               {currentProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="inv-no-data">
-                    {searchTerm
-                      ? "No products match your search"
+                  <td colSpan="11" className="inv-no-data">
+                    {searchTerm || stockFilters.length > 0 || syncFilter !== "all"
+                      ? "No products match your filters"
                       : "No products found"}
                   </td>
                 </tr>
@@ -703,6 +875,13 @@ export default function InventoryDashboard() {
                           ) : null}
                         </td>
 
+                        <td className="inv-image-cell">
+                          <InventoryThumb
+                            src={product.image_url}
+                            alt={product.name}
+                            onClick={() => product.image_url && setLightboxUrl(product.image_url)}
+                          />
+                        </td>
                         <td>
                           <span className="inv-sku">{product.sku_id || "—"}</span>
                         </td>

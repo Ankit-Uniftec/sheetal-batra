@@ -1702,3 +1702,342 @@
     padding: 0;
   }
 }
+/* ──────────────────── Filter button + panel ──────────────────── */
+.inv-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.inv-filter-btn:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+.inv-filter-btn.active {
+  background: #faf6e8;
+  border-color: #d5b85a;
+  color: #b8941f;
+}
+
+.inv-filter-btn.has-active {
+  border-color: #d5b85a;
+  color: #b8941f;
+}
+
+.inv-filter-count {
+  background: #d5b85a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 2px;
+  line-height: 1.4;
+}
+
+.inv-filter-panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.inv-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inv-filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.inv-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inv-chip {
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 14px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inv-chip:hover {
+  background: #f0f0f0;
+}
+
+.inv-chip.on {
+  background: #fff8e1;
+  border-color: #d5b85a;
+  color: #b8941f;
+  font-weight: 600;
+}
+
+.inv-filter-clear {
+  background: transparent;
+  border: 1px solid #c62828;
+  color: #c62828;
+  padding: 5px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inv-filter-clear:hover {
+  background: #ffebee;
+}
+
+/* ──────────────────── Image thumbnail column ──────────────────── */
+.inv-th-image {
+  width: 60px;
+}
+
+.inv-image-cell {
+  width: 60px;
+  padding: 6px !important;
+}
+
+.inv-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  display: block;
+}
+
+.inv-thumb-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  border: 1px dashed #ddd;
+  background: #fafafa;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+/* ──────────────────── Stock Exchange table ──────────────────── */
+.inv-exchange-table-wrapper {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.inv-exchange-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.inv-exchange-table thead {
+  background: #fafafa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.inv-exchange-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #777;
+}
+
+.inv-exchange-table th.inv-th-expand {
+  width: 36px;
+  padding: 10px 4px;
+}
+
+.inv-exchange-row {
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.inv-exchange-row:hover {
+  background: #fafafa;
+}
+
+.inv-exchange-row.expanded {
+  background: #fff8e1;
+}
+
+.inv-exchange-row td {
+  padding: 12px 14px;
+  vertical-align: middle;
+}
+
+.inv-exchange-expand-cell {
+  width: 36px;
+  padding: 12px 4px !important;
+  text-align: center;
+}
+
+.inv-exchange-chevron {
+  display: inline-block;
+  font-size: 18px;
+  color: #999;
+  transition: transform 0.15s;
+  line-height: 1;
+}
+
+.inv-exchange-chevron.open {
+  transform: rotate(90deg);
+  color: #d5b85a;
+}
+
+.inv-exchange-date-cell,
+.inv-exchange-by-cell {
+  color: #777;
+  white-space: nowrap;
+}
+
+.inv-exchange-notes-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #555;
+}
+
+.inv-exchange-detail-row td {
+  padding: 0;
+  background: #faf6e8;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.inv-exchange-items-panel {
+  padding: 14px 36px;
+}
+
+/* ──────────────────── Thumbnail skeleton ──────────────────── */
+.inv-thumb-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+}
+
+.inv-thumb-skeleton {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 0%,
+    #fafafa 50%,
+    #f0f0f0 100%
+  );
+  background-size: 200% 100%;
+  animation: inv-shimmer 1.2s linear infinite;
+}
+
+@keyframes inv-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.inv-thumb.loading {
+  opacity: 0;
+}
+
+.inv-thumb.loaded {
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+
+/* ──────────────────── Image lightbox ──────────────────── */
+.inv-thumb-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.inv-thumb-wrap:hover .inv-thumb {
+  transform: scale(1.05);
+}
+
+.inv-thumb {
+  transition: transform 0.15s ease, opacity 0.18s ease;
+}
+
+.inv-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 32px;
+  cursor: zoom-out;
+}
+
+.inv-lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.6);
+  cursor: default;
+}
+
+.inv-lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+}
+
+.inv-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
