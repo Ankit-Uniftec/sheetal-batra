@@ -249,7 +249,7 @@ export default function StockExchangeTab() {
         </button>
       </div>
 
-      {/* Exchange List */}
+      {/* Exchange Table */}
       {exchanges.length === 0 ? (
         <div className="inv-empty-state">
           <p>No stock exchanges yet.</p>
@@ -258,49 +258,73 @@ export default function StockExchangeTab() {
           </button>
         </div>
       ) : (
-        <div className="inv-exchange-list">
-          {exchanges.map((ex) => (
-            <div key={ex.id} className={`inv-exchange-card ${expandedId === ex.id ? "expanded" : ""}`}>
-              <div className="inv-exchange-card-header" onClick={() => fetchExchangeItems(ex.id)}>
-                <div className="inv-exchange-flow">
-                  <span className="inv-exchange-wh">{ex.from_wh?.name || "—"}</span>
-                  <span className="inv-exchange-arrow-icon">→</span>
-                  <span className="inv-exchange-wh">{ex.to_wh?.name || "—"}</span>
-                </div>
-                <div className="inv-exchange-meta">
-                  <span className={`inv-exchange-status ${ex.status}`}>{ex.status}</span>
-                  <span className="inv-exchange-date">{formatDate(ex.created_at)}</span>
-                  <span className="inv-exchange-by">{ex.created_by}</span>
-                  <span className="inv-warehouse-arrow">{expandedId === ex.id ? "▲" : "▼"}</span>
-                </div>
-              </div>
-
-              {ex.notes && <p className="inv-exchange-notes">{ex.notes}</p>}
-
-              {expandedId === ex.id && itemsData[ex.id] && (
-                <div className="inv-exchange-items">
-                  <table className="inv-stock-table">
-                    <thead>
-                      <tr>
-                        <th>SKU</th>
-                        <th>Product</th>
-                        <th>Quantity</th>
+        <div className="inv-exchange-table-wrapper">
+          <table className="inv-exchange-table">
+            <thead>
+              <tr>
+                <th className="inv-th-expand"></th>
+                <th>From</th>
+                <th>To</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Created By</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exchanges.map((ex) => {
+                const isExpanded = expandedId === ex.id;
+                return (
+                  <React.Fragment key={ex.id}>
+                    <tr
+                      className={`inv-exchange-row ${isExpanded ? "expanded" : ""}`}
+                      onClick={() => fetchExchangeItems(ex.id)}
+                    >
+                      <td className="inv-exchange-expand-cell">
+                        <span className={`inv-exchange-chevron ${isExpanded ? "open" : ""}`}>›</span>
+                      </td>
+                      <td>{ex.from_wh?.name || "—"}</td>
+                      <td>{ex.to_wh?.name || "—"}</td>
+                      <td>
+                        <span className={`inv-exchange-status ${ex.status}`}>{ex.status}</span>
+                      </td>
+                      <td className="inv-exchange-date-cell">{formatDate(ex.created_at)}</td>
+                      <td className="inv-exchange-by-cell">{ex.created_by || "—"}</td>
+                      <td className="inv-exchange-notes-cell">
+                        {ex.notes ? <span title={ex.notes}>{ex.notes}</span> : "—"}
+                      </td>
+                    </tr>
+                    {isExpanded && itemsData[ex.id] && (
+                      <tr className="inv-exchange-detail-row">
+                        <td colSpan="7">
+                          <div className="inv-exchange-items-panel">
+                            <table className="inv-stock-table">
+                              <thead>
+                                <tr>
+                                  <th>SKU</th>
+                                  <th>Product</th>
+                                  <th>Quantity</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {itemsData[ex.id].map((item) => (
+                                  <tr key={item.id}>
+                                    <td><span className="inv-sku">{item.products?.sku_id || "—"}</span></td>
+                                    <td>{item.products?.name || "Unknown"}</td>
+                                    <td><strong>{item.quantity}</strong></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {itemsData[ex.id].map((item) => (
-                        <tr key={item.id}>
-                          <td><span className="inv-sku">{item.products?.sku_id || "—"}</span></td>
-                          <td>{item.products?.name || "Unknown"}</td>
-                          <td><strong>{item.quantity}</strong></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          ))}
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

@@ -1476,11 +1476,17 @@ const WarehouseDashboard = () => {
                             )}
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
 
-                            {/* Client & SA Name — responsive row */}
+                            {/* Client & SA Name — responsive row. For exhibition orders the SA is
+                                always stored as "Exhibition"; the actual person is on sb_representative_name. */}
                             <div className="wd-info-row">
                               <p><strong className="wd-label">Client Name:</strong> {getClientName(order) || "-"}</p>
-                              <p><strong className="wd-label">SA Name:</strong> {order.salesperson_name || order.salesperson || "-"}</p>
+                              <p><strong className="wd-label">SA Name:</strong> {order.sb_representative_name || order.salesperson_name || order.salesperson || "-"}</p>
                             </div>
+
+                            {/* Exhibition Name — only present on exhibition orders */}
+                            {order.exb_name && (
+                              <p><strong className="wd-label">Exhibition:</strong> {order.exb_name}</p>
+                            )}
 
                             {/* Top & Bottom colors — responsive row */}
                             <div className="wd-info-row">

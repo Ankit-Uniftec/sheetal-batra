@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadWarehousePdf } from "../../utils/pdfUtils";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import "../AssociateDashboard.css";
 import "./StockOrdersTab.css";
@@ -55,8 +55,9 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [saFilter, setSaFilter] = useState("");
+  const [saDropdownOpen, setSaDropdownOpen] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
-  const [pdfLoading, setPdfLoading] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
   // Edit modal state
@@ -65,6 +66,19 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
 
   // Refs for scroll-to-highlight
   const cardRefs = useRef({});
+  const saDropdownRef = useRef(null);
+
+  // Close the SA dropdown when clicking outside it.
+  useEffect(() => {
+    if (!saDropdownOpen) return;
+    const onClick = (e) => {
+      if (saDropdownRef.current && !saDropdownRef.current.contains(e.target)) {
+        setSaDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [saDropdownOpen]);
 
   const fetchStockOrders = async () => {
     setLoading(true);
@@ -97,15 +111,26 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
     }
   }, [highlightOrderId, loading, orders, onHighlightShown]);
 
+  // Unique salesperson list — alphabetised, empties stripped.
+  const salespeople = useMemo(() => {
+    const set = new Set();
+    orders.forEach((o) => { if (o.salesperson) set.add(o.salesperson); });
+    return Array.from(set).sort();
+  }, [orders]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter((o) =>
-      [o.order_no, o.salesperson, o.salesperson_email, o.delivery_date]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q))
-    );
-  }, [orders, search]);
+    return orders.filter((o) => {
+      if (saFilter && o.salesperson !== saFilter) return false;
+      if (q) {
+        const hit = [o.order_no, o.salesperson, o.salesperson_email, o.delivery_date]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+      return true;
+    });
+  }, [orders, search, saFilter]);
 
   const canEdit = (o) => hoursSince(o.created_at) <= STOCK_WINDOW_HOURS && isOpenStatus(o.status);
   const canCancel = (o) => hoursSince(o.created_at) <= STOCK_WINDOW_HOURS && isOpenStatus(o.status);
@@ -170,14 +195,6 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
     }
   };
 
-  const handleCustomerPdf = async (e, order) => {
-    e.stopPropagation();
-    setPdfLoading(order.id);
-    try { await downloadCustomerPdf(order); }
-    catch (err) { console.error("PDF error:", err); }
-    finally { setPdfLoading(null); }
-  };
-
   const handleWarehousePdf = async (e, order) => {
     e.stopPropagation();
     setWarehousePdfLoading(order.id);
@@ -199,8 +216,45 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <div className="stock-sa-dropdown" ref={saDropdownRef}>
+          <button
+            className={`stock-sa-btn ${saFilter ? "active" : ""}`}
+            onClick={() => setSaDropdownOpen((v) => !v)}
+          >
+            Salesperson
+            <span className="stock-sa-arrow">&#9662;</span>
+          </button>
+          {saDropdownOpen && (
+            <div className="stock-sa-panel">
+              <button
+                type="button"
+                className={`stock-sa-option ${saFilter === "" ? "selected" : ""}`}
+                onClick={() => { setSaFilter(""); setSaDropdownOpen(false); }}
+              >All Salespersons</button>
+              {salespeople.map((sa) => (
+                <button
+                  type="button"
+                  key={sa}
+                  className={`stock-sa-option ${saFilter === sa ? "selected" : ""}`}
+                  onClick={() => { setSaFilter(sa); setSaDropdownOpen(false); }}
+                >{sa}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <button className="stock-refresh" onClick={fetchStockOrders}>Refresh</button>
       </div>
+
+      {saFilter && (
+        <div className="stock-applied-filters">
+          <span className="stock-applied-label">Applied:</span>
+          <span className="stock-filter-chip">
+            {saFilter}
+            <button onClick={() => setSaFilter("")}>×</button>
+          </span>
+          <button className="stock-clear-all" onClick={() => setSaFilter("")}>Clear All</button>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="stock-empty">No stock orders yet.</div>
@@ -248,13 +302,6 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
                         Editable ({remainingH}h)
                       </div>
                     )}
-                    <button
-                      className="ad-print-pdf-btn"
-                      onClick={(e) => handleCustomerPdf(e, order)}
-                      disabled={pdfLoading === order.id}
-                    >
-                      {pdfLoading === order.id ? "..." : "📄 Customer PDF"}
-                    </button>
                     <button
                       className="ad-print-pdf-btn"
                       onClick={(e) => handleWarehousePdf(e, order)}
