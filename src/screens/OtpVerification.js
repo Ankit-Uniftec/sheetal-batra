@@ -37,6 +37,7 @@ const COUNTRY_CODES = [
   { code: "+55", label: "Brazil", flag: "🇧🇷" },
   { code: "+27", label: "South Africa", flag: "🇿🇦" },
   { code: "+234", label: "Nigeria", flag: "🇳🇬" },
+  { code: "+254", label: "Kenya", flag: "🇰🇪" },
   { code: "+20", label: "Egypt", flag: "🇪🇬" },
 ];
 
