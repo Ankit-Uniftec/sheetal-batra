@@ -24,12 +24,12 @@ import config from "../../config/config";
  *     individual prices for PR reporting
  *   - Calls generate_order_no RPC with p_store = 'COMMS' (gives SB-COM-MMYY-...)
  *   - Inserts the order with salesperson_store = 'COMMS', is_comms = true
- *   - Sends PDF via WhatsApp to Nazreen (+91 9773983394)
+ *   - Sends PDF via WhatsApp to the logged-in comms user using their
+ *     salesperson.personal_phone — no hardcoded number
  *   - Navigates to /order-placed on success
  */
 
 const COMMS_APPROVAL_CAP = 35000;
-const COMMS_WHATSAPP_NUMBER = "9616774672"; // Nazreen — fixed recipient per spec
 const COMMS_STORE_KEY = "COMMS";            // marker value for salesperson_store
 
 const PAYMENT_MODES = [
@@ -119,7 +119,7 @@ export default function CommsReviewOrder() {
       if (!session) { navigate("/login", { replace: true }); return; }
       const { data: sp } = await supabase
         .from("salesperson")
-        .select("email, role, saleperson, phone, designation")
+        .select("email, role, saleperson, phone, personal_phone, designation")
         .eq("email", session.user.email?.toLowerCase())
         .maybeSingle();
       if (cancelled) return;
@@ -388,8 +388,11 @@ export default function CommsReviewOrder() {
                   "Authorization": `Bearer ${config.SUPABASE_KEY}`,
                 },
                 body: JSON.stringify({
-                  customerName: profile?.saleperson || "Nazreen",
-                  customerPhone: COMMS_WHATSAPP_NUMBER,
+                  customerName: profile?.saleperson || "Comms",
+                  // Send to the comms user's personal WhatsApp. profile.phone is
+                  // the store/work line, NOT a fallback we want to use — if
+                  // personal_phone is unset, fall back to Nazreen's known number.
+                  customerPhone: profile?.personal_phone || "9773983394",
                   customerCountry: "India",
                   pdfUrl,
                 }),
