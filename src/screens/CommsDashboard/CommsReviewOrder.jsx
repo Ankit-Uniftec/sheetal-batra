@@ -389,7 +389,10 @@ export default function CommsReviewOrder() {
                 },
                 body: JSON.stringify({
                   customerName: profile?.saleperson || "Comms",
-                  customerPhone: profile?.personal_phone || profile?.phone,
+                  // Send to the comms user's personal WhatsApp. profile.phone is
+                  // the store/work line, NOT a fallback we want to use — if
+                  // personal_phone is unset, fall back to Nazreen's known number.
+                  customerPhone: profile?.personal_phone || "9773983394",
                   customerCountry: "India",
                   pdfUrl,
                 }),
