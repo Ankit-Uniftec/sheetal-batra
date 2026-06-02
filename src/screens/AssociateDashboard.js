@@ -350,9 +350,29 @@ export default function Dashboard() {
 
         // Step 2: Fetch orders - sa_services gets ALL orders, regular SA gets only their own
         // Paginate past Supabase's default 1000-row cap so sa_services can see 2000+ orders.
+        //
+        // PERF: only the columns the dashboard actually reads (stats, calendar,
+        // client book, order cards, in-page actions, and the PDF cache-check
+        // fields customer_url/warehouse_urls). Heavy PDF-only columns (billing,
+        // signature, gift, measurements, comms_*, etc.) are intentionally NOT
+        // fetched here — the PDF generators re-fetch the full row by id on click
+        // (see fetchFullOrder in pdfUtils). This cuts the payload substantially,
+        // especially for sa_services which loads the whole table.
+        const ORDER_LIST_COLUMNS = [
+          "id", "order_no", "created_at", "delivery_date", "delivered_at", "status",
+          "salesperson", "salesperson_email",
+          "net_total", "grand_total_after_discount", "grand_total", "advance_payment",
+          "total_quantity", "is_stock_order", "is_alteration", "alteration_location",
+          "is_rework", "warehouse_stage", "user_id",
+          "delivery_name", "delivery_email", "delivery_phone",
+          "delivery_address", "delivery_city", "delivery_state", "delivery_pincode",
+          "mode_of_delivery", "items", "attachments",
+          "cancellation_reason", "exchange_reason",
+          "customer_url", "warehouse_urls", "vendor_id", "is_b2b",
+        ].join(", ");
         const isServicesUser = spData.role === "sa_services";
         const { data: ordersData } = await fetchAllRows("orders", (q) => {
-          let query = q.select("*").order("created_at", { ascending: false });
+          let query = q.select(ORDER_LIST_COLUMNS).order("created_at", { ascending: false });
           if (!isServicesUser) {
             query = query.eq("salesperson_email", user.email.toLowerCase());
           }
