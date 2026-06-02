@@ -245,3 +245,46 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+.dpm-addr-toggle {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dpm-toggle-btn {
+  padding: 7px 22px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+  border: none;
+  color: #555;
+  cursor: pointer;
+}
+
+.dpm-toggle-btn + .dpm-toggle-btn {
+  border-left: 1px solid #d4d4d4;
+}
+
+.dpm-toggle-btn.on {
+  background: #d5b85a;
+  color: #fff;
+}
+
+.dpm-addr-input {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.dpm-addr-input:focus {
+  outline: none;
+  border-color: #d5b85a;
+}

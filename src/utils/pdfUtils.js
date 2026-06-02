@@ -26,6 +26,27 @@ const resolveClientNameForPdf = async (order) => {
   }
 };
 
+// Dashboards now fetch a TRIMMED set of order columns for speed, so the order
+// object handed to a PDF function may be missing the billing / signature /
+// gift / measurement columns the PDFs need. Re-fetch the full row by id before
+// generating. One row by primary key is a sub-50ms query. Falls back to the
+// passed-in order if the fetch fails, so PDFs never hard-fail on a network blip.
+const fetchFullOrder = async (order) => {
+  if (!order?.id) return order;
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", order.id)
+      .single();
+    if (error || !data) return order;
+    return data;
+  } catch (err) {
+    console.warn("Full-order re-fetch for PDF failed, using passed order:", err?.message);
+    return order;
+  }
+};
+
 /**
  * Generate and download Customer PDF
  * If PDF URL exists in order, opens it directly
@@ -42,6 +63,10 @@ export const downloadCustomerPdf = async (order, setLoading = null) => {
     }
 
     if (setLoading) setLoading(true);
+
+    // Re-fetch the full order — dashboards pass a trimmed object, but the
+    // customer PDF needs billing/signature/payment columns to render correctly.
+    order = await fetchFullOrder(order);
 
     const filename = `orders/${order.order_no}_customer.pdf`;
 
@@ -132,6 +157,10 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
     }
 
     if (setLoading) setLoading(true);
+
+    // Re-fetch the full order — warehouse PDF needs gift/alteration/measurement
+    // columns that the trimmed dashboard fetch omits.
+    order = await fetchFullOrder(order);
 
     const logoUrl = new URL(Logo, window.location.origin).href;
     const warehouseUrls = [];
@@ -249,8 +278,11 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
 
     if (setLoading) setLoading(true);
 
+    // Re-fetch full order for the same reason as the other PDF paths.
+    order = await fetchFullOrder(order);
+
     const logoUrl = new URL(Logo, window.location.origin).href;
-    const item = items[productIndex];
+    const item = (order.items || [])[productIndex];
     const resolvedClientName = await resolveClientNameForPdf(order);
 
     // Fetch components and generate barcode images

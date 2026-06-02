@@ -13,6 +13,7 @@ import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
+import WalkInTab from "./WalkInTab";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -350,9 +351,29 @@ export default function Dashboard() {
 
         // Step 2: Fetch orders - sa_services gets ALL orders, regular SA gets only their own
         // Paginate past Supabase's default 1000-row cap so sa_services can see 2000+ orders.
+        //
+        // PERF: only the columns the dashboard actually reads (stats, calendar,
+        // client book, order cards, in-page actions, and the PDF cache-check
+        // fields customer_url/warehouse_urls). Heavy PDF-only columns (billing,
+        // signature, gift, measurements, comms_*, etc.) are intentionally NOT
+        // fetched here — the PDF generators re-fetch the full row by id on click
+        // (see fetchFullOrder in pdfUtils). This cuts the payload substantially,
+        // especially for sa_services which loads the whole table.
+        const ORDER_LIST_COLUMNS = [
+          "id", "order_no", "created_at", "delivery_date", "delivered_at", "status",
+          "salesperson", "salesperson_email",
+          "net_total", "grand_total_after_discount", "grand_total", "advance_payment",
+          "total_quantity", "is_stock_order", "is_alteration", "alteration_location",
+          "is_rework", "warehouse_stage", "user_id",
+          "delivery_name", "delivery_email", "delivery_phone",
+          "delivery_address", "delivery_city", "delivery_state", "delivery_pincode",
+          "mode_of_delivery", "items", "attachments",
+          "cancellation_reason", "exchange_reason",
+          "customer_url", "warehouse_urls", "vendor_id", "is_b2b",
+        ].join(", ");
         const isServicesUser = spData.role === "sa_services";
         const { data: ordersData } = await fetchAllRows("orders", (q) => {
-          let query = q.select("*").order("created_at", { ascending: false });
+          let query = q.select(ORDER_LIST_COLUMNS).order("created_at", { ascending: false });
           if (!isServicesUser) {
             query = query.eq("salesperson_email", user.email.toLowerCase());
           }
@@ -549,7 +570,7 @@ export default function Dashboard() {
     setDeliveryModalOrder(order);
   };
 
-  const handleDeliveryPaymentConfirm = async ({ paidAt, rows }) => {
+  const handleDeliveryPaymentConfirm = async ({ paidAt, rows, deliveredAddress }) => {
     const order = deliveryModalOrder;
     if (!order) return;
     setDeliveryModalSaving(true);
@@ -569,14 +590,17 @@ export default function Dashboard() {
       if (payErr) throw payErr;
 
       const deliveredAt = new Date().toISOString();
+      const orderUpdate = { status: "delivered", delivered_at: deliveredAt };
+      // Only set delivered_address when the SA flagged an address change.
+      if (deliveredAddress) orderUpdate.delivered_address = deliveredAddress;
       const { error: ordErr } = await supabase
         .from("orders")
-        .update({ status: "delivered", delivered_at: deliveredAt })
+        .update(orderUpdate)
         .eq("id", order.id);
       if (ordErr) throw ordErr;
 
       setOrders(prev => prev.map(o =>
-        o.id === order.id ? { ...o, status: "delivered", delivered_at: deliveredAt } : o
+        o.id === order.id ? { ...o, status: "delivered", delivered_at: deliveredAt, ...(deliveredAddress ? { delivered_address: deliveredAddress } : {}) } : o
       ));
       setDeliveryModalOrder(null);
 
@@ -1196,6 +1220,7 @@ export default function Dashboard() {
               <a className={`ad-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
               <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
+              <a className={`ad-menu-item ${activeTab === "walkin" ? "active" : ""}`} onClick={() => { setActiveTab("walkin"); setShowSidebar(false); }}>Walk-In</a>
               {salesperson?.can_place_stock_orders && (
                 <a
                   className="ad-menu-item"
@@ -1825,6 +1850,10 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === "walkin" && (
+            <WalkInTab saEmail={salesperson?.email} showPopup={showPopup} />
           )}
         </div>
 

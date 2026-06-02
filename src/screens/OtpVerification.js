@@ -7,40 +7,9 @@ import LogoVideo from "../images/logo.mp4"
 import LogoVideoWebm from "../images/logo.webm";
 import config from "../config/config";
 import { usePopup } from "../components/Popup";
+import { COUNTRY_CODES } from "../utils/countryCodes";
 
-/* ----------------------------------
-   COUNTRY CODE CONFIG
------------------------------------ */
-const COUNTRY_CODES = [
-  { code: "+91", label: "India", flag: "🇮🇳" },
-  { code: "+1", label: "USA", flag: "🇺🇸" },
-  { code: "+44", label: "UK", flag: "🇬🇧" },
-  { code: "+61", label: "Australia", flag: "🇦🇺" },
-  { code: "+971", label: "UAE", flag: "🇦🇪" },
-  { code: "+49", label: "Germany", flag: "🇩🇪" },
-  { code: "+33", label: "France", flag: "🇫🇷" },
-  { code: "+39", label: "Italy", flag: "🇮🇹" },
-  { code: "+34", label: "Spain", flag: "🇪🇸" },
-  { code: "+31", label: "Netherlands", flag: "🇳🇱" },
-  { code: "+86", label: "China", flag: "🇨🇳" },
-  { code: "+81", label: "Japan", flag: "🇯🇵" },
-  { code: "+82", label: "South Korea", flag: "🇰🇷" },
-  { code: "+65", label: "Singapore", flag: "🇸🇬" },
-  { code: "+60", label: "Malaysia", flag: "🇲🇾" },
-  { code: "+66", label: "Thailand", flag: "🇹🇭" },
-  { code: "+62", label: "Indonesia", flag: "🇮🇩" },
-  { code: "+966", label: "Saudi Arabia", flag: "🇸🇦" },
-  { code: "+974", label: "Qatar", flag: "🇶🇦" },
-  { code: "+965", label: "Kuwait", flag: "🇰🇼" },
-  { code: "+968", label: "Oman", flag: "🇴🇲" },
-  { code: "+52", label: "Mexico", flag: "🇲🇽" },
-  { code: "+55", label: "Brazil", flag: "🇧🇷" },
-  { code: "+27", label: "South Africa", flag: "🇿🇦" },
-  { code: "+234", label: "Nigeria", flag: "🇳🇬" },
-  { code: "+254", label: "Kenya", flag: "🇰🇪" },
-  { code: "+20", label: "Egypt", flag: "🇪🇬" },
-];
-
+/* COUNTRY_CODES now lives in src/utils/countryCodes.js (shared with Walk-In form). */
 
 export default function OtpVerification() {
   const { showPopup, PopupComponent } = usePopup();

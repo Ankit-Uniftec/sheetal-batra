@@ -1,0 +1,332 @@
+/* Walk-In tab — table + add-walk-in modal */
+
+.wi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wi-add-btn {
+  background: linear-gradient(180deg, #d9bd66, #c5a44a);
+  color: #fff !important;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wi-add-btn:hover {
+  background: linear-gradient(180deg, #d5b85a, #bd9a3f);
+}
+
+/* ─── Modal ─── */
+.wi-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.wi-modal {
+  position: relative;
+  background: #fffdf8;
+  border-radius: 16px;
+  padding: 34px 36px 32px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
+}
+
+.wi-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #999;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.wi-modal-close:hover {
+  background: #f0ece0;
+  color: #555;
+}
+
+.wi-modal-title {
+  margin: 0 0 26px;
+  font-size: 19px;
+  font-weight: 600;
+  color: #c5a44a;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.wi-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.wi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wi-field label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #4a4a4a;
+}
+
+.wi-optional {
+  font-style: italic;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #b0a98f;
+  margin-left: 6px;
+}
+
+.wi-req {
+  color: #c62828;
+  margin-left: 3px;
+}
+
+.wi-field input,
+.wi-field select {
+  height: 54px;
+  padding: 0 18px;
+  border: 1px solid #e8e2d4;
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  background: #fffefb;
+  color: #333;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+/* Native select: reset appearance + add our own chevron so the text isn't
+   clipped and the arrow is consistent across browsers. */
+.wi-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  cursor: pointer;
+}
+
+.wi-field input::placeholder {
+  color: #bdb6a4;
+}
+
+.wi-field input:focus,
+.wi-field select:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.12);
+}
+
+.wi-phone-row {
+  display: flex;
+  gap: 12px;
+}
+
+.wi-phone-row input {
+  flex: 1;
+}
+
+/* ─── Custom country-code dropdown ─── */
+.wi-cc {
+  position: relative;
+  flex: 0 0 116px;
+}
+
+.wi-cc-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 54px;
+  padding: 0 12px;
+  border: 1px solid #e8e2d4;
+  border-radius: 10px;
+  background: #fffefb;
+  cursor: pointer;
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.wi-cc-flag {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.wi-cc-code {
+  font-weight: 600;
+  color: #333;
+}
+
+.wi-cc-chevron {
+  margin-left: auto;
+  color: #999;
+  font-size: 12px;
+}
+
+.wi-cc-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.wi-cc-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 11;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  width: 240px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e8e2d4;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+}
+
+.wi-cc-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.wi-cc-option:hover {
+  background: #faf6e8;
+}
+
+.wi-cc-option.selected {
+  background: #fff8e1;
+}
+
+.wi-cc-option .wi-cc-label {
+  flex: 1;
+  color: #444;
+}
+
+.wi-cc-option .wi-cc-code {
+  color: #888;
+  font-weight: 500;
+}
+
+.wi-submit {
+  margin-top: 10px;
+  padding: 17px;
+  background: linear-gradient(180deg, #dcc06a, #c5a44a);
+  color: #fff !important;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.wi-submit:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.wi-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─── Table ─── */
+.wi-empty {
+  color: #8a8270 !important;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 15px;
+  padding: 28px 24px;
+  text-align: center;
+  background: #fffdf8;
+  border: 1px solid #ece6d6;
+  border-radius: 10px;
+}
+
+.wi-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e6e0d0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.wi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.wi-table thead {
+  background: #faf6e8;
+}
+
+.wi-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8a7a45;
+  white-space: nowrap;
+}
+
+.wi-table td {
+  padding: 12px 16px;
+  border-top: 1px solid #f0ece0;
+  color: #444;
+  white-space: nowrap;
+}
+
+.wi-table tbody tr:hover {
+  background: #fffdf6;
+}
+
+@media (max-width: 600px) {
+  .wi-form {
+    padding: 18px;
+  }
+  .wi-cc-select {
+    flex: 0 0 100px;
+  }
+}
