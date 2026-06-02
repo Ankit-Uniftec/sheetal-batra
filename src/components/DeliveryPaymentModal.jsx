@@ -24,6 +24,11 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
   ]);
   const [error, setError] = useState("");
 
+  // Delivery-address change capture. Default "no"; when "yes" the SA must
+  // type the actual address the order was delivered to.
+  const [addressChanged, setAddressChanged] = useState(false);
+  const [deliveredAddress, setDeliveredAddress] = useState("");
+
   const totalEntered = useMemo(
     () => rows.reduce((s, r) => s + (Number(r.amount) || 0), 0),
     [rows]
@@ -55,7 +60,15 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
       .filter((r) => Number(r.amount) > 0)
       .map((r) => ({ mode: r.mode, amount: Number(r.amount) }));
     if (validRows.length === 0) { setError("Add at least one payment."); return; }
-    onConfirm({ paidAt, rows: validRows });
+    if (addressChanged && !deliveredAddress.trim()) {
+      setError("Please enter the changed delivery address.");
+      return;
+    }
+    onConfirm({
+      paidAt,
+      rows: validRows,
+      deliveredAddress: addressChanged ? deliveredAddress.trim() : null,
+    });
   };
 
   return (
@@ -136,6 +149,31 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
               {rows.length === 1 && <span className="dpm-remove-placeholder" />}
             </div>
           ))}
+        </div>
+
+        <div className="dpm-field">
+          <label>Change in delivery address?</label>
+          <div className="dpm-addr-toggle">
+            <button
+              type="button"
+              className={`dpm-toggle-btn ${!addressChanged ? "on" : ""}`}
+              onClick={() => { setAddressChanged(false); setError(""); }}
+            >No</button>
+            <button
+              type="button"
+              className={`dpm-toggle-btn ${addressChanged ? "on" : ""}`}
+              onClick={() => { setAddressChanged(true); setError(""); }}
+            >Yes</button>
+          </div>
+          {addressChanged && (
+            <textarea
+              className="dpm-addr-input"
+              rows={3}
+              placeholder="Enter the address the order was actually delivered to…"
+              value={deliveredAddress}
+              onChange={(e) => { setDeliveredAddress(e.target.value); setError(""); }}
+            />
+          )}
         </div>
 
         <div className={`dpm-left ${exactlyMatches ? "dpm-left-ok" : (leftToPay < 0 ? "dpm-left-over" : "")}`}>

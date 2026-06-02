@@ -13,6 +13,7 @@ import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
+import WalkInTab from "./WalkInTab";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -569,7 +570,7 @@ export default function Dashboard() {
     setDeliveryModalOrder(order);
   };
 
-  const handleDeliveryPaymentConfirm = async ({ paidAt, rows }) => {
+  const handleDeliveryPaymentConfirm = async ({ paidAt, rows, deliveredAddress }) => {
     const order = deliveryModalOrder;
     if (!order) return;
     setDeliveryModalSaving(true);
@@ -589,14 +590,17 @@ export default function Dashboard() {
       if (payErr) throw payErr;
 
       const deliveredAt = new Date().toISOString();
+      const orderUpdate = { status: "delivered", delivered_at: deliveredAt };
+      // Only set delivered_address when the SA flagged an address change.
+      if (deliveredAddress) orderUpdate.delivered_address = deliveredAddress;
       const { error: ordErr } = await supabase
         .from("orders")
-        .update({ status: "delivered", delivered_at: deliveredAt })
+        .update(orderUpdate)
         .eq("id", order.id);
       if (ordErr) throw ordErr;
 
       setOrders(prev => prev.map(o =>
-        o.id === order.id ? { ...o, status: "delivered", delivered_at: deliveredAt } : o
+        o.id === order.id ? { ...o, status: "delivered", delivered_at: deliveredAt, ...(deliveredAddress ? { delivered_address: deliveredAddress } : {}) } : o
       ));
       setDeliveryModalOrder(null);
 
@@ -1216,6 +1220,7 @@ export default function Dashboard() {
               <a className={`ad-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
               <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
+              <a className={`ad-menu-item ${activeTab === "walkin" ? "active" : ""}`} onClick={() => { setActiveTab("walkin"); setShowSidebar(false); }}>Walk-In</a>
               {salesperson?.can_place_stock_orders && (
                 <a
                   className="ad-menu-item"
@@ -1845,6 +1850,10 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === "walkin" && (
+            <WalkInTab saEmail={salesperson?.email} showPopup={showPopup} />
           )}
         </div>
 
