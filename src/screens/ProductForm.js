@@ -2751,7 +2751,7 @@ export default function ProductForm() {
                 </select>
                 {isSyncProduct && <span className="sync-badge">LXRTS</span>}
                 {isCustomPieceMode && !isSyncProduct && (
-                  <span className="sync-badge" style={{ background: '#7b1fa2', color: '#fff' }}>CUSTOM PIECE</span>
+                  <span className="sync-badge">NON-STD SKU</span>
                 )}
               </div>
 
@@ -2798,7 +2798,7 @@ export default function ProductForm() {
                       if (existingIsCustom !== newVal) {
                         showPopup({
                           title: "Cannot Mix Modes",
-                          message: "Cart already has " + (existingIsCustom ? "Custom Piece" : "Standard") + " items. Clear the cart first or place a separate order.",
+                          message: "Cart already has " + (existingIsCustom ? "Non-standard SKU" : "Standard") + " items. Clear the cart first or place a separate order.",
                           type: "warning",
                         });
                         return;
@@ -2811,9 +2811,9 @@ export default function ProductForm() {
                   disabled={isSyncProduct}
                 >
                   <option value="standard">Standard Product</option>
-                  <option value="custom">Custom Piece</option>
+                  <option value="custom">Non-standard SKU</option>
                 </select>
-                {isCustomPieceMode && <span className="sync-badge" style={{ background: '#7b1fa2', color: '#fff' }}>CUSTOM</span>}
+                {isCustomPieceMode && <span className="sync-badge">NON-STD SKU</span>}
               </div>
             </div> {/* End of dropdowns row */}
 
