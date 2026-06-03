@@ -13,6 +13,7 @@ import CommsReports from "./CommsReports";
 import CommsPRPerformance from "./CommsPRPerformance";
 import CommsInventory from "./CommsInventory";
 import CommsCalendar from "./CommsCalendar";
+import CommsOrderCalendar from "./CommsOrderCalendar";
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
@@ -218,6 +219,7 @@ export default function CommsDashboard() {
     { key: "inventory", label: "Inventory" },
     { key: "reports", label: "Reports" },
     { key: "pr_performance", label: "PR Performance" },
+    { key: "order_calendar", label: "Order Calendar" },
     { key: "my_calendar", label: "My Calendar" },
   ];
 
@@ -731,6 +733,13 @@ export default function CommsDashboard() {
             <>
               <h2 className="comms-section-title">PR Performance</h2>
               <CommsPRPerformance orders={orders} showPopup={showPopup} />
+            </>
+          )}
+
+          {activeTab === "order_calendar" && (
+            <>
+              <h2 className="comms-section-title">Order Calendar</h2>
+              <CommsOrderCalendar orders={orders} />
             </>
           )}
 
