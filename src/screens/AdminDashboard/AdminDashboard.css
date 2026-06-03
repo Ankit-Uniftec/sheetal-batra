@@ -1997,6 +1997,62 @@
     transform: scale(0.97);
 }
 
+/* ─── Walk-Ins tab — conversion status cell (shared class names with
+       the SA WalkInTab so both render identically) ─── */
+.wi-status-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.wi-status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.wi-status-badge.converted {
+    background: #e7f3e1;
+    color: #4e7a3a;
+}
+
+.wi-status-badge.not-converted {
+    background: #f1eee6;
+    color: #8a8270;
+}
+
+.wi-status-src {
+    font-size: 11px;
+    color: #b0a890;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.wi-status-toggle {
+    border: 1px solid #e0d8c2;
+    background: #fff;
+    color: #8a7a45;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.wi-status-toggle:hover:not(:disabled) {
+    border-color: #d5b85a;
+    background: #fffdf6;
+}
+
+.wi-status-toggle:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 /* ─── Sales Team tab — Stock-order permission toggle ─── */
 .admin-stock-toggle {
     position: relative;

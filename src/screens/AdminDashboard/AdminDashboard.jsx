@@ -13,6 +13,14 @@ import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
+import {
+    buildOrderPhoneSet,
+    isAutoConverted,
+    effectiveConverted,
+    conversionSource,
+    reconcileConversions,
+    setManualConversion,
+} from "../../utils/walkinConversion";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 import config from "../../config/config";
 import {
@@ -196,6 +204,9 @@ export default function AdminDashboard() {
     const [walkinsLoading, setWalkinsLoading] = useState(false);
     const [walkinsSearch, setWalkinsSearch] = useState("");
     const [walkinsSaFilter, setWalkinsSaFilter] = useState("");
+    const [walkinsConvFilter, setWalkinsConvFilter] = useState("all"); // all | converted | not_converted
+    const [walkinOrderPhoneSet, setWalkinOrderPhoneSet] = useState(() => new Set());
+    const [walkinTogglingId, setWalkinTogglingId] = useState(null);
     // Sales Team tab — search filter + the id of the row currently being saved
     const [salesTeamSearch, setSalesTeamSearch] = useState("");
     const [stockTogglingId, setStockTogglingId] = useState(null);
@@ -449,10 +460,15 @@ export default function AdminDashboard() {
             try {
                 const { data, error } = await supabase
                     .from("walkins")
-                    .select("id, created_at, sa_email, name, country_code, phone, email, source")
+                    .select("id, created_at, sa_email, name, country_code, phone, email, source, converted, converted_manual, converted_at")
                     .order("created_at", { ascending: false });
                 if (error) throw error;
-                setWalkins(data || []);
+                // Auto-detect conversions against ALL orders' delivery_phone (any SA).
+                // The dashboard's `orders` state is already loaded for analytics.
+                const phoneSet = buildOrderPhoneSet(orders);
+                setWalkinOrderPhoneSet(phoneSet);
+                const reconciled = await reconcileConversions(data || [], phoneSet);
+                setWalkins(reconciled);
                 setWalkinsLoaded(true);
             } catch (err) {
                 console.error("Failed to load walk-ins:", err);
@@ -461,7 +477,7 @@ export default function AdminDashboard() {
             }
         };
         loadWalkins();
-    }, [activeTab, walkinsLoaded, walkinsLoading]);
+    }, [activeTab, walkinsLoaded, walkinsLoading, orders]);
 
     // Distinct SA emails present in the walk-in data, for the filter dropdown.
     const walkinSaOptions = useMemo(() => {
@@ -470,11 +486,15 @@ export default function AdminDashboard() {
         return Array.from(set).sort();
     }, [walkins]);
 
-    // Walk-ins after applying the SA filter + free-text search.
+    // Walk-ins after applying the SA filter + conversion filter + free-text search.
     const filteredWalkins = useMemo(() => {
         const q = walkinsSearch.trim().toLowerCase();
         return walkins.filter((w) => {
             if (walkinsSaFilter && w.sa_email !== walkinsSaFilter) return false;
+            if (walkinsConvFilter !== "all") {
+                const want = walkinsConvFilter === "converted";
+                if (effectiveConverted(w, walkinOrderPhoneSet) !== want) return false;
+            }
             if (!q) return true;
             return (
                 (w.name || "").toLowerCase().includes(q) ||
@@ -484,12 +504,36 @@ export default function AdminDashboard() {
                 (w.source || "").toLowerCase().includes(q)
             );
         });
-    }, [walkins, walkinsSearch, walkinsSaFilter]);
+    }, [walkins, walkinsSearch, walkinsSaFilter, walkinsConvFilter, walkinOrderPhoneSet]);
+
+    // Count of converted walk-ins across the whole set (not just filtered).
+    const walkinsConvertedCount = useMemo(
+        () => walkins.filter((w) => effectiveConverted(w, walkinOrderPhoneSet)).length,
+        [walkins, walkinOrderPhoneSet]
+    );
+
+    // Manual conversion override toggle (admin). Mirrors the SA tab behavior:
+    // flips the effective status and clears the override if it matches auto.
+    const handleToggleWalkinConverted = async (w) => {
+        const auto = isAutoConverted(w, walkinOrderPhoneSet);
+        const currentlyConverted = effectiveConverted(w, walkinOrderPhoneSet);
+        const desired = !currentlyConverted;
+        const nextManual = desired === auto ? null : desired;
+        setWalkinTogglingId(w.id);
+        try {
+            const patch = await setManualConversion(w.id, nextManual, auto);
+            setWalkins((prev) => prev.map((x) => (x.id === w.id ? { ...x, ...patch } : x)));
+        } catch (err) {
+            showPopup({ title: "Update failed", message: err.message || "Could not update conversion status.", type: "error" });
+        } finally {
+            setWalkinTogglingId(null);
+        }
+    };
 
     // CSV export of the currently filtered walk-ins.
     const handleExportWalkins = () => {
         if (filteredWalkins.length === 0) return;
-        const headers = ["Date", "SA Email", "Name", "Phone", "Email", "Source"];
+        const headers = ["Date", "SA Email", "Name", "Phone", "Email", "Source", "Converted"];
         const rows = filteredWalkins.map((w) => [
             w.created_at ? new Date(w.created_at).toLocaleString("en-GB") : "",
             w.sa_email || "",
@@ -497,6 +541,7 @@ export default function AdminDashboard() {
             `${w.country_code || ""} ${w.phone || ""}`.trim(),
             w.email || "",
             w.source || "",
+            effectiveConverted(w, walkinOrderPhoneSet) ? "Yes" : "No",
         ].map((v) => `"${String(v).replace(/"/g, '""')}"`));
         const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
         const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
@@ -3795,9 +3840,19 @@ export default function AdminDashboard() {
                                         <option key={sa} value={sa}>{sa}</option>
                                     ))}
                                 </select>
+                                <select
+                                    value={walkinsConvFilter}
+                                    onChange={(e) => setWalkinsConvFilter(e.target.value)}
+                                    className="admin-sort-select"
+                                    style={{ maxWidth: 200 }}
+                                >
+                                    <option value="all">All statuses</option>
+                                    <option value="converted">Converted</option>
+                                    <option value="not_converted">Not Converted</option>
+                                </select>
                                 <div style={{ flex: 1 }} />
                                 <span style={{ color: "#888", fontSize: 13, marginRight: 8 }}>
-                                    {filteredWalkins.length} of {walkins.length}
+                                    {filteredWalkins.length} of {walkins.length} · {walkinsConvertedCount} converted
                                 </span>
                                 <button
                                     className="admin-export-btn"
@@ -3821,23 +3876,27 @@ export default function AdminDashboard() {
                                                 <th>Phone</th>
                                                 <th>Email</th>
                                                 <th>Source</th>
+                                                <th>Status</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {walkinsLoading ? (
                                                 <tr>
-                                                    <td colSpan={6} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
+                                                    <td colSpan={7} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
                                                         Loading walk-ins…
                                                     </td>
                                                 </tr>
                                             ) : filteredWalkins.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={6} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
-                                                        {walkinsSearch || walkinsSaFilter ? "No walk-ins match your filter." : "No walk-ins recorded yet."}
+                                                    <td colSpan={7} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
+                                                        {walkinsSearch || walkinsSaFilter || walkinsConvFilter !== "all" ? "No walk-ins match your filter." : "No walk-ins recorded yet."}
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                filteredWalkins.map((w) => (
+                                                filteredWalkins.map((w) => {
+                                                    const converted = effectiveConverted(w, walkinOrderPhoneSet);
+                                                    const src = conversionSource(w);
+                                                    return (
                                                     <tr key={w.id}>
                                                         <td>{w.created_at ? new Date(w.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                                                         <td>{w.sa_email || "—"}</td>
@@ -3845,8 +3904,25 @@ export default function AdminDashboard() {
                                                         <td>{w.phone ? `${w.country_code || ""} ${w.phone}`.trim() : "—"}</td>
                                                         <td>{w.email || "—"}</td>
                                                         <td>{w.source || "—"}</td>
+                                                        <td>
+                                                            <div className="wi-status-cell">
+                                                                <span className={`wi-status-badge ${converted ? "converted" : "not-converted"}`}>
+                                                                    {converted ? "Converted" : "Not Converted"}
+                                                                </span>
+                                                                <span className="wi-status-src">{src === "manual" ? "manual" : "auto"}</span>
+                                                                <button
+                                                                    className="wi-status-toggle"
+                                                                    onClick={() => handleToggleWalkinConverted(w)}
+                                                                    disabled={walkinTogglingId === w.id}
+                                                                    title={converted ? "Mark as not converted" : "Mark as converted"}
+                                                                >
+                                                                    {walkinTogglingId === w.id ? "…" : converted ? "Unset" : "Mark converted"}
+                                                                </button>
+                                                            </div>
+                                                        </td>
                                                     </tr>
-                                                ))
+                                                    );
+                                                })
                                             )}
                                         </tbody>
                                     </table>

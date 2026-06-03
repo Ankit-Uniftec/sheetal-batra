@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { COUNTRY_CODES, SOURCE_OPTIONS } from "../utils/countryCodes";
+import {
+  buildOrderPhoneSet,
+  isAutoConverted,
+  effectiveConverted,
+  conversionSource,
+  reconcileConversions,
+  setManualConversion,
+} from "../utils/walkinConversion";
 import "./WalkInTab.css";
 
 const formatDateTime = (iso) => {
@@ -20,6 +28,12 @@ export default function WalkInTab({ saEmail, showPopup }) {
   const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
+  // Conversion tracking. orderPhoneSet = normalized delivery_phones across ALL
+  // orders (any SA), used to auto-detect whether a walk-in later ordered.
+  const [orderPhoneSet, setOrderPhoneSet] = useState(() => new Set());
+  const [convFilter, setConvFilter] = useState("all"); // all | converted | not_converted
+  const [togglingId, setTogglingId] = useState(null);
+
   // Form state
   const [name, setName] = useState("");
   const [countryCode, setCountryCode] = useState("+91");
@@ -36,17 +50,64 @@ export default function WalkInTab({ saEmail, showPopup }) {
     let cancelled = false;
     (async () => {
       if (!saEmail) { setLoading(false); return; }
-      const { data } = await supabase
-        .from("walkins")
-        .select("*")
-        .eq("sa_email", saEmail.toLowerCase())
-        .order("created_at", { ascending: false });
+      // Load this SA's walk-ins and the phone column of ALL orders in parallel.
+      // Conversion counts an order from any SA (the client may return on a
+      // different SA's shift), so the order query is NOT scoped to saEmail.
+      const [walkinsRes, ordersRes] = await Promise.all([
+        supabase
+          .from("walkins")
+          .select("*")
+          .eq("sa_email", saEmail.toLowerCase())
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("orders")
+          .select("delivery_phone"),
+      ]);
       if (cancelled) return;
-      setWalkins(data || []);
+
+      const phoneSet = buildOrderPhoneSet(ordersRes.data || []);
+      setOrderPhoneSet(phoneSet);
+
+      // Reconcile auto-matches with the DB, then show the corrected list.
+      const reconciled = await reconcileConversions(walkinsRes.data || [], phoneSet);
+      if (cancelled) return;
+      setWalkins(reconciled);
       setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [saEmail]);
+
+  // Apply the conversion filter to the loaded walk-ins.
+  const visibleWalkins = useMemo(() => {
+    if (convFilter === "all") return walkins;
+    const want = convFilter === "converted";
+    return walkins.filter((w) => effectiveConverted(w, orderPhoneSet) === want);
+  }, [walkins, convFilter, orderPhoneSet]);
+
+  const convertedCount = useMemo(
+    () => walkins.filter((w) => effectiveConverted(w, orderPhoneSet)).length,
+    [walkins, orderPhoneSet]
+  );
+
+  // Manual override toggle. Cycles the effective status: clicking flips it and
+  // pins a manual override so it sticks even against auto-detection.
+  const handleToggleConverted = async (w) => {
+    const auto = isAutoConverted(w, orderPhoneSet);
+    const currentlyConverted = effectiveConverted(w, orderPhoneSet);
+    // New manual value = opposite of current effective. If that equals the auto
+    // result, clear the override (null) so it tracks auto going forward.
+    const desired = !currentlyConverted;
+    const nextManual = desired === auto ? null : desired;
+    setTogglingId(w.id);
+    try {
+      const patch = await setManualConversion(w.id, nextManual, auto);
+      setWalkins((prev) => prev.map((x) => (x.id === w.id ? { ...x, ...patch } : x)));
+    } catch (err) {
+      showPopup?.({ title: "Update failed", message: err.message || "Could not update conversion status.", type: "error", confirmText: "OK" });
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const phoneDigits = useMemo(() => phone.replace(/\D/g, ""), [phone]);
 
@@ -102,15 +163,41 @@ export default function WalkInTab({ saEmail, showPopup }) {
   return (
     <div className="ad-order-details-wrapper">
       <div className="wi-header">
-        <h2 className="ad-order-title" style={{ margin: 0 }}>Walk-In ({walkins.length})</h2>
+        <h2 className="ad-order-title" style={{ margin: 0 }}>
+          Walk-In ({walkins.length})
+          {walkins.length > 0 && (
+            <span className="wi-converted-summary"> · {convertedCount} converted</span>
+          )}
+        </h2>
         <button className="wi-add-btn" onClick={openForm}>+ Add Walk-In</button>
       </div>
+
+      {/* ─── Conversion filter ─── */}
+      {!loading && walkins.length > 0 && (
+        <div className="wi-filter-row">
+          {[
+            { key: "all", label: "All" },
+            { key: "converted", label: "Converted" },
+            { key: "not_converted", label: "Not Converted" },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              className={`wi-filter-chip ${convFilter === opt.key ? "active" : ""}`}
+              onClick={() => setConvFilter(opt.key)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ─── This SA's walk-ins ─── */}
       {loading ? (
         <p className="ad-loading-text">Loading walk-ins…</p>
       ) : walkins.length === 0 ? (
         <p className="wi-empty">No walk-ins recorded yet. Click "+ Add Walk-In" to register a visit.</p>
+      ) : visibleWalkins.length === 0 ? (
+        <p className="wi-empty">No walk-ins match this filter.</p>
       ) : (
         <div className="wi-table-wrapper">
           <table className="wi-table">
@@ -121,18 +208,39 @@ export default function WalkInTab({ saEmail, showPopup }) {
                 <th>Phone</th>
                 <th>Email</th>
                 <th>Source</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {walkins.map((w) => (
-                <tr key={w.id}>
-                  <td>{formatDateTime(w.created_at)}</td>
-                  <td>{w.name || "—"}</td>
-                  <td>{w.country_code} {w.phone}</td>
-                  <td>{w.email || "—"}</td>
-                  <td>{w.source || "—"}</td>
-                </tr>
-              ))}
+              {visibleWalkins.map((w) => {
+                const converted = effectiveConverted(w, orderPhoneSet);
+                const src = conversionSource(w);
+                return (
+                  <tr key={w.id}>
+                    <td>{formatDateTime(w.created_at)}</td>
+                    <td>{w.name || "—"}</td>
+                    <td>{w.country_code} {w.phone}</td>
+                    <td>{w.email || "—"}</td>
+                    <td>{w.source || "—"}</td>
+                    <td>
+                      <div className="wi-status-cell">
+                        <span className={`wi-status-badge ${converted ? "converted" : "not-converted"}`}>
+                          {converted ? "Converted" : "Not Converted"}
+                        </span>
+                        <span className="wi-status-src">{src === "manual" ? "manual" : "auto"}</span>
+                        <button
+                          className="wi-status-toggle"
+                          onClick={() => handleToggleConverted(w)}
+                          disabled={togglingId === w.id}
+                          title={converted ? "Mark as not converted" : "Mark as converted"}
+                        >
+                          {togglingId === w.id ? "…" : converted ? "Unset" : "Mark converted"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
