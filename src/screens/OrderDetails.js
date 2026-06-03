@@ -138,8 +138,8 @@ export default function OrderDetails() {
   // product subtotal (totalAmount minus extras) — same base the % codes use.
   // To add a new code: append here. To deactivate: delete the entry.
   const SHOPMORE_CODES = {
-    SHOPMORE25K: { amount: 2000, minSpend: 25000 },
-    SHOPMORE40K: { amount: 4000, minSpend: 40000 },
+    SHOPMORE28K: { amount: 2200, minSpend: 28000 },
+    SHOPMORE45K: { amount: 4200, minSpend: 45000 },
   };
 
   const [shippingCharge, setShippingCharge] = useState(0);
@@ -749,7 +749,7 @@ export default function OrderDetails() {
     const flatApplied = flatDiscountAmount > 0;
     const appliedCodesCount = [discountApplied, birthdayApplied, codWaiverApplied, flatApplied].filter(Boolean).length;
 
-    // Hardcoded flat-amount codes (SHOPMORE25K / SHOPMORE40K). Different math
+    // Hardcoded flat-amount codes (SHOPMORE28K / SHOPMORE45K). Different math
     // shape from the percent codes — flat ₹ off above a minimum spend — so
     // they live in JS rather than the discount table.
     if (SHOPMORE_CODES[code]) {
@@ -1984,7 +1984,7 @@ export default function OrderDetails() {
               setTimeout(() => applyCollectorCode(value), 0);
             }
           }}
-          placeholder="e.g. SBBIRTHDAY, SB250, SHOPMORE25K"
+          placeholder="e.g. SBBIRTHDAY, SB250, SHOPMORE28K"
           style={{
             width: "100%",
             padding: "10px 14px",
