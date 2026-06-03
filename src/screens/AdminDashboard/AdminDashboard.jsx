@@ -190,6 +190,12 @@ export default function AdminDashboard() {
     const [targetsLoading, setTargetsLoading] = useState(false);
     const [savingTargetKey, setSavingTargetKey] = useState(null);
     const [targetsSearch, setTargetsSearch] = useState("");
+    // Walk-Ins tab — all SAs' walk-ins, loaded lazily on first open. Read-only.
+    const [walkins, setWalkins] = useState([]);
+    const [walkinsLoaded, setWalkinsLoaded] = useState(false);
+    const [walkinsLoading, setWalkinsLoading] = useState(false);
+    const [walkinsSearch, setWalkinsSearch] = useState("");
+    const [walkinsSaFilter, setWalkinsSaFilter] = useState("");
     // Sales Team tab — search filter + the id of the row currently being saved
     const [salesTeamSearch, setSalesTeamSearch] = useState("");
     const [stockTogglingId, setStockTogglingId] = useState(null);
@@ -434,6 +440,73 @@ export default function AdminDashboard() {
         };
         loadTargets();
     }, [activeTab, targetsLoaded, targetsLoading, targetMonthColumns]);
+
+    // Fetch all SAs' walk-ins the first time the Walk-Ins tab is opened.
+    useEffect(() => {
+        if (activeTab !== "walkins" || walkinsLoaded || walkinsLoading) return;
+        const loadWalkins = async () => {
+            setWalkinsLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from("walkins")
+                    .select("id, created_at, sa_email, name, country_code, phone, email, source")
+                    .order("created_at", { ascending: false });
+                if (error) throw error;
+                setWalkins(data || []);
+                setWalkinsLoaded(true);
+            } catch (err) {
+                console.error("Failed to load walk-ins:", err);
+            } finally {
+                setWalkinsLoading(false);
+            }
+        };
+        loadWalkins();
+    }, [activeTab, walkinsLoaded, walkinsLoading]);
+
+    // Distinct SA emails present in the walk-in data, for the filter dropdown.
+    const walkinSaOptions = useMemo(() => {
+        const set = new Set();
+        walkins.forEach((w) => { if (w.sa_email) set.add(w.sa_email); });
+        return Array.from(set).sort();
+    }, [walkins]);
+
+    // Walk-ins after applying the SA filter + free-text search.
+    const filteredWalkins = useMemo(() => {
+        const q = walkinsSearch.trim().toLowerCase();
+        return walkins.filter((w) => {
+            if (walkinsSaFilter && w.sa_email !== walkinsSaFilter) return false;
+            if (!q) return true;
+            return (
+                (w.name || "").toLowerCase().includes(q) ||
+                (w.phone || "").toLowerCase().includes(q) ||
+                (w.email || "").toLowerCase().includes(q) ||
+                (w.sa_email || "").toLowerCase().includes(q) ||
+                (w.source || "").toLowerCase().includes(q)
+            );
+        });
+    }, [walkins, walkinsSearch, walkinsSaFilter]);
+
+    // CSV export of the currently filtered walk-ins.
+    const handleExportWalkins = () => {
+        if (filteredWalkins.length === 0) return;
+        const headers = ["Date", "SA Email", "Name", "Phone", "Email", "Source"];
+        const rows = filteredWalkins.map((w) => [
+            w.created_at ? new Date(w.created_at).toLocaleString("en-GB") : "",
+            w.sa_email || "",
+            w.name || "",
+            `${w.country_code || ""} ${w.phone || ""}`.trim(),
+            w.email || "",
+            w.source || "",
+        ].map((v) => `"${String(v).replace(/"/g, '""')}"`));
+        const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+        const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `walkins_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     // Save or clear a single cell. Upserts on a non-empty value, deletes the
     // row if the user clears the cell. Refuses to write past months.
@@ -1994,6 +2067,7 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
                         <button className={`admin-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
+                        <button className={`admin-nav-item ${activeTab === "walkins" ? "active" : ""}`} onClick={() => { setActiveTab("walkins"); setShowSidebar(false); }}>Walk-Ins</button>
                         <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
                         <button className={`admin-nav-item ${activeTab === "sa_targets" ? "active" : ""}`} onClick={() => { setActiveTab("sa_targets"); setShowSidebar(false); }}>SA Targets</button>
                         <button className={`admin-nav-item ${activeTab === "comms_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("comms_approvals"); setShowSidebar(false); }}>
@@ -3684,6 +3758,100 @@ export default function AdminDashboard() {
                                     >Next</button>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* WALK-INS TAB — all SAs' walk-ins, read-only + export */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "walkins" && (
+                        <div className="admin-clients-tab">
+                            <h2 className="admin-section-title">Walk-Ins</h2>
+
+                            <div className="admin-toolbar">
+                                <div className="admin-search-wrapper">
+                                    <span className="search-icon">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name, phone, email, SA or source…"
+                                        value={walkinsSearch}
+                                        onChange={(e) => setWalkinsSearch(e.target.value)}
+                                        className="admin-search-input"
+                                    />
+                                    {walkinsSearch && (
+                                        <button className="search-clear" onClick={() => setWalkinsSearch("")}>×</button>
+                                    )}
+                                </div>
+                                <select
+                                    value={walkinsSaFilter}
+                                    onChange={(e) => setWalkinsSaFilter(e.target.value)}
+                                    className="admin-sort-select"
+                                    style={{ maxWidth: 240 }}
+                                >
+                                    <option value="">All SAs</option>
+                                    {walkinSaOptions.map((sa) => (
+                                        <option key={sa} value={sa}>{sa}</option>
+                                    ))}
+                                </select>
+                                <div style={{ flex: 1 }} />
+                                <span style={{ color: "#888", fontSize: 13, marginRight: 8 }}>
+                                    {filteredWalkins.length} of {walkins.length}
+                                </span>
+                                <button
+                                    className="admin-export-btn"
+                                    onClick={handleExportWalkins}
+                                    disabled={filteredWalkins.length === 0}
+                                    title="Export the currently filtered walk-ins to CSV"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                    Export CSV
+                                </button>
+                            </div>
+
+                            <div className="admin-table-container">
+                                <div className="admin-table-wrapper">
+                                    <table className="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>SA</th>
+                                                <th>Name</th>
+                                                <th>Phone</th>
+                                                <th>Email</th>
+                                                <th>Source</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {walkinsLoading ? (
+                                                <tr>
+                                                    <td colSpan={6} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
+                                                        Loading walk-ins…
+                                                    </td>
+                                                </tr>
+                                            ) : filteredWalkins.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={6} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
+                                                        {walkinsSearch || walkinsSaFilter ? "No walk-ins match your filter." : "No walk-ins recorded yet."}
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                filteredWalkins.map((w) => (
+                                                    <tr key={w.id}>
+                                                        <td>{w.created_at ? new Date(w.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                                                        <td>{w.sa_email || "—"}</td>
+                                                        <td><strong>{w.name || "—"}</strong></td>
+                                                        <td>{w.phone ? `${w.country_code || ""} ${w.phone}`.trim() : "—"}</td>
+                                                        <td>{w.email || "—"}</td>
+                                                        <td>{w.source || "—"}</td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     )}
 
