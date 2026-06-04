@@ -6,6 +6,7 @@ import "./Screen4.css";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatDate from "../utils/formatDate";
+import { normalizeStore, isProductVisibleForStore } from "../utils/storeCategory";
 import { usePopup } from "../components/Popup"; // Import Popup component
 import ExtrasPopup from "../components/ExtrasPopup";
 import config from "../config/config";
@@ -2017,6 +2018,19 @@ export default function ProductForm() {
     } catch { return false; }
   })();
 
+  // Logged-in SA's store, normalized to "Delhi"/"Ludhiana" (or null if the
+  // store_name can't be classified). Drives the product list store filter:
+  // an SA only sees products tagged for their store plus "All Stores".
+  // Stock & comms orders aren't tied to a retail store, so they skip the
+  // filter (saStore=null → fail open, all products visible).
+  const saStore = useMemo(() => {
+    if (isStockOrder || isCommsOrder) return null;
+    try {
+      const sp = JSON.parse(sessionStorage.getItem("currentSalesperson") || "{}");
+      return normalizeStore(sp.store_name);
+    } catch { return null; }
+  }, [isStockOrder, isCommsOrder]);
+
   // CHANGE #1: Get base price without extras (for product display)
   const getBasePrice = () => {
     if (!selectedProduct) return 0;
@@ -3263,6 +3277,7 @@ export default function ProductForm() {
                 <SearchableSelect
                   options={products
                     .filter((p) => isCustomPieceMode ? p.is_custom_piece === true : !p.is_custom_piece)
+                    .filter((p) => isProductVisibleForStore(p, saStore))
                     .map((p) => ({
                       label: p.name,
                       value: p.id,

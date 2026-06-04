@@ -21,6 +21,7 @@ import {
     reconcileConversions,
     setManualConversion,
 } from "../../utils/walkinConversion";
+import { normalizeStore } from "../../utils/storeCategory";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 import config from "../../config/config";
 import {
@@ -205,6 +206,7 @@ export default function AdminDashboard() {
     const [walkinsSearch, setWalkinsSearch] = useState("");
     const [walkinsSaFilter, setWalkinsSaFilter] = useState("");
     const [walkinsConvFilter, setWalkinsConvFilter] = useState("all"); // all | converted | not_converted
+    const [walkinsLocFilter, setWalkinsLocFilter] = useState("all"); // all | Delhi | Ludhiana | Other
     const [walkinOrderPhoneSet, setWalkinOrderPhoneSet] = useState(() => new Set());
     const [walkinTogglingId, setWalkinTogglingId] = useState(null);
     // Sales Team tab — search filter + the id of the row currently being saved
@@ -486,11 +488,29 @@ export default function AdminDashboard() {
         return Array.from(set).sort();
     }, [walkins]);
 
-    // Walk-ins after applying the SA filter + conversion filter + free-text search.
+    // Map each SA email → normalized store ("Delhi"/"Ludhiana"/"Other").
+    // Walk-ins have no location of their own, so it's derived from the SA's
+    // store_name in the salesperson table. Unclassifiable stores → "Other"
+    // so the location counts always sum to the grand total.
+    const saLocationByEmail = useMemo(() => {
+        const map = {};
+        (salespersonTable || []).forEach((sp) => {
+            if (!sp.email) return;
+            map[sp.email.toLowerCase()] = normalizeStore(sp.store_name) || "Other";
+        });
+        return map;
+    }, [salespersonTable]);
+
+    // Resolve a single walk-in's location bucket.
+    const walkinLocation = (w) =>
+        saLocationByEmail[(w.sa_email || "").toLowerCase()] || "Other";
+
+    // Walk-ins after applying SA + conversion + location filters + free-text search.
     const filteredWalkins = useMemo(() => {
         const q = walkinsSearch.trim().toLowerCase();
         return walkins.filter((w) => {
             if (walkinsSaFilter && w.sa_email !== walkinsSaFilter) return false;
+            if (walkinsLocFilter !== "all" && walkinLocation(w) !== walkinsLocFilter) return false;
             if (walkinsConvFilter !== "all") {
                 const want = walkinsConvFilter === "converted";
                 if (effectiveConverted(w, walkinOrderPhoneSet) !== want) return false;
@@ -504,13 +524,34 @@ export default function AdminDashboard() {
                 (w.source || "").toLowerCase().includes(q)
             );
         });
-    }, [walkins, walkinsSearch, walkinsSaFilter, walkinsConvFilter, walkinOrderPhoneSet]);
+    }, [walkins, walkinsSearch, walkinsSaFilter, walkinsConvFilter, walkinsLocFilter, walkinOrderPhoneSet, saLocationByEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Count of converted walk-ins across the whole set (not just filtered).
     const walkinsConvertedCount = useMemo(
         () => walkins.filter((w) => effectiveConverted(w, walkinOrderPhoneSet)).length,
         [walkins, walkinOrderPhoneSet]
     );
+
+    // Location-wise walk-in + conversion stats for the summary cards.
+    // Each bucket: { total, converted }. pct is derived in the render.
+    const walkinStats = useMemo(() => {
+        const blank = () => ({ total: 0, converted: 0 });
+        const stats = {
+            Total: blank(), Delhi: blank(), Ludhiana: blank(), Other: blank(),
+        };
+        walkins.forEach((w) => {
+            const loc = walkinLocation(w);
+            const isConv = effectiveConverted(w, walkinOrderPhoneSet);
+            stats.Total.total += 1;
+            if (isConv) stats.Total.converted += 1;
+            const bucket = stats[loc] || stats.Other;
+            bucket.total += 1;
+            if (isConv) bucket.converted += 1;
+        });
+        return stats;
+    }, [walkins, walkinOrderPhoneSet, saLocationByEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 
     // Manual conversion override toggle (admin). Mirrors the SA tab behavior:
     // flips the effective status and clears the override if it matches auto.
@@ -533,10 +574,11 @@ export default function AdminDashboard() {
     // CSV export of the currently filtered walk-ins.
     const handleExportWalkins = () => {
         if (filteredWalkins.length === 0) return;
-        const headers = ["Date", "SA Email", "Name", "Phone", "Email", "Source", "Converted"];
+        const headers = ["Date", "SA Email", "Location", "Name", "Phone", "Email", "Source", "Converted"];
         const rows = filteredWalkins.map((w) => [
             w.created_at ? new Date(w.created_at).toLocaleString("en-GB") : "",
             w.sa_email || "",
+            walkinLocation(w),
             w.name || "",
             `${w.country_code || ""} ${w.phone || ""}`.trim(),
             w.email || "",
@@ -3813,6 +3855,26 @@ export default function AdminDashboard() {
                         <div className="admin-clients-tab">
                             <h2 className="admin-section-title">Walk-Ins</h2>
 
+                            {/* Summary: total walk-ins + conversion, split by location.
+                                Location is derived from each walk-in's SA store. */}
+                            <div className="admin-stats-grid" style={{ marginBottom: 16 }}>
+                                {["Total", "Delhi", "Ludhiana", "Other"].map((loc) => {
+                                    const s = walkinStats[loc] || { total: 0, converted: 0 };
+                                    // Hide the "Other" card when there's nothing in it (keeps the
+                                    // row clean when every SA maps cleanly to Delhi/Ludhiana).
+                                    if (loc === "Other" && s.total === 0) return null;
+                                    return (
+                                        <div className="admin-stat-card" key={loc}>
+                                            <span className="admin-stat-label">{loc === "Total" ? "Total Walk-Ins" : loc}</span>
+                                            <span className="admin-stat-value">{s.total}</span>
+                                            <span className="admin-stat-sub">
+                                                {s.converted} converted · {pct(s.converted, s.total)}%
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
                             <div className="admin-toolbar">
                                 <div className="admin-search-wrapper">
                                     <span className="search-icon">
@@ -3850,6 +3912,16 @@ export default function AdminDashboard() {
                                     <option value="converted">Converted</option>
                                     <option value="not_converted">Not Converted</option>
                                 </select>
+                                <select
+                                    value={walkinsLocFilter}
+                                    onChange={(e) => setWalkinsLocFilter(e.target.value)}
+                                    className="admin-sort-select"
+                                    style={{ maxWidth: 180 }}
+                                >
+                                    <option value="all">All locations</option>
+                                    <option value="Delhi">Delhi</option>
+                                    <option value="Ludhiana">Ludhiana</option>
+                                </select>
                                 <div style={{ flex: 1 }} />
                                 <span style={{ color: "#888", fontSize: 13, marginRight: 8 }}>
                                     {filteredWalkins.length} of {walkins.length} · {walkinsConvertedCount} converted
@@ -3872,6 +3944,7 @@ export default function AdminDashboard() {
                                             <tr>
                                                 <th>Date</th>
                                                 <th>SA</th>
+                                                <th>Location</th>
                                                 <th>Name</th>
                                                 <th>Phone</th>
                                                 <th>Email</th>
@@ -3882,14 +3955,14 @@ export default function AdminDashboard() {
                                         <tbody>
                                             {walkinsLoading ? (
                                                 <tr>
-                                                    <td colSpan={7} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
+                                                    <td colSpan={8} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
                                                         Loading walk-ins…
                                                     </td>
                                                 </tr>
                                             ) : filteredWalkins.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={7} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
-                                                        {walkinsSearch || walkinsSaFilter || walkinsConvFilter !== "all" ? "No walk-ins match your filter." : "No walk-ins recorded yet."}
+                                                    <td colSpan={8} style={{ textAlign: "center", padding: "32px 16px", color: "#999" }}>
+                                                        {walkinsSearch || walkinsSaFilter || walkinsConvFilter !== "all" || walkinsLocFilter !== "all" ? "No walk-ins match your filter." : "No walk-ins recorded yet."}
                                                     </td>
                                                 </tr>
                                             ) : (
@@ -3900,6 +3973,7 @@ export default function AdminDashboard() {
                                                     <tr key={w.id}>
                                                         <td>{w.created_at ? new Date(w.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                                                         <td>{w.sa_email || "—"}</td>
+                                                        <td>{walkinLocation(w)}</td>
                                                         <td><strong>{w.name || "—"}</strong></td>
                                                         <td>{w.phone ? `${w.country_code || ""} ${w.phone}`.trim() : "—"}</td>
                                                         <td>{w.email || "—"}</td>
