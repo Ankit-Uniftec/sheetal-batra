@@ -9,6 +9,7 @@ import {
   parseCsv,
   validateRow,
 } from "./csvHelpers";
+import { STORE_CATEGORIES, DEFAULT_STORE_CATEGORY } from "../../utils/storeCategory";
 import "./AddProduct.css";
 
 // Standard size order for sorting variant rows + the size multi-select.
@@ -145,6 +146,9 @@ export default function AddProduct({ onProductAdded }) {
   const [defaultTop, setDefaultTop] = useState("");
   const [defaultBottom, setDefaultBottom] = useState("");
   const [defaultColor, setDefaultColor] = useState("");
+  // Store category — which retail store(s) this product belongs to.
+  // "All Stores" = visible everywhere; "Delhi"/"Ludhiana" = location-specific.
+  const [storeCategory, setStoreCategory] = useState(DEFAULT_STORE_CATEGORY);
 
   // Normal-only
   const [availableSizes, setAvailableSizes] = useState([]);
@@ -232,6 +236,7 @@ export default function AddProduct({ onProductAdded }) {
     setName(""); setImageUrl(""); setBasePrice("");
     setTopOptions([]); setBottomOptions([]);
     setDefaultTop(""); setDefaultBottom(""); setDefaultColor("");
+    setStoreCategory(DEFAULT_STORE_CATEGORY);
     setAvailableSizes([]); setInventory("0"); setIsMto(false);
     setShopifyProductId("");
     setVariants([{ size: "", price: "", inventory: "0", shopify_variant_id: "" }]);
@@ -285,6 +290,7 @@ export default function AddProduct({ onProductAdded }) {
       default_top: defaultTop || null,
       default_bottom: defaultBottom || null,
       default_color: defaultColor.trim() || null,
+      store_category: storeCategory || DEFAULT_STORE_CATEGORY,
       sync_enabled: productType === "lxrts",
       is_custom_piece: productType === "custom_piece",
     };
@@ -409,6 +415,7 @@ export default function AddProduct({ onProductAdded }) {
           default_top: p.default_top || "",
           default_bottom: p.default_bottom || "",
           default_color: p.default_color || "",
+          store_category: p.store_category || DEFAULT_STORE_CATEGORY,
           available_size: (p.available_size || []).join("|"),
           inventory: inv,
         };
@@ -507,6 +514,7 @@ export default function AddProduct({ onProductAdded }) {
         default_top: r.default_top,
         default_bottom: r.default_bottom,
         default_color: r.default_color,
+        store_category: r.store_category || DEFAULT_STORE_CATEGORY,
         sync_enabled: false,
         inventory: r.inventory ?? 0,
         available_size: r.available_size,
@@ -743,6 +751,26 @@ export default function AddProduct({ onProductAdded }) {
                   </div>
                 );
               })()}
+            </div>
+          </div>
+
+          {/* ── Store category ── */}
+          <h3 className="ap-section-title">Store</h3>
+          <div className="ap-grid-3">
+            <div className="ap-field">
+              <label>Store Category</label>
+              <select
+                className="ap-input"
+                value={storeCategory}
+                onChange={(e) => setStoreCategory(e.target.value)}
+              >
+                {STORE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <span className="ap-help">
+                "All Stores" shows in every store's order form. "Delhi"/"Ludhiana" show only to that store's SAs.
+              </span>
             </div>
           </div>
 

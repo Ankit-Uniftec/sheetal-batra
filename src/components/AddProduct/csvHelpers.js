@@ -4,6 +4,8 @@
 // functions only — no React, no Supabase calls. The component owns the
 // fetch + insert orchestration.
 
+import { STORE_CATEGORIES, DEFAULT_STORE_CATEGORY } from "../../utils/storeCategory";
+
 // ─── Column schema (also used for template + export + import) ──────
 // Order matters — this is the column order in the generated CSV.
 //
@@ -20,6 +22,7 @@ export const CSV_COLUMNS = [
   "default_top",
   "default_bottom",
   "default_color",
+  "store_category",  // "All Stores" (default), "Delhi", or "Ludhiana"
   "available_size",  // pipe-separated, e.g. "XS|S|M|L"
   "inventory",       // number or "MTO" (unlimited stock — saves as 9999)
 ];
@@ -36,6 +39,7 @@ export const TEMPLATE_DEMO_ROWS = [
     default_top: "Choga",
     default_bottom: "Salwar",
     default_color: "Burnt Orange",
+    store_category: "All Stores",
     available_size: "XS|S|M|L|XL|XXL",
     inventory: "MTO",
   },
@@ -148,6 +152,19 @@ export const validateRow = (row, rowIndex) => {
     errors.push(`Row ${rowIndex}: default_bottom '${row.default_bottom}' not in bottom_options.`);
   }
 
+  // Store category — blank defaults to "All Stores"; otherwise must match a
+  // canonical value (case-insensitively). Normalized to canonical casing.
+  const rawStore = (row.store_category || "").trim();
+  let storeCategory = DEFAULT_STORE_CATEGORY;
+  if (rawStore) {
+    const match = STORE_CATEGORIES.find((c) => c.toLowerCase() === rawStore.toLowerCase());
+    if (!match) {
+      errors.push(`Row ${rowIndex}: store_category '${rawStore}' must be one of ${STORE_CATEGORIES.join(", ")}.`);
+    } else {
+      storeCategory = match;
+    }
+  }
+
   const availableSizes = splitPipes(row.available_size);
   const invStr = (row.inventory || "").trim();
   let inventory = 0;
@@ -176,6 +193,7 @@ export const validateRow = (row, rowIndex) => {
       default_top: (row.default_top || "").trim() || null,
       default_bottom: (row.default_bottom || "").trim() || null,
       default_color: (row.default_color || "").trim() || null,
+      store_category: storeCategory,
       available_size: availableSizes.length > 0 ? availableSizes : null,
       inventory,
     },
