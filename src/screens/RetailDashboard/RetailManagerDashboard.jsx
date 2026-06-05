@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./RetailManagerDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -333,10 +334,10 @@ export default function RetailManagerDashboard() {
         const cur = filterByDateRange(retailOrders, dateRange);
         const prev = compRange ? filterByDateRange(retailOrders, compRange) : [];
 
-        const totalRevenue = cur.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = cur.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalOrders = cur.length;
         const deliveredOrders = cur.filter(o => o.status === "delivered").length;
-        const prevRevenue = prev.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const prevRevenue = prev.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const prevOrders = prev.length;
         const prevDelivered = prev.filter(o => o.status === "delivered").length;
 
@@ -348,7 +349,7 @@ export default function RetailManagerDashboard() {
         cur.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -360,6 +361,7 @@ export default function RetailManagerDashboard() {
         // Top products
         const productSales = {};
         cur.forEach(order => {
+            if (!isRevenueOrder(order)) return;
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
@@ -464,7 +466,7 @@ export default function RetailManagerDashboard() {
     const productAnalytics = useMemo(() => {
         const dateRange = getAnalyticsDateRange(analyticsTimeline);
         const valid = retailOrders.filter(o => {
-            if (o.status === "cancelled") return false;
+            if (!isRevenueOrder(o)) return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
         });

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./GMDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -431,16 +432,16 @@ export default function GMDashboard() {
         const currentOrders = filterOrdersByDateRange(orders.filter(o => !isLxrtsOrder(o)), dateRange);
         const prevOrders = compRange ? filterOrdersByDateRange(orders.filter(o => !isLxrtsOrder(o)), compRange) : [];
 
-        const totalRevenue = currentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = currentOrders.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalOrders = currentOrders.length;
-        const prevRevenue = prevOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const prevRevenue = prevOrders.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
 
         // Store-wise breakdown
         const storeMap = {};
         currentOrders.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!storeMap[store]) storeMap[store] = { name: store, revenue: 0, orders: 0, items: 0 };
-            storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             storeMap[store].orders += 1;
             storeMap[store].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
         });
@@ -453,7 +454,7 @@ export default function GMDashboard() {
             if (!sp || !isPersonName(sp)) return;
             const store = o.salesperson_store || "Other";
             if (!saMap[sp]) saMap[sp] = { name: sp, store, revenue: 0, orders: 0, items: 0, discount: 0 };
-            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);
@@ -466,7 +467,7 @@ export default function GMDashboard() {
         prevOrders.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!prevStoreMap[store]) prevStoreMap[store] = { revenue: 0 };
-            prevStoreMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) prevStoreMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const storeGrowth = storeBreakdown.map(s => ({
             ...s,
@@ -516,7 +517,8 @@ export default function GMDashboard() {
             const key = d.toISOString().split("T")[0];
             const label = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!buckets[key]) buckets[key] = { date: label, fullDate: key, revenue: 0, orders: 0, delhiRevenue: 0, ludhianaRevenue: 0, b2bRevenue: 0 };
-            const amount = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            // Revenue counts only for non-cancelled/refunded orders; order count is all.
+            const amount = isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0;
             buckets[key].revenue += amount;
             buckets[key].orders += 1;
             const store = (o.salesperson_store || "").toLowerCase();
@@ -535,8 +537,8 @@ export default function GMDashboard() {
         const dateRange = getDateRange(timeline);
         const currentB2b = allB2bOrders.filter(o => { const d = new Date(o.created_at); return d >= dateRange.start && d <= dateRange.end; });
 
-        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const totalAllRevenue = filterOrdersByDateRange(orders, dateRange).reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalB2bRevenue = currentB2b.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const totalAllRevenue = filterOrdersByDateRange(orders, dateRange).reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const b2bContribution = totalAllRevenue > 0 ? ((totalB2bRevenue / totalAllRevenue) * 100).toFixed(1) : 0;
 
         const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
@@ -548,7 +550,7 @@ export default function GMDashboard() {
             const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
             const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
-            clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             clientSales[client].orders += 1;
             clientSales[client].advance += Number(o.advance_payment || 0);
             clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./COODashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -340,8 +341,8 @@ export default function COODashboard() {
         const current = filterByDate(orders, dr);
         const prev = prevDr ? filterByDate(orders, prevDr) : [];
 
-        const totalRevenue = current.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const prevRevenue = prev.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = current.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const prevRevenue = prev.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalRefund = current.filter(o => o.refund_reason).reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const refundCount = current.filter(o => o.refund_reason).length;
 
@@ -350,14 +351,14 @@ export default function COODashboard() {
         current.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
 
         // Top categories
         const catMap = {};
-        current.filter(o => o.status !== "cancelled").forEach(o => {
+        current.filter(o => isRevenueOrder(o)).forEach(o => {
             (o.items || []).forEach(it => {
                 const cat = it.category || it.product_name?.split(" ")[0] || "Other";
                 if (!catMap[cat]) catMap[cat] = { name: cat, sales: 0, count: 0 };
@@ -369,7 +370,7 @@ export default function COODashboard() {
 
         // Top products
         const prodMap = {};
-        current.filter(o => o.status !== "cancelled").forEach(o => {
+        current.filter(o => isRevenueOrder(o)).forEach(o => {
             (o.items || []).forEach(it => {
                 const name = it.product_name || "Unknown";
                 if (!prodMap[name]) prodMap[name] = { name, sales: 0, count: 0 };
@@ -381,7 +382,7 @@ export default function COODashboard() {
 
         // Top colors
         const colorMap = {};
-        current.filter(o => o.status !== "cancelled").forEach(o => {
+        current.filter(o => isRevenueOrder(o)).forEach(o => {
             (o.items || []).forEach(it => {
                 const c = it.top_color?.name || it.color?.name;
                 if (c && c !== "Unknown") { if (!colorMap[c]) colorMap[c] = { name: c, count: 0 }; colorMap[c].count += 1; }
@@ -518,7 +519,7 @@ export default function COODashboard() {
         const dr = getDateRange(timeline);
         const period = filterByDate(nonLxrtsOrders, dr);
 
-        const totalGrand = period.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalGrand = period.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalAdvance = period.reduce((s, o) => s + Number(o.advance_payment || 0), 0);
         const totalPending = totalGrand - totalAdvance;
 

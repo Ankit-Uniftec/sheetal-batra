@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./CeoDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -501,14 +502,14 @@ export default function CEODashboard() {
         const currentOrders = filterOrdersByDateRange(orders, dateRange);
         const previousOrders = comparisonRange ? filterOrdersByDateRange(orders, comparisonRange) : [];
 
-        const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = currentOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalOrders = currentOrders.length;
         const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
         const deliveredOrders = currentOrders.filter(o => o.status === "delivered").length;
         const cancelledOrders = currentOrders.filter(o => o.status === "cancelled").length;
 
-        const prevRevenue = previousOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const prevRevenue = previousOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const prevTotalOrders = previousOrders.length;
         const prevPendingOrders = previousOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const prevPreparedOrders = previousOrders.filter(o => o.status === "completed").length;
@@ -586,7 +587,7 @@ export default function CEODashboard() {
     const analyticsData = useMemo(() => {
         const dateRange = getAnalyticsDateRange(analyticsTimeline);
         const validOrders = orders.filter(o => {
-            if (o.status === "cancelled") return false;
+            if (!isRevenueOrder(o)) return false;
             const orderDate = new Date(o.created_at);
             return orderDate >= dateRange.start && orderDate <= dateRange.end;
         });

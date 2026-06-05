@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./AccountantDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -190,7 +191,7 @@ export default function AccountantDashboard() {
       const ch = getOrderChannel(o);
       if (!map[ch]) map[ch] = { name: ch, orders: 0, revenue: 0 };
       map[ch].orders += 1;
-      map[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+      if (isRevenueOrder(o)) map[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
     });
     const list = Object.values(map).sort((a, b) => b.revenue - a.revenue);
     const totalRevenue = list.reduce((s, c) => s + c.revenue, 0);

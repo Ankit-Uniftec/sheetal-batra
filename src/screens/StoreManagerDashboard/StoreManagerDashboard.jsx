@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./StoreManagerDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -272,7 +273,7 @@ export default function StoreManagerDashboard() {
         const dateRange = getDateRange(timeline);
         const period = filterByDate(storeOrders, dateRange);
 
-        const totalRevenue = period.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = period.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalOrders = period.length;
         const totalItems = period.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
         const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
@@ -298,7 +299,7 @@ export default function StoreManagerDashboard() {
             const key = d.toISOString().split("T")[0];
             const label = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!buckets[key]) buckets[key] = { date: label, fullDate: key, revenue: 0, orders: 0 };
-            buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             buckets[key].orders += 1;
         });
         const dailySales = Object.values(buckets)
@@ -325,7 +326,7 @@ export default function StoreManagerDashboard() {
             const sp = getOrderSalesperson(o);
             if (!sp || !isPersonName(sp)) return;
             if (!saMap[sp]) saMap[sp] = { name: sp, revenue: 0, orders: 0, items: 0, discount: 0, delivered: 0, cancelled: 0 };
-            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);

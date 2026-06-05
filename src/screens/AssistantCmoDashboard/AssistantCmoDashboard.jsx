@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./AssistantCmoDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -292,27 +293,8 @@ export default function AssistantCmoDashboard() {
     return topColor || fallback || bottomColor;
   };
 
-  // Revenue counts every order RECEIVED, minus anything later cancelled,
-  // revoked, returned, or refunded (the money came back / never will).
-  // Per business rule: a fresh "order_received" order is revenue from day one;
-  // it's only subtracted if it lands in one of these terminal states.
-  const REVENUE_EXCLUDED_STATUSES = new Set([
-    "cancelled",
-    "revoked",
-    "return_store_credit",
-    "exchange_return",
-    "partial_return",      // future-proof: present in the order lifecycle elsewhere
-    "refund_requested",
-    "returned",
-  ]);
-  const REFUNDED_STATUSES = new Set(["pending", "processed", "completed", "refunded"]);
-  const isRevenueOrder = (o) => {
-    const status = (o.status || "").toLowerCase();
-    if (REVENUE_EXCLUDED_STATUSES.has(status)) return false;
-    // Any active refund (requested through completed) removes the order's value.
-    if (o.refund_status && REFUNDED_STATUSES.has(String(o.refund_status).toLowerCase())) return false;
-    return true;
-  };
+  // Revenue rule (received minus cancelled/refunded) — imported from the
+  // shared src/utils/revenue.js so every dashboard stays consistent.
 
   // ==================== OVERVIEW (Bhawna's own section) ====================
   const overview = useMemo(() => {

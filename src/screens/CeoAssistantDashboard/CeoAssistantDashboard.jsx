@@ -6,6 +6,7 @@ import "./CeoAssistantDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { isRevenueOrder } from "../../utils/revenue";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import {
@@ -136,7 +137,7 @@ export default function CeoAssistantDashboard() {
         };
       }
       stores[store].orderCount += 1;
-      if (o.status === "delivered" || o.status === "completed") {
+      if (isRevenueOrder(o)) {
         stores[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       }
       const amt = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
@@ -215,7 +216,7 @@ export default function CeoAssistantDashboard() {
 
   // ==================== PRODUCT / STYLE / DESIGN ====================
   const productPerformance = useMemo(() => {
-    const isRevenue = (o) => (o.status === "delivered" || o.status === "completed");
+    const isRevenue = isRevenueOrder;
 
     const productMap = {};
     const colorMap = {};

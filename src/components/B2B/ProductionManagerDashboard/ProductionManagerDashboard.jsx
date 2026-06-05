@@ -5,6 +5,7 @@ import "./ProductionManagerDashboard.css";
 import Logo from "../../../images/logo.png";
 import formatIndianNumber from "../../../utils/formatIndianNumber";
 import formatDate from "../../../utils/formatDate";
+import { isRevenueOrder } from "../../../utils/revenue";
 import { usePopup } from "../../../components/Popup";
 import NotificationBell from "../../../components/NotificationBell";
 import SearchByDropdown from "../../../components/SearchByDropdown";
@@ -557,8 +558,9 @@ export default function ProductionManagerDashboard() {
         const prevMonth = currMonth === 0 ? 11 : currMonth - 1;
         const prevMonthYear = currMonth === 0 ? currYear - 1 : currYear;
 
-        // Revenue counted only on delivered/completed orders (non-cancelled)
-        const isRevenue = (o) => (o.status === "delivered" || o.status === "completed") && o.status !== "cancelled";
+        // Revenue counts every received order, minus cancelled/refunded.
+        // Shared rule — see src/utils/revenue.js.
+        const isRevenue = isRevenueOrder;
 
         let revenueMonthly = 0;
         let revenueYearly = 0;
@@ -627,7 +629,7 @@ export default function ProductionManagerDashboard() {
 
     // ==================== TOP PRODUCT / COLOR / SIZE BY STORE ====================
     const topByStore = useMemo(() => {
-        const isRevenue = (o) => (o.status === "delivered" || o.status === "completed") && o.status !== "cancelled";
+        const isRevenue = isRevenueOrder; // shared rule — see src/utils/revenue.js
 
         const getStore = (o) => {
             if (o.is_b2b) return "B2B";
