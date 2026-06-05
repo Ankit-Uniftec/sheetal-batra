@@ -292,7 +292,27 @@ export default function AssistantCmoDashboard() {
     return topColor || fallback || bottomColor;
   };
 
-  const isRevenueOrder = (o) => (o.status === "delivered" || o.status === "completed") && o.status !== "cancelled";
+  // Revenue counts every order RECEIVED, minus anything later cancelled,
+  // revoked, returned, or refunded (the money came back / never will).
+  // Per business rule: a fresh "order_received" order is revenue from day one;
+  // it's only subtracted if it lands in one of these terminal states.
+  const REVENUE_EXCLUDED_STATUSES = new Set([
+    "cancelled",
+    "revoked",
+    "return_store_credit",
+    "exchange_return",
+    "partial_return",      // future-proof: present in the order lifecycle elsewhere
+    "refund_requested",
+    "returned",
+  ]);
+  const REFUNDED_STATUSES = new Set(["pending", "processed", "completed", "refunded"]);
+  const isRevenueOrder = (o) => {
+    const status = (o.status || "").toLowerCase();
+    if (REVENUE_EXCLUDED_STATUSES.has(status)) return false;
+    // Any active refund (requested through completed) removes the order's value.
+    if (o.refund_status && REFUNDED_STATUSES.has(String(o.refund_status).toLowerCase())) return false;
+    return true;
+  };
 
   // ==================== OVERVIEW (Bhawna's own section) ====================
   const overview = useMemo(() => {
