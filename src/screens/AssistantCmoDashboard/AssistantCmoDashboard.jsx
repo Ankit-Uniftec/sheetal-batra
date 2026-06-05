@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isRevenueOrder } from "../../utils/revenue";
 import "./AssistantCmoDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -195,10 +196,22 @@ export default function AssistantCmoDashboard() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
+      // Only the order columns this dashboard actually reads. Pulling select("*")
+      // dragged the full per-row JSON (measurements, addresses, billing, etc.) —
+      // ~1.6 MB and 40s+ over many paginated pages. This narrow list cuts the
+      // payload to what the analytics, client book, and order list use.
+      const ORDER_COLUMNS = [
+        "id", "created_at", "delivered_at", "delivery_date",
+        "delivery_email", "delivery_name", "delivery_phone",
+        "discount_amount", "grand_total", "grand_total_after_discount", "net_total",
+        "is_alteration", "is_b2b", "is_comms",
+        "items", "order_no", "refund_status", "return_reason",
+        "salesperson", "salesperson_store", "status", "user_id",
+      ].join(", ");
       const [ordersRes, productsRes, profilesRes, consRes] = await Promise.all([
-        fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
+        fetchAllRows("orders", (q) => q.select(ORDER_COLUMNS).order("created_at", { ascending: false })),
         supabase.from("products").select("*").order("name", { ascending: true }),
-        supabase.from("profiles").select("id, full_name, email, dob, loyalty_points, created_at"),
+        supabase.from("profiles").select("id, full_name, phone, email, dob, loyalty_points, created_at"),
         supabase.from("consignment_inventory").select("*"),
       ]);
       if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
@@ -280,7 +293,8 @@ export default function AssistantCmoDashboard() {
     return topColor || fallback || bottomColor;
   };
 
-  const isRevenueOrder = (o) => (o.status === "delivered" || o.status === "completed") && o.status !== "cancelled";
+  // Revenue rule (received minus cancelled/refunded) — imported from the
+  // shared src/utils/revenue.js so every dashboard stays consistent.
 
   // ==================== OVERVIEW (Bhawna's own section) ====================
   const overview = useMemo(() => {

@@ -3,6 +3,7 @@ import "./AssociateDashboard.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "../utils/fetchAllRows";
+import { isRevenueOrder } from "../utils/revenue";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
@@ -119,6 +120,7 @@ export default function Dashboard() {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const totalRevenue = displayOrders.reduce((sum, o) => {
       if (!o.created_at) return sum;
+      if (!isRevenueOrder(o)) return sum;
       return new Date(o.created_at) >= monthStart
         ? sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)
         : sum;
