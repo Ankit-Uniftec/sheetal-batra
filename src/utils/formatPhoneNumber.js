@@ -36,6 +36,36 @@ const formatLocal = (code, local) => {
   return local;
 };
 
+/**
+ * Split a stored phone value into its country code and local number for CSV
+ * export. Returns { countryCode, number } — countryCode includes the leading
+ * "+" (e.g. "+91", "+971"), or "" when none is present.
+ *
+ * Conservative by design: only splits when the value explicitly starts with
+ * "+", where the country code is unambiguous (DIAL_CODES is matched
+ * longest-first, so 3-digit codes like +971 win over +9 / +97). When there is
+ * no "+", we DON'T guess — the whole number goes into `number` with an empty
+ * country code, so an unusual length can never be mis-split.
+ */
+export const splitPhoneNumber = (phoneNumber) => {
+  if (!phoneNumber) return { countryCode: "", number: "" };
+  const str = String(phoneNumber).trim();
+
+  if (str.startsWith("+")) {
+    const cleaned = "+" + str.slice(1).replace(/\D/g, "");
+    for (const code of DIAL_CODES) {
+      if (cleaned.startsWith(code) && cleaned.length > code.length) {
+        return { countryCode: code, number: cleaned.slice(code.length) };
+      }
+    }
+    // Has "+" but no recognized code — keep digits as the number.
+    return { countryCode: "", number: cleaned.slice(1) };
+  }
+
+  // No "+": don't guess a country code. Return the raw digits as the number.
+  return { countryCode: "", number: str.replace(/\D/g, "") };
+};
+
 const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber) return "";
   const str = String(phoneNumber).trim();
