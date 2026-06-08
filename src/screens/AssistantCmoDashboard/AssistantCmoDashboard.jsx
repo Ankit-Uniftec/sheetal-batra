@@ -6,6 +6,7 @@ import { isRevenueOrder } from "../../utils/revenue";
 import "./AssistantCmoDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
+import { splitPhoneNumber } from "../../utils/formatPhoneNumber";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
@@ -742,26 +743,32 @@ export default function AssistantCmoDashboard() {
   // CSV export — mirrors GM/Admin pattern: UTF-8 BOM + text/csv blob + temp anchor.
   const handleOrdersExportCSV = () => {
     if (filteredOrders.length === 0) return;
+    // Normal quoted CSV cell + Excel "text cell" (="..." keeps long phone
+    // digit-strings from turning into 9.16E+11 scientific notation).
+    const cell = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const textCell = (v) => `="${String(v).replace(/"/g, '""')}"`;
     const headers = [
-      "Order No", "Order Date", "Customer", "Phone", "Salesperson", "Store",
+      "Order No", "Order Date", "Customer", "Country Code", "Phone", "Salesperson", "Store",
       "Product", "Status", "Amount", "Delivery Date",
     ];
     const rows = filteredOrders.map((o) => {
       const item = o.items?.[0] || {};
+      const { countryCode, number } = splitPhoneNumber(o.delivery_phone);
       return [
-        o.order_no || "",
-        o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
-        o.delivery_name || "",
-        o.delivery_phone || "",
-        o.salesperson || "",
-        getOrderStore(o),
-        item.product_name || "",
-        o.status || "",
-        o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0,
-        o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
-      ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
+        cell(o.order_no || ""),
+        cell(o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : ""),
+        cell(o.delivery_name || ""),
+        cell(countryCode),
+        textCell(number),
+        cell(o.salesperson || ""),
+        cell(getOrderStore(o)),
+        cell(item.product_name || ""),
+        cell(o.status || ""),
+        cell(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0),
+        cell(o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : ""),
+      ];
     });
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csv = [headers.map(cell).join(","), ...rows.map((r) => r.join(","))].join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -903,17 +910,26 @@ export default function AssistantCmoDashboard() {
   // CSV export for client book
   const handleClientBookExportCSV = () => {
     if (clientBook.all.length === 0) return;
-    const headers = ["Client Name", "Phone", "Email", "Primary Store", "Connected SA(s)", "Total Orders", "Last Order Date"];
-    const rows = clientBook.all.map((c) => [
-      c.name,
-      c.phone,
-      c.email,
-      c.primaryStore || "",
-      c.sas.join("; "),
-      c.orderCount,
-      c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("en-GB") : "",
-    ].map((v) => `"${String(v).replace(/"/g, '""')}"`));
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    // Normal quoted CSV cell.
+    const cell = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    // Excel "text cell" — wraps the value as ="..." so long digit strings keep
+    // their full form (no 9.16E+11 scientific notation, no dropped leading 0s).
+    const textCell = (v) => `="${String(v).replace(/"/g, '""')}"`;
+    const headers = ["Client Name", "Country Code", "Phone", "Email", "Primary Store", "Connected SA(s)", "Total Orders", "Last Order Date"];
+    const rows = clientBook.all.map((c) => {
+      const { countryCode, number } = splitPhoneNumber(c.phone);
+      return [
+        cell(c.name),
+        cell(countryCode),
+        textCell(number),
+        cell(c.email),
+        cell(c.primaryStore || ""),
+        cell(c.sas.join("; ")),
+        cell(c.orderCount),
+        cell(c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("en-GB") : ""),
+      ];
+    });
+    const csv = [headers.map(cell).join(","), ...rows.map((r) => r.join(","))].join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
