@@ -115,12 +115,19 @@ export default function AssistantCmoDashboard() {
   const [orderStatusTab, setOrderStatusTab] = useState("all");
   const [orderSortBy, setOrderSortBy] = useState("newest");
   const [ordersPage, setOrdersPage] = useState(1);
+  // Order-date range filter (by created_at). "" = no bound.
+  const [orderDateFrom, setOrderDateFrom] = useState("");
+  const [orderDateTo, setOrderDateTo] = useState("");
   const ORDERS_PER_PAGE = 20;
 
   // Client Book tab state
   const [clientSearch, setClientSearch] = useState("");
   const [clientStoreFilter, setClientStoreFilter] = useState("all");
   const [clientsPage, setClientsPage] = useState(1);
+  // Client Book order-date range filter — limits to clients whose orders fall
+  // in the range (by order created_at). "" = no bound.
+  const [clientDateFrom, setClientDateFrom] = useState("");
+  const [clientDateTo, setClientDateTo] = useState("");
   const CLIENTS_PER_PAGE = 25;
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -663,6 +670,18 @@ export default function AssistantCmoDashboard() {
   // search-by-order-no to work across history).
   const filteredOrders = useMemo(() => {
     let result = orders.filter((o) => matchOrderStatus(o, orderStatusTab));
+    // Order-date range (created_at). From = start of day, To = end of day.
+    const fromTs = orderDateFrom ? new Date(orderDateFrom + "T00:00:00").getTime() : null;
+    const toTs = orderDateTo ? new Date(orderDateTo + "T23:59:59.999").getTime() : null;
+    if (fromTs != null || toTs != null) {
+      result = result.filter((o) => {
+        if (!o.created_at) return false;
+        const ts = new Date(o.created_at).getTime();
+        if (fromTs != null && ts < fromTs) return false;
+        if (toTs != null && ts > toTs) return false;
+        return true;
+      });
+    }
     const q = orderSearch.trim().toLowerCase();
     if (q) {
       result = result.filter((o) => {
@@ -696,7 +715,7 @@ export default function AssistantCmoDashboard() {
       }
     });
     return result;
-  }, [orders, orderStatusTab, orderSearch, orderSearchField, orderSortBy]);
+  }, [orders, orderStatusTab, orderSearch, orderSearchField, orderSortBy, orderDateFrom, orderDateTo]);
 
   // Status tab counts
   const orderTabCounts = useMemo(() => {
@@ -707,7 +726,7 @@ export default function AssistantCmoDashboard() {
   }, [orders, ORDER_STATUS_TABS]);
 
   // Reset pagination when filters change
-  useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, orderStatusTab, orderSortBy]);
+  useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, orderStatusTab, orderSortBy, orderDateFrom, orderDateTo]);
 
   // Top-product click-through: when a product name is set, pre-fill the
   // Orders search with it and clear the consumed value.
@@ -772,7 +791,22 @@ export default function AssistantCmoDashboard() {
         entry.lastOrderStore = store;
       }
     };
+    // Date-range filter (by order created_at). When active, only orders in the
+    // range feed the index — so the book shows clients who ordered in that window.
+    const cFromTs = clientDateFrom ? new Date(clientDateFrom + "T00:00:00").getTime() : null;
+    const cToTs = clientDateTo ? new Date(clientDateTo + "T23:59:59.999").getTime() : null;
+    const dateActive = cFromTs != null || cToTs != null;
+    const inDateRange = (o) => {
+      if (!dateActive) return true;
+      if (!o.created_at) return false;
+      const ts = new Date(o.created_at).getTime();
+      if (cFromTs != null && ts < cFromTs) return false;
+      if (cToTs != null && ts > cToTs) return false;
+      return true;
+    };
+
     orders.forEach((o) => {
+      if (!inDateRange(o)) return;
       const phone = (o.delivery_phone || o.phone || "").trim();
       if (phone) addToIndex(`phone:${phone}`, o);
       if (o.user_id) addToIndex(`uid:${o.user_id}`, o);
@@ -821,7 +855,8 @@ export default function AssistantCmoDashboard() {
 
     // Hide abandoned signups (no name, no email, no orders) — same as Admin.
     const isAbandoned = (c) => c.name === "—" && !c.email && c.orderCount === 0;
-    const visible = all.filter((c) => !isAbandoned(c));
+    // With a date range active, show only clients who actually ordered in it.
+    const visible = all.filter((c) => !isAbandoned(c) && (!dateActive || c.orderCount > 0));
 
     // Store filter
     let filtered = visible;
@@ -860,10 +895,10 @@ export default function AssistantCmoDashboard() {
       visibleCount: visible.length,
       storeBreakdown,
     };
-  }, [profiles, orders, clientSearch, clientStoreFilter, clientsPage]);
+  }, [profiles, orders, clientSearch, clientStoreFilter, clientsPage, clientDateFrom, clientDateTo]);
 
   // Reset to page 1 when search or store filter changes
-  useEffect(() => { setClientsPage(1); }, [clientSearch, clientStoreFilter]);
+  useEffect(() => { setClientsPage(1); }, [clientSearch, clientStoreFilter, clientDateFrom, clientDateTo]);
 
   // CSV export for client book
   const handleClientBookExportCSV = () => {
@@ -1431,6 +1466,32 @@ export default function AssistantCmoDashboard() {
                     <option value="amount_high">Amount: High to Low</option>
                     <option value="amount_low">Amount: Low to High</option>
                   </select>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="date"
+                      value={orderDateFrom}
+                      onChange={(e) => setOrderDateFrom(e.target.value)}
+                      max={orderDateTo || undefined}
+                      aria-label="Order date from"
+                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
+                    />
+                    <span style={{ color: "#999" }}>→</span>
+                    <input
+                      type="date"
+                      value={orderDateTo}
+                      onChange={(e) => setOrderDateTo(e.target.value)}
+                      min={orderDateFrom || undefined}
+                      aria-label="Order date to"
+                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
+                    />
+                    {(orderDateFrom || orderDateTo) && (
+                      <button
+                        onClick={() => { setOrderDateFrom(""); setOrderDateTo(""); }}
+                        title="Clear date filter"
+                        style={{ padding: "8px 10px", border: "1px solid #e0d5c5", borderRadius: 8, background: "#fff", color: "#8B7355", cursor: "pointer", fontSize: 13 }}
+                      >Clear</button>
+                    )}
+                  </div>
                   <button
                     onClick={handleOrdersExportCSV}
                     disabled={filteredOrders.length === 0}
@@ -1588,6 +1649,34 @@ export default function AssistantCmoDashboard() {
                     onChange={(e) => setClientSearch(e.target.value)}
                     style={{ flex: "1 1 280px", maxWidth: 480, padding: "10px 14px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, outline: "none" }}
                   />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="date"
+                      value={clientDateFrom}
+                      onChange={(e) => setClientDateFrom(e.target.value)}
+                      max={clientDateTo || undefined}
+                      aria-label="Order date from"
+                      title="Filter to clients who ordered from this date"
+                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
+                    />
+                    <span style={{ color: "#999" }}>→</span>
+                    <input
+                      type="date"
+                      value={clientDateTo}
+                      onChange={(e) => setClientDateTo(e.target.value)}
+                      min={clientDateFrom || undefined}
+                      aria-label="Order date to"
+                      title="Filter to clients who ordered up to this date"
+                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
+                    />
+                    {(clientDateFrom || clientDateTo) && (
+                      <button
+                        onClick={() => { setClientDateFrom(""); setClientDateTo(""); }}
+                        title="Clear date filter"
+                        style={{ padding: "8px 10px", border: "1px solid #e0d5c5", borderRadius: 8, background: "#fff", color: "#8B7355", cursor: "pointer", fontSize: 13 }}
+                      >Clear</button>
+                    )}
+                  </div>
                   <span style={{ color: "#888", fontSize: 13 }}>
                     {clientBook.totalCount} {clientBook.totalCount === 1 ? "client" : "clients"}
                   </span>
