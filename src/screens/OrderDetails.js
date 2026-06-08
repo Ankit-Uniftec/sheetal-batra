@@ -85,6 +85,11 @@ export default function OrderDetails() {
   const [discountApplied, setDiscountApplied] = useState(false);
   const [birthdayApplied, setBirthdayApplied] = useState(false);
   const [appliedCode, setAppliedCode] = useState("");
+  // Second regular-% discount slot — lets an SA stack two regular codes
+  // (e.g. 10% + 20% = 30% off, additive). Mirrors the first slot.
+  const [discountPercent2, setDiscountPercent2] = useState(0);
+  const [discountApplied2, setDiscountApplied2] = useState(false);
+  const [appliedCode2, setAppliedCode2] = useState("");
   const [codWaiverApplied, setCodWaiverApplied] = useState(false);
   // SHOPMORE flat-rupee discounts. Hardcoded (not in the discount table)
   // because they have a different math shape — flat amount + min-spend gate —
@@ -207,8 +212,8 @@ export default function OrderDetails() {
 
   // Calculate totalDiscount BEFORE pricing useMemo
   const totalDiscount = useMemo(() => {
-    return (Number(discountPercent) || 0) + (Number(birthdayDiscount) || 0);
-  }, [discountPercent, birthdayDiscount]);
+    return (Number(discountPercent) || 0) + (Number(discountPercent2) || 0) + (Number(birthdayDiscount) || 0);
+  }, [discountPercent, discountPercent2, birthdayDiscount]);
 
   // Check if store credit is valid (not expired)
   const isStoreCreditValid = useMemo(() => {
@@ -233,7 +238,7 @@ export default function OrderDetails() {
     // Combined ₹ discount, persisted to orders.discount_amount.
     const discountAmount = percentDiscountAmount + cappedFlat;
 
-    const hasDiscount = discountApplied || birthdayApplied || cappedFlat > 0;
+    const hasDiscount = discountApplied || discountApplied2 || birthdayApplied || cappedFlat > 0;
 
     let netPayable = Math.max(0, totalAmount - discountAmount);
     let currentShippingCharge = 0;
@@ -294,7 +299,7 @@ export default function OrderDetails() {
       netAfterStoreCredit,
       remaining,
       shippingCharge: currentShippingCharge,
-      regularDiscount: Number(discountPercent) || 0,
+      regularDiscount: (Number(discountPercent) || 0) + (Number(discountPercent2) || 0),
       birthdayDiscount: Number(birthdayDiscount) || 0,
       minAdvanceAmount,
       hasDiscount,
@@ -307,6 +312,7 @@ export default function OrderDetails() {
   }, [
     totalDiscount,
     discountPercent,
+    discountPercent2,
     birthdayDiscount,
     flatDiscountAmount,
     flatDiscountCode,
@@ -317,6 +323,7 @@ export default function OrderDetails() {
     deliveryCountry,
     order.mode_of_delivery,
     discountApplied,
+    discountApplied2,
     birthdayApplied,
     minAdvancePercent,
     codWaiverApplied,
@@ -477,6 +484,9 @@ export default function OrderDetails() {
         if (data.discountApplied !== undefined) setDiscountApplied(data.discountApplied);
         if (data.birthdayApplied !== undefined) setBirthdayApplied(data.birthdayApplied);
         if (data.appliedCode) setAppliedCode(data.appliedCode);
+        if (data.discountPercent2 !== undefined) setDiscountPercent2(data.discountPercent2);
+        if (data.discountApplied2 !== undefined) setDiscountApplied2(data.discountApplied2);
+        if (data.appliedCode2) setAppliedCode2(data.appliedCode2);
         if (data.flatDiscountAmount !== undefined) setFlatDiscountAmount(Number(data.flatDiscountAmount) || 0);
         if (data.flatDiscountCode) setFlatDiscountCode(data.flatDiscountCode);
         if (data.paymentMode) setPaymentMode(data.paymentMode);
@@ -523,6 +533,9 @@ export default function OrderDetails() {
       discountApplied,
       birthdayApplied,
       appliedCode,
+      discountPercent2,
+      discountApplied2,
+      appliedCode2,
       flatDiscountAmount,
       flatDiscountCode,
       paymentMode,
@@ -557,6 +570,9 @@ export default function OrderDetails() {
     discountApplied,
     birthdayApplied,
     appliedCode,
+    discountPercent2,
+    discountApplied2,
+    appliedCode2,
     flatDiscountAmount,
     flatDiscountCode,
     paymentMode,
@@ -747,7 +763,7 @@ export default function OrderDetails() {
     // Count currently applied codes (regular % + birthday % + COD waiver + flat).
     // All four count toward the per-order maximum of 2 collector codes.
     const flatApplied = flatDiscountAmount > 0;
-    const appliedCodesCount = [discountApplied, birthdayApplied, codWaiverApplied, flatApplied].filter(Boolean).length;
+    const appliedCodesCount = [discountApplied, discountApplied2, birthdayApplied, codWaiverApplied, flatApplied].filter(Boolean).length;
 
     // Hardcoded flat-amount codes (SHOPMORE28K / SHOPMORE45K). Different math
     // shape from the percent codes — flat ₹ off above a minimum spend — so
@@ -919,23 +935,35 @@ export default function OrderDetails() {
           type: "success",
         });
       } else {
-        // Regular discount code
-        if (discountApplied) {
-          // Already have a regular discount - offer to replace (doesn't increase count)
+        // Regular discount code. Two regular slots can stack additively
+        // (e.g. 10% + 20% = 30% off), still within the overall 2-code cap.
+
+        // Block re-applying the exact same regular code.
+        if ((discountApplied && appliedCode === actualCode) || (discountApplied2 && appliedCode2 === actualCode)) {
           showPopup({
-            title: "Replace Discount?",
-            message: `You already have "${appliedCode}" (${discountPercent}%) applied.\n\nReplace with "${actualCode}" (${pct}%)?`,
+            title: "Already Applied",
+            message: `${actualCode} is already applied to this order.`,
+            type: "warning",
+          });
+          return;
+        }
+
+        // Both regular slots full — offer to replace the second one.
+        if (discountApplied && discountApplied2) {
+          showPopup({
+            title: "Replace 2nd Discount?",
+            message: `You already have "${appliedCode}" (${discountPercent}%) and "${appliedCode2}" (${discountPercent2}%) applied.\n\nReplace the 2nd code "${appliedCode2}" with "${actualCode}" (${pct}%)?`,
             type: "confirm",
             confirmText: "Replace",
             cancelText: "Keep Current",
             onConfirm: () => {
-              setDiscountPercent(pct);
-              setDiscountApplied(true);
-              setAppliedCode(actualCode);
+              setDiscountPercent2(pct);
+              setDiscountApplied2(true);
+              setAppliedCode2(actualCode);
               setTimeout(() => {
                 showPopup({
                   title: "Discount Applied! ✅",
-                  message: `Discount code "${actualCode}" (${pct}%) applied!${birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""}`,
+                  message: `Discount code "${actualCode}" (${pct}%) applied! Total ${discountPercent + pct + (birthdayApplied ? birthdayDiscount : 0)}% off.`,
                   type: "success",
                 });
               }, 300);
@@ -944,7 +972,7 @@ export default function OrderDetails() {
           return;
         }
 
-        // Check max 2 codes limit for new regular discount
+        // Adding a NEW regular code (into slot 1 or slot 2) — enforce the cap.
         if (appliedCodesCount >= 2) {
           showPopup({
             title: "Maximum Codes Reached",
@@ -954,14 +982,27 @@ export default function OrderDetails() {
           return;
         }
 
-        setDiscountPercent(pct);
-        setDiscountApplied(true);
-        setAppliedCode(actualCode);
-        showPopup({
-          title: "Discount Applied! ✅",
-          message: `Discount code "${actualCode}" (${pct}%) applied!${birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""}`,
-          type: "success",
-        });
+        if (!discountApplied) {
+          // Fill slot 1.
+          setDiscountPercent(pct);
+          setDiscountApplied(true);
+          setAppliedCode(actualCode);
+          showPopup({
+            title: "Discount Applied! ✅",
+            message: `Discount code "${actualCode}" (${pct}%) applied!${birthdayApplied ? ` Combined with Birthday: Total ${pct + birthdayDiscount}% off!` : ""}`,
+            type: "success",
+          });
+        } else {
+          // Slot 1 full — stack into slot 2 (additive).
+          setDiscountPercent2(pct);
+          setDiscountApplied2(true);
+          setAppliedCode2(actualCode);
+          showPopup({
+            title: "Discount Applied! ✅",
+            message: `Discount code "${actualCode}" (${pct}%) stacked! Total ${discountPercent + pct + (birthdayApplied ? birthdayDiscount : 0)}% off.`,
+            type: "success",
+          });
+        }
       }
 
     } catch (e) {
@@ -1093,9 +1134,26 @@ export default function OrderDetails() {
   };
 
   const removeRegularDiscount = () => {
+    // If a 2nd code is stacked, promote it into slot 1 so we never leave an
+    // empty slot 1 with a full slot 2 (keeps the slots gap-free).
+    if (discountApplied2) {
+      setDiscountPercent(discountPercent2);
+      setAppliedCode(appliedCode2);
+      setDiscountApplied(true);
+      setDiscountPercent2(0);
+      setAppliedCode2("");
+      setDiscountApplied2(false);
+      return;
+    }
     setDiscountPercent(0);
     setDiscountApplied(false);
     setAppliedCode("");
+  };
+
+  const removeRegularDiscount2 = () => {
+    setDiscountPercent2(0);
+    setDiscountApplied2(false);
+    setAppliedCode2("");
   };
 
   const removeBirthdayDiscount = () => {
@@ -1579,7 +1637,7 @@ export default function OrderDetails() {
           )} */}
 
           {/* Applied Discounts Display */}
-          {(discountApplied || birthdayApplied || codWaiverApplied || storeCreditApplied) && (
+          {(discountApplied || discountApplied2 || birthdayApplied || codWaiverApplied || storeCreditApplied) && (
             <div
               className="applied-discounts"
               style={{
@@ -1618,6 +1676,33 @@ export default function OrderDetails() {
                   >×</button>
                 </div>
               )}
+              {discountApplied2 && (
+                <div
+                  className="discount-tag"
+                  style={{
+                    background: "#e8f5e9",
+                    color: "#2e7d32",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>🏷️ {appliedCode2} ({discountPercent2}%)</span>
+                  <button
+                    onClick={removeRegularDiscount2}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
               {birthdayApplied && (
                 <div
                   className="discount-tag birthday"
@@ -1645,7 +1730,9 @@ export default function OrderDetails() {
                   >×</button>
                 </div>
               )}
-              {discountApplied && birthdayApplied && (
+              {/* Combined-total badge — shown whenever 2+ percent discounts stack
+                  (two regular codes, or a regular code + birthday). */}
+              {([discountApplied, discountApplied2, birthdayApplied].filter(Boolean).length >= 2) && (
                 <div
                   style={{
                     background: "#d5b85a",
@@ -1824,7 +1911,7 @@ export default function OrderDetails() {
             </div>
           </div>
 
-          {(discountApplied || birthdayApplied) && (
+          {(discountApplied || discountApplied2 || birthdayApplied) && (
             <div className="row3">
               <div className="field">
                 <label>Collector Code:</label>
