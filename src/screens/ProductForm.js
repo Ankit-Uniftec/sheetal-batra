@@ -804,10 +804,22 @@ export default function ProductForm() {
       relevantKeys.add(CATEGORY_KEY_MAP[selectedBottom]);
     }
 
-    // Filter measurements to only include relevant category keys
+    // Fallback for custom / separate pieces where top & bottom don't map to a
+    // standard category (e.g. "NA"): keep whatever category the SA was actively
+    // entering under, so their measurements aren't silently dropped on save.
+    // Mirrors the same fallback used when populating saved measurements.
+    if (relevantKeys.size === 1) {
+      const activeCategoryKey = getCategoryKeyFromDisplayName(activeCategory) || activeCategory;
+      if (activeCategoryKey) relevantKeys.add(activeCategoryKey);
+    }
+
+    // Safety net: never drop a category the SA actually entered data into.
+    // If the form has measurements under keys we didn't anticipate (custom
+    // flows), keep them rather than filtering to nothing.
     const filteredMeasurements = {};
     for (const [key, value] of Object.entries(measurements)) {
-      if (relevantKeys.has(key)) {
+      const hasData = value && typeof value === "object" && Object.keys(value).length > 0;
+      if (relevantKeys.has(key) || hasData) {
         filteredMeasurements[key] = value;
       }
     }
