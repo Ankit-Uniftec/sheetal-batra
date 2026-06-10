@@ -10,6 +10,7 @@ import { splitPhoneNumber } from "../../utils/formatPhoneNumber";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import WalkInsView from "../../components/WalkInsView/WalkInsView";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
@@ -1025,6 +1026,7 @@ export default function AssistantCmoDashboard() {
             <button className={`acmo-nav-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Insights</button>
             <button className={`acmo-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
             <button className={`acmo-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
+            <button className={`acmo-nav-item ${activeTab === "walkins" ? "active" : ""}`} onClick={() => { setActiveTab("walkins"); setShowSidebar(false); }}>Walk-Ins</button>
             <button className={`acmo-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
             {currentUserProfile?.can_place_stock_orders && (
               <button
@@ -1780,6 +1782,11 @@ export default function AssistantCmoDashboard() {
               </>
             );
           })()}
+
+          {/* ==================== WALK-INS ==================== */}
+          {activeTab === "walkins" && (
+            <WalkInsView orders={orders} showPopup={showPopup} />
+          )}
 
           {/* ==================== INVENTORY ==================== */}
           {activeTab === "inventory" && (
