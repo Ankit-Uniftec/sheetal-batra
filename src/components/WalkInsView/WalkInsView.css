@@ -1,0 +1,253 @@
+/* WalkInsView — shared all-SA walk-in table with conversion + location.
+   Self-contained so both Admin and ACMO render it identically. */
+
+.wiv-root {
+  width: 100%;
+}
+
+.wiv-section-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #8B7355;
+  margin: 0 0 16px;
+}
+
+/* ─── Summary stat cards ─── */
+.wiv-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.wiv-stat-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  backdrop-filter: blur(10px);
+}
+
+.wiv-stat-label {
+  font-size: 13px;
+  color: #8a8270;
+  font-weight: 600;
+}
+
+.wiv-stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #333;
+}
+
+.wiv-stat-sub {
+  font-size: 12px;
+  color: #6f9e5e;
+  font-weight: 600;
+}
+
+/* ─── Toolbar (search + filters + export) ─── */
+.wiv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.wiv-search-wrapper {
+  display: flex;
+  align-items: center;
+  background: #FFFFFFB0;
+  border: 1px solid #d5b85a;
+  border-radius: 8px;
+  padding: 0 12px;
+  flex: 1;
+  min-width: 200px;
+  max-width: 350px;
+}
+
+.wiv-search-wrapper:focus-within {
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.2);
+}
+
+.wiv-search-icon {
+  color: #d5b85a;
+  margin-right: 8px;
+  display: inline-flex;
+}
+
+.wiv-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 10px 0;
+  font-size: 13px;
+  background: transparent;
+}
+
+.wiv-search-clear {
+  background: #d5b85a;
+  border: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 11px;
+  color: #fff !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wiv-select {
+  padding: 10px 14px;
+  border: 1px solid #D4D4D4;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #FFFFFFB0;
+  cursor: pointer;
+}
+
+.wiv-select:focus {
+  border-color: #d5b85a;
+  outline: none;
+}
+
+.wiv-count {
+  color: #888;
+  font-size: 13px;
+  margin-right: 8px;
+}
+
+.wiv-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid #d5b85a;
+  border-radius: 8px;
+  background: #faf6e8;
+  color: #8B7355;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.wiv-export-btn:hover:not(:disabled) {
+  background: #f5ecd0;
+  border-color: #c9a94e;
+}
+
+.wiv-export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Table ─── */
+.wiv-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e6e0d0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.wiv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.wiv-table th {
+  background: #d5b85a;
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: #fff !important;
+  white-space: nowrap;
+  border-bottom: 2px solid #c7a24f;
+}
+
+.wiv-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #333;
+  white-space: nowrap;
+}
+
+.wiv-table tbody tr:hover {
+  background: rgba(213, 184, 90, 0.05);
+}
+
+.wiv-empty-cell {
+  text-align: center;
+  padding: 32px 16px;
+  color: #999;
+}
+
+/* ─── Conversion status cell (shared class names with the SA WalkInTab) ─── */
+.wi-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wi-status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wi-status-badge.converted {
+  background: #e7f3e1;
+  color: #4e7a3a;
+}
+
+.wi-status-badge.not-converted {
+  background: #f1eee6;
+  color: #8a8270;
+}
+
+.wi-status-src {
+  font-size: 11px;
+  color: #b0a890;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.wi-status-toggle {
+  border: 1px solid #e0d8c2;
+  background: #fff;
+  color: #8a7a45;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wi-status-toggle:hover:not(:disabled) {
+  border-color: #d5b85a;
+  background: #fffdf6;
+}
+
+.wi-status-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 768px) {
+  .wiv-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
