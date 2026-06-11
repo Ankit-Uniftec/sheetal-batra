@@ -19,6 +19,7 @@ const countryOptions = [
   { label: "Australia", value: "Australia" },
   { label: "Germany", value: "Germany" },
   { label: "France", value: "France" },
+  { label: "Portugal", value: "Portugal" },
   { label: "Japan", value: "Japan" },
   { label: "China", value: "China" },
   { label: "Brazil", value: "Brazil" },
