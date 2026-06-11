@@ -4,7 +4,7 @@
 // All known dial codes from OtpVerification — sorted longest first so prefix
 // matching picks the most specific code (e.g. "+966" before "+9", "+971" before "+97").
 const DIAL_CODES = [
-  "+966", "+974", "+965", "+968", "+971", "+234",
+  "+966", "+974", "+965", "+968", "+971", "+234", "+351",
   "+91", "+44", "+61", "+49", "+33", "+39", "+34", "+31", "+86",
   "+81", "+82", "+65", "+60", "+66", "+62", "+52", "+55", "+27", "+20",
   "+1",

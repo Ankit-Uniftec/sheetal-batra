@@ -44,7 +44,15 @@ export default function WalkInTab({ saEmail, showPopup }) {
   // Custom country dropdown open state (native select renders flag emoji
   // unreliably across OSes, so we use our own dropdown).
   const [ccOpen, setCcOpen] = useState(false);
+  const [ccQuery, setCcQuery] = useState("");
   const selectedCountry = COUNTRY_CODES.find((c) => c.code === countryCode) || COUNTRY_CODES[0];
+  // Filter by country name or dial code (with or without the leading "+").
+  const ccQ = ccQuery.trim().toLowerCase().replace(/^\+/, "");
+  const ccFiltered = ccQ
+    ? COUNTRY_CODES.filter(
+        (c) => c.label.toLowerCase().includes(ccQ) || c.code.replace("+", "").startsWith(ccQ)
+      )
+    : COUNTRY_CODES;
 
   useEffect(() => {
     let cancelled = false;
@@ -272,7 +280,7 @@ export default function WalkInTab({ saEmail, showPopup }) {
                     <button
                       type="button"
                       className="wi-cc-trigger"
-                      onClick={() => setCcOpen((v) => !v)}
+                      onClick={() => { setCcOpen((v) => !v); setCcQuery(""); }}
                     >
                       <span className="wi-cc-flag">{selectedCountry.flag}</span>
                       <span className="wi-cc-code">{selectedCountry.code}</span>
@@ -280,20 +288,32 @@ export default function WalkInTab({ saEmail, showPopup }) {
                     </button>
                     {ccOpen && (
                       <>
-                        <div className="wi-cc-backdrop" onClick={() => setCcOpen(false)} />
-                        <ul className="wi-cc-menu">
-                          {COUNTRY_CODES.map((c) => (
-                            <li
-                              key={c.code}
-                              className={`wi-cc-option ${c.code === countryCode ? "selected" : ""}`}
-                              onClick={() => { setCountryCode(c.code); setCcOpen(false); }}
-                            >
-                              <span className="wi-cc-flag">{c.flag}</span>
-                              <span className="wi-cc-label">{c.label}</span>
-                              <span className="wi-cc-code">{c.code}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="wi-cc-backdrop" onClick={() => { setCcOpen(false); setCcQuery(""); }} />
+                        <div className="wi-cc-menu">
+                          <input
+                            className="wi-cc-search"
+                            placeholder="Search country…"
+                            value={ccQuery}
+                            autoFocus
+                            onChange={(e) => setCcQuery(e.target.value)}
+                          />
+                          <ul className="wi-cc-list">
+                            {ccFiltered.length === 0 && (
+                              <li className="wi-cc-empty">No matches</li>
+                            )}
+                            {ccFiltered.map((c) => (
+                              <li
+                                key={c.code}
+                                className={`wi-cc-option ${c.code === countryCode ? "selected" : ""}`}
+                                onClick={() => { setCountryCode(c.code); setCcOpen(false); setCcQuery(""); }}
+                              >
+                                <span className="wi-cc-flag">{c.flag}</span>
+                                <span className="wi-cc-label">{c.label}</span>
+                                <span className="wi-cc-code">{c.code}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </>
                     )}
                   </div>

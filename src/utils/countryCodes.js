@@ -10,6 +10,7 @@ export const COUNTRY_CODES = [
   { code: "+33", label: "France", flag: "🇫🇷" },
   { code: "+39", label: "Italy", flag: "🇮🇹" },
   { code: "+34", label: "Spain", flag: "🇪🇸" },
+  { code: "+351", label: "Portugal", flag: "🇵🇹" },
   { code: "+31", label: "Netherlands", flag: "🇳🇱" },
   { code: "+86", label: "China", flag: "🇨🇳" },
   { code: "+81", label: "Japan", flag: "🇯🇵" },
