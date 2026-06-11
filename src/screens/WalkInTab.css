@@ -209,14 +209,38 @@
   z-index: 11;
   margin: 0;
   padding: 6px 0;
-  list-style: none;
   width: 240px;
-  max-height: 260px;
-  overflow-y: auto;
   background: #fff;
   border: 1px solid #e8e2d4;
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+}
+
+.wi-cc-search {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 2px 8px 6px;
+  padding: 8px 10px;
+  border: 1px solid #e8e2d4;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.wi-cc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.wi-cc-empty {
+  padding: 10px 14px;
+  color: #999;
+  font-size: 13px;
 }
 
 .wi-cc-option {
