@@ -198,6 +198,20 @@ export default function OrderDetails() {
   const isCustomOrder = order?.payment_order_type === "Custom";
   const minAdvancePercent = isCustomOrder ? 0.5 : 0.25;
 
+  // sa_services may place orders with NO advance when the cart value is up to
+  // ₹30,000 (client rule). The 25%/50% minimum is still shown as guidance, but
+  // it doesn't block the order. Above ₹30k the minimum is enforced as usual.
+  const NO_ADVANCE_LIMIT_SERVICES = 30000;
+  const isServicesSA = useMemo(() => {
+    try {
+      const sp = JSON.parse(sessionStorage.getItem("currentSalesperson") || "{}");
+      return sp.role === "sa_services";
+    } catch {
+      return false;
+    }
+  }, []);
+  const advanceWaived = isServicesSA && totalAmount <= NO_ADVANCE_LIMIT_SERVICES;
+
   // Allow any advance amount (don't force minimum)
   const sanitizedAdvance = useMemo(() => {
     const amount = parseFloat(advancePayment);
@@ -726,8 +740,10 @@ export default function OrderDetails() {
       }
     }
 
-    // Check if advance payment is below minimum and show warning
-    if (isAdvanceBelowMinimum) {
+    // Check if advance payment is below minimum and show warning.
+    // sa_services skips this block for carts up to ₹30k — the minimum is
+    // shown as guidance but any advance (including none) is accepted.
+    if (isAdvanceBelowMinimum && !advanceWaived) {
       const minPercentLabel = isCustomOrder ? "50%" : "25%";
       showPopup({
         title: "Minimum Advance Required",
@@ -1906,6 +1922,7 @@ export default function OrderDetails() {
                 Min. Advance
                 {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 50%)</span>}
                 {!isCustomOrder && <span style={{ color: "#2e7d32", marginLeft: 4 }}>(Standard - 25%)</span>}
+                {advanceWaived && <span style={{ color: "#999", marginLeft: 4 }}>— optional</span>}
               </label>
               <span>₹{formatIndianNumber(pricing.minAdvanceAmount)}</span>
             </div>

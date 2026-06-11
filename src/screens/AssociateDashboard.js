@@ -88,7 +88,8 @@ export default function Dashboard() {
     return salesperson?.designation?.toLowerCase().includes("manager");
   }, [salesperson]);
 
-  // Check if user is sa_services (can see all orders, view-only for others)
+  // Check if user is sa_services (can see all orders; view-only for others'
+  // orders except Mark Delivered, which sa_services can do on any order)
   const isServices = useMemo(() => {
     return salesperson?.role === "sa_services";
   }, [salesperson]);
@@ -471,6 +472,7 @@ export default function Dashboard() {
       phone: salesperson.phone,
       store: salesperson.store_name,
       designation: salesperson.designation,
+      role: salesperson.role,
     }));
     sessionStorage.setItem("isStockOrder", "true");
     sessionStorage.removeItem("screen4FormData");
@@ -888,6 +890,7 @@ export default function Dashboard() {
         phone: salesperson.phone,
         store: salesperson.store_name,
         designation: salesperson.designation || "",
+        role: salesperson.role,
       }));
     }
 
@@ -920,6 +923,7 @@ export default function Dashboard() {
         phone: salesperson.phone,
         store: salesperson.store_name,
         designation: salesperson.designation || "",
+        role: salesperson.role,
       }));
     }
 
@@ -1628,7 +1632,10 @@ export default function Dashboard() {
                       })()}
                       */}
 
-                      {own && canMarkDelivered(order) && (
+                      {/* sa_services can collect balance & mark ANY order delivered
+                          (client request) — other actions stay view-only for
+                          orders that aren't theirs. */}
+                      {(own || isServices) && canMarkDelivered(order) && (
                         <div className="ad-order-actions">
                           <button
                             className="ad-action-btn ad-delivered-btn"
@@ -1889,6 +1896,7 @@ export default function Dashboard() {
               phone: salesperson.phone,
               store: salesperson.store_name,
               designation: salesperson.designation || "",
+              role: salesperson.role,
             }));
 
             // Clear any leftover stock-order flag — this is the regular
