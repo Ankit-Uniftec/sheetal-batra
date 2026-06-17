@@ -1,0 +1,52 @@
+.scc-wrap {
+  margin: 0 0 20px;
+}
+
+.scc-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #444;
+}
+
+.scc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.scc-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #ececec;
+  border-top: 3px solid #ccc;
+  border-radius: 10px;
+  text-align: left;
+  font: inherit;
+  cursor: default;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.scc-card.scc-clickable {
+  cursor: pointer;
+}
+
+.scc-card.scc-clickable:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.scc-count {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.scc-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+}

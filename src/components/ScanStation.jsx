@@ -16,6 +16,7 @@ import {
     REJOURNEY_STAGES,
     getStageLabel,
     getStageColor,
+    getStageTextColor,
 } from "../utils/barcodeService";
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
@@ -1014,7 +1015,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                         <div className="wd-scan-history-right">
                                             <span
                                                 className="wd-scan-history-stage"
-                                                style={{ backgroundColor: getStageColor(scan.toStage) }}
+                                                style={{ backgroundColor: getStageColor(scan.toStage), color: getStageTextColor(scan.toStage) }}
                                             >
                                                 {getStageLabel(scan.toStage)}
                                             </span>
@@ -1054,7 +1055,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                 <span className="wd-detail-label">Current Stage</span>
                                 <span
                                     className="wd-stage-badge"
-                                    style={{ backgroundColor: getStageColor(selectedComponent.current_stage) }}
+                                    style={{ backgroundColor: getStageColor(selectedComponent.current_stage), color: getStageTextColor(selectedComponent.current_stage) }}
                                 >
                                     {getStageLabel(selectedComponent.current_stage)}
                                 </span>
@@ -1110,7 +1111,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                             <span className="wd-sibling-label">{comp.component_label || comp.component_type}</span>
                                             <span
                                                 className="wd-stage-badge wd-stage-badge-sm"
-                                                style={{ backgroundColor: getStageColor(comp.current_stage) }}
+                                                style={{ backgroundColor: getStageColor(comp.current_stage), color: getStageTextColor(comp.current_stage) }}
                                             >
                                                 {getStageLabel(comp.current_stage)}
                                             </span>

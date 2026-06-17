@@ -87,6 +87,41 @@ export const SCAN_STATIONS = [
 ];
 
 // ============================================================
+// STAGE GROUPS — the 10 logical V2 stages, each collapsing its
+// in-progress/completed enum values into one group. Used for stage
+// filtering and stage-count cards (one entry per logical stage).
+// `key` is the group id used by filters; `members` are the raw
+// production_stage enum values that map into this group.
+// ============================================================
+export const STAGE_GROUPS = [
+  { key: "cloth_issue", label: "Cloth Issue", step: 1, color: "#795548", members: ["cloth_issued"] },
+  { key: "dyeing", label: "Dyeing", step: 2, color: "#e91e63", members: ["dyeing_in_progress", "dyeing_completed"] },
+  { key: "pattern_cutting", label: "Pattern Cutting", step: 3, color: "#9c27b0", members: ["pattern_cutting_in_progress", "pattern_cutting_completed"] },
+  { key: "embroidery", label: "Embroidery", step: 4, color: "#3f51b5", members: ["embroidery_in_progress", "embroidery_completed"] },
+  { key: "dry_cleaning", label: "Dry Cleaning", step: 5, color: "#00bcd4", members: ["dry_cleaning_in_progress", "dry_cleaning_completed"] },
+  { key: "qc1", label: "QC 1", step: 6, color: "#f44336", members: ["qc_in_progress", "qc_passed", "qc_failed"] },
+  { key: "stitching", label: "Stitching", step: 7, color: "#ef6c00", members: ["stitching_in_progress", "stitching_completed"] },
+  { key: "hemming", label: "Hemming", step: 8, color: "#ff5722", members: ["hemming_in_progress", "hemming_completed"] },
+  { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
+  { key: "packaging", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", members: ["packaging_dispatch", "dispatched"] },
+];
+
+// Map a raw stage value (e.g. "embroidery_completed") to its group key
+// (e.g. "embroidery"). Returns null for stages outside the 10 (e.g.
+// order_received / disposed / scrapped / legacy).
+export function getStageGroupKey(stageValue) {
+  if (!stageValue) return null;
+  const g = STAGE_GROUPS.find(grp => grp.members.includes(stageValue));
+  return g ? g.key : null;
+}
+
+// Text color for a stage badge. Stage colors are mid/dark tones, so we use
+// white text consistently across all stage badges for a uniform look.
+export function getStageTextColor() {
+  return "#ffffff";
+}
+
+// ============================================================
 // HELPER: Get stage info by value
 // ============================================================
 export function getStageInfo(stageValue) {

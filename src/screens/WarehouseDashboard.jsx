@@ -12,7 +12,8 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageLabel, getStageColor } from "../utils/barcodeService";
+import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS } from "../utils/barcodeService";
+import Badge from "../components/Badge";
 import SearchByDropdown from "../components/SearchByDropdown";
 
 // Status options for alterations
@@ -122,6 +123,7 @@ const WarehouseDashboard = () => {
     orderType: [],
     store: [],
     salesperson: "",
+    stage: [],   // warehouse_stage values (10 V2 stages)
   });
 
   // Filter dropdown states
@@ -497,6 +499,12 @@ const WarehouseDashboard = () => {
       result = result.filter((order) => filters.store.includes(order.salesperson_store));
     }
 
+    // Stage filter — match the order's warehouse_stage (earliest/slowest
+    // active component) to one of the 10 V2 logical stage groups.
+    if (filters.stage.length > 0) {
+      result = result.filter((order) => filters.stage.includes(getStageGroupKey(order.warehouse_stage)));
+    }
+
     // Salesperson filter
     if (filters.salesperson) {
       result = result.filter((order) => order.salesperson === filters.salesperson);
@@ -598,6 +606,7 @@ const WarehouseDashboard = () => {
     filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
     filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t === "b2b" ? "B2B" : (t.charAt(0).toUpperCase() + t.slice(1)) }));
     filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
+    filters.stage.forEach(k => chips.push({ type: "stage", value: k, label: STAGE_GROUPS.find(g => g.key === k)?.label || k }));
     if (filters.salesperson) {
       chips.push({ type: "salesperson", label: filters.salesperson });
     }
@@ -628,6 +637,7 @@ const WarehouseDashboard = () => {
       orderType: [],
       store: [],
       salesperson: "",
+      stage: [],
     });
   };
 
@@ -1267,6 +1277,33 @@ const WarehouseDashboard = () => {
                   )}
                 </div>
 
+                {/* Stage Filter — by the order's warehouse_stage (10 V2 stages) */}
+                <div className="wd-filter-dropdown">
+                  <button
+                    className={`wd-filter-btn ${filters.stage.length > 0 ? "active" : ""}`}
+                    onClick={() => setOpenDropdown(openDropdown === "stage" ? null : "stage")}
+                  >
+                    Stage
+                    <span className="wd-dropdown-arrow">&#9662;</span>
+                  </button>
+                  {openDropdown === "stage" && (
+                    <div className="wd-dropdown-panel">
+                      <div className="wd-dropdown-title">Production Stage</div>
+                      {STAGE_GROUPS.map(g => (
+                        <label key={g.key} className="wd-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={filters.stage.includes(g.key)}
+                            onChange={() => toggleFilter("stage", g.key)}
+                          />
+                          <span>{g.label}</span>
+                        </label>
+                      ))}
+                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Salesperson Filter */}
                 <div className="wd-filter-dropdown">
                   <button
@@ -1560,12 +1597,9 @@ const WarehouseDashboard = () => {
                                             {comp.re_journey_count > 0 && (
                                               <span className="wd-comp-rework-tag">Rework {comp.re_journey_count}</span>
                                             )}
-                                            <span
-                                              className="wd-comp-stage-badge"
-                                              style={{ backgroundColor: getStageColor(comp.current_stage) }}
-                                            >
+                                            <Badge color={getStageColor(comp.current_stage)}>
                                               {getStageLabel(comp.current_stage)}
-                                            </span>
+                                            </Badge>
                                           </div>
                                         </div>
                                       ))}

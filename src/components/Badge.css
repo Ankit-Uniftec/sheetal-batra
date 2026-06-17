@@ -1,0 +1,31 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.badge-sm {
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.badge-md {
+  padding: 5px 14px;
+  font-size: 13px;
+}
+
+/* Solid color badges (stage badges): force white text so no competing
+   class rule from a host dashboard can darken it. */
+.badge.badge-solid { color: #ffffff !important; }
+
+/* Semantic soft variants — readable, consistent everywhere */
+.badge-neutral { background: #eceff1; color: #455a64; }
+.badge-success { background: #e6f4ea; color: #1e7e34; }
+.badge-warning { background: #fff4e5; color: #b8860b; }
+.badge-danger  { background: #fdecea; color: #c0392b; }
+.badge-info    { background: #e7f0fb; color: #1565c0; }
