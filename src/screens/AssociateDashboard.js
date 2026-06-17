@@ -15,6 +15,7 @@ import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 import WalkInTab from "./WalkInTab";
+import ExhibitionPanel from "../components/ExhibitionPanel";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -37,6 +38,9 @@ export default function Dashboard() {
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [salesperson, setSalesperson] = useState(null);
+  // Exhibition SA: store/designation = "Exhibition". Drives the Exhibitions
+  // menu + gating of the regular "+" order journey (points 1 & 2).
+  const isExhibition = /exhib/i.test(salesperson?.store_name || "") || /exhib/i.test(salesperson?.designation || "");
   const [monthlyTarget, setMonthlyTarget] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1227,6 +1231,9 @@ export default function Dashboard() {
               <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
               <a className={`ad-menu-item ${activeTab === "walkin" ? "active" : ""}`} onClick={() => { setActiveTab("walkin"); setShowSidebar(false); }}>Walk-In</a>
+              {isExhibition && (
+                <a className={`ad-menu-item ${activeTab === "exhibitions" ? "active" : ""}`} onClick={() => { setActiveTab("exhibitions"); setShowSidebar(false); }}>Exhibitions</a>
+              )}
               {salesperson?.can_place_stock_orders && (
                 <a
                   className="ad-menu-item"
@@ -1864,6 +1871,12 @@ export default function Dashboard() {
           {activeTab === "walkin" && (
             <WalkInTab saEmail={salesperson?.email} showPopup={showPopup} />
           )}
+
+          {activeTab === "exhibitions" && isExhibition && (
+            <div style={{ gridColumn: "2 / -1" }}>
+              <ExhibitionPanel currentUserEmail={salesperson?.email} />
+            </div>
+          )}
         </div>
 
         <button
@@ -1876,6 +1889,20 @@ export default function Dashboard() {
                 message: "Salesperson data not found. Please login again.",
                 type: "error",
                 confirmText: "Ok",
+              });
+              return;
+            }
+
+            // Point 1: the regular "+" order journey is disabled for Exhibition
+            // SAs. Orders must be created by selecting an Active Exhibition
+            // (point 5), so send them to the Exhibitions panel instead.
+            if (isExhibition) {
+              setActiveTab("exhibitions");
+              showPopup({
+                title: "Select an Exhibition",
+                message: "Exhibition orders must be started from an Active Exhibition. Open the Exhibitions menu and create the order from there.",
+                type: "info",
+                confirmText: "OK",
               });
               return;
             }

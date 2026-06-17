@@ -160,6 +160,21 @@ export default function OtpVerification() {
         }
       }
 
+      // ======= EXHIBITION ORDERS: OTP DISABLED (point 5) =======
+      // Exhibition orders skip OTP verification entirely. We still capture the
+      // customer (existing profile → /product, else /userinfo to collect details),
+      // just without the WhatsApp OTP step.
+      const isExhibitionOrder = !!sessionStorage.getItem("exhibitionOrder");
+      if (isExhibitionOrder) {
+        setLoading(false);
+        if (existingProfile && existingProfile.full_name) {
+          navigateWithVideo("/product");
+        } else {
+          navigateWithVideo("/userinfo", { phoneNumber });
+        }
+        return;
+      }
+
       // ======= SPUR WHATSAPP OTP (replaces Twilio SMS) =======
       setStatusMessage("Sending OTP via WhatsApp...");
 

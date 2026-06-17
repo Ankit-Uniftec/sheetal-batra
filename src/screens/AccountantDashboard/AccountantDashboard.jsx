@@ -12,6 +12,7 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import { totalNetSbRevenue } from "../../utils/exhibitionService";
 
 // Accountant Dashboard — for the "ACCOUNTANT — DISPATCH & LOGISTICS" role.
 // Sidebar with 4 tabs (Overview + the 3 spec items).
@@ -196,7 +197,9 @@ export default function AccountantDashboard() {
     const list = Object.values(map).sort((a, b) => b.revenue - a.revenue);
     const totalRevenue = list.reduce((s, c) => s + c.revenue, 0);
     const totalOrders = list.reduce((s, c) => s + c.orders, 0);
-    return { list, totalRevenue, totalOrders };
+    // Net SB Revenue: exhibition orders net of commission, others at gross.
+    const netSb = totalNetSbRevenue(periodOrders.filter(isRevenueOrder));
+    return { list, totalRevenue, totalOrders, netSb };
   }, [periodOrders]);
 
   // ─── Status stats ────────────────────────────────────────────
@@ -373,6 +376,10 @@ export default function AccountantDashboard() {
                 <div className="acct-stat-card">
                   <span className="acct-stat-label">Total Revenue</span>
                   <span className="acct-stat-value">{"₹"}{formatIndianNumber(Math.round(channelStats.totalRevenue))}</span>
+                </div>
+                <div className="acct-stat-card">
+                  <span className="acct-stat-label">Net SB Revenue</span>
+                  <span className="acct-stat-value">{"₹"}{formatIndianNumber(Math.round(channelStats.netSb))}</span>
                 </div>
                 <div className="acct-stat-card">
                   <span className="acct-stat-label">Channels Active</span>

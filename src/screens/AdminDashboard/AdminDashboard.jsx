@@ -21,6 +21,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
+import { totalNetSbRevenue } from "../../utils/exhibitionService";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -756,6 +757,7 @@ export default function AdminDashboard() {
         const previousOrders = comparisonRange ? filterOrdersByDateRange(nonCommsOrders, comparisonRange) : [];
 
         const totalRevenue = currentOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
         const totalOrders = currentOrders.length;
         const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
@@ -770,7 +772,7 @@ export default function AdminDashboard() {
         const prevCancelledOrders = previousOrders.filter(o => o.status === "cancelled").length;
 
         return {
-            totalRevenue, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
+            totalRevenue, netSbRev, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
             revenueGrowth: calculateGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calculateGrowth(totalOrders, prevTotalOrders),
             pendingGrowth: calculateGrowth(pendingOrders, prevPendingOrders),
@@ -2061,6 +2063,10 @@ export default function AdminDashboard() {
                                     <span className="stat-label">Total Revenue</span>
                                     <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue)}</span>
                                     {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Net SB Revenue</span>
+                                    <span className="stat-value">₹{formatIndianNumber(Math.round(dashboardStats.netSbRev))}</span>
                                 </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Total Orders</span>

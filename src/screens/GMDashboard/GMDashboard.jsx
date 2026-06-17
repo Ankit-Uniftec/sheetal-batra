@@ -10,6 +10,8 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import ExhibitionApprovals from "../../components/ExhibitionApprovals";
+import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
@@ -433,6 +435,7 @@ export default function GMDashboard() {
         const prevOrders = compRange ? filterOrdersByDateRange(orders.filter(o => !isLxrtsOrder(o)), compRange) : [];
 
         const totalRevenue = currentOrders.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
         const totalOrders = currentOrders.length;
         const prevRevenue = prevOrders.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
 
@@ -492,7 +495,7 @@ export default function GMDashboard() {
         }));
 
         return {
-            totalRevenue, totalOrders,
+            totalRevenue, netSbRev, totalOrders,
             revenueGrowth: calculateGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calculateGrowth(totalOrders, prevOrders.length),
             showComparison: comparison !== "none",
@@ -950,6 +953,7 @@ export default function GMDashboard() {
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
+                        <button className={`admin-nav-item ${activeTab === "exhibition_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("exhibition_approvals"); setShowSidebar(false); }}>Exhibition Approvals</button>
                         {currentUserProfile?.can_place_stock_orders && (
                             <button
                                 className="admin-nav-item"
@@ -995,6 +999,7 @@ export default function GMDashboard() {
                             <div className="admin-stats-grid">
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(storePerformanceStats.totalRevenue))}</span></div>
                                     {storePerformanceStats.showComparison && <span className={`stat-growth ${storePerformanceStats.revenueGrowth >= 0 ? "positive" : "negative"}`}>{storePerformanceStats.revenueGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(storePerformanceStats.revenueGrowth).toFixed(1)}%</span>}</div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Net SB Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(storePerformanceStats.netSbRev))}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Orders</span><span className="stat-value">{storePerformanceStats.totalOrders}</span></div>
                                     {storePerformanceStats.showComparison && <span className={`stat-growth ${storePerformanceStats.ordersGrowth >= 0 ? "positive" : "negative"}`}>{storePerformanceStats.ordersGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(storePerformanceStats.ordersGrowth).toFixed(1)}%</span>}</div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">AOV</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(storePerformanceStats.aov))}</span></div></div>
@@ -1644,6 +1649,10 @@ export default function GMDashboard() {
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {activeTab === "exhibition_approvals" && (
+                        <ExhibitionApprovals currentUserEmail={currentUserEmail} />
                     )}
 
                 </main>
