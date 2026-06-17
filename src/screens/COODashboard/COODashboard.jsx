@@ -10,6 +10,7 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import VendorApprovals from "../../components/VendorApprovals";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import {
@@ -695,6 +696,7 @@ export default function COODashboard() {
                         <button className={`admin-nav-item ${activeTab === "financial" ? "active" : ""}`} onClick={() => { setActiveTab("financial"); setShowSidebar(false); }}>Financial</button>
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order Tracking</button>
+                        <button className={`admin-nav-item ${activeTab === "vendor_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("vendor_approvals"); setShowSidebar(false); }}>Vendor Approvals</button>
                     </nav>
                 </aside>
 
@@ -982,6 +984,10 @@ export default function COODashboard() {
                             </table></div></div>
                             {ordersTotalPages > 1 && (<div className="admin-pagination"><button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button><span>Page {ordersPage} of {ordersTotalPages}</span><button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button></div>)}
                         </div>
+                    )}
+
+                    {activeTab === "vendor_approvals" && (
+                        <VendorApprovals currentUserEmail={currentUserEmail} />
                     )}
 
                 </main>

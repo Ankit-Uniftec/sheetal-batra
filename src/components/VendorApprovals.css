@@ -1,0 +1,96 @@
+.va-wrap {
+  max-width: 760px;
+  padding: 8px 4px;
+}
+
+.va-title {
+  margin: 0 0 4px;
+  color: #333;
+}
+
+.va-hint {
+  margin: 0 0 20px;
+  color: #888;
+  font-size: 13px;
+}
+
+.va-section {
+  margin: 22px 0 10px;
+  font-size: 15px;
+  color: #555;
+}
+
+.va-empty {
+  color: #999;
+  font-size: 14px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.va-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.va-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.va-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.va-name {
+  font-weight: 600;
+  color: #222;
+}
+
+.va-loc {
+  font-size: 12px;
+  color: #777;
+}
+
+.va-req {
+  font-size: 12px;
+  color: #999;
+}
+
+.va-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.va-approve, .va-reject {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.va-approve { background: #1e7e34; color: #fff; }
+.va-reject { background: #fff; color: #c0392b; border: 1px solid #c0392b; }
+.va-approve:disabled, .va-reject:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.va-status {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+.va-status-approved { background: #e6f4ea; color: #1e7e34; }
+.va-status-pending { background: #fff4e5; color: #b8860b; }
+.va-status-rejected { background: #fdecea; color: #c0392b; }

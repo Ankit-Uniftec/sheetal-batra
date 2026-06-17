@@ -10,6 +10,7 @@ import { usePopup } from "../../../components/Popup";
 import NotificationBell from "../../../components/NotificationBell";
 import SearchByDropdown from "../../../components/SearchByDropdown";
 import ProductionOverrides from "../../../components/ProductionOverrides";
+import VendorRequest from "../../../components/VendorRequest";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
 import { PRODUCTION_STAGES, getStageLabel, getStageColor } from "../../../utils/barcodeService";
@@ -1155,6 +1156,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
+                            <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendors</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                             <a className={`pm-menu-item ${activeTab === "staff" ? "active" : ""}`} onClick={() => { setActiveTab("staff"); setShowSidebar(false); }}>Staff</a>
                             <a className={`pm-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>Profile</a>
@@ -2296,6 +2298,11 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "overrides" && (
                             <div className="pm-orders-tab">
                                 <ProductionOverrides currentUserEmail={currentUserEmail} />
+                            </div>
+                        )}
+                        {activeTab === "vendors" && (
+                            <div className="pm-orders-tab">
+                                <VendorRequest currentUserEmail={currentUserEmail} />
                             </div>
                         )}
                         {/* ===== STAFF TAB (no DB tables yet) ===== */}

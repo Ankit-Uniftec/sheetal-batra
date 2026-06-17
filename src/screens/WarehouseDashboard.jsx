@@ -8,9 +8,10 @@ import formatDate from "../utils/formatDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import NotificationBell from "../components/NotificationBell";
-// TEMP (prod): scan station hidden — re-enable when barcode scan flow is ready
-// import ScanStation from "../components/ScanStation";
-// import "../components/ScanStation.css";
+import ScanStation from "../components/ScanStation";
+import "../components/ScanStation.css";
+import ProductionHeadVendors from "../components/ProductionHeadVendors";
+import "../components/ProductionHeadVendors.css";
 import { getStageLabel, getStageColor } from "../utils/barcodeService";
 import SearchByDropdown from "../components/SearchByDropdown";
 
@@ -1010,12 +1011,16 @@ const WarehouseDashboard = () => {
               onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>
               Calendar
             </a>
-            {/* TEMP (prod): Scan Station tab hidden — re-enable when scan flow is ready
             <a className={`wd-menu-item ${activeTab === "scan" ? "active" : ""}`}
               onClick={() => { setActiveTab("scan"); setShowSidebar(false); }}>
               Scan Station
             </a>
-            */}
+            {userDesignation?.trim().toLowerCase() === "offline production head" && (
+              <a className={`wd-menu-item ${activeTab === "vendors" ? "active" : ""}`}
+                onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>
+                Vendor / External
+              </a>
+            )}
             <a className="wd-menu-item" onClick={handleLogout}>Log Out</a>
           </nav>
         </aside>
@@ -1531,9 +1536,8 @@ const WarehouseDashboard = () => {
                               <p><strong className="wd-label">Delivery Date:</strong> {getWarehouseDate(order.delivery_date, order.created_at)}</p>
                             </div>
 
-                            {/* TEMP (prod): per-component barcode stage tracker hidden —
-                                re-enable when scan flow is ready. Restored simple status badge
-                                + Mark as Completed button below in the meantime.
+                            {/* Per-component barcode stage tracker — shows each
+                                component's live production stage (re-enabled with the scan flow). */}
                             {!isAlteration && (
                               <div className="wd-component-tracker">
                                 {order.status === "cancelled" ? (
@@ -1581,24 +1585,7 @@ const WarehouseDashboard = () => {
                                           "Awaiting Production"}
                                   </div>
                                 )}
-                              </div>
-                            )}
-                            */}
-
-                            {/* Simple status badge + Mark as Completed (used while scan flow is disabled) */}
-                            {!isAlteration && (
-                              <div className="wd-component-tracker">
-                                <div className={`wd-order-status-badge ${
-                                  order.status === "cancelled" ? "wd-status-cancelled" :
-                                    order.status === "completed" ? "wd-status-completed" :
-                                      order.status === "delivered" ? "wd-status-delivered" :
-                                        "wd-status-pending"
-                                }`}>
-                                  {order.status === "cancelled" ? "Cancelled" :
-                                    order.status === "completed" ? "Completed" :
-                                      order.status === "delivered" ? "Delivered" :
-                                        "Order Received"}
-                                </div>
+                                {/* Mark as Completed remains available to the warehouse manager */}
                                 <button
                                   className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""}`}
                                   disabled={order.status === "completed" || order.status === "delivered" || order.status === "cancelled"}
@@ -1765,14 +1752,15 @@ const WarehouseDashboard = () => {
               )}
             </div>
           )}
-          {/* TEMP (prod): Scan Station hidden — re-enable when scan flow is ready
           {activeTab === "scan" && (
             <ScanStation
               currentUserEmail={currentUserEmail}
               allowedStations={assignedStations}
             />
           )}
-          */}
+          {activeTab === "vendors" && userDesignation?.trim().toLowerCase() === "offline production head" && (
+            <ProductionHeadVendors currentUserEmail={currentUserEmail} />
+          )}
         </div>
       </div>
 
