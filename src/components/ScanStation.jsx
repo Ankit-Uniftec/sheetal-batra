@@ -17,6 +17,7 @@ import {
     getStageLabel,
     getStageColor,
     getStageTextColor,
+    fetchApprovedVendors,
 } from "../utils/barcodeService";
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
@@ -162,6 +163,14 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         vendorName: "",
         vendorLocation: "",
     });
+
+    // Approved vendors — for the Security Gate exit vendor dropdown.
+    const [approvedVendors, setApprovedVendors] = useState([]);
+    useEffect(() => {
+        fetchApprovedVendors()
+            .then((v) => setApprovedVendors(v || []))
+            .catch((e) => console.error("Failed to load approved vendors:", e));
+    }, []);
 
     // Activation popup (Step 2 — Production Head activates components)
     const [activationPopup, setActivationPopup] = useState({
@@ -1286,13 +1295,32 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         {securityPopup.scanType === "exit" ? (
                             <>
                                 <div className="wd-form-group">
-                                    <label>Vendor Name *</label>
-                                    <input
-                                        type="text"
+                                    <label>Vendor *</label>
+                                    <select
                                         value={securityPopup.vendorName}
-                                        onChange={e => setSecurityPopup(prev => ({ ...prev, vendorName: e.target.value }))}
-                                        placeholder="e.g. Dye Works Pvt Ltd"
-                                    />
+                                        onChange={e => {
+                                            const name = e.target.value;
+                                            const v = approvedVendors.find(av => av.vendor_name === name);
+                                            setSecurityPopup(prev => ({
+                                                ...prev,
+                                                vendorName: name,
+                                                // Auto-fill location from the chosen vendor (still editable below).
+                                                vendorLocation: v?.vendor_location || prev.vendorLocation,
+                                            }));
+                                        }}
+                                    >
+                                        <option value="">Select vendor…</option>
+                                        {approvedVendors.map(v => (
+                                            <option key={v.id} value={v.vendor_name}>
+                                                {v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {approvedVendors.length === 0 && (
+                                        <p style={{ fontSize: 11, color: "#c0392b", marginTop: 4 }}>
+                                            No approved vendors. The Production Head must configure them first.
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="wd-form-group">
                                     <label>Vendor Location</label>
