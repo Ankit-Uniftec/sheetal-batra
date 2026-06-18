@@ -16,6 +16,8 @@ import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 import WalkInTab from "./WalkInTab";
 import ExhibitionPanel from "../components/ExhibitionPanel";
+import ProductionHeadVendors from "../components/ProductionHeadVendors";
+import "../components/ProductionHeadVendors.css";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -41,6 +43,9 @@ export default function Dashboard() {
   // Exhibition SA: store/designation = "Exhibition". Drives the Exhibitions
   // menu + gating of the regular "+" order journey (points 1 & 2).
   const isExhibition = /exhib/i.test(salesperson?.store_name || "") || /exhib/i.test(salesperson?.designation || "");
+  // Pvt Production Head (Kavita) — gets the Vendor / External workspace for
+  // Private-source orders. Matched on the 'Private SA' designation.
+  const isPvtHead = (salesperson?.designation || "").trim().toLowerCase() === "private sa";
   const [monthlyTarget, setMonthlyTarget] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1234,6 +1239,9 @@ export default function Dashboard() {
               {isExhibition && (
                 <a className={`ad-menu-item ${activeTab === "exhibitions" ? "active" : ""}`} onClick={() => { setActiveTab("exhibitions"); setShowSidebar(false); }}>Exhibitions</a>
               )}
+              {isPvtHead && (
+                <a className={`ad-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor / External</a>
+              )}
               {salesperson?.can_place_stock_orders && (
                 <a
                   className="ad-menu-item"
@@ -1875,6 +1883,12 @@ export default function Dashboard() {
           {activeTab === "exhibitions" && isExhibition && (
             <div style={{ gridColumn: "2 / -1" }}>
               <ExhibitionPanel currentUserEmail={salesperson?.email} />
+            </div>
+          )}
+
+          {activeTab === "vendors" && isPvtHead && (
+            <div style={{ gridColumn: "2 / -1" }}>
+              <ProductionHeadVendors currentUserEmail={salesperson?.email} />
             </div>
           )}
         </div>

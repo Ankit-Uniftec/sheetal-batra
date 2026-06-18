@@ -11,6 +11,7 @@ import NotificationBell from "../../../components/NotificationBell";
 import SearchByDropdown from "../../../components/SearchByDropdown";
 import ProductionOverrides from "../../../components/ProductionOverrides";
 import VendorRequest from "../../../components/VendorRequest";
+import ReplacementApprovals from "../../../components/ReplacementApprovals";
 import StageCountCards from "../../../components/StageCountCards";
 import Badge from "../../../components/Badge";
 import "../../../components/ProductionOverrides.css";
@@ -1169,6 +1170,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
                             <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendors</a>
+                            <a className={`pm-menu-item ${activeTab === "replacements" ? "active" : ""}`} onClick={() => { setActiveTab("replacements"); setShowSidebar(false); }}>Replacement Approvals</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                             <a className={`pm-menu-item ${activeTab === "staff" ? "active" : ""}`} onClick={() => { setActiveTab("staff"); setShowSidebar(false); }}>Staff</a>
                             <a className={`pm-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>Profile</a>
@@ -2343,6 +2345,11 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "vendors" && (
                             <div className="pm-orders-tab">
                                 <VendorRequest currentUserEmail={currentUserEmail} />
+                            </div>
+                        )}
+                        {activeTab === "replacements" && (
+                            <div className="pm-orders-tab">
+                                <ReplacementApprovals currentUserEmail={currentUserEmail} />
                             </div>
                         )}
                         {/* ===== STAFF TAB (no DB tables yet) ===== */}

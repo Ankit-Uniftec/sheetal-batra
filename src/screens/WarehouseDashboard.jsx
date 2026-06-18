@@ -100,6 +100,12 @@ const WarehouseDashboard = () => {
   const [assignedStations, setAssignedStations] = useState([]);
   const [userDesignation, setUserDesignation] = useState("");
 
+  // Warehouse-based Production Heads who get the Vendor / External tools here:
+  // Offline (Khushnuma — Store/Exhibition) and Online (Gulafsha — Website/LXRTS).
+  // Other heads (B2B/Comms/Pvt) work from their own dashboards.
+  const _designNorm = (userDesignation || "").trim().toLowerCase();
+  const isWarehouseProdHead = _designNorm === "offline production head" || _designNorm === "online production head";
+
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
   const [searchField, setSearchField] = useState("order_no");
@@ -1025,7 +1031,7 @@ const WarehouseDashboard = () => {
               onClick={() => { setActiveTab("scan"); setShowSidebar(false); }}>
               Scan Station
             </a>
-            {userDesignation?.trim().toLowerCase() === "offline production head" && (
+            {isWarehouseProdHead && (
               <a className={`wd-menu-item ${activeTab === "vendors" ? "active" : ""}`}
                 onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>
                 Vendor / External
@@ -1792,7 +1798,7 @@ const WarehouseDashboard = () => {
               allowedStations={assignedStations}
             />
           )}
-          {activeTab === "vendors" && userDesignation?.trim().toLowerCase() === "offline production head" && (
+          {activeTab === "vendors" && isWarehouseProdHead && (
             <ProductionHeadVendors currentUserEmail={currentUserEmail} />
           )}
         </div>

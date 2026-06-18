@@ -388,6 +388,92 @@ export async function generateOrderComponents(order) {
 }
 
 // ============================================================
+// REPLACEMENT JOURNEY (vendor failure) — PH initiates, PM approves
+// ============================================================
+
+// Production Head reports a vendor failure and requests a replacement journey.
+export async function initiateReplacementJourney({ barcode, failureType, reason, costLoss, requestedBy }) {
+  const { data, error } = await supabase.rpc("initiate_replacement_journey", {
+    p_barcode: barcode,
+    p_failure_type: failureType,
+    p_reason: reason,
+    p_cost_loss: costLoss,
+    p_requested_by: requestedBy,
+  });
+  if (error) throw error;
+  return data;
+}
+
+// Pending replacement requests (Production Manager view).
+export async function fetchPendingReplacements() {
+  const { data, error } = await supabase
+    .from("replacement_requests")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function approveReplacementJourney({ requestId, approvedBy }) {
+  const { data, error } = await supabase.rpc("approve_replacement_journey", {
+    p_request_id: requestId,
+    p_approved_by: approvedBy,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function rejectReplacementJourney({ requestId, approvedBy, reason = null }) {
+  const { data, error } = await supabase.rpc("reject_replacement_journey", {
+    p_request_id: requestId,
+    p_approved_by: approvedBy,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data;
+}
+
+// ============================================================
+// FACTORY PAUSE (Manish only) — global freeze of SLA/escalation timers
+// ============================================================
+
+// Current pause state: returns the open pause row (resumed_at IS NULL) or null.
+export async function fetchFactoryPause() {
+  const { data, error } = await supabase
+    .from("factory_pause")
+    .select("*")
+    .is("resumed_at", null)
+    .order("paused_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data; // null when not paused
+}
+
+// Pause the factory. Caller must be Manish (enforced in UI; pass his email).
+export async function pauseFactory({ pausedBy, reason }) {
+  const { data, error } = await supabase
+    .from("factory_pause")
+    .insert({ paused_by: pausedBy, reason })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Resume: close the open pause row.
+export async function resumeFactory({ resumedBy }) {
+  const { data, error } = await supabase
+    .from("factory_pause")
+    .update({ resumed_at: new Date().toISOString(), resumed_by: resumedBy })
+    .is("resumed_at", null)
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+// ============================================================
 // EXTERNAL VENDOR / MOVEMENT (Production Head)
 // ============================================================
 

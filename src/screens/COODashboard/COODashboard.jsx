@@ -11,6 +11,7 @@ import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils"
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import VendorApprovals from "../../components/VendorApprovals";
+import FactoryPause from "../../components/FactoryPause";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
@@ -699,6 +700,7 @@ export default function COODashboard() {
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order Tracking</button>
                         <button className={`admin-nav-item ${activeTab === "vendor_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("vendor_approvals"); setShowSidebar(false); }}>Vendor Approvals</button>
+                        <button className={`admin-nav-item ${activeTab === "factory_pause" ? "active" : ""}`} onClick={() => { setActiveTab("factory_pause"); setShowSidebar(false); }}>Factory Pause</button>
                     </nav>
                 </aside>
 
@@ -991,6 +993,10 @@ export default function COODashboard() {
 
                     {activeTab === "vendor_approvals" && (
                         <VendorApprovals currentUserEmail={currentUserEmail} />
+                    )}
+
+                    {activeTab === "factory_pause" && (
+                        <FactoryPause currentUserEmail={currentUserEmail} />
                     )}
 
                 </main>
