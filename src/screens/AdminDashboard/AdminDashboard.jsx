@@ -3732,7 +3732,13 @@ export default function AdminDashboard() {
                             "gm",
                             "assistant_cmo",
                         ]);
-                        const teamList = salespersonTable.filter(sp => STOCK_ELIGIBLE_ROLES.has(sp.role));
+                        // Roles that get scan-station assignment (the people who scan).
+                        const STATION_ELIGIBLE_ROLES = new Set(["warehouse", "scan_station"]);
+                        // Show anyone eligible for EITHER feature; each control is
+                        // guarded per row (stock toggle vs station dropdown).
+                        const teamList = salespersonTable.filter(
+                            sp => STOCK_ELIGIBLE_ROLES.has(sp.role) || STATION_ELIGIBLE_ROLES.has(sp.role)
+                        );
                         const canHaveStockPermission = (r) => STOCK_ELIGIBLE_ROLES.has(r);
                         return (
                         <div className="admin-clients-tab">
@@ -3774,9 +3780,7 @@ export default function AdminDashboard() {
                                             <th>Phone</th>
                                             <th>Email</th>
                                             <th style={{ textAlign: 'center' }}>Place Stock Orders</th>
-                                            {/* TEMP (prod): Assigned Stations column hidden — re-enable when scan flow is ready.
                                             <th>Assigned Stations</th>
-                                            */}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -3789,7 +3793,7 @@ export default function AdminDashboard() {
                                                     .some(v => String(v).toLowerCase().includes(q));
                                             }).sort((a, b) => (a.saleperson || "").localeCompare(b.saleperson || ""));
                                             if (list.length === 0) {
-                                                return <tr><td colSpan="7" className="no-data">No salespersons found</td></tr>;
+                                                return <tr><td colSpan="8" className="no-data">No salespersons found</td></tr>;
                                             }
                                             return list.map(sp => {
                                                 const checked = !!sp.can_place_stock_orders;
@@ -3825,7 +3829,6 @@ export default function AdminDashboard() {
                                                                 <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
                                                             )}
                                                         </td>
-                                                        {/* TEMP (prod): Assigned Stations cell hidden — re-enable when scan flow is ready.
                                                         <td>
                                                             {!showStations ? (
                                                                 <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
@@ -3865,7 +3868,6 @@ export default function AdminDashboard() {
                                                                 </div>
                                                             )}
                                                         </td>
-                                                        */}
                                                     </tr>
                                                 );
                                             });
