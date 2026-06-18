@@ -7,6 +7,8 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import ProductionHeadVendors from "../../components/ProductionHeadVendors";
+import "../../components/ProductionHeadVendors.css";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import CommsSourcingReturns from "./CommsSourcingReturns";
 import CommsReports from "./CommsReports";
@@ -221,6 +223,7 @@ export default function CommsDashboard() {
     { key: "pr_performance", label: "PR Performance" },
     { key: "order_calendar", label: "Order Calendar" },
     { key: "my_calendar", label: "My Calendar" },
+    { key: "vendors", label: "Vendor / External" },
   ];
 
   const renderStub = (label, items) => (
@@ -748,6 +751,10 @@ export default function CommsDashboard() {
               <h2 className="comms-section-title">My Calendar</h2>
               <CommsCalendar profile={profile} orders={orders} showPopup={showPopup} />
             </>
+          )}
+
+          {activeTab === "vendors" && (
+            <ProductionHeadVendors currentUserEmail={profile?.email} />
           )}
         </main>
       </div>

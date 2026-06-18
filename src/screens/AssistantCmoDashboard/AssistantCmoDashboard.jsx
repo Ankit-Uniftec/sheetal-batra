@@ -220,7 +220,9 @@ export default function AssistantCmoDashboard() {
       const [ordersRes, productsRes, profilesRes, consRes] = await Promise.all([
         fetchAllRows("orders", (q) => q.select(ORDER_COLUMNS).order("created_at", { ascending: false })),
         supabase.from("products").select("*").order("name", { ascending: true }),
-        supabase.from("profiles").select("id, full_name, phone, email, dob, loyalty_points, created_at"),
+        // Paginate profiles past Supabase's 1000-row cap — the client book is
+        // built from profiles, so a cap here silently dropped clients.
+        fetchAllRows("profiles", (q) => q.select("id, full_name, phone, email, dob, loyalty_points, created_at")),
         supabase.from("consignment_inventory").select("*"),
       ]);
       if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
@@ -813,11 +815,20 @@ export default function AssistantCmoDashboard() {
       return true;
     };
 
+    // Index each order under ONE key — its profile (user_id) when present,
+    // else a phone fallback for the rare order with no user_id. Keying by a
+    // single identity avoids the same client appearing twice (once by uid,
+    // once by phone). Exclude B2B / comms / stock — the book is retail clients,
+    // not vendor or internal-stock orders ("Internal Stock" is not a person).
     orders.forEach((o) => {
       if (!inDateRange(o)) return;
-      const phone = (o.delivery_phone || o.phone || "").trim();
-      if (phone) addToIndex(`phone:${phone}`, o);
-      if (o.user_id) addToIndex(`uid:${o.user_id}`, o);
+      if (o.is_b2b || o.is_comms || o.is_stock_order) return;
+      if (o.user_id) {
+        addToIndex(`uid:${o.user_id}`, o);
+      } else {
+        const phone = (o.delivery_phone || "").trim();
+        if (phone) addToIndex(`phone:${phone}`, o);
+      }
     });
 
     const all = profiles.map((p) => {

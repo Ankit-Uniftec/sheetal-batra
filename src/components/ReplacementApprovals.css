@@ -1,0 +1,14 @@
+.rpa-wrap { padding: 8px 4px; width: 100%; box-sizing: border-box; }
+.rpa-title { margin: 0 0 4px; color: #333; }
+.rpa-hint { margin: 0 0 18px; color: #888; font-size: 13px; }
+.rpa-section { margin: 18px 0 10px; font-size: 15px; color: #555; }
+.rpa-empty { color: #999; font-size: 14px; padding: 14px; background: #fafafa; border-radius: 8px; }
+.rpa-list { display: flex; flex-direction: column; gap: 10px; }
+.rpa-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px; background: #fff; border: 1px solid #eee; border-radius: 10px; }
+.rpa-line { display: flex; align-items: center; gap: 8px; }
+.rpa-bc { font-weight: 700; color: #222; font-family: monospace; }
+.rpa-meta { font-size: 12px; color: #777; margin-top: 3px; }
+.rpa-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.rpa-approve { padding: 7px 16px; background: #1e7e34; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+.rpa-reject { padding: 7px 16px; background: #fff; color: #c0392b; border: 1px solid #c0392b; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+.rpa-approve:disabled, .rpa-reject:disabled { opacity: 0.6; cursor: not-allowed; }

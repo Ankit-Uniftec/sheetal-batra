@@ -10,6 +10,9 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import VendorApprovals from "../../components/VendorApprovals";
+import FactoryPause from "../../components/FactoryPause";
+import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import {
@@ -342,6 +345,7 @@ export default function COODashboard() {
         const prev = prevDr ? filterByDate(orders, prevDr) : [];
 
         const totalRevenue = current.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const netSbRev = totalNetSbRevenue(current.filter(isRevenueOrder));
         const prevRevenue = prev.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalRefund = current.filter(o => o.refund_reason).reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const refundCount = current.filter(o => o.refund_reason).length;
@@ -391,7 +395,7 @@ export default function COODashboard() {
         const topColors = Object.values(colorMap).sort((a, b) => b.count - a.count).slice(0, 5);
 
         return {
-            totalRevenue, totalOrders: current.length,
+            totalRevenue, netSbRev, totalOrders: current.length,
             revenueGrowth: calcGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calcGrowth(current.length, prev.length),
             showComparison: comparison !== "none",
@@ -695,6 +699,8 @@ export default function COODashboard() {
                         <button className={`admin-nav-item ${activeTab === "financial" ? "active" : ""}`} onClick={() => { setActiveTab("financial"); setShowSidebar(false); }}>Financial</button>
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order Tracking</button>
+                        <button className={`admin-nav-item ${activeTab === "vendor_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("vendor_approvals"); setShowSidebar(false); }}>Vendor Approvals</button>
+                        <button className={`admin-nav-item ${activeTab === "factory_pause" ? "active" : ""}`} onClick={() => { setActiveTab("factory_pause"); setShowSidebar(false); }}>Factory Pause</button>
                     </nav>
                 </aside>
 
@@ -801,6 +807,7 @@ export default function COODashboard() {
                             <div className="admin-stats-grid">
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(brandStats.totalRevenue))}</span></div>
                                     {brandStats.showComparison && <span className={`stat-growth ${brandStats.revenueGrowth >= 0 ? "positive" : "negative"}`}>{brandStats.revenueGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(brandStats.revenueGrowth).toFixed(1)}%</span>}</div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Net SB Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(brandStats.netSbRev))}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Orders</span><span className="stat-value">{brandStats.totalOrders}</span></div>
                                     {brandStats.showComparison && <span className={`stat-growth ${brandStats.ordersGrowth >= 0 ? "positive" : "negative"}`}>{brandStats.ordersGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(brandStats.ordersGrowth).toFixed(1)}%</span>}</div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Refunds</span><span className="stat-value" style={{ color: '#c62828' }}>{brandStats.refundCount} ({"\u20B9"}{formatIndianNumber(Math.round(brandStats.totalRefund))})</span></div></div>
@@ -982,6 +989,14 @@ export default function COODashboard() {
                             </table></div></div>
                             {ordersTotalPages > 1 && (<div className="admin-pagination"><button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button><span>Page {ordersPage} of {ordersTotalPages}</span><button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button></div>)}
                         </div>
+                    )}
+
+                    {activeTab === "vendor_approvals" && (
+                        <VendorApprovals currentUserEmail={currentUserEmail} />
+                    )}
+
+                    {activeTab === "factory_pause" && (
+                        <FactoryPause currentUserEmail={currentUserEmail} />
                     )}
 
                 </main>

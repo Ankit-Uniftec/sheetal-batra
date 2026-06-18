@@ -7,6 +7,8 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import NotificationBell from "../../components/NotificationBell";
+import ProductionHeadVendors from "../../components/ProductionHeadVendors";
+import "../../components/ProductionHeadVendors.css";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -320,6 +322,7 @@ export default function B2bProductionDashboard() {
                         <a className={`prod-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
                         <a className={`prod-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders</a>
                         <a className={`prod-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
+                        <a className={`prod-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor / External</a>
                         <a className="prod-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
@@ -611,6 +614,13 @@ export default function B2bProductionDashboard() {
                             <div className="prod-profile-row"><span className="prod-plabel">Role</span><span className="prod-pvalue">B2B Production Head</span></div>
                             <div className="prod-profile-row"><span className="prod-plabel">Store</span><span className="prod-pvalue">{profile?.store_name || "N/A"}</span></div>
                         </div>
+                    </div>
+                )}
+
+                {/* ===== VENDOR / EXTERNAL (Production Head workspace) ===== */}
+                {activeTab === "vendors" && (
+                    <div className="prod-tab-wrapper">
+                        <ProductionHeadVendors currentUserEmail={profile?.email || user?.email} />
                     </div>
                 )}
             </div>

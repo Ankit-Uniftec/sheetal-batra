@@ -10,9 +10,13 @@ import { usePopup } from "../../../components/Popup";
 import NotificationBell from "../../../components/NotificationBell";
 import SearchByDropdown from "../../../components/SearchByDropdown";
 import ProductionOverrides from "../../../components/ProductionOverrides";
+import VendorRequest from "../../../components/VendorRequest";
+import ReplacementApprovals from "../../../components/ReplacementApprovals";
+import StageCountCards from "../../../components/StageCountCards";
+import Badge from "../../../components/Badge";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
-import { PRODUCTION_STAGES, getStageLabel, getStageColor } from "../../../utils/barcodeService";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS } from "../../../utils/barcodeService";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
@@ -141,7 +145,7 @@ export default function ProductionManagerDashboard() {
     const [channelFilter, setChannelFilter] = useState("all");
     const [statusTab, setStatusTab] = useState("all");
     const [sortBy, setSortBy] = useState("newest");
-    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "" });
+    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [] });
     const [openDropdown, setOpenDropdown] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const dropdownRef = useRef(null);
@@ -335,7 +339,15 @@ export default function ProductionManagerDashboard() {
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "" });
+    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [] });
+
+    // Clicking a stage-count card: scope the orders list to that one stage and
+    // jump to the All Orders tab (status reset to "all" so nothing else hides it).
+    const handleStageCardClick = (stageKey) => {
+        setFilters(prev => ({ ...prev, stage: [stageKey] }));
+        setStatusTab("all");
+        setActiveTab("orders");
+    };
 
     const appliedFilters = useMemo(() => {
         const chips = [];
@@ -347,6 +359,7 @@ export default function ProductionManagerDashboard() {
         filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p === "unpaid" ? "Unpaid (COD)" : p.charAt(0).toUpperCase() + p.slice(1) }));
         filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
         filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
+        filters.stage.forEach(k => chips.push({ type: "stage", value: k, label: STAGE_GROUPS.find(g => g.key === k)?.label || k }));
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
         return chips;
     }, [filters]);
@@ -743,6 +756,7 @@ export default function ProductionManagerDashboard() {
         if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
         if (filters.store.length > 0) result = result.filter(o => filters.store.includes(o.salesperson_store));
         if (filters.salesperson) result = result.filter(o => o.salesperson === filters.salesperson);
+        if (filters.stage.length > 0) result = result.filter(o => filters.stage.includes(getStageGroupKey(o.warehouse_stage)));
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
             const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
@@ -1155,6 +1169,8 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
+                            <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendors</a>
+                            <a className={`pm-menu-item ${activeTab === "replacements" ? "active" : ""}`} onClick={() => { setActiveTab("replacements"); setShowSidebar(false); }}>Replacement Approvals</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                             <a className={`pm-menu-item ${activeTab === "staff" ? "active" : ""}`} onClick={() => { setActiveTab("staff"); setShowSidebar(false); }}>Staff</a>
                             <a className={`pm-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>Profile</a>
@@ -1166,6 +1182,10 @@ export default function ProductionManagerDashboard() {
                         {/* ===== OVERVIEW TAB ===== */}
                         {activeTab === "overview" && (
                             <>
+                                {/* ===== ORDERS BY PRODUCTION STAGE (click a card to drill into the orders list) ===== */}
+                                <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Orders by Production Stage</p>
+                                <StageCountCards orders={orders} onStageClick={handleStageCardClick} />
+
                                 {/* ===== BUSINESS METRICS SECTION ===== */}
                                 <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Business Performance</p>
                                 <div className="pm-stats-row-3">
@@ -1477,6 +1497,23 @@ export default function ProductionManagerDashboard() {
                                         )}
                                     </div>
 
+                                    {/* Stage (10 V2 stages, by order's warehouse_stage) */}
+                                    <div style={{ position: "relative" }}>
+                                        <button className={`pm-filter-select ${filters.stage.length > 0 ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "stage" ? null : "stage")} style={{ cursor: "pointer" }}>Stage {"▾"}</button>
+                                        {openDropdown === "stage" && (
+                                            <div className="pm-dropdown-panel">
+                                                <div className="pm-dropdown-title">Production Stage</div>
+                                                {STAGE_GROUPS.map(g => (
+                                                    <label key={g.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
+                                                        <input type="checkbox" checked={filters.stage.includes(g.key)} onChange={() => toggleFilter("stage", g.key)} />
+                                                        <span>{g.label}</span>
+                                                    </label>
+                                                ))}
+                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* Salesperson */}
                                     <select className="pm-filter-select" value={filters.salesperson || ""} onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}>
                                         <option value="">All Salespersons</option>
@@ -1518,7 +1555,14 @@ export default function ProductionManagerDashboard() {
                                                     </div>
                                                     <div className="pm-oheader-actions">
                                                         <span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span>
-                                                        <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{order.status === "pending" ? "Order Received" : (order.status === "order_received" ? "Order Received" : (order.status || "Order Received"))}</div>
+                                                        {/* Show the live production stage (from warehouse_stage = slowest
+                                                            active component). Fall back to the order status badge only when
+                                                            there's no production stage yet (not started) or it's terminal. */}
+                                                        {getStageGroupKey(order.warehouse_stage) ? (
+                                                            <Badge color={getStageColor(order.warehouse_stage)}>{getStageLabel(order.warehouse_stage)}</Badge>
+                                                        ) : (
+                                                            <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{order.status === "pending" ? "Order Received" : (order.status === "order_received" ? "Order Received" : (order.status || "Order Received"))}</div>
+                                                        )}
                                                         {order.priority && <span className={`pm-priority-tag pm-priority-${order.priority}`}>{order.priority === "urgent" ? "🔴" : order.priority === "high" ? "🟠" : "🟢"} {order.priority}</span>}
                                                     </div>
                                                 </div>
@@ -2296,6 +2340,16 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "overrides" && (
                             <div className="pm-orders-tab">
                                 <ProductionOverrides currentUserEmail={currentUserEmail} />
+                            </div>
+                        )}
+                        {activeTab === "vendors" && (
+                            <div className="pm-orders-tab">
+                                <VendorRequest currentUserEmail={currentUserEmail} />
+                            </div>
+                        )}
+                        {activeTab === "replacements" && (
+                            <div className="pm-orders-tab">
+                                <ReplacementApprovals currentUserEmail={currentUserEmail} />
                             </div>
                         )}
                         {/* ===== STAFF TAB (no DB tables yet) ===== */}

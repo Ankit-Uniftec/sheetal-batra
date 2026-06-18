@@ -11,6 +11,9 @@ export const NOTIFICATION_TYPES = {
     QC_REWORK: "qc_rework",                     // #18
     ALTERATION_CREATED: "alteration_created",   // #19
     REJOURNEY_ALERT: "rejourney_alert",         // SA alert when their order's component goes to re-journey
+    QC_FAIL_ALERT: "qc_fail_alert",             // every QC fail → Production Head (per source) + Production Manager + Manish (COO)
+    REPLACEMENT_REQUESTED: "replacement_requested", // PH reports vendor failure → notify Production Manager
+    REPLACEMENT_APPROVED: "replacement_approved",   // PM approves → notify requesting PH + Manish (COO)
 
     // Scheduled triggers (created by cron)
     ORDER_DELAYED_T1: "order_delayed_t1",       // #14
@@ -88,13 +91,31 @@ const RECIPIENT_MAP = {
         { designation: "Offline Production Assistant", channel: "both" },
     ],
     [NOTIFICATION_TYPES.REJOURNEY_ALERT]: [
-        { designation: "Offline Production Head", channel: "in_app" },
-        // + SA who placed the order (added dynamically via extraRecipients)
+        // No hardcoded head here: the source-specific Production Head is added
+        // dynamically via extraRecipients (resolved from the source→head map),
+        // so B2B re-journeys go to Tara, store to Khushnuma, etc. — not a fixed
+        // "Offline Production Head". The SA is also added via extraRecipients.
     ],
     [NOTIFICATION_TYPES.QC_REWORK]: [
         { designation: "Production Manager", channel: "in_app" },
         { designation: "Offline Production Head", channel: "in_app" },
         { designation: "Offline Production Assistant", channel: "in_app" },
+    ],
+    // Every QC fail (Rule): Production Manager + COO (Manish). The order's
+    // source-specific Production Head is added dynamically via extraRecipients
+    // (resolved from the source→head map), since it varies per order.
+    [NOTIFICATION_TYPES.QC_FAIL_ALERT]: [
+        { designation: "Production Manager", channel: "in_app" },
+        { role: "coo", channel: "in_app" },   // Manish
+    ],
+    // PH reported a vendor failure → Production Manager approves it.
+    [NOTIFICATION_TYPES.REPLACEMENT_REQUESTED]: [
+        { designation: "Production Manager", channel: "in_app" },
+    ],
+    // PM approved a replacement journey → Manish (COO); the requesting PH is
+    // added dynamically via extraRecipients.
+    [NOTIFICATION_TYPES.REPLACEMENT_APPROVED]: [
+        { role: "coo", channel: "in_app" },   // Manish
     ],
     [NOTIFICATION_TYPES.ALTERATION_CREATED]: [
         { designation: "Offline Production Head", channel: "in_app" },
@@ -205,6 +226,22 @@ const TEMPLATES = {
     [NOTIFICATION_TYPES.QC_REWORK]: (meta) => ({
         title: "QC Issue — Rework Required",
         message: `Rework post client delivery — ${meta.order_no}`,
+        priority: "urgent",
+    }),
+    [NOTIFICATION_TYPES.QC_FAIL_ALERT]: (meta) => ({
+        // Urgent orders are highlighted separately (escalation priority + 🔥 prefix).
+        title: meta.is_urgent ? "🔥 URGENT Order — QC Failed" : "QC Failed",
+        message: `${meta.is_urgent ? "🔥 URGENT — " : ""}${meta.which_qc === "final" ? "Final QC" : "QC 1"} failed: ${meta.component_label || "Component"} (${meta.barcode}) — ${meta.outcome || "fail"}. Order ${meta.order_no}. Reason: ${meta.fail_reason || "—"}`,
+        priority: meta.is_urgent ? "escalation" : "urgent",
+    }),
+    [NOTIFICATION_TYPES.REPLACEMENT_REQUESTED]: (meta) => ({
+        title: "Replacement Requested — Vendor Failure",
+        message: `${meta.barcode || "Component"} reported ${meta.failure_type || "damaged"} at vendor${meta.vendor_name ? ` (${meta.vendor_name})` : ""}. Order ${meta.order_no}. Awaiting your approval. Loss: ₹${meta.cost_loss || 0}`,
+        priority: "urgent",
+    }),
+    [NOTIFICATION_TYPES.REPLACEMENT_APPROVED]: (meta) => ({
+        title: "Replacement Journey Approved",
+        message: `${meta.barcode || "Component"} (Order ${meta.order_no}) reset to Cloth Issue after vendor failure. Loss ₹${meta.cost_loss || 0} booked against ${meta.vendor_name || "vendor"}.`,
         priority: "urgent",
     }),
     [NOTIFICATION_TYPES.ALTERATION_CREATED]: (meta) => ({

@@ -1,0 +1,15 @@
+.fp-wrap { padding: 8px 4px; max-width: 640px; }
+.fp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.fp-title { margin: 0; color: #333; }
+.fp-hint { margin: 0 0 20px; color: #888; font-size: 13px; }
+.fp-muted { color: #999; }
+.fp-card { background: #fff; border: 1px solid #ece3cf; border-radius: 12px; padding: 20px; }
+.fp-card-paused { border-color: #f3c4c0; background: #fff8f7; }
+.fp-row { display: flex; gap: 10px; padding: 4px 0; font-size: 14px; }
+.fp-label { min-width: 90px; font-weight: 600; color: #777; }
+.fp-field-label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #555; }
+.fp-input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; resize: vertical; }
+.fp-input:focus { outline: none; border-color: #b8985a; }
+.fp-pause { margin-top: 16px; padding: 11px 22px; background: #c0392b; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+.fp-resume { margin-top: 16px; padding: 11px 22px; background: #1e7e34; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+.fp-pause:disabled, .fp-resume:disabled { opacity: 0.6; cursor: not-allowed; }

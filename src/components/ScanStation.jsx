@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { usePopup } from "../components/Popup";
 import { supabase } from "../lib/supabaseClient";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
@@ -16,6 +16,8 @@ import {
     REJOURNEY_STAGES,
     getStageLabel,
     getStageColor,
+    getStageTextColor,
+    fetchApprovedVendors,
 } from "../utils/barcodeService";
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
@@ -130,15 +132,22 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     const [scanHistory, setScanHistory] = useState([]);
     const [isProcessing, setIsProcessing] = useState(false);
 
+    // Debounce: ignore the SAME barcode re-scanned within this window, so an
+    // accidental double-tap can't immediately scan-out a stage it just
+    // scanned-in. Tracks { barcode, ts } of the last accepted scan.
+    const lastScanRef = useRef({ barcode: null, ts: 0 });
+    const SCAN_DEBOUNCE_MS = 1000;
+
     // Component detail view
     const [selectedComponent, setSelectedComponent] = useState(null);
     const [componentHistory, setComponentHistory] = useState([]);
     const [orderComponents, setOrderComponents] = useState([]);
 
-    // QC popup
+    // QC popup. `qcStage` distinguishes QC 1 ("qc1") from Final QC ("final").
     const [qcPopup, setQcPopup] = useState({
         isOpen: false,
         barcode: "",
+        qcStage: "qc1",
         failReason: "",
         outcome: "",
         rejourneyStage: "",
@@ -154,6 +163,14 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         vendorName: "",
         vendorLocation: "",
     });
+
+    // Approved vendors — for the Security Gate exit vendor dropdown.
+    const [approvedVendors, setApprovedVendors] = useState([]);
+    useEffect(() => {
+        fetchApprovedVendors()
+            .then((v) => setApprovedVendors(v || []))
+            .catch((e) => console.error("Failed to load approved vendors:", e));
+    }, []);
 
     // Activation popup (Step 2 — Production Head activates components)
     const [activationPopup, setActivationPopup] = useState({
@@ -195,8 +212,23 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             return;
         }
 
+        // Debounce identical rapid scans (accidental double-tap). Same barcode
+        // within SCAN_DEBOUNCE_MS is ignored so it can't in-then-out instantly.
+        const now = Date.now();
+        if (
+            lastScanRef.current.barcode === barcode &&
+            now - lastScanRef.current.ts < SCAN_DEBOUNCE_MS
+        ) {
+            return;
+        }
+        lastScanRef.current = { barcode, ts: now };
+
         setIsProcessing(true);
         setScanResult(null);
+        // Hold the processing/loading state for a brief minimum so every scan
+        // visibly registers (worker sees a ~1s loading) and double-taps don't
+        // race through.
+        const scanStartedAt = now;
 
         try {
             const station = SCAN_STATIONS.find(s => s.value === selectedStation);
@@ -215,27 +247,32 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 return;
             }
 
-            // QC station — show pass/fail popup.
-            // record_qc_result requires the component to already be at
-            // qc_in_progress, so if the worker scanned a piece coming from
-            // finishing_completed (the normal forward path), advance it to
-            // qc_in_progress first. If it's already at qc_in_progress (e.g.
-            // they re-scanned after dismissing the popup), skip the advance.
-            if (selectedStation === "qc") {
+            // QC stations — show pass/fail popup. There are two QC stations:
+            //   "qc"       → QC 1 (after Embroidery)  → enters qc_in_progress
+            //   "final_qc" → QC 2 (before Packaging)  → enters final_qc_in_progress
+            // record_qc_result requires the component to already be at the
+            // matching *_in_progress stage, so advance it there first if the
+            // worker scanned a piece arriving from the prior stage. If it's
+            // already in-progress (e.g. re-scan after dismissing the popup),
+            // skip the advance.
+            if (selectedStation === "qc" || selectedStation === "final_qc") {
+                const isFinalQc = selectedStation === "final_qc";
+                const entryStage = isFinalQc ? "final_qc_in_progress" : "qc_in_progress";
+                const stationLabel = isFinalQc ? "Final QC" : "QC 1";
                 let component = await fetchComponentByBarcode(barcode);
 
-                if (component.current_stage !== "qc_in_progress") {
+                if (component.current_stage !== entryStage) {
                     try {
                         await advanceComponentStage(
                             barcode,
-                            "qc_in_progress",
+                            entryStage,
                             currentUserEmail,
-                            "Quality Check",
+                            stationLabel,
                             null,
                             "scan"
                         );
                         // Refresh local copy so the popup sees the new stage
-                        component = { ...component, current_stage: "qc_in_progress" };
+                        component = { ...component, current_stage: entryStage };
                     } catch (advanceErr) {
                         const rawMsg = advanceErr?.message || "";
                         setScanResult({
@@ -252,6 +289,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 setQcPopup({
                     isOpen: true,
                     barcode,
+                    qcStage: isFinalQc ? "final" : "qc1",
                     failReason: "",
                     outcome: "",
                     rejourneyStage: "",
@@ -457,6 +495,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             });
         }
 
+        // Enforce a brief minimum loading window (~1s) so every scan visibly
+        // registers and rapid double-taps can't race through.
+        const elapsed = Date.now() - scanStartedAt;
+        if (elapsed < SCAN_DEBOUNCE_MS) {
+            await new Promise((r) => setTimeout(r, SCAN_DEBOUNCE_MS - elapsed));
+        }
         setIsProcessing(false);
     }, [selectedStation, isProcessing, currentUserEmail, packagingPopup]);
 
@@ -483,6 +527,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     barcode: qcPopup.barcode,
                     result: "pass",
                     inspectedBy: currentUserEmail,
+                    whichQc: qcPopup.qcStage || "qc1",
                 });
 
                 if (result.success) {
@@ -523,6 +568,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 barcode: qcPopup.barcode,
                 result: "fail",
                 inspectedBy: currentUserEmail,
+                whichQc: qcPopup.qcStage || "qc1",
                 failReason: qcPopup.failReason,
                 outcome: qcPopup.outcome,
                 rejourneyToStage: qcPopup.rejourneyStage || null,
@@ -551,26 +597,60 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     });
                 }
 
-                // Notify SA who placed the order
+                // QC-fail notifications. Rule: EVERY QC fail alerts the
+                // Production Head (per order source) + Production Manager +
+                // Manish (COO). Urgent orders are highlighted separately.
+                // Re-journey additionally notifies the SA who placed the order.
                 try {
                     const { sendNotification, NOTIFICATION_TYPES } = await import("../utils/notificationService");
                     const comp = await fetchComponentByBarcode(qcPopup.barcode);
                     const saEmail = comp?.orders?.salesperson_email || comp?.orders?.salesperson;
 
-                    await sendNotification(NOTIFICATION_TYPES.REJOURNEY_ALERT, {
+                    // Resolve the order's source-specific Production Head email.
+                    let headEmail = null;
+                    try {
+                        const { data: he } = await supabase.rpc("get_production_head_email", { p_order_id: comp.order_id });
+                        headEmail = he || null;
+                    } catch (e) { /* map not deployed yet — fall back to map designations */ }
+
+                    const extra = [];
+                    if (headEmail) extra.push({ email: headEmail.toLowerCase(), channel: "in_app" });
+                    if (saEmail) extra.push({ email: saEmail.toLowerCase(), channel: "in_app" });
+
+                    // 1) Always: QC fail alert to PH + PM + Manish (+ SA)
+                    await sendNotification(NOTIFICATION_TYPES.QC_FAIL_ALERT, {
                         orderId: comp.order_id,
                         orderNo: comp.order_no,
                         metadata: {
                             barcode: qcPopup.barcode,
+                            which_qc: qcPopup.qcStage || "qc1",
                             component_label: selectedComponent?.component_label || selectedComponent?.component_type,
-                            rejourney_stage: getStageLabel(qcPopup.rejourneyStage),
+                            outcome: qcPopup.outcome,
                             fail_reason: qcPopup.failReason,
-                            rejourney_count: result.rejourney_count,
+                            is_urgent: !!result.is_urgent,
                         },
-                        extraRecipients: saEmail ? [{ email: saEmail.toLowerCase(), channel: "in_app" }] : [],
+                        extraRecipients: extra,
                     });
+
+                    // 2) Re-journey only: SA-facing re-journey alert. The
+                    //    source-specific Production Head + SA are passed as
+                    //    extraRecipients (the map no longer hardcodes a head).
+                    if (qcPopup.outcome === "rejourney" || qcPopup.outcome === "rework") {
+                        await sendNotification(NOTIFICATION_TYPES.REJOURNEY_ALERT, {
+                            orderId: comp.order_id,
+                            orderNo: comp.order_no,
+                            metadata: {
+                                barcode: qcPopup.barcode,
+                                component_label: selectedComponent?.component_label || selectedComponent?.component_type,
+                                rejourney_stage: getStageLabel(qcPopup.rejourneyStage),
+                                fail_reason: qcPopup.failReason,
+                                rejourney_count: result.rejourney_count,
+                            },
+                            extraRecipients: extra,  // source-resolved head + SA
+                        });
+                    }
                 } catch (notifErr) {
-                    console.error("Re-journey notification failed:", notifErr);
+                    console.error("QC-fail notification failed:", notifErr);
                 }
 
                 setTodayStats(prev => ({ ...prev, scanned: prev.scanned + 1, failed: prev.failed + 1 }));
@@ -670,8 +750,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             );
 
             if (result.success) {
-                // All verified — advance all to packaging_dispatch
+                // All verified — advance each component through packaging_dispatch
+                // and on to dispatched. Once every active component is dispatched,
+                // the sync_order_warehouse_stage trigger auto-completes the order
+                // (SA sees "Order Ready & Dispatched"). V2 Stage 10.
                 for (const barcode of packagingPopup.scannedBarcodes) {
+                    // Step into Packaging & Dispatch (records the packaging step)
                     await advanceComponentStage(
                         barcode,
                         "packaging_dispatch",
@@ -680,18 +764,53 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         "Packaging verified",
                         "scan"
                     );
+                    // Then dispatch it (completes the journey)
+                    await advanceComponentStage(
+                        barcode,
+                        "dispatched",
+                        currentUserEmail,
+                        "Packaging Station",
+                        "Dispatched",
+                        "scan"
+                    );
                 }
 
                 setScanResult({
                     success: true,
-                    message: `All ${result.verified_count} components verified — ready for dispatch!`,
+                    message: `All ${result.verified_count} components dispatched — order complete!`,
                     data: result,
                 });
             } else {
+                // Build a detailed mismatch message (Additional Rule 3): for a
+                // WRONG/extra barcode, show which order+component it belongs to
+                // and its last location; for MISSING expected components, show
+                // their last recorded stage/location.
+                let detailMsg = result.message || "Scanned components do not match order";
+                const extras = Array.isArray(result.extra_details) ? result.extra_details : [];
+                const missing = Array.isArray(result.missing_details) ? result.missing_details : [];
+
+                if (extras.length > 0) {
+                    detailMsg += "\n\nWrong item(s) scanned:";
+                    extras.forEach((e) => {
+                        detailMsg += `\n• ${e.barcode} belongs to order ${e.belongs_to_order_no || "UNKNOWN"}` +
+                            (e.component_label ? ` (${e.component_label})` : "") +
+                            (e.current_stage ? ` — currently at ${getStageLabel(e.current_stage)}` : "") +
+                            (e.location ? `, ${e.location}` : "");
+                    });
+                }
+                if (missing.length > 0) {
+                    detailMsg += "\n\nNot yet scanned (expected for this order):";
+                    missing.forEach((m) => {
+                        detailMsg += `\n• ${m.barcode}` + (m.component_label ? ` (${m.component_label})` : "") +
+                            (m.last_stage ? ` — last at ${getStageLabel(m.last_stage)}` : "") +
+                            (m.location ? `, ${m.location}` : "");
+                    });
+                }
+
                 setScanResult({
                     success: false,
                     error: result.error,
-                    message: result.message,
+                    message: detailMsg,
                     data: result,
                 });
             }
@@ -840,10 +959,13 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                 {scanResult.success ? "\u2713" : "\u2717"}
                             </div>
                             <div className="wd-scan-result-body">
-                                <p className="wd-scan-result-msg">
+                                <p className="wd-scan-result-msg" style={{ whiteSpace: "pre-line" }}>
                                     {scanResult.success
                                         ? prettifyStageMessage(scanResult.message)
-                                        : buildFriendlyScanError(scanResult.message)}
+                                        : scanResult.error === "COMPONENT_MISMATCH"
+                                            // Already a detailed, multi-line mismatch message — show as-is.
+                                            ? scanResult.message
+                                            : buildFriendlyScanError(scanResult.message)}
                                 </p>
                                 {scanResult.data?.barcode && (
                                     <p className="wd-scan-result-barcode">{scanResult.data.barcode}</p>
@@ -902,7 +1024,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                         <div className="wd-scan-history-right">
                                             <span
                                                 className="wd-scan-history-stage"
-                                                style={{ backgroundColor: getStageColor(scan.toStage) }}
+                                                style={{ backgroundColor: getStageColor(scan.toStage), color: getStageTextColor(scan.toStage) }}
                                             >
                                                 {getStageLabel(scan.toStage)}
                                             </span>
@@ -942,7 +1064,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                 <span className="wd-detail-label">Current Stage</span>
                                 <span
                                     className="wd-stage-badge"
-                                    style={{ backgroundColor: getStageColor(selectedComponent.current_stage) }}
+                                    style={{ backgroundColor: getStageColor(selectedComponent.current_stage), color: getStageTextColor(selectedComponent.current_stage) }}
                                 >
                                     {getStageLabel(selectedComponent.current_stage)}
                                 </span>
@@ -998,7 +1120,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                             <span className="wd-sibling-label">{comp.component_label || comp.component_type}</span>
                                             <span
                                                 className="wd-stage-badge wd-stage-badge-sm"
-                                                style={{ backgroundColor: getStageColor(comp.current_stage) }}
+                                                style={{ backgroundColor: getStageColor(comp.current_stage), color: getStageTextColor(comp.current_stage) }}
                                             >
                                                 {getStageLabel(comp.current_stage)}
                                             </span>
@@ -1173,13 +1295,32 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         {securityPopup.scanType === "exit" ? (
                             <>
                                 <div className="wd-form-group">
-                                    <label>Vendor Name *</label>
-                                    <input
-                                        type="text"
+                                    <label>Vendor *</label>
+                                    <select
                                         value={securityPopup.vendorName}
-                                        onChange={e => setSecurityPopup(prev => ({ ...prev, vendorName: e.target.value }))}
-                                        placeholder="e.g. Dye Works Pvt Ltd"
-                                    />
+                                        onChange={e => {
+                                            const name = e.target.value;
+                                            const v = approvedVendors.find(av => av.vendor_name === name);
+                                            setSecurityPopup(prev => ({
+                                                ...prev,
+                                                vendorName: name,
+                                                // Auto-fill location from the chosen vendor (still editable below).
+                                                vendorLocation: v?.vendor_location || prev.vendorLocation,
+                                            }));
+                                        }}
+                                    >
+                                        <option value="">Select vendor…</option>
+                                        {approvedVendors.map(v => (
+                                            <option key={v.id} value={v.vendor_name}>
+                                                {v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {approvedVendors.length === 0 && (
+                                        <p style={{ fontSize: 11, color: "#c0392b", marginTop: 4 }}>
+                                            No approved vendors. The Production Head must configure them first.
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="wd-form-group">
                                     <label>Vendor Location</label>

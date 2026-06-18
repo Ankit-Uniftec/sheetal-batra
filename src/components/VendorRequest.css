@@ -1,0 +1,20 @@
+.vr-wrap { max-width: 720px; padding: 8px 4px; }
+.vr-title { margin: 0 0 4px; color: #333; }
+.vr-hint { margin: 0 0 20px; color: #888; font-size: 13px; }
+.vr-card { background: #fff; border: 1px solid #ece3cf; border-radius: 12px; padding: 20px; margin-bottom: 8px; }
+.vr-section { margin: 18px 0 10px; font-size: 15px; color: #555; }
+.vr-label { display: block; margin: 12px 0 6px; font-weight: 600; font-size: 13px; color: #555; }
+.vr-input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+.vr-input:focus { outline: none; border-color: #b8985a; }
+.vr-submit { margin-top: 18px; width: 100%; padding: 12px; background: #b8985a; color: #fff; border: none; border-radius: 8px; font-weight: 700; font-size: 15px; cursor: pointer; }
+.vr-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.vr-list { display: flex; flex-direction: column; gap: 8px; }
+.vr-empty { color: #999; font-size: 14px; }
+.vr-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border: 1px solid #eee; border-radius: 10px; background: #fff; }
+.vr-info { display: flex; flex-direction: column; gap: 2px; }
+.vr-name { font-weight: 600; color: #222; }
+.vr-loc { font-size: 12px; color: #777; }
+.vr-status { font-size: 12px; font-weight: 700; text-transform: uppercase; padding: 4px 12px; border-radius: 12px; }
+.vr-status-approved { background: #e6f4ea; color: #1e7e34; }
+.vr-status-pending { background: #fff4e5; color: #b8860b; }
+.vr-status-rejected { background: #fdecea; color: #c0392b; }

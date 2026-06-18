@@ -21,6 +21,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
+import { totalNetSbRevenue } from "../../utils/exhibitionService";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -358,7 +359,9 @@ export default function AdminDashboard() {
                 supabase.from("products").select("*").order("name", { ascending: true }),
                 supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders, assigned_stations"),
                 supabase.from("vendors").select("*"),
-                supabase.from("profiles").select("id, full_name, phone, email, created_at"),
+                // Paginate past Supabase's 1000-row cap — the client book is
+                // built from profiles, so a cap here silently dropped clients.
+                fetchAllRows("profiles", (q) => q.select("id, full_name, phone, email, created_at")),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data);
             if (productsRes.data) setProducts(productsRes.data);
@@ -756,6 +759,7 @@ export default function AdminDashboard() {
         const previousOrders = comparisonRange ? filterOrdersByDateRange(nonCommsOrders, comparisonRange) : [];
 
         const totalRevenue = currentOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
         const totalOrders = currentOrders.length;
         const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
@@ -770,7 +774,7 @@ export default function AdminDashboard() {
         const prevCancelledOrders = previousOrders.filter(o => o.status === "cancelled").length;
 
         return {
-            totalRevenue, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
+            totalRevenue, netSbRev, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
             revenueGrowth: calculateGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calculateGrowth(totalOrders, prevTotalOrders),
             pendingGrowth: calculateGrowth(pendingOrders, prevPendingOrders),
@@ -1594,10 +1598,18 @@ export default function AdminDashboard() {
                 entry.lastOrderAt = order.created_at;
             }
         };
+        // Index each order under ONE key — user_id when present, else a phone
+        // fallback — so a client never appears twice. Exclude B2B and internal
+        // stock orders ("Internal Stock" is not a real client; comms already
+        // excluded via nonCommsOrders).
         nonCommsOrders.forEach((o) => {
-            const phone = (o.delivery_phone || o.phone || "").trim();
-            if (phone) addToIndex(`phone:${phone}`, o);
-            if (o.user_id) addToIndex(`uid:${o.user_id}`, o);
+            if (o.is_b2b || o.is_stock_order) return;
+            if (o.user_id) {
+                addToIndex(`uid:${o.user_id}`, o);
+            } else {
+                const phone = (o.delivery_phone || "").trim();
+                if (phone) addToIndex(`phone:${phone}`, o);
+            }
         });
 
         // Walk profiles. For each one, look up its orders by user_id then phone.
@@ -2061,6 +2073,10 @@ export default function AdminDashboard() {
                                     <span className="stat-label">Total Revenue</span>
                                     <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue)}</span>
                                     {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Net SB Revenue</span>
+                                    <span className="stat-value">₹{formatIndianNumber(Math.round(dashboardStats.netSbRev))}</span>
                                 </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Total Orders</span>
@@ -3716,7 +3732,13 @@ export default function AdminDashboard() {
                             "gm",
                             "assistant_cmo",
                         ]);
-                        const teamList = salespersonTable.filter(sp => STOCK_ELIGIBLE_ROLES.has(sp.role));
+                        // Roles that get scan-station assignment (the people who scan).
+                        const STATION_ELIGIBLE_ROLES = new Set(["warehouse", "scan_station"]);
+                        // Show anyone eligible for EITHER feature; each control is
+                        // guarded per row (stock toggle vs station dropdown).
+                        const teamList = salespersonTable.filter(
+                            sp => STOCK_ELIGIBLE_ROLES.has(sp.role) || STATION_ELIGIBLE_ROLES.has(sp.role)
+                        );
                         const canHaveStockPermission = (r) => STOCK_ELIGIBLE_ROLES.has(r);
                         return (
                         <div className="admin-clients-tab">
@@ -3758,9 +3780,7 @@ export default function AdminDashboard() {
                                             <th>Phone</th>
                                             <th>Email</th>
                                             <th style={{ textAlign: 'center' }}>Place Stock Orders</th>
-                                            {/* TEMP (prod): Assigned Stations column hidden — re-enable when scan flow is ready.
                                             <th>Assigned Stations</th>
-                                            */}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -3773,7 +3793,7 @@ export default function AdminDashboard() {
                                                     .some(v => String(v).toLowerCase().includes(q));
                                             }).sort((a, b) => (a.saleperson || "").localeCompare(b.saleperson || ""));
                                             if (list.length === 0) {
-                                                return <tr><td colSpan="7" className="no-data">No salespersons found</td></tr>;
+                                                return <tr><td colSpan="8" className="no-data">No salespersons found</td></tr>;
                                             }
                                             return list.map(sp => {
                                                 const checked = !!sp.can_place_stock_orders;
@@ -3809,7 +3829,6 @@ export default function AdminDashboard() {
                                                                 <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
                                                             )}
                                                         </td>
-                                                        {/* TEMP (prod): Assigned Stations cell hidden — re-enable when scan flow is ready.
                                                         <td>
                                                             {!showStations ? (
                                                                 <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
@@ -3849,7 +3868,6 @@ export default function AdminDashboard() {
                                                                 </div>
                                                             )}
                                                         </td>
-                                                        */}
                                                     </tr>
                                                 );
                                             });

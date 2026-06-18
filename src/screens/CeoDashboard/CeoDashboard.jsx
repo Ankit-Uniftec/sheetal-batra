@@ -10,6 +10,8 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import ExhibitionApprovals from "../../components/ExhibitionApprovals";
+import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
@@ -503,6 +505,7 @@ export default function CEODashboard() {
         const previousOrders = comparisonRange ? filterOrdersByDateRange(orders, comparisonRange) : [];
 
         const totalRevenue = currentOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
         const totalOrders = currentOrders.length;
         const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
@@ -517,7 +520,7 @@ export default function CEODashboard() {
         const prevCancelledOrders = previousOrders.filter(o => o.status === "cancelled").length;
 
         return {
-            totalRevenue, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
+            totalRevenue, netSbRev, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
             revenueGrowth: calculateGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calculateGrowth(totalOrders, prevTotalOrders),
             pendingGrowth: calculateGrowth(pendingOrders, prevPendingOrders),
@@ -1720,6 +1723,7 @@ export default function CEODashboard() {
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
+                        <button className={`admin-nav-item ${activeTab === "exhibition_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("exhibition_approvals"); setShowSidebar(false); }}>Exhibition Approvals</button>
                         {/* <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button> */}
                     </nav>
                 </aside>
@@ -1766,6 +1770,10 @@ export default function CEODashboard() {
                                     <span className="stat-label">Total Revenue</span>
                                     <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue)}</span>
                                     {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
+                                </div>
+                                <div className="admin-stat-card overview-card">
+                                    <span className="stat-label">Net SB Revenue</span>
+                                    <span className="stat-value">₹{formatIndianNumber(Math.round(dashboardStats.netSbRev))}</span>
                                 </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Total Orders</span>
@@ -3402,6 +3410,10 @@ export default function CEODashboard() {
                     {/* ═══════════════════════════════════════════════════ */}
                     {/* CLIENTS TAB */}
                     {/* ═══════════════════════════════════════════════════ */}
+
+                    {activeTab === "exhibition_approvals" && (
+                        <ExhibitionApprovals currentUserEmail={currentUserEmail} />
+                    )}
 
                 </main>
             </div>

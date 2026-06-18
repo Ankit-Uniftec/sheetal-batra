@@ -444,6 +444,25 @@ export default function ReviewDetail() {
       orderDataToInsert.sb_representative_name = sbRepName.trim();
     }
 
+    // Link the order to the Active Exhibition it was started from (point 5),
+    // and store Net SB Revenue (point 6): gross × (1 − commission%/100), computed
+    // once here so managerial dashboards can read it without re-deriving.
+    // The exhibitionOrder session blob is set by ExhibitionPanel's "+ New Order".
+    try {
+      const exbCtx = JSON.parse(sessionStorage.getItem("exhibitionOrder") || "null");
+      if (exbCtx?.exhibition_id) {
+        orderDataToInsert.exhibition_id = exbCtx.exhibition_id;
+        // Backfill EXB metadata from the chosen exhibition if not typed in.
+        if (!orderDataToInsert.exb_name && exbCtx.exhibition_name) orderDataToInsert.exb_name = exbCtx.exhibition_name;
+        if (!orderDataToInsert.sb_representative_name && exbCtx.sb_representative) orderDataToInsert.sb_representative_name = exbCtx.sb_representative;
+
+        // Net SB Revenue off the order's headline value (net payable / grand total).
+        const gross = Number(orderDataToInsert.net_total ?? orderDataToInsert.grand_total_after_discount ?? orderDataToInsert.grand_total ?? 0) || 0;
+        const split = Number(exbCtx.commission_split) || 0;
+        orderDataToInsert.net_sb_revenue = Math.round(gross * (1 - split / 100));
+      }
+    } catch { /* ignore malformed session */ }
+
     // STOCK ORDER FLAG — propagate to the row so dashboards can filter on it.
     if (isStockOrder) {
       orderDataToInsert.is_stock_order = true;
@@ -537,6 +556,9 @@ export default function ReviewDetail() {
     // ✅ ORDER PERSISTED — from this point on, never allow another insert attempt
     // for this component instance. The lock will not be released by `finally` below.
     orderInsertSucceeded = true;
+
+    // Clear the exhibition-order context so it doesn't leak into the next order.
+    sessionStorage.removeItem("exhibitionOrder");
 
     // 4.5️⃣ GENERATE ORDER COMPONENTS (for barcode tracking)
     try {

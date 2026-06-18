@@ -1,0 +1,75 @@
+.exb-wrap { padding: 8px 4px; width: 100%; box-sizing: border-box; }
+
+.exb-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px; flex-wrap: wrap; gap: 12px;
+}
+.exb-title { margin: 0; color: #333; }
+.exb-new-btn {
+  padding: 10px 18px; background: #b8985a; color: #fff; border: none;
+  border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px;
+}
+
+.exb-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px; margin-bottom: 22px;
+}
+.exb-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 16px; background: #fff; border: 1px solid #ececec;
+  border-radius: 12px;
+}
+.exb-card-val { font-size: 24px; font-weight: 800; color: #6b5a2e; }
+.exb-card-lbl { font-size: 12px; font-weight: 600; color: #777; }
+
+.exb-list { display: flex; flex-direction: column; gap: 10px; }
+.exb-empty { color: #999; font-size: 14px; padding: 16px; background: #fafafa; border-radius: 8px; }
+.exb-row {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 14px 16px; background: #fff; border: 1px solid #eee; border-radius: 10px; gap: 12px;
+}
+.exb-row-name { font-weight: 700; color: #222; font-size: 15px; }
+.exb-row-meta { font-size: 12px; color: #777; margin-top: 2px; }
+.exb-row-reject { font-size: 12px; color: #c0392b; margin-top: 4px; }
+.exb-row-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.exb-row-btns { display: flex; gap: 8px; }
+.exb-edit-btn {
+  padding: 5px 14px; background: #fff; color: #6b5a2e; border: 1px solid #d8c9a4;
+  border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.exb-order-btn {
+  padding: 5px 14px; background: #b8985a; color: #fff; border: none;
+  border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+
+/* Modal */
+.exb-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+}
+.exb-modal {
+  background: #fff; border-radius: 14px; padding: 24px; width: 100%; max-width: 560px;
+  max-height: 90vh; overflow-y: auto;
+}
+.exb-modal-title { margin: 0 0 6px; color: #333; }
+.exb-edit-note { margin: 0 0 14px; font-size: 12px; color: #b8860b; }
+.exb-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.exb-field { display: flex; flex-direction: column; gap: 5px; }
+.exb-label { font-size: 12px; font-weight: 600; color: #555; }
+.exb-req { color: #c0392b; }
+.exb-input {
+  padding: 9px 11px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box;
+}
+.exb-input:focus { outline: none; border-color: #b8985a; }
+.exb-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.exb-cancel-btn {
+  padding: 10px 18px; background: #fff; color: #555; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; font-weight: 600;
+}
+.exb-submit-btn {
+  padding: 10px 18px; background: #b8985a; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 700;
+}
+.exb-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .exb-form-grid { grid-template-columns: 1fr; }
+}
