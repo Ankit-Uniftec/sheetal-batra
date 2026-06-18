@@ -359,7 +359,9 @@ export default function AdminDashboard() {
                 supabase.from("products").select("*").order("name", { ascending: true }),
                 supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders, assigned_stations"),
                 supabase.from("vendors").select("*"),
-                supabase.from("profiles").select("id, full_name, phone, email, created_at"),
+                // Paginate past Supabase's 1000-row cap — the client book is
+                // built from profiles, so a cap here silently dropped clients.
+                fetchAllRows("profiles", (q) => q.select("id, full_name, phone, email, created_at")),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data);
             if (productsRes.data) setProducts(productsRes.data);
@@ -1596,10 +1598,18 @@ export default function AdminDashboard() {
                 entry.lastOrderAt = order.created_at;
             }
         };
+        // Index each order under ONE key — user_id when present, else a phone
+        // fallback — so a client never appears twice. Exclude B2B and internal
+        // stock orders ("Internal Stock" is not a real client; comms already
+        // excluded via nonCommsOrders).
         nonCommsOrders.forEach((o) => {
-            const phone = (o.delivery_phone || o.phone || "").trim();
-            if (phone) addToIndex(`phone:${phone}`, o);
-            if (o.user_id) addToIndex(`uid:${o.user_id}`, o);
+            if (o.is_b2b || o.is_stock_order) return;
+            if (o.user_id) {
+                addToIndex(`uid:${o.user_id}`, o);
+            } else {
+                const phone = (o.delivery_phone || "").trim();
+                if (phone) addToIndex(`phone:${phone}`, o);
+            }
         });
 
         // Walk profiles. For each one, look up its orders by user_id then phone.
