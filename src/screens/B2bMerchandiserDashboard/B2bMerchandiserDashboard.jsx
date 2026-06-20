@@ -301,6 +301,18 @@ export default function B2bMerchandiserDashboard() {
                 }
             }
 
+            // On approval the B2B order enters the warehouse — generate its
+            // barcode components. Idempotent (no-op if already generated) and
+            // non-blocking so a barcode failure never breaks approval.
+            if (newStatus === "approved") {
+                try {
+                    const { ensureOrderComponents } = await import("../../utils/barcodeService");
+                    await ensureOrderComponents(order);
+                } catch (compErr) {
+                    console.warn("B2B barcode generation skipped:", compErr.message);
+                }
+            }
+
             // Send notification for rejected orders
             if (newStatus === "rejected") {
                 sendNotification(NOTIFICATION_TYPES.B2B_ORDER_REJECTED, {

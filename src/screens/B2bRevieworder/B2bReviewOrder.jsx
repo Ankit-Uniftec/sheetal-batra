@@ -248,6 +248,22 @@ export default function B2bReviewOrder() {
 
                 resultOrderNo = updatedOrder.order_no;
 
+                // Merchandiser edits stay approved, so the order is in the
+                // warehouse — make sure barcode components exist. Idempotent:
+                // a no-op if they were already generated. Non-blocking.
+                if (isMerchandiser) {
+                    try {
+                        const { ensureOrderComponents } = await import("../../utils/barcodeService");
+                        await ensureOrderComponents({
+                            id: editingOrderId,
+                            order_no: updatedOrder.order_no,
+                            items: orderPayload.items,
+                        });
+                    } catch (compErr) {
+                        console.warn("B2B barcode generation skipped:", compErr.message);
+                    }
+                }
+
                 // Update approval record if executive re-submits
                 if (!isMerchandiser) {
                     await supabase.from("b2b_approvals").upsert([{
@@ -290,6 +306,19 @@ export default function B2bReviewOrder() {
                 if (orderError) throw orderError;
                 insertedOrderId = insertedOrderData.id;
 
+                // Merchandiser-created orders are auto-approved, so they enter
+                // the warehouse immediately — generate barcode components now.
+                // (Non-merchandiser orders are pending; their components are
+                // generated when a merchandiser approves them.) Non-blocking:
+                // a barcode failure must not stop order placement.
+                if (isMerchandiser) {
+                    try {
+                        const { ensureOrderComponents } = await import("../../utils/barcodeService");
+                        await ensureOrderComponents(insertedOrderData);
+                    } catch (compErr) {
+                        console.warn("B2B barcode generation skipped:", compErr.message);
+                    }
+                }
 
                 resultOrderNo = orderNo.replace("DLC", "B2B");
 
