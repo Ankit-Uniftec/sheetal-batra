@@ -406,6 +406,15 @@ const WarehouseDashboard = () => {
     return "normal";
   };
 
+  // Product name(s) for an order. The card UI shows items[0].product_name, but
+  // an order can have multiple items, so for the export we list every product
+  // name (deduped, comma-separated) to keep the column genuinely useful.
+  const getProductNames = (order) => {
+    const items = Array.isArray(order.items) ? order.items : order.items ? [order.items] : [];
+    const names = items.map((it) => (it?.product_name || "").trim()).filter(Boolean);
+    return [...new Set(names)].join(", ");
+  };
+
   // Get order type. Stock and B2B are treated as their own categories so the
   // filter selects all matching orders regardless of their alteration/custom
   // flags. Stock orders skip the customer/B2B flow entirely, so they take
@@ -545,7 +554,7 @@ const WarehouseDashboard = () => {
   const handleExportCSV = () => {
     if (filteredOrders.length === 0) return;
     const headers = [
-      "Order No", "Order Date", "Customer Name",
+      "Order No", "Order Date", "Customer Name", "Product Name",
       "Delivery Date", "Mode of Delivery", "Item Count",
       "Priority", "Status", "Salesperson", "Store",
     ];
@@ -553,6 +562,7 @@ const WarehouseDashboard = () => {
       order.order_no || "",
       order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
       getClientName(order) || "",
+      getProductNames(order),
       order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
       order.mode_of_delivery || order.delivery_location || order.delivery_city || "",
       Array.isArray(order.items) ? order.items.length : 0,

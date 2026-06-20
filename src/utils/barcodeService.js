@@ -388,6 +388,25 @@ export async function generateOrderComponents(order) {
 }
 
 // ============================================================
+// 10b. ENSURE COMPONENTS — idempotent wrapper around generateOrderComponents.
+// Safe to call more than once for the same order (e.g. B2B orders whose
+// approval can fire from multiple paths, or an edit→re-approve cycle).
+// No-ops and returns the existing rows if components already exist.
+// ============================================================
+export async function ensureOrderComponents(order) {
+  const { data: existing, error } = await supabase
+    .from("order_components")
+    .select("id")
+    .eq("order_id", order.id)
+    .limit(1);
+
+  if (error) throw error;
+  if (existing && existing.length > 0) return existing;
+
+  return generateOrderComponents(order);
+}
+
+// ============================================================
 // REPLACEMENT JOURNEY (vendor failure) — PH initiates, PM approves
 // ============================================================
 
