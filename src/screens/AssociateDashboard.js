@@ -69,6 +69,7 @@ export default function Dashboard() {
     { value: "order_no", label: "Order Number" },
     { value: "product_name", label: "Product Name" },
     { value: "client_name", label: "Client Name" },
+    { value: "phone", label: "Phone" },
   ];
 
   // Edit modal state
@@ -204,6 +205,8 @@ export default function Dashboard() {
           );
         case "client_name":
           return order.delivery_name?.toLowerCase().includes(q);
+        case "phone":
+          return (order.delivery_phone || "").toLowerCase().includes(q);
         case "order_no":
         default:
           return order.order_no?.toLowerCase().includes(q);
