@@ -8,6 +8,7 @@ import LogoVideoWebm from "../images/logo.webm";
 import config from "../config/config";
 import { usePopup } from "../components/Popup";
 import { COUNTRY_CODES } from "../utils/countryCodes";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 
 /* COUNTRY_CODES now lives in src/utils/countryCodes.js (shared with Walk-In form). */
 
@@ -83,19 +84,30 @@ export default function OtpVerification() {
   };
 
   const handleContinue = async () => {
-    const normalized = mobile.replace(/\D/g, "");
+    // Country-aware validation + E.164 normalization (libphonenumber-js).
+    // Parse what the user typed against the SELECTED country code. This:
+    //  - validates the number is real for that country (any country, worldwide)
+    //  - strips a duplicated country code (e.g. +91 selected and "91…" typed)
+    //  - produces one canonical E.164 number used for send + verify
+    // Prevents OTPs going to malformed / wrong numbers.
+    const rawDigits = mobile.replace(/\D/g, "");
+    // Try parsing as the user typed it WITH the selected country code prefixed.
+    const parsed =
+      parsePhoneNumberFromString(`${countryCode}${rawDigits}`) ||
+      // Fallback: maybe they already typed the full international number.
+      parsePhoneNumberFromString(rawDigits.startsWith("+") ? rawDigits : `+${rawDigits}`);
 
-    if (normalized.length < 6) {
+    if (!parsed || !parsed.isValid()) {
       showPopup({
         title: "Invalid mobile number",
-        message: "Please enter a valid mobile number.",
+        message: "Please enter a valid mobile number for the selected country.",
         type: "warning",
         confirmText: "Ok",
       });
       return;
     }
 
-    const phoneNumber = `${countryCode}${normalized}`;
+    const phoneNumber = parsed.number; // canonical E.164, e.g. +919897670280
     setLoading(true);
     setStatusMessage("Checking...");
 
