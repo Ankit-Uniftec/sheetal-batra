@@ -149,6 +149,10 @@ export default function AddProduct({ onProductAdded }) {
   // Store category — which retail store(s) this product belongs to.
   // "All Stores" = visible everywhere; "Delhi"/"Ludhiana" = location-specific.
   const [storeCategory, setStoreCategory] = useState(DEFAULT_STORE_CATEGORY);
+  // Whether this product is sold with a dupatta. Applies to all three product
+  // types. When true, orders for this product generate a separate dupatta
+  // component + barcode (the order form pre-fills a per-item toggle from this).
+  const [hasDupatta, setHasDupatta] = useState(false);
 
   // Normal-only
   const [availableSizes, setAvailableSizes] = useState([]);
@@ -237,6 +241,7 @@ export default function AddProduct({ onProductAdded }) {
     setTopOptions([]); setBottomOptions([]);
     setDefaultTop(""); setDefaultBottom(""); setDefaultColor("");
     setStoreCategory(DEFAULT_STORE_CATEGORY);
+    setHasDupatta(false);
     setAvailableSizes([]); setInventory("0"); setIsMto(false);
     setShopifyProductId("");
     setVariants([{ size: "", price: "", inventory: "0", shopify_variant_id: "" }]);
@@ -291,6 +296,7 @@ export default function AddProduct({ onProductAdded }) {
       default_bottom: defaultBottom || null,
       default_color: defaultColor.trim() || null,
       store_category: storeCategory || DEFAULT_STORE_CATEGORY,
+      has_dupatta: hasDupatta,
       sync_enabled: productType === "lxrts",
       is_custom_piece: productType === "custom_piece",
     };
@@ -416,6 +422,7 @@ export default function AddProduct({ onProductAdded }) {
           default_bottom: p.default_bottom || "",
           default_color: p.default_color || "",
           store_category: p.store_category || DEFAULT_STORE_CATEGORY,
+          has_dupatta: p.has_dupatta ? "yes" : "no",
           available_size: (p.available_size || []).join("|"),
           inventory: inv,
         };
@@ -770,6 +777,21 @@ export default function AddProduct({ onProductAdded }) {
               </select>
               <span className="ap-help">
                 "All Stores" shows in every store's order form. "Delhi"/"Ludhiana" show only to that store's SAs.
+              </span>
+            </div>
+
+            <div className="ap-field">
+              <label>Dupatta</label>
+              <label className="ap-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={hasDupatta}
+                  onChange={(e) => setHasDupatta(e.target.checked)}
+                />
+                <span>Includes a dupatta</span>
+              </label>
+              <span className="ap-help">
+                Tick if this outfit comes with a dupatta. Orders then track the dupatta as its own piece with a separate barcode.
               </span>
             </div>
           </div>

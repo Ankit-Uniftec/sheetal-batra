@@ -605,6 +605,12 @@ export default function ProductForm() {
   const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
 
+  // Whether the selected product is sold with a dupatta. Pre-filled from the
+  // product's `has_dupatta` flag when a product is chosen; staff can override
+  // per item. Captured onto the order item as `includes_dupatta` so the
+  // warehouse generates a separate dupatta component + barcode.
+  const [includesDupatta, setIncludesDupatta] = useState(false);
+
   const [modeOfDelivery, setModeOfDelivery] = useState(isStockOrder ? "WH Delhi" : "Delhi Store");
   const [orderFlag, setOrderFlag] = useState("Normal");
   const [deliveryDate, setDeliveryDate] = useState("");
@@ -1068,6 +1074,9 @@ export default function ProductForm() {
         }
         if (draftData.showAdditionals !== undefined) setShowAdditionals(draftData.showAdditionals);
 
+        // Dupatta
+        if (draftData.includesDupatta !== undefined) setIncludesDupatta(draftData.includesDupatta);
+
         // Size & Quantity
         if (draftData.selectedSize) setSelectedSize(draftData.selectedSize);
         if (draftData.quantity) setQuantity(draftData.quantity);
@@ -1152,6 +1161,9 @@ export default function ProductForm() {
         // Don't restore empty additionals - keep the default one empty row
         if (data.showAdditionals !== undefined) setShowAdditionals(data.showAdditionals);
 
+        // Dupatta
+        if (data.includesDupatta !== undefined) setIncludesDupatta(data.includesDupatta);
+
         // Size & Quantity
         if (data.selectedSize) setSelectedSize(data.selectedSize);
         if (data.quantity) setQuantity(data.quantity);
@@ -1215,6 +1227,7 @@ export default function ProductForm() {
       selectedExtrasWithColors,
       selectedAdditionals,
       showAdditionals,
+      includesDupatta,
       selectedSize,
       quantity,
       measurements,
@@ -1254,6 +1267,7 @@ export default function ProductForm() {
     selectedExtrasWithColors,
     selectedAdditionals,
     showAdditionals,
+    includesDupatta,
     selectedSize,
     quantity,
     measurements,
@@ -1555,6 +1569,10 @@ export default function ProductForm() {
     if ((syncEnabled || selectedProduct.is_custom_piece === true) && isKidsProduct) {
       setIsKidsProduct(false);
     }
+
+    // Pre-fill the dupatta toggle from the product. Staff can still override
+    // before adding to the cart (e.g. a customer who declines the dupatta).
+    setIncludesDupatta(selectedProduct.has_dupatta === true);
 
     // Set product options
     setTops(selectedProduct.top_options || []);
@@ -1935,6 +1953,8 @@ export default function ProductForm() {
       top_color: selectedTopColor, // Now an object { name, hex }
       bottom: selectedBottom,
       bottom_color: selectedBottomColor,
+      // Dupatta is tracked as its own warehouse component/barcode when present.
+      includes_dupatta: includesDupatta,
       extras: finalExtras,
       additionals: selectedAdditionals.filter(a => a.name && a.name.trim() !== ""),
       size: selectedSize,
@@ -1982,6 +2002,7 @@ export default function ProductForm() {
     setSelectedExtrasWithColors([]);
     setSelectedAdditionals([{ name: "", price: "" }]); // ✅ RESET ADDITIONALS to one empty row
     setShowAdditionals(true);  // Keep additionals open
+    setIncludesDupatta(false);
     setSelectedSize("S");
     setQuantity(1);
     setMeasurements({});
@@ -2456,6 +2477,7 @@ export default function ProductForm() {
         top_color: selectedTopColor,
         bottom: selectedBottom,
         bottom_color: selectedBottomColor,
+        includes_dupatta: includesDupatta,
         extras: finalExtras,
         additionals: selectedAdditionals.filter(a => a.name && a.name.trim() !== ""),
         size: selectedSize,
@@ -3424,6 +3446,21 @@ export default function ProductForm() {
 
 
             {/* TOP / BOTTOM COLORS */}
+
+            {/* DUPATTA — pre-filled from the product; track as its own piece */}
+            <div className="dupatta-box" style={{ margin: "10px 0" }}>
+              <label
+                className="dupatta-toggle"
+                style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={includesDupatta}
+                  onChange={(e) => setIncludesDupatta(e.target.checked)}
+                />
+                <span>Includes Dupatta (tracked as a separate piece with its own barcode)</span>
+              </label>
+            </div>
 
             {/* SIZE */}
 

@@ -23,6 +23,7 @@ export const CSV_COLUMNS = [
   "default_bottom",
   "default_color",
   "store_category",  // "All Stores" (default), "Delhi", or "Ludhiana"
+  "has_dupatta",     // "yes"/"no" (blank = no) — generates a separate dupatta barcode
   "available_size",  // pipe-separated, e.g. "XS|S|M|L"
   "inventory",       // number or "MTO" (unlimited stock — saves as 9999)
 ];
@@ -40,10 +41,18 @@ export const TEMPLATE_DEMO_ROWS = [
     default_bottom: "Salwar",
     default_color: "Burnt Orange",
     store_category: "All Stores",
+    has_dupatta: "no",
     available_size: "XS|S|M|L|XL|XXL",
     inventory: "MTO",
   },
 ];
+
+// Parse a CSV boolean-ish cell. Accepts yes/no, true/false, 1/0, y/n.
+// Blank/unknown -> false (safe default: never fabricate a dupatta).
+const parseBoolCell = (s) => {
+  const v = (s || "").trim().toLowerCase();
+  return v === "yes" || v === "true" || v === "1" || v === "y";
+};
 
 // ─── CSV escape / unescape ────────────────────────────────────────
 const escapeCell = (v) => {
@@ -194,6 +203,7 @@ export const validateRow = (row, rowIndex) => {
       default_bottom: (row.default_bottom || "").trim() || null,
       default_color: (row.default_color || "").trim() || null,
       store_category: storeCategory,
+      has_dupatta: parseBoolCell(row.has_dupatta),
       available_size: availableSizes.length > 0 ? availableSizes : null,
       inventory,
     },

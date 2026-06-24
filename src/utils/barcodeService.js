@@ -335,9 +335,11 @@ export async function generateOrderComponents(order) {
       });
     }
 
-    // DUPATTA component — if product typically includes dupatta
-    // Check if dupatta is part of top_options/bottom_options or product type
-    if (item?.dupatta || item?.includes_dupatta) {
+    // DUPATTA component — when the order item is flagged as including a
+    // dupatta. `includes_dupatta` is set at order-build time from the
+    // product's `has_dupatta` flag (with a staff override toggle). The
+    // dupatta then runs the same production flow as the top/bottom.
+    if (item?.includes_dupatta) {
       components.push({
         order_id: order.id,
         order_no: orderNo,
