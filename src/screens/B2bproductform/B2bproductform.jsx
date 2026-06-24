@@ -179,6 +179,9 @@ export default function B2bProductForm() {
     // Size & Quantity
     const [selectedSize, setSelectedSize] = useState("M");
     const [quantity, setQuantity] = useState(1);
+    // Pre-filled from the product's has_dupatta; captured on the item as
+    // includes_dupatta so the warehouse generates a separate dupatta barcode.
+    const [includesDupatta, setIncludesDupatta] = useState(false);
     const [availableSizes, setAvailableSizes] = useState(SIZE_OPTIONS);
 
     const [isKidsProduct, setIsKidsProduct] = useState(false);
@@ -298,6 +301,7 @@ export default function B2bProductForm() {
             setTops([]); setBottoms([]); setAvailableSizes(SIZE_OPTIONS); setSelectedSize("M");
             setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" });
             setSelectedExtrasWithColors([]); setSelectedAdditionals([]); setQuantity(1); setMeasurements({});
+            setIncludesDupatta(false);
             return;
         }
         setTops(selectedProduct.top_options || []);
@@ -318,6 +322,7 @@ export default function B2bProductForm() {
             if (extra) setSelectedExtrasWithColors([{ name: selectedProduct.default_extra, color: defaultColor, price: extra.price || 0 }]);
         } else setSelectedExtrasWithColors([]);
         setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" });
+        setIncludesDupatta(selectedProduct.has_dupatta === true);
     }, [selectedProduct, isKidsProduct, colors, globalExtras]);
 
     // Auto-fill size chart
@@ -433,11 +438,12 @@ export default function B2bProductForm() {
         setOrderItems(prev => [...prev, {
             _id: makeId(), product_id: selectedProduct.id, product_name: selectedProduct.name, sku_id: selectedProduct.sku_id,
             top: selectedTop, top_color: selectedTopColor, bottom: selectedBottom, bottom_color: selectedBottomColor,
+            includes_dupatta: includesDupatta,
             extras: finalExtras, additionals: selectedAdditionals.filter(a => a.name?.trim()), size: selectedSize, quantity,
             price: getBasePrice(), measurements: getRelevantMeasurements(), image_url: selectedProduct.image_url, notes: comments, delivery_date: deliveryDate,
             isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
         }]);
-        setSelectedProduct(null); setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" });
+        setSelectedProduct(null); setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" }); setIncludesDupatta(false);
         setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" }); setSelectedExtrasWithColors([]); setSelectedAdditionals([{ name: "", price: "" }]);
         setShowExtrasModal(false); setShowAdditionals(true);
         setSelectedSize("M"); setQuantity(1); setMeasurements({}); setComments("");
@@ -472,6 +478,7 @@ export default function B2bProductForm() {
             finalItems.push({
                 _id: makeId(), product_id: selectedProduct.id, product_name: selectedProduct.name, sku_id: selectedProduct.sku_id,
                 top: selectedTop, top_color: selectedTopColor, bottom: selectedBottom, bottom_color: selectedBottomColor,
+                includes_dupatta: includesDupatta,
                 extras: finalExtras, additionals: selectedAdditionals.filter(a => a.name?.trim()), size: selectedSize, quantity,
                 price: getBasePrice(), measurements: getRelevantMeasurements(), image_url: selectedProduct.image_url, notes: comments, delivery_date: deliveryDate,
                 isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
@@ -644,6 +651,13 @@ export default function B2bProductForm() {
                         </div>
 
                         {selectedExtrasWithColors.map((extra, idx) => <div key={idx} className="selected-extra-item"><span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price)}){extra.color?.name && ` (${extra.color.name})`}</span><button onClick={() => handleRemoveExtra(idx)}>x</button></div>)}
+
+                        <div className="dupatta-box" style={{ margin: "10px 0" }}>
+                            <label className="dupatta-toggle" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+                                <input type="checkbox" checked={includesDupatta} onChange={(e) => setIncludesDupatta(e.target.checked)} />
+                                <span>Includes Dupatta (tracked as a separate piece with its own barcode)</span>
+                            </label>
+                        </div>
 
                         <div className="size-box"><span className="size-label">Size:</span><div className="sizes">{availableSizes.map((s, i) => <button key={i} className={selectedSize === s ? "size-btn active" : "size-btn"} onClick={() => setSelectedSize(s)}>{s}</button>)}</div></div>
 

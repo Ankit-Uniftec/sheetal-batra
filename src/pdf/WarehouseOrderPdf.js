@@ -500,6 +500,7 @@ const InfoRow = ({ label, value, highlight = false, urgent = false }) => (
 const ProductItem = ({ item }) => {
   const hasTop = item?.top && item.top.trim() !== "";
   const hasBottom = item?.bottom && item.bottom.trim() !== "";
+  const hasDupatta = item?.includes_dupatta === true;
   const hasSize = item?.size && item.size.trim() !== "";
 
   const validExtras = (item?.extras || []).filter(e => e.name && e.name.trim() !== "");
@@ -550,6 +551,13 @@ const ProductItem = ({ item }) => {
                   />
                 )}
               </View>
+            </View>
+          )}
+
+          {hasDupatta && (
+            <View style={warehouseStyles.productField}>
+              <Text style={warehouseStyles.fieldLabel}>Dupatta</Text>
+              <Text style={warehouseStyles.fieldValue}>Included</Text>
             </View>
           )}
 
@@ -952,6 +960,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             <View style={warehouseStyles.bottomBarcodes} fixed>
               <BarcodePlaceholder label="Top" />
               <BarcodePlaceholder label="Bottom" />
+              {item?.includes_dupatta === true && <BarcodePlaceholder label="Dupatta" />}
               <BarcodePlaceholder label="Extra" />
             </View>
           )}
