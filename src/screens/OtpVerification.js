@@ -217,7 +217,7 @@ export default function OtpVerification() {
 
       setLoading(false);
       navigateWithVideo("/otp", {
-        mobile: normalized,
+        mobile: phoneNumber,
         phoneNumber,
         countryCode,
         fromAssociate: location.state?.fromAssociate || false,
