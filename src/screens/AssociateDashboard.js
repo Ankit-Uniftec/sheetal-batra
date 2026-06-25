@@ -14,6 +14,7 @@ import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
+import UpdatePaymentModal from "../components/UpdatePaymentModal";
 import WalkInTab from "./WalkInTab";
 import ExhibitionPanel from "../components/ExhibitionPanel";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
@@ -79,6 +80,8 @@ export default function Dashboard() {
   // Delivery payment modal — captures balance + mode breakdown before marking delivered.
   const [deliveryModalOrder, setDeliveryModalOrder] = useState(null);
   const [deliveryModalSaving, setDeliveryModalSaving] = useState(false);
+  const [paymentModalOrder, setPaymentModalOrder] = useState(null);
+  const [paymentModalSaving, setPaymentModalSaving] = useState(false);
 
   // Action dropdowns state
   const [selectedCancellation, setSelectedCancellation] = useState({});
@@ -560,18 +563,9 @@ export default function Dashboard() {
   const handleMarkDelivered = async (e, order) => {
     e.stopPropagation();
 
-    // For balance-due we need the post-discount total — what the customer
-    // ACTUALLY owes — not the MRP. Otherwise an order with a 25% discount
-    // would still ask the SA to collect the full MRP balance at delivery.
-    const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
-    const advancePaid = Number(order?.advance_payment) || 0;
-    const balanceDue = orderTotal - advancePaid;
-    const skipPaymentModal =
-      order?.is_b2b ||
-      order?.is_stock_order ||
-      balanceDue <= 0;
-
-    if (skipPaymentModal) {
+    // B2B and stock orders don't go through the retail delivery flow (no
+    // customer balance / COD), so they keep the simple confirm.
+    if (order?.is_b2b || order?.is_stock_order) {
       showPopup({
         type: "confirm",
         title: "Mark as Delivered",
@@ -583,14 +577,102 @@ export default function Dashboard() {
       return;
     }
 
+    // Always open the delivery modal for retail orders — even when fully paid —
+    // so the SA confirms the FINAL delivery method (which drives the COD charge)
+    // and any address change. The modal handles the "nothing to collect" case.
     setDeliveryModalOrder(order);
   };
 
-  const handleDeliveryPaymentConfirm = async ({ paidAt, rows, deliveredAddress }) => {
+  const handleDeliveryPaymentConfirm = async ({ paidAt, rows, deliveredAddress, finalMethod, deliveryCharge, codWaived }) => {
     const order = deliveryModalOrder;
     if (!order) return;
     setDeliveryModalSaving(true);
     try {
+      // Record each balance payment (if any money was collected at delivery).
+      if (Array.isArray(rows) && rows.length > 0) {
+        const paymentRows = rows.map((r) => ({
+          order_id: order.id,
+          kind: "balance",
+          payment_mode: r.mode,
+          amount: r.amount,
+          paid_at: paidAt,
+          recorded_by: salesperson?.email || null,
+        }));
+        const { error: payErr } = await supabase
+          .from("order_payments")
+          .insert(paymentRows);
+        if (payErr) throw payErr;
+      }
+
+      // Recompute the order's financial fields to include the COD charge that
+      // was decided at delivery, so net_total / remaining reflect what was
+      // actually charged. The goods total never carried the charge (it was
+      // removed from order placement), so we add it here exactly once.
+      const goodsTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
+      const charge = Number(deliveryCharge) || 0;
+      const newNetTotal = goodsTotal + charge;
+      const collected = (rows || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      const advancePaid = Number(order?.advance_payment) || 0;
+      const newRemaining = Math.max(0, newNetTotal - advancePaid - collected);
+
+      const deliveredAt = new Date().toISOString();
+      const orderUpdate = {
+        status: "delivered",
+        delivered_at: deliveredAt,
+        delivered_mode_of_delivery: finalMethod,
+        cod_charge: charge,
+        net_total: newNetTotal,
+        remaining_payment: newRemaining,
+      };
+      // Only set delivered_address when the SA flagged an address change.
+      if (deliveredAddress) orderUpdate.delivered_address = deliveredAddress;
+
+      const { error: ordErr } = await supabase
+        .from("orders")
+        .update(orderUpdate)
+        .eq("id", order.id);
+      if (ordErr) throw ordErr;
+
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, ...orderUpdate } : o
+      ));
+      setDeliveryModalOrder(null);
+
+      showPopup({
+        type: "success",
+        title: "Order Delivered",
+        message: charge > 0
+          ? `₹${formatIndianNumber(charge)} COD charge applied. Order marked as delivered.`
+          : (codWaived ? "COD charge waived. Order marked as delivered." : "Order marked as delivered."),
+        confirmText: "OK",
+      });
+    } catch (err) {
+      console.error("Delivery confirm error:", err);
+      showPopup({
+        type: "error",
+        title: "Failed",
+        message: "Could not complete delivery: " + err.message,
+        confirmText: "OK",
+      });
+    } finally {
+      setDeliveryModalSaving(false);
+    }
+  };
+
+  // Open the standalone "Update Payment" modal (record balance any time,
+  // independent of delivery).
+  const handleUpdatePayment = (e, order) => {
+    e.stopPropagation();
+    setPaymentModalOrder(order);
+  };
+
+  const handleUpdatePaymentConfirm = async ({ paidAt, rows }) => {
+    const order = paymentModalOrder;
+    if (!order) return;
+    setPaymentModalSaving(true);
+    try {
+      const collected = (rows || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+
       const paymentRows = rows.map((r) => ({
         order_id: order.id,
         kind: "balance",
@@ -599,35 +681,37 @@ export default function Dashboard() {
         paid_at: paidAt,
         recorded_by: salesperson?.email || null,
       }));
-
       const { error: payErr } = await supabase
         .from("order_payments")
         .insert(paymentRows);
       if (payErr) throw payErr;
 
-      const deliveredAt = new Date().toISOString();
-      const orderUpdate = { status: "delivered", delivered_at: deliveredAt };
-      // Only set delivered_address when the SA flagged an address change.
-      if (deliveredAddress) orderUpdate.delivered_address = deliveredAddress;
+      // Roll the collected amount into advance_payment and recompute the
+      // outstanding balance. Status is NOT changed — this is payment only.
+      const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
+      const newAdvance = (Number(order?.advance_payment) || 0) + collected;
+      const newRemaining = Math.max(0, orderTotal - newAdvance);
+
+      const orderUpdate = { advance_payment: newAdvance, remaining_payment: newRemaining };
       const { error: ordErr } = await supabase
         .from("orders")
         .update(orderUpdate)
         .eq("id", order.id);
       if (ordErr) throw ordErr;
 
-      setOrders(prev => prev.map(o =>
-        o.id === order.id ? { ...o, status: "delivered", delivered_at: deliveredAt, ...(deliveredAddress ? { delivered_address: deliveredAddress } : {}) } : o
-      ));
-      setDeliveryModalOrder(null);
+      setOrders(prev => prev.map(o => (o.id === order.id ? { ...o, ...orderUpdate } : o)));
+      setPaymentModalOrder(null);
 
       showPopup({
         type: "success",
-        title: "Order Delivered",
-        message: "Balance recorded and order marked as delivered.",
+        title: "Payment Recorded",
+        message: newRemaining > 0
+          ? `₹${formatIndianNumber(collected)} recorded. Balance now ₹${formatIndianNumber(newRemaining)}.`
+          : `₹${formatIndianNumber(collected)} recorded. Order is now fully paid.`,
         confirmText: "OK",
       });
     } catch (err) {
-      console.error("Delivery payment error:", err);
+      console.error("Update payment error:", err);
       showPopup({
         type: "error",
         title: "Failed",
@@ -635,7 +719,7 @@ export default function Dashboard() {
         confirmText: "OK",
       });
     } finally {
-      setDeliveryModalSaving(false);
+      setPaymentModalSaving(false);
     }
   };
 
@@ -1025,6 +1109,17 @@ export default function Dashboard() {
     return status !== "delivered" && status !== "cancelled" && status !== "exchange_return" && status !== "revoked";
   };
 
+  // "Update Payment" is for retail orders that still have an outstanding
+  // balance and aren't finished. B2B/stock orders don't collect a balance here.
+  const canUpdatePayment = (order) => {
+    if (order?.is_b2b || order?.is_stock_order) return false;
+    const status = order.status?.toLowerCase();
+    if (status === "delivered" || status === "cancelled" || status === "exchange_return" || status === "revoked") return false;
+    const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
+    const advancePaid = Number(order?.advance_payment) || 0;
+    return orderTotal - advancePaid > 0;
+  };
+
   // Get status badge style
   const getStatusBadgeClass = (status) => {
     switch (status?.toLowerCase()) {
@@ -1052,6 +1147,15 @@ export default function Dashboard() {
           saving={deliveryModalSaving}
           onCancel={() => { if (!deliveryModalSaving) setDeliveryModalOrder(null); }}
           onConfirm={handleDeliveryPaymentConfirm}
+        />
+      )}
+
+      {paymentModalOrder && (
+        <UpdatePaymentModal
+          order={paymentModalOrder}
+          saving={paymentModalSaving}
+          onCancel={() => { if (!paymentModalSaving) setPaymentModalOrder(null); }}
+          onConfirm={handleUpdatePaymentConfirm}
         />
       )}
 
@@ -1653,15 +1757,26 @@ export default function Dashboard() {
                       {/* sa_services can collect balance & mark ANY order delivered
                           (client request) — other actions stay view-only for
                           orders that aren't theirs. */}
-                      {(own || isServices) && canMarkDelivered(order) && (
+                      {(own || isServices) && (canMarkDelivered(order) || canUpdatePayment(order)) && (
                         <div className="ad-order-actions">
-                          <button
-                            className="ad-action-btn ad-delivered-btn"
-                            onClick={(e) => handleMarkDelivered(e, order)}
-                            disabled={actionLoading === order.id}
-                          >
-                            {actionLoading === order.id ? "..." : "✓ Mark Delivered"}
-                          </button>
+                          {canUpdatePayment(order) && (
+                            <button
+                              className="ad-action-btn ad-payment-btn"
+                              onClick={(e) => handleUpdatePayment(e, order)}
+                              disabled={actionLoading === order.id}
+                            >
+                              ₹ Update Payment
+                            </button>
+                          )}
+                          {canMarkDelivered(order) && (
+                            <button
+                              className="ad-action-btn ad-delivered-btn"
+                              onClick={(e) => handleMarkDelivered(e, order)}
+                              disabled={actionLoading === order.id}
+                            >
+                              {actionLoading === order.id ? "..." : "✓ Mark Delivered"}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

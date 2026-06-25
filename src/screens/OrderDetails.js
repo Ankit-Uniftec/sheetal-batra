@@ -91,7 +91,6 @@ export default function OrderDetails() {
   const [discountPercent2, setDiscountPercent2] = useState(0);
   const [discountApplied2, setDiscountApplied2] = useState(false);
   const [appliedCode2, setAppliedCode2] = useState("");
-  const [codWaiverApplied, setCodWaiverApplied] = useState(false);
   // SHOPMORE flat-rupee discounts. Hardcoded (not in the discount table)
   // because they have a different math shape — flat amount + min-spend gate —
   // and don't fit the table's `percent`-only schema.
@@ -136,7 +135,8 @@ export default function OrderDetails() {
   const [giftRecipientName, setGiftRecipientName] = useState("");
   const [giftRecipientContact, setGiftRecipientContact] = useState("");
 
-  const COD_CHARGE = 250;
+  // COD_CHARGE removed from placement — the ₹250 COD/delivery handling charge
+  // is now applied at delivery time only (src/utils/deliveryCharge.js).
   const SHIPPING_CHARGE_AMOUNT = 2500;
   const SHIPPING_THRESHOLD = 30000;
 
@@ -264,19 +264,14 @@ export default function OrderDetails() {
     }
     setShippingCharge(currentShippingCharge);
 
-    // Check if Cash is used in advance payment (normal or split)
-    const hasCashPayment = isSplitPayment
-      ? splitPayments.some(p => p.mode === "Cash")
-      : paymentMode === "COD";
-
-    // COD charge - waived if codWaiverApplied is true
-    const appliedCodCharge = (hasCashPayment && order.mode_of_delivery === "Home Delivery" && !codWaiverApplied)
-      ? COD_CHARGE
-      : 0;
-
-    if (appliedCodCharge > 0) {
-      netPayable += appliedCodCharge;
-    }
+    // COD / delivery handling charge is NO LONGER applied at order placement.
+    // It is a delivery-time charge: it depends on the FINAL delivery method and
+    // whether a balance is actually being collected at handover, so it is
+    // decided once, on "Order Delivered" (see src/utils/deliveryCharge.js and
+    // the delivery flow in AssociateDashboard). At placement it is always 0, so
+    // net_total here is the pure goods total and nothing is double-counted when
+    // the charge is added at delivery.
+    const appliedCodCharge = 0;
 
     // Calculate store credit to be used
     // Store credit is applied AFTER discounts, COD charge, and shipping
@@ -341,7 +336,6 @@ export default function OrderDetails() {
     discountApplied2,
     birthdayApplied,
     minAdvancePercent,
-    codWaiverApplied,
     isSplitPayment,
     splitPayments,
     storeCreditApplied,
@@ -505,7 +499,6 @@ export default function OrderDetails() {
         if (data.flatDiscountAmount !== undefined) setFlatDiscountAmount(Number(data.flatDiscountAmount) || 0);
         if (data.flatDiscountCode) setFlatDiscountCode(data.flatDiscountCode);
         if (data.paymentMode) setPaymentMode(data.paymentMode);
-        if (data.codWaiverApplied !== undefined) setCodWaiverApplied(data.codWaiverApplied);
         if (data.storeCreditApplied !== undefined) setStoreCreditApplied(data.storeCreditApplied);
 
         // if (data.loyaltyPointsApplied !== undefined) setLoyaltyPointsApplied(data.loyaltyPointsApplied);
@@ -568,7 +561,6 @@ export default function OrderDetails() {
       deliveryState,
       deliveryPincode,
       deliveryNotes,
-      codWaiverApplied,
       storeCreditApplied,
       giftRecipientName,
       giftRecipientContact,
@@ -605,7 +597,6 @@ export default function OrderDetails() {
     deliveryState,
     deliveryPincode,
     deliveryNotes,
-    codWaiverApplied,
     storeCreditApplied,
     giftRecipientName,
     giftRecipientContact,
@@ -780,7 +771,7 @@ export default function OrderDetails() {
     // Count currently applied codes (regular % + birthday % + COD waiver + flat).
     // All four count toward the per-order maximum of 2 collector codes.
     const flatApplied = flatDiscountAmount > 0;
-    const appliedCodesCount = [discountApplied, discountApplied2, birthdayApplied, codWaiverApplied, flatApplied].filter(Boolean).length;
+    const appliedCodesCount = [discountApplied, discountApplied2, birthdayApplied, flatApplied].filter(Boolean).length;
 
     // Hardcoded flat-amount codes (SHOPMORE28K / SHOPMORE45K). Different math
     // shape from the percent codes — flat ₹ off above a minimum spend — so
@@ -861,48 +852,11 @@ export default function OrderDetails() {
       return;
     }
 
-    // Check for SB250 code
-    if (code === "SB250") {
-      if (codWaiverApplied) {
-        showPopup({
-          title: "Already Applied",
-          message: "Free COD code already applied!",
-          type: "warning",
-        });
-        return;
-      }
-
-      // Check max 2 codes limit
-      if (appliedCodesCount >= 2) {
-        showPopup({
-          title: "Maximum Codes Reached",
-          message: "You can only apply up to 2 collector codes per order.",
-          type: "warning",
-        });
-        return;
-      }
-
-      // Check if Cash is used in advance payment (normal or split)
-      const hasCashPayment = isSplitPayment
-        ? splitPayments.some(p => p.mode === "Cash")
-        : paymentMode === "COD";
-
-      if (!hasCashPayment || order.mode_of_delivery !== "Home Delivery") {
-        showPopup({
-          title: "Not Applicable",
-          message: "SB250 is only applicable for Cash on Delivery with Home Delivery.",
-          type: "warning",
-        });
-        return;
-      }
-      setCodWaiverApplied(true);
-      showPopup({
-        title: "Free COD Applied!",
-        message: "COD charge of ₹250 has been waived!",
-        type: "success",
-      });
-      return;
-    }
+    // NOTE: The SB250 "free COD" code was removed. The COD/delivery charge is
+    // now a delivery-time concept (see src/utils/deliveryCharge.js): it is only
+    // charged on Home Delivery with a balance due, and the SA can waive it
+    // directly in the "Order Delivered" modal. There is no longer a
+    // placement-time code to waive a charge that placement no longer adds.
 
     try {
       const { data, error } = await supabase
@@ -1136,12 +1090,6 @@ export default function OrderDetails() {
     setSplitPayments(payments);
     setIsSplitPayment(true);
     setAdvancePayment(totalAmount);
-
-    // Check if any payment is Cash for COD charge logic
-    const hasCash = payments.some(p => p.mode === "Cash");
-    if (!hasCash && codWaiverApplied) {
-      setCodWaiverApplied(false);
-    }
   };
 
   const removeSplitPayment = () => {
@@ -1176,10 +1124,6 @@ export default function OrderDetails() {
   const removeBirthdayDiscount = () => {
     setBirthdayDiscount(0);
     setBirthdayApplied(false);
-  };
-
-  const removeCodWaiver = () => {
-    setCodWaiverApplied(false);
   };
 
   const removeFlatDiscount = () => {
@@ -1654,7 +1598,7 @@ export default function OrderDetails() {
           )} */}
 
           {/* Applied Discounts Display */}
-          {(discountApplied || discountApplied2 || birthdayApplied || codWaiverApplied || storeCreditApplied) && (
+          {(discountApplied || discountApplied2 || birthdayApplied || storeCreditApplied) && (
             <div
               className="applied-discounts"
               style={{
@@ -1761,33 +1705,6 @@ export default function OrderDetails() {
                   }}
                 >
                   Total: {totalDiscount}% OFF
-                </div>
-              )}
-              {codWaiverApplied && (
-                <div
-                  className="discount-tag cod-waiver"
-                  style={{
-                    background: "#e3f2fd",
-                    color: "#1565c0",
-                    padding: "6px 12px",
-                    borderRadius: "20px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    fontSize: "14px",
-                  }}
-                >
-                  <span>SB250 (₹250 waived)</span>
-                  <button
-                    onClick={removeCodWaiver}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: "16px",
-                      color: "#666",
-                    }}
-                  >×</button>
                 </div>
               )}
               {flatDiscountAmount > 0 && (
@@ -2089,7 +2006,7 @@ export default function OrderDetails() {
               setTimeout(() => applyCollectorCode(value), 0);
             }
           }}
-          placeholder="e.g. SBBIRTHDAY, SB250, SHOPMORE28K"
+          placeholder="e.g. SBBIRTHDAY, SHOPMORE28K"
           style={{
             width: "100%",
             padding: "10px 14px",
