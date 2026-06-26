@@ -13,9 +13,12 @@ import { supabase } from "../lib/supabaseClient";
 // ============================================================
 // V2 model: 10 logical stages. `step` = logical step (1..10), matching the
 // DB get_stage_step(). `mandatory: true` = always required; otherwise the
-// stage is skippable (Dyeing, Pattern Cutting, Dry Cleaning). Two QCs:
-// the existing qc_* values are QC 1 (after Embroidery); final_qc_* are QC 2
-// (before Packaging).
+// stage is skippable (Dyeing, Pattern Cutting, Dry Cleaning, and QC 1). Two
+// QCs: the existing qc_* values are QC 1 (after Embroidery), now OPTIONAL —
+// a piece may go Embroidery -> Stitching directly; final_qc_* are QC 2
+// (before Packaging), which remains mandatory. The authoritative skippable
+// set lives in the DB is_step_skippable(); `mandatory` here is descriptive
+// metadata only (not queried in JS).
 //
 // Stages marked `legacy: true` were removed from the active flow
 // (pattern_printing / trims / cutting / finishing) but are KEPT here so
@@ -32,9 +35,9 @@ export const PRODUCTION_STAGES = [
   { value: "embroidery_completed", label: "Embroidery Completed", step: 4, color: "#3f51b5", mandatory: true },
   { value: "dry_cleaning_in_progress", label: "Dry Cleaning In-Progress", step: 5, color: "#00bcd4", maxDays: 1 },
   { value: "dry_cleaning_completed", label: "Dry Cleaning Completed", step: 5, color: "#00bcd4" },
-  { value: "qc_in_progress", label: "QC 1 In-Progress", step: 6, color: "#f44336", maxDays: 1, mandatory: true },
-  { value: "qc_passed", label: "QC 1 Passed", step: 6, color: "#4caf50", mandatory: true },
-  { value: "qc_failed", label: "QC 1 Failed", step: 6, color: "#d32f2f", mandatory: true },
+  { value: "qc_in_progress", label: "QC 1 In-Progress", step: 6, color: "#f44336", maxDays: 1 },
+  { value: "qc_passed", label: "QC 1 Passed", step: 6, color: "#4caf50" },
+  { value: "qc_failed", label: "QC 1 Failed", step: 6, color: "#d32f2f" },
   { value: "stitching_in_progress", label: "Stitching In-Progress", step: 7, color: "#ef6c00", maxDays: 2, mandatory: true },
   { value: "stitching_completed", label: "Stitching Completed", step: 7, color: "#ef6c00", mandatory: true },
   { value: "hemming_in_progress", label: "Hemming In-Progress", step: 8, color: "#ff5722", maxDays: 1, mandatory: true },
