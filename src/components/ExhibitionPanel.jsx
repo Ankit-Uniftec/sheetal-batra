@@ -35,6 +35,10 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
 
   const [exhibitions, setExhibitions] = useState([]);
   const [orders, setOrders] = useState([]);
+  // Time window for the order-derived summary cards (Total Orders, Total
+  // Clients, Gross/Net Revenue). "all" = no filter. Exhibition counts
+  // (Active / Pending Approvals) are status-based and ignore this.
+  const [period, setPeriod] = useState("all"); // all | week | month | year
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editingStatus, setEditingStatus] = useState(null);
@@ -51,7 +55,7 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
       if (ids.length > 0) {
         const { data: ords } = await supabase
           .from("orders")
-          .select("id, exhibition_id, net_total, grand_total_after_discount, grand_total, user_id, phone, delivery_phone")
+          .select("id, exhibition_id, created_at, net_total, grand_total_after_discount, grand_total, user_id, phone, delivery_phone")
           .in("exhibition_id", ids);
         setOrders(ords || []);
       } else {
@@ -69,12 +73,27 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
     const commissionByExb = {};
     exhibitions.forEach((e) => { commissionByExb[e.id] = e.commission_split; });
 
+    // Exhibition counts are status-based — not affected by the time filter.
     const activeCount = exhibitions.filter((e) => e.status === EXHIBITION_STATUS.ACTIVE).length;
     const pendingCount = exhibitions.filter((e) => e.status === EXHIBITION_STATUS.PENDING).length;
 
+    // Period cutoff for the order-derived cards. null => no filter ("all").
+    let cutoff = null;
+    if (period !== "all") {
+      const d = new Date();
+      if (period === "week") d.setDate(d.getDate() - 7);
+      else if (period === "month") d.setMonth(d.getMonth() - 1);
+      else if (period === "year") d.setFullYear(d.getFullYear() - 1);
+      cutoff = d.getTime();
+    }
+
+    const periodOrders = cutoff === null
+      ? orders
+      : orders.filter((o) => o.created_at && new Date(o.created_at).getTime() >= cutoff);
+
     let gross = 0, net = 0;
     const clientKeys = new Set();
-    orders.forEach((o) => {
+    periodOrders.forEach((o) => {
       const val = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0;
       gross += Number(val) || 0;
       net += netSbRevenue(val, commissionByExb[o.exhibition_id] || 0);
@@ -85,18 +104,56 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
 
     return {
       activeExhibitions: activeCount,
-      totalOrders: orders.length,
+      totalOrders: periodOrders.length,
       totalClients: clientKeys.size,
       grossRevenue: gross,
       netSbRevenue: net,
       pendingApprovals: pendingCount,
     };
-  }, [exhibitions, orders]);
+  }, [exhibitions, orders, period]);
 
   // Point 5: start an order from an ACTIVE exhibition. We stash the exhibition
   // context in sessionStorage so the order flow (a) skips OTP and (b) attaches
   // exhibition_id (+ commission) to the order on submit.
-  const startExhibitionOrder = (exb) => {
+  //
+  // IMPORTANT: like every other order-entry path (regular + stock), we MUST seed
+  // `associateSession` and `currentSalesperson` here. The downstream screens use
+  // them as auth/return context — ProductForm's Back handler reads
+  // `associateSession`, OrderDetails requires `currentSalesperson` — and without
+  // them a Back/Continue bounces to the dashboard and the role re-check signs the
+  // user out. (This was the exhibition "logout on Continue/Back" bug.)
+  const startExhibitionOrder = async (exb) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        sessionStorage.setItem("associateSession", JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          user: { email: session.user?.email },
+        }));
+      }
+
+      // Full salesperson record for `currentSalesperson` (name/phone/store/role).
+      const { data: sp } = await supabase
+        .from("salesperson")
+        .select("saleperson, email, phone, store_name, designation, role")
+        .eq("email", (currentUserEmail || "").toLowerCase())
+        .single();
+      if (sp) {
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+          name: sp.saleperson,
+          email: sp.email,
+          phone: sp.phone,
+          store: sp.store_name,
+          designation: sp.designation,
+          role: sp.role,
+        }));
+      }
+      sessionStorage.setItem("returnToAssociate", "true");
+    } catch (e) {
+      console.error("Exhibition order session setup failed:", e);
+    }
+
     sessionStorage.setItem("exhibitionOrder", JSON.stringify({
       exhibition_id: exb.id,
       exhibition_name: exb.name,
@@ -173,6 +230,22 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
       <div className="exb-header">
         <h2 className="exb-title">Exhibitions</h2>
         <button className="exb-new-btn" onClick={openNew}>+ New Exhibition</button>
+      </div>
+
+      {/* Period filter — applies to Total Orders / Clients / Revenue cards. */}
+      <div className="exb-period">
+        {[
+          { k: "all", label: "All Time" },
+          { k: "week", label: "This Week" },
+          { k: "month", label: "This Month" },
+          { k: "year", label: "This Year" },
+        ].map((p) => (
+          <button
+            key={p.k}
+            className={`exb-period-btn ${period === p.k ? "active" : ""}`}
+            onClick={() => setPeriod(p.k)}
+          >{p.label}</button>
+        ))}
       </div>
 
       {/* Summary cards (point 8) */}

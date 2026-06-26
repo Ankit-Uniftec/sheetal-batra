@@ -10,6 +10,17 @@
   border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px;
 }
 
+.exb-period {
+  display: inline-flex; gap: 0; margin-bottom: 14px;
+  border: 1px solid #e0d6bd; border-radius: 8px; overflow: hidden;
+}
+.exb-period-btn {
+  padding: 7px 16px; background: #fff; color: #6b5a2e; border: none;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.exb-period-btn + .exb-period-btn { border-left: 1px solid #e0d6bd; }
+.exb-period-btn.active { background: #b8985a; color: #fff; }
+
 .exb-cards {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px; margin-bottom: 22px;

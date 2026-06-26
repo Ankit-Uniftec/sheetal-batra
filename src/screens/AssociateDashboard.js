@@ -348,6 +348,14 @@ export default function Dashboard() {
         setSalesperson(spData);
         localStorage.setItem("sp_email", user.email);
 
+        // Exhibition SAs have no Dashboard tab (it shows personal-SA metrics).
+        // If they'd land on the default "dashboard" tab, send them to their
+        // Exhibitions view instead so they never see a hidden/irrelevant tab.
+        const spIsExhibition = /exhib/i.test(spData.store_name || "") || /exhib/i.test(spData.designation || "");
+        if (spIsExhibition) {
+          setActiveTab((t) => (t === "dashboard" ? "exhibitions" : t));
+        }
+
         // Fetch the most recent monthly target row at or before the
         // current month. Carry-forward semantics: if no row exists for
         // this exact month, use the latest prior month's value so the
@@ -1338,7 +1346,11 @@ export default function Dashboard() {
 
             <nav className="ad-menu">
               <a className={`ad-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>View Profile</a>
-              <a className={`ad-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
+              {/* Dashboard tab shows personal-SA sales metrics — not relevant to
+                  exhibition SAs, who work entirely from the Exhibitions tab. */}
+              {!isExhibition && (
+                <a className={`ad-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
+              )}
               <a className={`ad-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
               <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
@@ -2011,6 +2023,10 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Floating "+" order button — hidden entirely for Exhibition SAs, who
+            start orders from an Active Exhibition (the button had no relevant
+            action for them). */}
+        {!isExhibition && (
         <button
           className="ad-add-btn"
           onClick={async () => {
@@ -2021,20 +2037,6 @@ export default function Dashboard() {
                 message: "Salesperson data not found. Please login again.",
                 type: "error",
                 confirmText: "Ok",
-              });
-              return;
-            }
-
-            // Point 1: the regular "+" order journey is disabled for Exhibition
-            // SAs. Orders must be created by selecting an Active Exhibition
-            // (point 5), so send them to the Exhibitions panel instead.
-            if (isExhibition) {
-              setActiveTab("exhibitions");
-              showPopup({
-                title: "Select an Exhibition",
-                message: "Exhibition orders must be started from an Active Exhibition. Open the Exhibitions menu and create the order from there.",
-                type: "info",
-                confirmText: "OK",
               });
               return;
             }
@@ -2066,6 +2068,7 @@ export default function Dashboard() {
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}
         >+</button>
+        )}
 
         {/* Floating "Stock" button removed — stock-order entry is now the
             sidebar item below Client Book. handleStartStockOrder() is reused. */}
