@@ -9,6 +9,8 @@ import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils"
 import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
+import Badge from "../../components/Badge";
+import { getStageLabel, getStageColor } from "../../utils/barcodeService";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -18,6 +20,7 @@ export default function B2bMerchandiserDashboard() {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
+    const [components, setComponents] = useState([]); // order_components for the journey row
     const [vendors, setVendors] = useState([]);
     const [vendorMap, setVendorMap] = useState({});
     const [loading, setLoading] = useState(true);
@@ -107,6 +110,16 @@ export default function B2bMerchandiserDashboard() {
                     (vData || []).forEach(v => { vMap[v.id] = v; });
                     setVendorMap(vMap);
                 }
+
+                // Per-piece components for the order-card journey row.
+                const orderIds = (ordersResult.data || []).map(o => o.id);
+                if (orderIds.length > 0) {
+                    const { data: cData } = await supabase
+                        .from("order_components")
+                        .select("id, order_id, barcode, component_type, component_label, current_stage, item_index")
+                        .in("order_id", orderIds);
+                    setComponents(cData || []);
+                }
             }
             if (vendorsResult.data) setVendors(vendorsResult.data);
             setLoading(false);
@@ -139,6 +152,19 @@ export default function B2bMerchandiserDashboard() {
             return acc;
         }, {});
     }, [orders]);
+
+    // Per-order component lookup for the card journey row (O(1) per card),
+    // sorted by item then a stable TOP -> BTM -> DUP -> EXTRA order.
+    const componentsByOrder = useMemo(() => {
+        const TYPE_ORDER = { top: 0, bottom: 1, dupatta: 2, extra: 3 };
+        const map = {};
+        components.forEach((c) => { (map[c.order_id] || (map[c.order_id] = [])).push(c); });
+        Object.values(map).forEach((arr) => arr.sort((a, b) =>
+            (a.item_index ?? 0) - (b.item_index ?? 0) ||
+            (TYPE_ORDER[a.component_type] ?? 9) - (TYPE_ORDER[b.component_type] ?? 9)
+        ));
+        return map;
+    }, [components]);
 
     const uniqueMerchandisers = useMemo(() => {
         const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
@@ -726,6 +752,7 @@ export default function B2bMerchandiserDashboard() {
                                         <div className="merch-ocard-header">
                                             <div className="merch-ocard-info">
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">ORDER NO:</span><span className="merch-ocard-val">{order.order_no || "\u2014"}</span></div>
+                                                <div className="merch-ocard-field"><span className="merch-ocard-label">ORDER DATE:</span><span className="merch-ocard-val">{formatDate(order.created_at) || "\u2014"}</span></div>
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">DELIVERY:</span><span className="merch-ocard-val">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">PO NUMBER:</span><span className="merch-ocard-val">{order.po_number || "\u2014"}</span></div>
                                             </div>
@@ -756,6 +783,19 @@ export default function B2bMerchandiserDashboard() {
                                                 </div>
                                             </div>
                                         </div>
+                                        {(componentsByOrder[order.id]?.length > 0) && (
+                                            <div className="merch-comp-journey">
+                                                {componentsByOrder[order.id].map((comp) => (
+                                                    <div key={comp.id} className="merch-comp-card">
+                                                        <div className="merch-comp-info">
+                                                            <span className="merch-comp-barcode">{comp.barcode}</span>
+                                                            <span className="merch-comp-label">{comp.component_label || comp.component_type}</span>
+                                                        </div>
+                                                        <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                         {order.approval_status === "pending" && (
                                             <div className="merch-ocard-actions" onClick={(e) => e.stopPropagation()}>
                                                 <button className="merch-btn-approve" onClick={() => setApprovalModal({ order, action: "approve" })}>{"\u2713"} Approve</button>

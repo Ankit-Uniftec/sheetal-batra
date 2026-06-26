@@ -816,6 +816,9 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
               </View>
               <View style={warehouseStyles.infoColumn}>
                 <InfoRow label="ORDER DATE:" value={formatDate(order.created_at)} />
+                {order.is_b2b && order.po_number && (
+                  <InfoRow label="PO NUMBER:" value={order.po_number} />
+                )}
                 {order.is_gifting && order.gift_recipient_name && (
                   <InfoRow label="GIFT RECIPIENT:" value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`} />
                 )}
@@ -925,6 +928,9 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             </View>
             <View style={warehouseStyles.infoColumn}>
               <InfoRow label="ORDER DATE:" value={formatDate(order.created_at)} />
+              {order.is_b2b && order.po_number && (
+                <InfoRow label="PO NUMBER:" value={order.po_number} />
+              )}
               {order.is_gifting && order.gift_recipient_name && (
                 <InfoRow label="GIFT RECIPIENT:" value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`} />
               )}
