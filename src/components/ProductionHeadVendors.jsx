@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { usePopup } from "./Popup";
+import { SearchableSelect } from "./SearchableSelect";
 import {
   fetchApprovedVendors,
   fetchAllVendors,
@@ -64,6 +65,28 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   const toggleStage = (step) => {
     setStages((prev) => prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step]);
   };
+
+  // Vendor dropdown options. Label shows the vendor's STAGE (replacing the old
+  // location). When stage checkboxes are ticked, only vendors whose assigned
+  // stage matches one of the checked stages are shown. SearchableSelect adds a
+  // type-to-search box over these options.
+  const vendorOptions = useMemo(() => {
+    const list = stages.length > 0
+      ? approvedVendors.filter((v) => v.stage_number != null && stages.includes(v.stage_number))
+      : approvedVendors;
+    return list.map((v) => ({
+      value: v.id,
+      label: `${v.vendor_name}${v.stage_name ? ` — ${v.stage_name}` : ""}`,
+    }));
+  }, [approvedVendors, stages]);
+
+  // If the selected vendor no longer matches the checked-stage filter, clear it
+  // so we never submit a vendor that's hidden from the (now-filtered) list.
+  useEffect(() => {
+    if (vendorId && !vendorOptions.some((o) => o.value === vendorId)) {
+      setVendorId("");
+    }
+  }, [vendorOptions, vendorId]);
 
   const handleConfigure = async () => {
     if (!barcode.trim()) return showPopup({ title: "Required", message: "Enter the component barcode", type: "warning", confirmText: "OK" });
@@ -144,13 +167,16 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
           <input className="phv-input" value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="e.g. DLC-000082-TOP" />
 
           <label className="phv-label">Vendor (approved only)</label>
-          <select className="phv-input" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
-            <option value="">Select vendor…</option>
-            {approvedVendors.map((v) => (
-              <option key={v.id} value={v.id}>{v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            options={vendorOptions}
+            value={vendorId}
+            onChange={setVendorId}
+            placeholder="Search vendor by name or stage…"
+          />
           {approvedVendors.length === 0 && <p className="phv-warn">No approved vendors yet. Add one under the Vendors tab.</p>}
+          {approvedVendors.length > 0 && vendorOptions.length === 0 && (
+            <p className="phv-warn">No approved vendors match the selected stage(s).</p>
+          )}
 
           <label className="phv-label">Return Date (cannot be backdated)</label>
           <input className="phv-input" type="date" min={todayStr} value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
