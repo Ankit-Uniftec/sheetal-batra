@@ -6,6 +6,7 @@ import "./B2bProductForm.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 import ExtrasPopup from "../../components/ExtrasPopup";
 
@@ -72,6 +73,21 @@ const SIZE_CHART_US = {
     "5XL": { Bust: 48, Waist: 42, Hip: 52 }, "6XL": { Bust: 50, Waist: 44, Hip: 54 }, "7XL": { Bust: 52, Waist: 46, Hip: 56 },
     "8XL": { Bust: 54, Waist: 48, Hip: 58 },
 };
+
+// CUSTOM size — a deliberate "no standard size" choice. Not in any size chart,
+// so the auto-fill effect skips it; the user enters every measurement.
+const CUSTOM_SIZE = "Custom";
+
+// Every numeric value in the adult size chart — used to recognise (and clear)
+// chart-derived measurement values when switching to Custom, while keeping
+// values the user typed themselves.
+const SIZE_CHART_VALUE_SET = (() => {
+    const set = new Set();
+    Object.values(SIZE_CHART_US).forEach((d) =>
+        Object.values(d).forEach((v) => { if (v != null) set.add(Number(v)); })
+    );
+    return set;
+})();
 
 const CATEGORY_KEY_MAP = {
     "Short Kurta": "KurtaChogaKaftan", "Kurta": "KurtaChogaKaftan", "Long Kurta": "KurtaChogaKaftan",
@@ -289,7 +305,10 @@ export default function B2bProductForm() {
 
     // ==================== FETCH DATA ====================
     useEffect(() => {
-        supabase.from("products").select("*, product_extra_prices (*)").order("name").then(({ data }) => setProducts(data || []));
+        // Paginate past the 1000-row cap so the full catalog (1000+ products)
+        // shows in the dropdown, not just the first 1000 (late-alphabet
+        // products were silently dropping off).
+        fetchAllRows("products", (q) => q.select("*, product_extra_prices (*)").order("name")).then(({ data }) => setProducts(data || []));
         supabase.from("colors").select("name, hex").order("name").then(({ data }) => setColors(data || []));
         supabase.from("extras").select("name, price, sort_order").order("sort_order").then(({ data }) => setGlobalExtras(data || []));
     }, []);
@@ -325,9 +344,29 @@ export default function B2bProductForm() {
         setIncludesDupatta(selectedProduct.has_dupatta === true);
     }, [selectedProduct, isKidsProduct, colors, globalExtras]);
 
+    // Select CUSTOM size: no standard size, no auto-filled measurements. Clears
+    // only chart-derived measurement values (keeps anything typed manually).
+    const selectCustomSize = () => {
+        setSelectedSize(CUSTOM_SIZE);
+        setMeasurements((prev) => {
+            const cleared = {};
+            Object.entries(prev || {}).forEach(([categoryKey, fields]) => {
+                const newFields = {};
+                Object.entries(fields || {}).forEach(([field, value]) => {
+                    const isChartValue = value !== "" && value != null && SIZE_CHART_VALUE_SET.has(Number(value));
+                    newFields[field] = isChartValue ? "" : value;
+                });
+                cleared[categoryKey] = newFields;
+            });
+            return cleared;
+        });
+    };
+
     // Auto-fill size chart
     useEffect(() => {
         if (isRestoredRef.current || !selectedSize || !selectedProduct) return;
+        // CUSTOM never auto-fills — the user enters every measurement.
+        if (selectedSize === CUSTOM_SIZE) return;
         const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
         const sizeData = currentSizeChart[selectedSize];
         if (!sizeData) return;
@@ -390,6 +429,21 @@ export default function B2bProductForm() {
     const toggleExpand = (id) => setExpandedRowIds(e => ({ ...e, [id]: !e[id] }));
     const handleDelete = (id) => setOrderItems(prev => prev.filter(it => it._id !== id));
     const updateItem = (id, patch) => setOrderItems(prev => prev.map(it => it._id !== id ? it : { ...it, ...patch }));
+
+    // Edit-mode CUSTOM size: set the item's size to Custom and clear only its
+    // chart-derived measurement values (keep anything entered manually).
+    const selectCustomSizeForItem = (item) => {
+        const clearedMeasurements = {};
+        Object.entries(item.measurements || {}).forEach(([categoryKey, fields]) => {
+            const newFields = {};
+            Object.entries(fields || {}).forEach(([field, value]) => {
+                const isChartValue = value !== "" && value != null && SIZE_CHART_VALUE_SET.has(Number(value));
+                newFields[field] = isChartValue ? "" : value;
+            });
+            clearedMeasurements[categoryKey] = newFields;
+        });
+        updateItem(item._id, { size: CUSTOM_SIZE, measurements: clearedMeasurements });
+    };
 
     const handleAddExtra = () => {
         if (!selectedExtra) return;
@@ -577,7 +631,7 @@ export default function B2bProductForm() {
                                                             <button className="add-extra-btn" style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: "3px", cursor: "pointer", padding: "6px 14px", fontSize: "13px", marginTop: "8px" }} onClick={() => { setEditExtrasModalItemId(item._id); setEditExtraSelected(""); setEditExtraSelectedColor({ name: "", hex: "" }); }}>+ Add Extras</button>
                                                         </div>
                                                     </div>
-                                                    <div className="size-box edit-size-box"><span className="size-label">Size:</span><div className="sizes">{(item.isKids ? KIDS_SIZE_OPTIONS : opts.sizes).map((s, idx) => <button key={idx} className={item.size === s ? "size-btn active" : "size-btn"} onClick={() => updateItem(item._id, { size: s })}>{s}</button>)}</div></div>
+                                                    <div className="size-box edit-size-box"><span className="size-label">Size:</span><div className="sizes">{(item.isKids ? KIDS_SIZE_OPTIONS : opts.sizes).map((s, idx) => <button key={idx} className={item.size === s ? "size-btn active" : "size-btn"} onClick={() => updateItem(item._id, { size: s })}>{s}</button>)}<button className={item.size === CUSTOM_SIZE ? "size-btn active" : "size-btn"} onClick={() => selectCustomSizeForItem(item)}>{CUSTOM_SIZE}</button></div></div>
                                                     <div className="row"><div className="qty-field"><label>Qty</label><div className="qty-controls"><button onClick={() => updateItem(item._id, { quantity: Math.max(1, (item.quantity || 1) - 1) })}>−</button><span>{item.quantity || 1}</span><button onClick={() => updateItem(item._id, { quantity: (item.quantity || 1) + 1 })}>+</button></div></div><div className="field"><label>Delivery Date</label><input type="date" className="input-line" value={item.delivery_date || ""} min={new Date().toISOString().split("T")[0]} onChange={(e) => updateItem(item._id, { delivery_date: e.target.value })} /></div></div>
                                                     {/* Custom Measurements */}
                                                     <div className="measure-bar" onClick={() => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_m`]: !prev[`${item._id}_m`] }))}><span>Custom Measurements</span><button className="plus-btn" type="button">{expandedRowIds[`${item._id}_m`] ? "\u2212" : "+"}</button></div>
@@ -659,7 +713,7 @@ export default function B2bProductForm() {
                             </label>
                         </div>
 
-                        <div className="size-box"><span className="size-label">Size:</span><div className="sizes">{availableSizes.map((s, i) => <button key={i} className={selectedSize === s ? "size-btn active" : "size-btn"} onClick={() => setSelectedSize(s)}>{s}</button>)}</div></div>
+                        <div className="size-box"><span className="size-label">Size:</span><div className="sizes">{availableSizes.map((s, i) => <button key={i} className={selectedSize === s ? "size-btn active" : "size-btn"} onClick={() => setSelectedSize(s)}>{s}</button>)}<button className={selectedSize === CUSTOM_SIZE ? "size-btn active" : "size-btn"} onClick={() => selectCustomSize()}>{CUSTOM_SIZE}</button></div></div>
 
                         <div className="measure-bar"><span>Custom Measurements</span><button className="plus-btn" onClick={() => setShowMeasurements(!showMeasurements)}>{showMeasurements ? "−" : "+"}</button></div>
                         {showMeasurements && (

@@ -7,6 +7,7 @@ import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatDate from "../utils/formatDate";
 import { normalizeStore, isProductVisibleForStore } from "../utils/storeCategory";
+import { fetchAllRows } from "../utils/fetchAllRows";
 import { usePopup } from "../components/Popup"; // Import Popup component
 import ExtrasPopup from "../components/ExtrasPopup";
 import config from "../config/config";
@@ -375,6 +376,22 @@ const SIZE_CHART_US = {
   "7XL": { Bust: 52, Waist: 46, Hip: 56 },
   "8XL": { Bust: 54, Waist: 48, Hip: 58 },
 };
+
+// CUSTOM size — a deliberate "no standard size" choice. It is NOT in any size
+// chart, so the auto-fill effect naturally skips it (no chart values), and the
+// measurement fields stay empty for manual entry.
+const CUSTOM_SIZE = "Custom";
+
+// Set of every numeric value that appears anywhere in the adult size chart —
+// used to recognise (and clear) chart-derived measurement values when the user
+// switches to Custom, while preserving values they typed themselves.
+const SIZE_CHART_VALUE_SET = (() => {
+  const set = new Set();
+  Object.values(SIZE_CHART_US).forEach((d) =>
+    Object.values(d).forEach((v) => { if (v != null) set.add(Number(v)); })
+  );
+  return set;
+})();
 
 // 🔑 UI label → internal key mapping
 const CATEGORY_KEY_MAP = {
@@ -883,6 +900,23 @@ export default function ProductForm() {
         return updated;
       })
     );
+
+  // Edit-mode CUSTOM size: set the item's size to Custom and clear only its
+  // chart-derived measurement values (keep anything entered manually), mirroring
+  // selectCustomSize() in the add flow.
+  const selectCustomSizeForItem = (item) => {
+    const clearedMeasurements = {};
+    Object.entries(item.measurements || {}).forEach(([categoryKey, fields]) => {
+      const newFields = {};
+      Object.entries(fields || {}).forEach(([field, value]) => {
+        const isChartValue = value !== "" && value != null && SIZE_CHART_VALUE_SET.has(Number(value));
+        newFields[field] = isChartValue ? "" : value;
+      });
+      clearedMeasurements[categoryKey] = newFields;
+    });
+    updateItem(item._id, { size: CUSTOM_SIZE, measurements: clearedMeasurements });
+  };
+
   // Update measurement for a specific item
   const updateItemMeasurement = (itemId, categoryKey, field, value) => {
     setOrderItems((prev) =>
@@ -1297,11 +1331,15 @@ export default function ProductForm() {
   // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
-      const { data: productsData, error } = await supabase.from("products")
-        .select(`
+      // Paginate past Supabase's 1000-row default cap — the catalog exceeds
+      // 1000 products, so an un-paged fetch silently dropped late-alphabet
+      // products (everything after ~"W" went missing from the dropdown).
+      const { data: productsData, error } = await fetchAllRows("products", (q) =>
+        q.select(`
         *,
         product_extra_prices (*)
-      `);
+      `)
+      );
 
       if (error) {
         console.error("Error fetching products:", error);
@@ -1675,12 +1713,35 @@ export default function ProductForm() {
   }, [selectedTop, selectedBottom]);
 
 
+  // Select the CUSTOM size: no standard size, no auto-filled measurements.
+  // We clear only the measurement values that were auto-filled FROM the size
+  // chart (so a previously-picked S/M/L doesn't leave its defaults behind);
+  // any value the user typed manually (not a chart value) is preserved.
+  const selectCustomSize = () => {
+    setSelectedSize(CUSTOM_SIZE);
+    setMeasurements((prev) => {
+      const cleared = {};
+      Object.entries(prev || {}).forEach(([categoryKey, fields]) => {
+        const newFields = {};
+        Object.entries(fields || {}).forEach(([field, value]) => {
+          const isChartValue = value !== "" && value != null && SIZE_CHART_VALUE_SET.has(Number(value));
+          // Drop chart-derived values; keep anything the user entered.
+          newFields[field] = isChartValue ? "" : value;
+        });
+        cleared[categoryKey] = newFields;
+      });
+      return cleared;
+    });
+  };
+
   // ✅ AUTO-FILL SIZE CHART VALUES FOR ALL RELEVANT CATEGORIES
   useEffect(() => {
     // Skip auto-fill if data was just restored from sessionStorage
     if (isRestoredRef.current) {
       return;
     }
+    // CUSTOM size never auto-fills — the user enters every measurement.
+    if (selectedSize === CUSTOM_SIZE) return;
     if (!selectedSize || !selectedProduct) return;
 
     const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
@@ -3080,15 +3141,27 @@ export default function ProductForm() {
                             <span className="size-label">Size:</span>
                             <div className="sizes">
                               {itemSizes.length > 0 ? (
-                                itemSizes.map((s, idx) => (
-                                  <button
-                                    key={idx}
-                                    className={item.size === s ? "size-btn active" : "size-btn"}
-                                    onClick={() => updateItem(item._id, { size: s })}
-                                  >
-                                    {s}
-                                  </button>
-                                ))
+                                <>
+                                  {itemSizes.map((s, idx) => (
+                                    <button
+                                      key={idx}
+                                      className={item.size === s ? "size-btn active" : "size-btn"}
+                                      onClick={() => updateItem(item._id, { size: s })}
+                                    >
+                                      {s}
+                                    </button>
+                                  ))}
+                                  {/* CUSTOM — clears chart-derived measurements on
+                                      this item so they can be entered manually. */}
+                                  {!item.sync_enabled && (
+                                    <button
+                                      className={item.size === CUSTOM_SIZE ? "size-btn active" : "size-btn"}
+                                      onClick={() => selectCustomSizeForItem(item)}
+                                    >
+                                      {CUSTOM_SIZE}
+                                    </button>
+                                  )}
+                                </>
                               ) : (
                                 <span style={{ opacity: 0.6 }}>No sizes available</span>
                               )}
@@ -3471,21 +3544,35 @@ export default function ProductForm() {
                 {syncLoading ? (
                   <span style={{ opacity: 0.6 }}>Loading sizes...</span>
                 ) : Array.isArray(availableSizes) && availableSizes.length > 0 ? (
-                  availableSizes.map((s, i) => (
-                    <button
-                      key={i}
-                      className={selectedSize === s ? "size-btn active" : "size-btn"}
-                      onClick={() => {
-                        setSelectedSize(s);
-                        if (isSyncProduct) setQuantity(1);
-                      }}
-                    >
-                      {s}
-                      {isSyncProduct && localInventory[s] !== undefined && (
-                        <span className="size-inventory">({localInventory[s]})</span>
-                      )}
-                    </button>
-                  ))
+                  <>
+                    {availableSizes.map((s, i) => (
+                      <button
+                        key={i}
+                        className={selectedSize === s ? "size-btn active" : "size-btn"}
+                        onClick={() => {
+                          setSelectedSize(s);
+                          if (isSyncProduct) setQuantity(1);
+                        }}
+                      >
+                        {s}
+                        {isSyncProduct && localInventory[s] !== undefined && (
+                          <span className="size-inventory">({localInventory[s]})</span>
+                        )}
+                      </button>
+                    ))}
+                    {/* CUSTOM size — no size-chart auto-fill. Selecting it clears
+                        any chart-derived measurements so the user enters their
+                        own. Not offered for sync (LXRTS) products, which sell
+                        fixed Shopify variant sizes. */}
+                    {!isSyncProduct && (
+                      <button
+                        className={selectedSize === CUSTOM_SIZE ? "size-btn active" : "size-btn"}
+                        onClick={() => selectCustomSize()}
+                      >
+                        {CUSTOM_SIZE}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <span style={{ opacity: 0.6 }}>
                     {isSyncProduct ? "No sizes in stock" : "No sizes available"}
