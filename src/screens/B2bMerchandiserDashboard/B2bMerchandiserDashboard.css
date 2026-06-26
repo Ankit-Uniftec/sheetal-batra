@@ -150,10 +150,13 @@
 .merch-btn-detail:hover { background: #d5b85a; color: white; }
 
 /* ---------------- ALL ORDERS TAB ---------------- */
-.merch-filters-row { display: flex; gap: 12px; margin: 12px 0 18px; flex-wrap: wrap; }
-.merch-search-input { flex: 1; min-width: 250px; padding: 10px 14px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 14px; outline: none; }
+/* Compact filter bar — search spans the top line; the selects + date inputs
+   share a single wrapping line below (collapses to more lines only on very
+   narrow screens) instead of each filter stacking full-width. */
+.merch-filters-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 18px; align-items: center; }
+.merch-search-input { flex: 1 1 100%; padding: 9px 14px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 14px; outline: none; }
 .merch-search-input:focus { border-color: #b79b3d; }
-.merch-filter-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 14px; outline: none; background: white; cursor: pointer; }
+.merch-filter-select { flex: 1 1 150px; min-width: 130px; max-width: 220px; padding: 9px 12px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 13px; outline: none; background: white; cursor: pointer; }
 .merch-filter-select:focus { border-color: #b79b3d; }
 
 .merch-order-list-scroll { flex: 1; overflow-y: auto; padding-right: 10px; }
@@ -182,6 +185,13 @@
 .merch-ocard-gitem { display: flex; flex-direction: column; gap: 2px; }
 .merch-ocard-gitem .merch-ocard-dlabel { font-size: 11px; color: #999; text-transform: uppercase; }
 .merch-ocard-gitem .merch-ocard-dval { font-size: 13px; font-weight: 600; }
+
+/* Component journey (per-piece stage chips) */
+.merch-comp-journey { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; padding: 14px 20px; border-top: 1px solid #f0ead0; }
+.merch-comp-card { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: #f9f9f9; border: 1px solid #eee; border-radius: 8px; min-width: 0; }
+.merch-comp-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; overflow: hidden; }
+.merch-comp-barcode { font-family: "Courier New", monospace; font-size: 12px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.merch-comp-label { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .merch-ocard-actions { display: flex; gap: 10px; padding: 12px 20px; border-top: 1px solid #f0ead0; }
 

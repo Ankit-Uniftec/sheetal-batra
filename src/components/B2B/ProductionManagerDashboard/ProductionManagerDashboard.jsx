@@ -498,6 +498,22 @@ export default function ProductionManagerDashboard() {
         return { list, total };
     }, [components]);
 
+    // Per-order component lookup for the card journey row (O(1) per card vs.
+    // filtering the full list each render). Sorted by item_index then a stable
+    // TOP -> BTM -> DUP -> EXTRA order so each outfit's pieces read naturally.
+    const componentsByOrder = useMemo(() => {
+        const TYPE_ORDER = { top: 0, bottom: 1, dupatta: 2, extra: 3 };
+        const map = {};
+        components.forEach((c) => {
+            (map[c.order_id] || (map[c.order_id] = [])).push(c);
+        });
+        Object.values(map).forEach((arr) => arr.sort((a, b) =>
+            (a.item_index ?? 0) - (b.item_index ?? 0) ||
+            (TYPE_ORDER[a.component_type] ?? 9) - (TYPE_ORDER[b.component_type] ?? 9)
+        ));
+        return map;
+    }, [components]);
+
     // Components in the currently-drilled-down stage (for the modal list)
     const drillDownComponents = useMemo(() => {
         if (!stageDrillDown) return [];
@@ -1586,6 +1602,22 @@ export default function ProductionManagerDashboard() {
                                                         )}
                                                     </div>
                                                 </div>
+
+                                                {/* Component journey — one chip per piece (TOP/BTM/DUP/extra)
+                                                    with its current production stage, mirroring the warehouse view. */}
+                                                {(componentsByOrder[order.id]?.length > 0) && (
+                                                    <div className="pm-comp-journey">
+                                                        {componentsByOrder[order.id].map((comp) => (
+                                                            <div key={comp.id} className="pm-comp-card">
+                                                                <div className="pm-comp-info">
+                                                                    <span className="pm-comp-barcode">{comp.barcode}</span>
+                                                                    <span className="pm-comp-label">{comp.component_label || comp.component_type}</span>
+                                                                </div>
+                                                                <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
 
                                                 <div className="pm-order-actions">
                                                     <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>

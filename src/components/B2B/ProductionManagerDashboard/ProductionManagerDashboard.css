@@ -166,6 +166,30 @@
 .pm-odetails-grid { display: flex; gap: 32px; flex-wrap: wrap; }
 .pm-odetail-item { display: flex; flex-direction: column; gap: 2px; }
 
+/* Component journey (per-piece stage chips, mirrors the warehouse view) */
+.pm-comp-journey {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f0f0;
+}
+.pm-comp-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  min-width: 0;
+}
+.pm-comp-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; overflow: hidden; }
+.pm-comp-barcode { font-family: "Courier New", monospace; font-size: 12px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-comp-label { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* Order Actions */
 .pm-order-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #f0f0f0; align-items: center; }
 .pm-action-btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
