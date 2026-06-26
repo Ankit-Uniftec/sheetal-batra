@@ -505,7 +505,7 @@ export async function resumeFactory({ resumedBy }) {
 export async function fetchApprovedVendors() {
   const { data, error } = await supabase
     .from("production_vendors")
-    .select("id, vendor_name, vendor_location, status")
+    .select("id, vendor_name, vendor_location, contact_name, stage_name, stage_number, status")
     .eq("status", "approved")
     .order("vendor_name", { ascending: true });
   if (error) throw error;
