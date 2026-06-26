@@ -263,7 +263,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
 
                 if (component.current_stage !== entryStage) {
                     try {
-                        await advanceComponentStage(
+                        const advRes = await advanceComponentStage(
                             barcode,
                             entryStage,
                             currentUserEmail,
@@ -271,6 +271,21 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                             null,
                             "scan"
                         );
+                        // The RPC reports a REJECTED move (e.g. the piece isn't
+                        // eligible for QC yet) by returning { success: false }
+                        // as DATA — it does NOT throw. We must honour that and
+                        // stop, otherwise we'd optimistically show the piece at
+                        // the QC stage it never actually entered (and open the
+                        // QC popup on a piece still at, say, Order Received).
+                        if (advRes && advRes.success === false) {
+                            setScanResult({
+                                success: false,
+                                error: advRes.error || "QC_ENTRY_ERROR",
+                                message: buildFriendlyScanError(advRes.message || ""),
+                            });
+                            setIsProcessing(false);
+                            return;
+                        }
                         // Refresh local copy so the popup sees the new stage
                         component = { ...component, current_stage: entryStage };
                     } catch (advanceErr) {
