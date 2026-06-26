@@ -110,8 +110,8 @@ const getMeasurementLabel = (key) => {
 // Warehouse specific styles
 const warehouseStyles = StyleSheet.create({
   page: {
-    padding: 40,
-    paddingBottom: 160,
+    paddingHorizontal: 40,
+    paddingVertical: 36,
     fontFamily: "Helvetica",
     fontSize: 10,
     backgroundColor: "#FFFFFF",
@@ -120,7 +120,7 @@ const warehouseStyles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   logoSection: {
     alignItems: "center",
@@ -154,7 +154,7 @@ const warehouseStyles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 12,
   },
   title: {
     fontSize: 20,
@@ -225,14 +225,14 @@ const warehouseStyles = StyleSheet.create({
 
   infoGrid: {
     flexDirection: "row",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   infoColumn: {
     flex: 1,
   },
   infoRow: {
     flexDirection: "row",
-    marginBottom: 6,
+    marginBottom: 5,
   },
   infoLabel: {
     fontSize: 9,
@@ -261,13 +261,13 @@ const warehouseStyles = StyleSheet.create({
     backgroundColor: COLORS.gold,
     padding: 8,
     paddingLeft: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionBarAlteration: {
     backgroundColor: COLORS.gold,
     padding: 8,
     paddingLeft: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionTitle: {
     color: COLORS.white,
@@ -277,8 +277,8 @@ const warehouseStyles = StyleSheet.create({
 
   productRow: {
     flexDirection: "row",
-    marginBottom: 15,
-    paddingBottom: 15,
+    marginBottom: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#EEE",
   },
@@ -294,7 +294,7 @@ const warehouseStyles = StyleSheet.create({
   productName: {
     fontSize: 14,
     fontFamily: "Helvetica-Bold",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   productGrid: {
     flexDirection: "row",
@@ -302,11 +302,11 @@ const warehouseStyles = StyleSheet.create({
   },
   productField: {
     width: "25%",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   productFieldWide: {
     width: "50%",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   fieldLabel: {
     fontSize: 9,
@@ -343,15 +343,15 @@ const warehouseStyles = StyleSheet.create({
   },
 
   commentsSection: {
-    marginBottom: 15,
+    marginBottom: 12,
   },
   commentsLabel: {
     fontSize: 10,
     fontFamily: "Helvetica-Bold",
-    marginBottom: 6,
+    marginBottom: 5,
   },
   commentsBox: {
-    minHeight: 50,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: "#DDD",
     padding: 10,
@@ -365,14 +365,14 @@ const warehouseStyles = StyleSheet.create({
     backgroundColor: COLORS.gold,
     padding: 8,
     paddingLeft: 12,
-    marginBottom: 12,
-    marginTop: 10,
+    marginBottom: 10,
+    marginTop: 8,
   },
 
   measurementsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 20,
+    marginBottom: 12,
   },
   measurementBox: {
     width: "32%",
@@ -407,11 +407,17 @@ const warehouseStyles = StyleSheet.create({
     color: "#333",
   },
 
-  bottomBarcodes: {
-    position: "absolute",
-    bottom: 20,
-    left: 40,
-    right: 40,
+  // In-flow component barcode block — sits under the component's details, in
+  // the normal flow (replaces the old absolute/`fixed` footer that duplicated
+  // onto overflow pages and produced near-blank second pages).
+  componentBarcode: {
+    marginTop: 16,
+    alignItems: "center",
+    width: "100%",
+  },
+  // In-flow fallback placeholder barcodes (old orders without components).
+  fallbackBarcodes: {
+    marginTop: 24,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "flex-start",
@@ -849,20 +855,22 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             </View>
             <MeasurementsDisplay measurements={item.measurements} />
 
-            {/* Single Component Barcode at bottom */}
-            <View style={warehouseStyles.bottomBarcodes} fixed>
-              <View style={{ alignItems: "center", width: "100%" }}>
-                <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 8, color: COLORS.gold }}>
-                  {comp.label}
-                </Text>
-                {comp.image ? (
-                  <Image src={comp.image} style={{ width: 200, height: 60 }} />
-                ) : (
-                  <View style={warehouseStyles.barcodeItemBox}>
-                    <Text style={warehouseStyles.barcodeText}>{comp.barcode}</Text>
-                  </View>
-                )}
-              </View>
+            {/* Component barcode — rendered IN-FLOW (not `fixed`/absolute) so it
+                sits under the component's details and never duplicates onto an
+                overflow page. We let it flow naturally (no wrap={false}) so it
+                fills the remaining space on the page rather than being pushed
+                whole to the next page, which would leave a large gap. */}
+            <View style={warehouseStyles.componentBarcode}>
+              <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 8, color: COLORS.gold }}>
+                {comp.label}
+              </Text>
+              {comp.image ? (
+                <Image src={comp.image} style={{ width: 200, height: 60 }} />
+              ) : (
+                <View style={warehouseStyles.barcodeItemBox}>
+                  <Text style={warehouseStyles.barcodeText}>{comp.barcode}</Text>
+                </View>
+              )}
             </View>
           </Page>
         ))
@@ -961,9 +969,10 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
           </View>
           <MeasurementsDisplay measurements={item.measurements} />
 
-          {/* Fallback bottom barcodes (disabled in prod via SHOW_BARCODES) */}
+          {/* Fallback barcodes — in-flow (not `fixed`) so they don't duplicate
+              onto an overflow page. */}
           {SHOW_BARCODES && (
-            <View style={warehouseStyles.bottomBarcodes} fixed>
+            <View style={warehouseStyles.fallbackBarcodes}>
               <BarcodePlaceholder label="Top" />
               <BarcodePlaceholder label="Bottom" />
               {item?.includes_dupatta === true && <BarcodePlaceholder label="Dupatta" />}
