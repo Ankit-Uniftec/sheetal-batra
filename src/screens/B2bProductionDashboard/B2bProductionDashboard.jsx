@@ -425,6 +425,7 @@ export default function B2bProductionDashboard() {
                                                 <div className="prod-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
                                                     <p><b>Order No:</b> {o.order_no} &nbsp;|&nbsp; <b>PO:</b> {o.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Type:</b> {o.b2b_order_type || "\u2014"}</p>
+                                                    <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "\u2014"}</p>
                                                     <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span></p>
                                                 </div>
                                             );

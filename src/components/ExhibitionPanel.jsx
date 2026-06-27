@@ -53,10 +53,15 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
       // Orders linked to these exhibitions (for the summary cards).
       const ids = (exbs || []).map((e) => e.id);
       if (ids.length > 0) {
-        const { data: ords } = await supabase
+        const { data: ords, error: ordErr } = await supabase
           .from("orders")
-          .select("id, exhibition_id, created_at, net_total, grand_total_after_discount, grand_total, user_id, phone, delivery_phone")
+          .select("id, exhibition_id, created_at, net_total, grand_total_after_discount, grand_total, user_id, delivery_phone")
           .in("exhibition_id", ids);
+        // Surface (don't swallow) a failed orders fetch — otherwise the summary
+        // cards silently read as 0 when the query errors.
+        if (ordErr) {
+          console.error("Exhibition orders fetch failed:", ordErr);
+        }
         setOrders(ords || []);
       } else {
         setOrders([]);
@@ -98,7 +103,7 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
       gross += Number(val) || 0;
       net += netSbRevenue(val, commissionByExb[o.exhibition_id] || 0);
       // distinct client by best-available identifier
-      const key = o.user_id || o.phone || o.delivery_phone;
+      const key = o.user_id || o.delivery_phone;
       if (key) clientKeys.add(key);
     });
 

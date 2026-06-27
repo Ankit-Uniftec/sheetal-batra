@@ -678,7 +678,8 @@ export default function B2bMerchandiserDashboard() {
                                                 <p><b>Order No:</b> {o.order_no}</p>
                                                 <p><b>PO:</b> {o.po_number || "\u2014"} &nbsp;|&nbsp; <b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"}</p>
                                                 <p><b>Type:</b> {o.b2b_order_type || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={getStatusBadgeClass(o.approval_status)}>{o.approval_status || "Pending"}</span></p>
-                                                <p><b>Total:</b> {`\u20B9${formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}`} &nbsp;|&nbsp; <b>Date:</b> {formatDate(o.created_at)}</p>
+                                                <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "\u2014"}</p>
+                                                <p><b>Total:</b> {`\u20B9${formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}`}</p>
                                             </div>
                                         ))
                                     )}
