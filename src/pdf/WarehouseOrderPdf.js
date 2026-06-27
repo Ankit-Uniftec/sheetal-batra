@@ -563,7 +563,9 @@ const ProductItem = ({ item }) => {
           {hasDupatta && (
             <View style={warehouseStyles.productField}>
               <Text style={warehouseStyles.fieldLabel}>Dupatta</Text>
-              <Text style={warehouseStyles.fieldValue}>Included</Text>
+              <Text style={warehouseStyles.fieldValue}>
+                {item?.dupatta_color ? safeString(item.dupatta_color) : "Included"}
+              </Text>
             </View>
           )}
 

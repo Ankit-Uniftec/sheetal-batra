@@ -173,6 +173,7 @@ export default function B2bProductForm() {
     const [products, setProducts] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [colors, setColors] = useState([]);
+    const [dupattaColors, setDupattaColors] = useState([]); // own list, names only
     const [tops, setTops] = useState([]);
     const [bottoms, setBottoms] = useState([]);
     const [globalExtras, setGlobalExtras] = useState([]);
@@ -198,6 +199,7 @@ export default function B2bProductForm() {
     // Pre-filled from the product's has_dupatta; captured on the item as
     // includes_dupatta so the warehouse generates a separate dupatta barcode.
     const [includesDupatta, setIncludesDupatta] = useState(false);
+    const [selectedDupattaColor, setSelectedDupattaColor] = useState("");
     const [availableSizes, setAvailableSizes] = useState(SIZE_OPTIONS);
 
     const [isKidsProduct, setIsKidsProduct] = useState(false);
@@ -310,6 +312,7 @@ export default function B2bProductForm() {
         // products were silently dropping off).
         fetchAllRows("products", (q) => q.select("*, product_extra_prices (*)").order("name")).then(({ data }) => setProducts(data || []));
         supabase.from("colors").select("name, hex").order("name").then(({ data }) => setColors(data || []));
+        supabase.from("dupatta_colors").select("name").order("name").then(({ data }) => setDupattaColors((data || []).map((d) => d.name)));
         supabase.from("extras").select("name, price, sort_order").order("sort_order").then(({ data }) => setGlobalExtras(data || []));
     }, []);
 
@@ -321,6 +324,7 @@ export default function B2bProductForm() {
             setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" });
             setSelectedExtrasWithColors([]); setSelectedAdditionals([]); setQuantity(1); setMeasurements({});
             setIncludesDupatta(false);
+            setSelectedDupattaColor("");
             return;
         }
         setTops(selectedProduct.top_options || []);
@@ -342,6 +346,7 @@ export default function B2bProductForm() {
         } else setSelectedExtrasWithColors([]);
         setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" });
         setIncludesDupatta(selectedProduct.has_dupatta === true);
+        setSelectedDupattaColor(selectedProduct.default_dupatta_color || "");
     }, [selectedProduct, isKidsProduct, colors, globalExtras]);
 
     // Select CUSTOM size: no standard size, no auto-filled measurements. Clears
@@ -493,11 +498,12 @@ export default function B2bProductForm() {
             _id: makeId(), product_id: selectedProduct.id, product_name: selectedProduct.name, sku_id: selectedProduct.sku_id,
             top: selectedTop, top_color: selectedTopColor, bottom: selectedBottom, bottom_color: selectedBottomColor,
             includes_dupatta: includesDupatta,
+            dupatta_color: includesDupatta ? (selectedDupattaColor || null) : null,
             extras: finalExtras, additionals: selectedAdditionals.filter(a => a.name?.trim()), size: selectedSize, quantity,
             price: getBasePrice(), measurements: getRelevantMeasurements(), image_url: selectedProduct.image_url, notes: comments, delivery_date: deliveryDate,
             isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
         }]);
-        setSelectedProduct(null); setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" }); setIncludesDupatta(false);
+        setSelectedProduct(null); setSelectedTop(""); setSelectedBottom(""); setSelectedTopColor({ name: "", hex: "" }); setSelectedBottomColor({ name: "", hex: "" }); setIncludesDupatta(false); setSelectedDupattaColor("");
         setSelectedExtra(""); setSelectedExtraColor({ name: "", hex: "" }); setSelectedExtrasWithColors([]); setSelectedAdditionals([{ name: "", price: "" }]);
         setShowExtrasModal(false); setShowAdditionals(true);
         setSelectedSize("M"); setQuantity(1); setMeasurements({}); setComments("");
@@ -533,6 +539,7 @@ export default function B2bProductForm() {
                 _id: makeId(), product_id: selectedProduct.id, product_name: selectedProduct.name, sku_id: selectedProduct.sku_id,
                 top: selectedTop, top_color: selectedTopColor, bottom: selectedBottom, bottom_color: selectedBottomColor,
                 includes_dupatta: includesDupatta,
+                dupatta_color: includesDupatta ? (selectedDupattaColor || null) : null,
                 extras: finalExtras, additionals: selectedAdditionals.filter(a => a.name?.trim()), size: selectedSize, quantity,
                 price: getBasePrice(), measurements: getRelevantMeasurements(), image_url: selectedProduct.image_url, notes: comments, delivery_date: deliveryDate,
                 isKids: isKidsProduct, category: isKidsProduct ? "Kids" : "Women",
@@ -706,12 +713,15 @@ export default function B2bProductForm() {
 
                         {selectedExtrasWithColors.map((extra, idx) => <div key={idx} className="selected-extra-item"><span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price)}){extra.color?.name && ` (${extra.color.name})`}</span><button onClick={() => handleRemoveExtra(idx)}>x</button></div>)}
 
-                        <div className="dupatta-box" style={{ margin: "10px 0" }}>
-                            <label className="dupatta-toggle" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-                                <input type="checkbox" checked={includesDupatta} onChange={(e) => setIncludesDupatta(e.target.checked)} />
-                                <span>Includes Dupatta (tracked as a separate piece with its own barcode)</span>
-                            </label>
-                        </div>
+                        {/* Dupatta driven by the product's has_dupatta flag (no toggle). */}
+                        {includesDupatta && (
+                            <div className="dupatta-box" style={{ margin: "10px 0" }}>
+                                <span style={{ fontSize: "14px", fontWeight: 600 }}>Dupatta included — tracked as a separate piece with its own barcode</span>
+                                <div className="field" style={{ marginTop: 8 }}>
+                                    <SearchableSelect options={toOptions(dupattaColors)} value={selectedDupattaColor} onChange={setSelectedDupattaColor} placeholder="Select Dupatta Color" />
+                                </div>
+                            </div>
+                        )}
 
                         <div className="size-box"><span className="size-label">Size:</span><div className="sizes">{availableSizes.map((s, i) => <button key={i} className={selectedSize === s ? "size-btn active" : "size-btn"} onClick={() => setSelectedSize(s)}>{s}</button>)}<button className={selectedSize === CUSTOM_SIZE ? "size-btn active" : "size-btn"} onClick={() => selectCustomSize()}>{CUSTOM_SIZE}</button></div></div>
 
