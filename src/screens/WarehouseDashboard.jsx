@@ -158,6 +158,10 @@ const WarehouseDashboard = () => {
   // Component tracking per order
   const [orderComponentsMap, setOrderComponentsMap] = useState({});
   const [componentLoadingMap, setComponentLoadingMap] = useState({});
+  // QC report modal: the order whose QC report is open + its qc_records.
+  const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
+  const [qcReportRecords, setQcReportRecords] = useState([]);
+  const [qcReportLoading, setQcReportLoading] = useState(false);
 
   // QC Fail Popup state
   // const [qcFailPopup, setQcFailPopup] = useState({
@@ -348,6 +352,27 @@ const WarehouseDashboard = () => {
       console.error("Failed to fetch components:", err);
     }
     setComponentLoadingMap(prev => ({ ...prev, [orderId]: false }));
+  };
+
+  // Open the QC report for an order — loads every QC check (QC 1 + Final QC)
+  // recorded for its components, newest stage first per component.
+  const openQcReport = async (order) => {
+    setQcReportOrder({ id: order.id, order_no: order.order_no });
+    setQcReportLoading(true);
+    setQcReportRecords([]);
+    try {
+      const { data, error } = await supabase
+        .from("qc_records")
+        .select("id, barcode, component_id, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at")
+        .eq("order_id", order.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      setQcReportRecords(data || []);
+    } catch (err) {
+      console.error("Failed to load QC report:", err);
+      setQcReportRecords([]);
+    }
+    setQcReportLoading(false);
   };
 
   useEffect(() => {
@@ -707,6 +732,62 @@ const WarehouseDashboard = () => {
 
   // TEMP (prod): used by simple Mark as Completed fallback while barcode scan flow is hidden
   const markAsCompleted = async (orderId) => {
+    // GATE: don't let an order be completed while its components are still in
+    // production. Previously this set status=completed blindly, so orders got
+    // "dispatched" with components still at Cloth Issued / Stitching — no QC,
+    // wrong stage, empty QC report. A component is "finished" when it reached
+    // the end of the flow (Final QC passed / Packaging / Dispatched) or was
+    // legitimately removed (disposed / scrapped).
+    const FINISHED_STAGES = new Set([
+      "final_qc_passed", "packaging_dispatch", "dispatched", "disposed", "scrapped",
+    ]);
+    try {
+      const { data: comps, error: cErr } = await supabase
+        .from("order_components")
+        .select("barcode, component_label, component_type, current_stage, is_active")
+        .eq("order_id", orderId);
+      if (cErr) throw cErr;
+
+      // No components at all → it never went through production. Block.
+      if (!comps || comps.length === 0) {
+        showPopup({
+          type: "warning",
+          title: "Order Not Ready to Complete",
+          message: "This order has no tracked components — it hasn't been through the production/scan flow yet, so it can't be marked completed.",
+          confirmText: "OK",
+        });
+        return;
+      }
+
+      // A component is "finished" only if it reached an end stage. An INACTIVE
+      // component (never activated / still at Order Received) counts as
+      // unfinished — it hasn't even started.
+      const unfinished = comps.filter((c) => !FINISHED_STAGES.has(c.current_stage));
+
+      if (unfinished.length > 0) {
+        const lines = unfinished
+          .map((c) => `• ${c.barcode} (${c.component_label || c.component_type}) — ${getStageLabel(c.current_stage)}${c.is_active ? "" : " (not started)"}`)
+          .join("\n");
+        showPopup({
+          type: "warning",
+          title: "Order Not Ready to Complete",
+          message:
+            `This order still has components in production. Scan them through to Final QC and Packaging first:\n\n${lines}`,
+          confirmText: "OK",
+        });
+        return;
+      }
+    } catch (gateErr) {
+      console.error("Completion gate check failed:", gateErr);
+      showPopup({
+        type: "error",
+        title: "Check Failed",
+        message: "Could not verify component stages. Please try again.",
+        confirmText: "OK",
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from("orders")
       .update({ status: "completed" })
@@ -1000,6 +1081,50 @@ const WarehouseDashboard = () => {
   return (
     <div className="wd-dashboard-wrapper">
       {PopupComponent}
+
+      {/* ===== QC REPORT MODAL ===== */}
+      {qcReportOrder && (
+        <div className="wd-qc-overlay" onClick={() => setQcReportOrder(null)}>
+          <div className="wd-qc-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wd-qc-modal-head">
+              <h3 className="wd-qc-modal-title">QC Report — {qcReportOrder.order_no}</h3>
+              <button className="wd-qc-modal-close" onClick={() => setQcReportOrder(null)}>×</button>
+            </div>
+
+            {qcReportLoading ? (
+              <p className="wd-qc-empty">Loading QC report…</p>
+            ) : qcReportRecords.length === 0 ? (
+              <p className="wd-qc-empty">No QC checks recorded for this order yet.</p>
+            ) : (
+              <div className="wd-qc-list">
+                {qcReportRecords.map((q) => (
+                  <div key={q.id} className={`wd-qc-row ${q.result === "fail" ? "wd-qc-row-fail" : "wd-qc-row-pass"}`}>
+                    <div className="wd-qc-row-head">
+                      <span className="wd-qc-barcode">{q.barcode}</span>
+                      <span className="wd-qc-which">{q.which_qc === "final" ? "Final QC" : "QC 1"}</span>
+                      <span className={`wd-qc-result ${q.result === "fail" ? "wd-qc-fail" : "wd-qc-pass"}`}>
+                        {q.result === "fail" ? "FAIL" : "PASS"}
+                      </span>
+                    </div>
+                    {q.result === "fail" && (
+                      <div className="wd-qc-detail">
+                        {q.fail_reason && <div><strong>Reason:</strong> {q.fail_reason}</div>}
+                        {q.outcome && <div><strong>Outcome:</strong> {q.outcome}{q.rejourney_number ? ` (re-journey ${q.rejourney_number})` : ""}</div>}
+                        {q.scrap_location && <div><strong>Scrap location:</strong> {q.scrap_location}</div>}
+                        {Number(q.scrap_loss_amount) > 0 && <div><strong>Loss:</strong> ₹{q.scrap_loss_amount}</div>}
+                      </div>
+                    )}
+                    <div className="wd-qc-meta">
+                      {q.inspected_by ? `Inspected by ${q.inspected_by}` : ""}
+                      {q.created_at ? ` · ${new Date(q.created_at).toLocaleString("en-GB")}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <div className="wd-top-header">
@@ -1635,6 +1760,13 @@ const WarehouseDashboard = () => {
                                           "Awaiting Production"}
                                   </div>
                                 )}
+                                {/* View the QC report (QC 1 + Final QC results) for this order */}
+                                <button
+                                  className="wd-qc-report-btn"
+                                  onClick={() => openQcReport(order)}
+                                >
+                                  QC Report
+                                </button>
                                 {/* Mark as Completed remains available to the warehouse manager */}
                                 <button
                                   className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""}`}

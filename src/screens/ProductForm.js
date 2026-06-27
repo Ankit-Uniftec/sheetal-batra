@@ -597,6 +597,9 @@ export default function ProductForm() {
   const [attachments, setAttachments] = useState([]);
 
   const [colors, setColors] = useState([]);
+  // Dupatta colours are their own list (separate from the top/bottom colors
+  // table) — includes values not in `colors` and compound multi-colours.
+  const [dupattaColors, setDupattaColors] = useState([]);
   const [tops, setTops] = useState([]);
   const [bottoms, setBottoms] = useState([]);
   const [globalExtras, setGlobalExtras] = useState([]);
@@ -627,6 +630,9 @@ export default function ProductForm() {
   // per item. Captured onto the order item as `includes_dupatta` so the
   // warehouse generates a separate dupatta component + barcode.
   const [includesDupatta, setIncludesDupatta] = useState(false);
+  // Selected dupatta colour name (string; no hex). Pre-filled from the
+  // product's default_dupatta_color when a product is chosen.
+  const [selectedDupattaColor, setSelectedDupattaColor] = useState("");
 
   const [modeOfDelivery, setModeOfDelivery] = useState(isStockOrder ? "WH Delhi" : "Delhi Store");
   const [orderFlag, setOrderFlag] = useState("Normal");
@@ -1110,6 +1116,7 @@ export default function ProductForm() {
 
         // Dupatta
         if (draftData.includesDupatta !== undefined) setIncludesDupatta(draftData.includesDupatta);
+        if (draftData.selectedDupattaColor !== undefined) setSelectedDupattaColor(draftData.selectedDupattaColor);
 
         // Size & Quantity
         if (draftData.selectedSize) setSelectedSize(draftData.selectedSize);
@@ -1197,6 +1204,7 @@ export default function ProductForm() {
 
         // Dupatta
         if (data.includesDupatta !== undefined) setIncludesDupatta(data.includesDupatta);
+        if (data.selectedDupattaColor !== undefined) setSelectedDupattaColor(data.selectedDupattaColor);
 
         // Size & Quantity
         if (data.selectedSize) setSelectedSize(data.selectedSize);
@@ -1262,6 +1270,7 @@ export default function ProductForm() {
       selectedAdditionals,
       showAdditionals,
       includesDupatta,
+      selectedDupattaColor,
       selectedSize,
       quantity,
       measurements,
@@ -1302,6 +1311,7 @@ export default function ProductForm() {
     selectedAdditionals,
     showAdditionals,
     includesDupatta,
+    selectedDupattaColor,
     selectedSize,
     quantity,
     measurements,
@@ -1378,6 +1388,19 @@ export default function ProductForm() {
     };
 
     fetchColors();
+  }, []);
+
+  // FETCH DUPATTA COLOURS (ONE TIME) — their own list, names only.
+  useEffect(() => {
+    const fetchDupattaColors = async () => {
+      const { data, error } = await supabase
+        .from("dupatta_colors")
+        .select("name")
+        .order("name");
+      if (error) { console.error("dupatta_colors fetch error:", error); return; }
+      setDupattaColors((data || []).map((d) => d.name));
+    };
+    fetchDupattaColors();
   }, []);
 
   // FETCH CUSTOMER'S LATEST SAVED MEASUREMENTS
@@ -1611,6 +1634,7 @@ export default function ProductForm() {
     // Pre-fill the dupatta toggle from the product. Staff can still override
     // before adding to the cart (e.g. a customer who declines the dupatta).
     setIncludesDupatta(selectedProduct.has_dupatta === true);
+    setSelectedDupattaColor(selectedProduct.default_dupatta_color || "");
 
     // Set product options
     setTops(selectedProduct.top_options || []);
@@ -2016,6 +2040,7 @@ export default function ProductForm() {
       bottom_color: selectedBottomColor,
       // Dupatta is tracked as its own warehouse component/barcode when present.
       includes_dupatta: includesDupatta,
+      dupatta_color: includesDupatta ? (selectedDupattaColor || null) : null,
       extras: finalExtras,
       additionals: selectedAdditionals.filter(a => a.name && a.name.trim() !== ""),
       size: selectedSize,
@@ -2064,6 +2089,7 @@ export default function ProductForm() {
     setSelectedAdditionals([{ name: "", price: "" }]); // ✅ RESET ADDITIONALS to one empty row
     setShowAdditionals(true);  // Keep additionals open
     setIncludesDupatta(false);
+    setSelectedDupattaColor("");
     setSelectedSize("S");
     setQuantity(1);
     setMeasurements({});
@@ -2548,6 +2574,7 @@ export default function ProductForm() {
         bottom: selectedBottom,
         bottom_color: selectedBottomColor,
         includes_dupatta: includesDupatta,
+        dupatta_color: includesDupatta ? (selectedDupattaColor || null) : null,
         extras: finalExtras,
         additionals: selectedAdditionals.filter(a => a.name && a.name.trim() !== ""),
         size: selectedSize,
@@ -3529,20 +3556,25 @@ export default function ProductForm() {
 
             {/* TOP / BOTTOM COLORS */}
 
-            {/* DUPATTA — pre-filled from the product; track as its own piece */}
-            <div className="dupatta-box" style={{ margin: "10px 0" }}>
-              <label
-                className="dupatta-toggle"
-                style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={includesDupatta}
-                  onChange={(e) => setIncludesDupatta(e.target.checked)}
-                />
-                <span>Includes Dupatta (tracked as a separate piece with its own barcode)</span>
-              </label>
-            </div>
+            {/* DUPATTA — driven by the product's has_dupatta flag (no manual
+                toggle). When the product includes a dupatta, it is tracked as
+                its own piece and the SA picks its colour (pre-filled from the
+                product's default_dupatta_color). */}
+            {includesDupatta && (
+              <div className="dupatta-box" style={{ margin: "10px 0" }}>
+                <span style={{ fontSize: "14px", fontWeight: 600 }}>
+                  Dupatta included — tracked as a separate piece with its own barcode
+                </span>
+                <div className="field" style={{ marginTop: 8 }}>
+                  <SearchableSelect
+                    options={toOptions(dupattaColors)}
+                    value={selectedDupattaColor}
+                    onChange={setSelectedDupattaColor}
+                    placeholder="Select Dupatta Color"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* SIZE */}
 

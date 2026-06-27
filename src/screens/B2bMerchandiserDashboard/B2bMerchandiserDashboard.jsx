@@ -111,14 +111,29 @@ export default function B2bMerchandiserDashboard() {
                     setVendorMap(vMap);
                 }
 
-                // Per-piece components for the order-card journey row.
-                const orderIds = (ordersResult.data || []).map(o => o.id);
-                if (orderIds.length > 0) {
-                    const { data: cData } = await supabase
-                        .from("order_components")
-                        .select("id, order_id, barcode, component_type, component_label, current_stage, item_index")
-                        .in("order_id", orderIds);
-                    setComponents(cData || []);
+                // Per-piece components for the order-card journey row. Fetch ALL
+                // components paged past the 1000-row cap and group by order_id
+                // client-side. We avoid .in(order_id, [...all ids]) because on a
+                // busy live DB that list is huge and the request silently
+                // fails/truncates (journey showed on UAT but not on live).
+                {
+                    const PAGE = 1000;
+                    let all = [];
+                    let from = 0;
+                    // eslint-disable-next-line no-constant-condition
+                    while (true) {
+                        const { data: cData, error: cErr } = await supabase
+                            .from("order_components")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index")
+                            .order("created_at", { ascending: false })
+                            .range(from, from + PAGE - 1);
+                        if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
+                        if (!cData || cData.length === 0) break;
+                        all = [...all, ...cData];
+                        if (cData.length < PAGE) break;
+                        from += PAGE;
+                    }
+                    setComponents(all);
                 }
             }
             if (vendorsResult.data) setVendors(vendorsResult.data);
