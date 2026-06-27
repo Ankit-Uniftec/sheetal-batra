@@ -342,7 +342,8 @@ export default function B2bExecutiveDashboard() {
                                                 <p><b>Order No:</b> {o.order_no}</p>
                                                 <p><b>PO Number:</b> {o.po_number || "—"}</p>
                                                 <p><b>Type:</b> {o.b2b_order_type || "—"} &nbsp; | &nbsp; <b>Status:</b> <span className={getStatusBadgeClass(o.approval_status)}>{o.approval_status || "Pending"}</span></p>
-                                                <p><b>Total:</b> ₹{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)} &nbsp; | &nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "—"}</p>
+                                                <p><b>Order Date:</b> {formatDate(o.created_at) || "—"} &nbsp; | &nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "—"}</p>
+                                                <p><b>Total:</b> ₹{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</p>
                                             </div>
                                         ))
                                     )}

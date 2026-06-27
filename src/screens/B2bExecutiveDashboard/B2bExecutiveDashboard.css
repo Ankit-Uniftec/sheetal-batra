@@ -475,6 +475,9 @@
   color: #d5b85a !important;
 }
 
+/* Compact filter bar — search spans the top line; selects + date inputs share
+   a single wrapping line below (matches the Merchandiser/Production layout)
+   instead of each filter stacking full-width. */
 .b2b-order-search-bar {
   margin: 12px 0 18px;
   display: flex;
@@ -484,10 +487,8 @@
 }
 
 .b2b-order-search-bar input[type="text"] {
-  flex: 1 1 200px;
-  min-width: 180px;
-  max-width: 420px;
-  padding: 10px 14px;
+  flex: 1 1 100%;
+  padding: 9px 14px;
   border-radius: 8px;
   border: 1px solid #d5b85a;
   font-size: 14px;
@@ -500,12 +501,21 @@
 
 .b2b-order-search-bar select,
 .b2b-order-search-bar input[type="date"] {
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid #ddd;
+  flex: 1 1 150px;
+  min-width: 130px;
+  max-width: 220px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #d5b85a;
   font-size: 13px;
   background: #fff;
   cursor: pointer;
+  outline: none;
+}
+
+.b2b-order-search-bar select:focus,
+.b2b-order-search-bar input[type="date"]:focus {
+  border-color: #b79b3d;
 }
 
 .b2b-order-list-scroll {
