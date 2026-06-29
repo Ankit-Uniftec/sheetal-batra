@@ -15,6 +15,16 @@ export default function CustomerDetailForm() {
 
   const phoneNumber = location.state?.phoneNumber || "";
 
+  // Exhibition orders collect quick walk-up details, so email + DOB are
+  // OPTIONAL for them (they're not required by anything downstream — profile
+  // lookups key off auth id, the customer PDF needs only name+phone, and the
+  // birthday discount is entered manually). The regular flow is unchanged:
+  // email + DOB stay mandatory there. One flag drives both the validation and
+  // the field labels so the two can't drift.
+  const isExhibition = !!sessionStorage.getItem("exhibitionOrder");
+  const emailRequired = !isExhibition;
+  const dobRequired = !isExhibition;
+
   // ---------------- STATE ----------------
   const [fullName, setFullName] = useState("");
   const [gender, setGender] = useState("Female");
@@ -63,36 +73,35 @@ export default function CustomerDetailForm() {
       return;
     }
 
-    if (!email.trim()) {
+    if (emailRequired && !email.trim()) {
       showPopup({
         title: "Email Required!",
         message: "Please enter your email.",
         type: "warning",
         confirmText: "Ok",
       })
-      // alert("Please enter your email.");
       return;
     }
 
-    if (!isValidEmail(email)) {
+    // Validate the format only when an email was actually entered (so an
+    // optional, left-blank email passes, but a malformed one is still caught).
+    if (email.trim() && !isValidEmail(email)) {
       showPopup({
         title: "Invalid Email",
         message: "Please enter a valid email address",
         type: "warning",
         confirmText: "Ok",
       })
-      // alert("Please enter a valid email address.");
       return;
     }
 
-    if (!dob) {
+    if (dobRequired && !dob) {
       showPopup({
         title: "Date of birth Required!",
         message: "Please select your date of birth.",
         type: "warning",
         confirmText: "Ok",
       })
-      // alert("Please select your date of birth.");
       return;
     }
 
@@ -119,8 +128,9 @@ export default function CustomerDetailForm() {
       full_name: fullName.trim(),
       gender,
       phone: normalizedPhone,
-      email: email.trim().toLowerCase(),
-      dob: dob, // Use formatDate
+      // Optional in the exhibition flow — store null rather than an empty string.
+      email: email.trim() ? email.trim().toLowerCase() : null,
+      dob: dob || null,
       created_at: new Date(),
     });
 
@@ -199,7 +209,7 @@ export default function CustomerDetailForm() {
           </div>
 
           <div className="input-box">
-            <label>Email *</label>
+            <label>Email {emailRequired ? "*" : "(optional)"}</label>
             <input
               type="email"
               value={email}
@@ -209,7 +219,7 @@ export default function CustomerDetailForm() {
           </div>
 
           <div className="input-box">
-            <label>Date of Birth *</label>
+            <label>Date of Birth {dobRequired ? "*" : "(optional)"}</label>
             <input
               type="date"
               value={dob}

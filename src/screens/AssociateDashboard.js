@@ -463,8 +463,13 @@ export default function Dashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     sessionStorage.setItem("requirePasswordVerificationOnDashboard", "true");
-    // Clear any in-flight order-flow flags so they don't leak into the next session
+    // Clear any in-flight order-flow flags so they don't leak into the next
+    // session. `exhibitionOrder` is only cleared on a SUCCESSFUL order insert,
+    // so an abandoned exhibition order would otherwise persist and make the
+    // next (regular) login wrongly behave as an exhibition order — e.g. email
+    // /DOB shown as optional in the customer form.
     sessionStorage.removeItem("isStockOrder");
+    sessionStorage.removeItem("exhibitionOrder");
     navigate("/login");
   };
 
@@ -498,6 +503,7 @@ export default function Dashboard() {
       role: salesperson.role,
     }));
     sessionStorage.setItem("isStockOrder", "true");
+    sessionStorage.removeItem("exhibitionOrder"); // a stock order is not an exhibition order
     sessionStorage.removeItem("screen4FormData");
     sessionStorage.removeItem("screen6FormData");
     navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
@@ -2060,10 +2066,12 @@ export default function Dashboard() {
               role: salesperson.role,
             }));
 
-            // Clear any leftover stock-order flag — this is the regular
-            // customer flow, not a stock order. Prevents leakage if the SA
-            // had previously started a stock order and backed out.
+            // Clear any leftover stock-order / exhibition-order flags — this is
+            // the regular customer flow, not a stock or exhibition order.
+            // Prevents leakage if the SA previously started one and backed out
+            // (exhibitionOrder is otherwise only cleared on a successful insert).
             sessionStorage.removeItem("isStockOrder");
+            sessionStorage.removeItem("exhibitionOrder");
 
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}
