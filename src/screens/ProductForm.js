@@ -8,6 +8,7 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import formatDate from "../utils/formatDate";
 import { normalizeStore, isProductVisibleForStore } from "../utils/storeCategory";
 import { fetchAllRows } from "../utils/fetchAllRows";
+import { restoreAssociateSession } from "../utils/restoreAssociateSession";
 import { usePopup } from "../components/Popup"; // Import Popup component
 import ExtrasPopup from "../components/ExtrasPopup";
 import config from "../config/config";
@@ -2752,55 +2753,11 @@ export default function ProductForm() {
     });
   };
 
+  // Exit the order flow: discard the customer order-placing session, restore
+  // the associate's login session, and return to the dashboard. Shared with
+  // the OTP / customer-details back buttons so every exit behaves identically.
   const handleLogout = async () => {
-    try {
-      // Clear form data
-      sessionStorage.removeItem("screen4FormData");
-      sessionStorage.removeItem("screen6FormData");
-
-      // Route back to whichever dashboard the user started from. Stock orders
-      // placed by non-SA roles (admin / GM / assistant_cmo) set returnDashboard
-      // before navigating here; for the regular SA flow it falls back to
-      // /AssociateDashboard. Without this fallback, non-SA users hit the SA
-      // role check on AssociateDashboard and get force-signed-out.
-      const returnDashboard = sessionStorage.getItem("returnDashboard") || "/AssociateDashboard";
-
-      // ✅ Check if we have a saved associate session
-      const savedSession = sessionStorage.getItem("associateSession");
-
-      if (savedSession) {
-        // Restore the salesperson's session
-        const session = JSON.parse(savedSession);
-
-        // Set the session back in Supabase
-        const { error } = await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token
-        });
-
-        if (error) {
-          console.error("Failed to restore session:", error);
-          navigate("/login", { replace: true });
-          return;
-        }
-
-
-        // Clean up and navigate
-        sessionStorage.removeItem("associateSession");
-        sessionStorage.removeItem("returnToAssociate");
-        sessionStorage.removeItem("returnDashboard");
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate(returnDashboard, { replace: true });
-      } else {
-        // No saved session - just navigate back
-        sessionStorage.removeItem("returnDashboard");
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate(returnDashboard, { replace: true });
-      }
-    } catch (e) {
-      console.error("Logout error", e);
-      navigate("/login", { replace: true });
-    }
+    await restoreAssociateSession(navigate);
   };
 
   const toOptions = (arr = []) =>

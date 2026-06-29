@@ -9,6 +9,7 @@ import config from "../config/config";
 import { usePopup } from "../components/Popup";
 import { COUNTRY_CODES } from "../utils/countryCodes";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { restoreAssociateSession } from "../utils/restoreAssociateSession";
 
 /* COUNTRY_CODES now lives in src/utils/countryCodes.js (shared with Walk-In form). */
 
@@ -36,11 +37,22 @@ export default function OtpVerification() {
   const [showVideo, setShowVideo] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
 
-  const handleBack = () => {
-    if (location.state?.fromAssociate) {
-      navigate("/AssociateDashboard", {
-        state: { fromBuyerVerification: true },
-      });
+  const handleBack = async () => {
+    // If this order was started by a sales associate, the live Supabase
+    // session may have been replaced by the customer's OTP (order-placing)
+    // session. Backing out must DISCARD that customer session and RESTORE the
+    // associate's login session, returning them to their dashboard still
+    // logged in — otherwise the dashboard role check sees the customer user
+    // and force-signs-out to /login. `fromAssociate` route state is lost on a
+    // forward-then-back round trip, so key off the durable sessionStorage
+    // breadcrumb instead.
+    const startedByAssociate =
+      location.state?.fromAssociate ||
+      !!sessionStorage.getItem("associateSession") ||
+      sessionStorage.getItem("returnToAssociate") === "true";
+
+    if (startedByAssociate) {
+      await restoreAssociateSession(navigate);
     } else {
       navigate(-1);
     }
