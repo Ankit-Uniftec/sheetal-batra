@@ -184,6 +184,7 @@ export default function CommsOrderForm() {
     if (!clientName.trim()) missing.push("Name");
     if (!contact.trim()) missing.push("Contact");
     if (!deliveryDate) missing.push("Delivery Date");
+    if (!orderAssign) missing.push("Order Assign");
     if (isSourcing && !outfitReturnDate) missing.push("Outfit Return Date");
     if (isBarterOrSourcing && !existingProductLocation) missing.push("Existing Product Location");
     if (showLocationOther && !existingProductLocationOther.trim()) missing.push("Existing Product Location (custom)");
@@ -426,7 +427,7 @@ export default function CommsOrderForm() {
 
           {/* Row 7: Order Assign */}
           <div className="cof-field">
-            <label className="cof-label">Order Assign</label>
+            <label className="cof-label">Order Assign <span className="cof-req">*</span></label>
             <select className="cof-input" value={orderAssign} onChange={(e) => setOrderAssign(e.target.value)}>
               <option value="">Select production owner…</option>
               {ORDER_ASSIGN_OPTIONS.map((p) => (
