@@ -113,7 +113,15 @@ export default function ReviewDetail() {
 
   // Private-SA-only mandatory fields, captured on this screen.
   // Persist to orders.exb_name + orders.sb_representative_name on insert.
-  const [exbName, setExbName] = useState("");
+  // EXB Name prefills from the exhibition the SA opened "+ New Order" on (it
+  // was already entered on the exhibition dashboard and seeded into
+  // `exhibitionOrder`), so it doesn't have to be retyped. SA Name is left
+  // blank for the SA to enter themselves.
+  const exbCtxInit = (() => {
+    try { return JSON.parse(sessionStorage.getItem("exhibitionOrder") || "null") || {}; }
+    catch { return {}; }
+  })();
+  const [exbName, setExbName] = useState(exbCtxInit.exhibition_name || "");
   const [sbRepName, setSbRepName] = useState("");
   // Whether to send the order PDF to the client via WhatsApp.
   // Regular SA: always true (asked before signature only for Private SA).
@@ -173,7 +181,7 @@ export default function ReviewDetail() {
         showPopup({
           type: "warning",
           title: "Missing Required Fields",
-          message: "EXB Name and SB Representative Name are required to place an exhibition order.",
+          message: "EXB Name and SA Name are required to place an exhibition order.",
           confirmText: "OK",
         });
         return;
@@ -1221,7 +1229,7 @@ export default function ReviewDetail() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="sbRepName">SB Representative Name *</label>
+                <label htmlFor="sbRepName">SA Name *</label>
                 <input
                   id="sbRepName"
                   type="text"
