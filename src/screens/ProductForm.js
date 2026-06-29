@@ -8,6 +8,7 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import formatDate from "../utils/formatDate";
 import { normalizeStore, isProductVisibleForStore } from "../utils/storeCategory";
 import { fetchAllRows } from "../utils/fetchAllRows";
+import { restoreAssociateSession } from "../utils/restoreAssociateSession";
 import { usePopup } from "../components/Popup"; // Import Popup component
 import ExtrasPopup from "../components/ExtrasPopup";
 import config from "../config/config";
@@ -566,6 +567,20 @@ export default function ProductForm() {
   const isCommsFreeOrder = isCommsOrder &&
     commsEngagementType && commsEngagementType !== "Personal order";
 
+  // Comms orders capture a single Delivery Date on CommsOrderForm, which is the
+  // one stored on the order (CommsReviewOrder overrides the order-level date
+  // with it). So the per-item Delivery Date field here is redundant for comms:
+  // we hide it and auto-stamp every item's delivery_date from this comms date,
+  // instead of asking the SA for the same date twice. Regular orders are
+  // unaffected and still capture a per-item delivery date below.
+  const commsDeliveryDate = (() => {
+    if (!isCommsOrder) return "";
+    try {
+      const raw = sessionStorage.getItem("commsOrderPayload");
+      return raw ? (JSON.parse(raw).delivery_date || "") : "";
+    } catch { return ""; }
+  })();
+
   // Delivery options — restricted to "WH Delhi" for stock orders. Comms orders
   // use the standard retail options (Nazreen ships from the same stores).
   const DELIVERY_OPTIONS = isStockOrder
@@ -636,7 +651,9 @@ export default function ProductForm() {
 
   const [modeOfDelivery, setModeOfDelivery] = useState(isStockOrder ? "WH Delhi" : "Delhi Store");
   const [orderFlag, setOrderFlag] = useState("Normal");
-  const [deliveryDate, setDeliveryDate] = useState("");
+  // Comms orders prefill from the single CommsOrderForm delivery date (the
+  // per-item field is hidden for them); regular orders start blank.
+  const [deliveryDate, setDeliveryDate] = useState(commsDeliveryDate || "");
 
   // MEASUREMENTS
   const [measurements, setMeasurements] = useState({});
@@ -1985,8 +2002,9 @@ export default function ProductForm() {
       }
     }
 
-    // Validate delivery date for this product
-    if (!deliveryDate) {
+    // Validate delivery date for this product. Comms orders capture it once on
+    // CommsOrderForm (auto-stamped onto each item; field hidden here), so skip.
+    if (!isCommsOrder && !deliveryDate) {
       showPopup({
         title: "Delivery Date Required",
         message: "Please select a delivery date for this product.",
@@ -2535,8 +2553,9 @@ export default function ProductForm() {
 
     // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT"
     if (orderItems.length === 0 && selectedProduct) {
-      // Validate delivery date for this product
-      if (!deliveryDate) {
+      // Validate delivery date for this product. Comms orders capture it once
+      // on CommsOrderForm (auto-stamped; field hidden here), so skip.
+      if (!isCommsOrder && !deliveryDate) {
         showPopup({
           title: "Delivery Date Required",
           message: "Please select a delivery date for this product.",
@@ -2604,12 +2623,17 @@ export default function ProductForm() {
       return;
     }
 
-    // Validate all items have delivery dates
+    // Validate all items have delivery dates. For comms orders the field is
+    // hidden and each item is auto-stamped from the CommsOrderForm date, so a
+    // gap means that upstream date is missing — point the SA there instead of
+    // to a hidden field.
     const itemsWithoutDeliveryDate = finalItems.filter(item => !item.delivery_date);
     if (itemsWithoutDeliveryDate.length > 0) {
       showPopup({
         title: "Delivery Date Missing",
-        message: `${itemsWithoutDeliveryDate.length} product(s) are missing delivery dates. Please expand and add delivery dates.`,
+        message: isCommsOrder
+          ? "No delivery date was set on the Comms order form. Please go back and set the Delivery Date there."
+          : `${itemsWithoutDeliveryDate.length} product(s) are missing delivery dates. Please expand and add delivery dates.`,
         type: "warning",
       });
       return;
@@ -2761,55 +2785,11 @@ export default function ProductForm() {
     });
   };
 
+  // Exit the order flow: discard the customer order-placing session, restore
+  // the associate's login session, and return to the dashboard. Shared with
+  // the OTP / customer-details back buttons so every exit behaves identically.
   const handleLogout = async () => {
-    try {
-      // Clear form data
-      sessionStorage.removeItem("screen4FormData");
-      sessionStorage.removeItem("screen6FormData");
-
-      // Route back to whichever dashboard the user started from. Stock orders
-      // placed by non-SA roles (admin / GM / assistant_cmo) set returnDashboard
-      // before navigating here; for the regular SA flow it falls back to
-      // /AssociateDashboard. Without this fallback, non-SA users hit the SA
-      // role check on AssociateDashboard and get force-signed-out.
-      const returnDashboard = sessionStorage.getItem("returnDashboard") || "/AssociateDashboard";
-
-      // ✅ Check if we have a saved associate session
-      const savedSession = sessionStorage.getItem("associateSession");
-
-      if (savedSession) {
-        // Restore the salesperson's session
-        const session = JSON.parse(savedSession);
-
-        // Set the session back in Supabase
-        const { error } = await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token
-        });
-
-        if (error) {
-          console.error("Failed to restore session:", error);
-          navigate("/login", { replace: true });
-          return;
-        }
-
-
-        // Clean up and navigate
-        sessionStorage.removeItem("associateSession");
-        sessionStorage.removeItem("returnToAssociate");
-        sessionStorage.removeItem("returnDashboard");
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate(returnDashboard, { replace: true });
-      } else {
-        // No saved session - just navigate back
-        sessionStorage.removeItem("returnDashboard");
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        navigate(returnDashboard, { replace: true });
-      }
-    } catch (e) {
-      console.error("Logout error", e);
-      navigate("/login", { replace: true });
-    }
+    await restoreAssociateSession(navigate);
   };
 
   const toOptions = (arr = []) =>
@@ -3351,6 +3331,10 @@ export default function ProductForm() {
                               </span>
                             </div>
 
+                            {/* Per-item Delivery Date — hidden for comms orders,
+                                which set a single delivery date on the Comms
+                                order form (auto-stamped onto each item). */}
+                            {!isCommsOrder && (
                             <div className="field" style={{ maxWidth: 200 }}>
                               {/* <label>Delivery Date*</label> */}
                               <input
@@ -3365,6 +3349,7 @@ export default function ProductForm() {
                                 }
                               />
                             </div>
+                            )}
 
                             <div className="field" style={{ maxWidth: 200 }}>
                               {/* <label>Delivery Location</label> */}
@@ -3838,6 +3823,11 @@ export default function ProductForm() {
 
             {/* ORDER DETAILS */}
             <div className="row">
+              {/* Delivery Date — hidden for comms orders, which capture a single
+                  delivery date on the Comms order form (it's the one stored on
+                  the order and is auto-applied to each item). Avoids asking the
+                  SA for the same date twice. */}
+              {!isCommsOrder && (
               <div className="field" style={{ display: "flex", flexDirection: 'row', alignItems: 'center', }}>
                 <label>Delivery Date*</label>
                 <input
@@ -3848,6 +3838,7 @@ export default function ProductForm() {
                   onChange={(e) => setDeliveryDate(e.target.value)}
                 />
               </div>
+              )}
 
               <div className="field">
                 <SearchableSelect

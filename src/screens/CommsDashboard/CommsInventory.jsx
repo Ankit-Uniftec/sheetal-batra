@@ -39,6 +39,11 @@ const todayISO = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+// Reservation purpose is a fixed dropdown (not free text) so "Sourcing" is a
+// reliable signal for requiring recipient details. "Other" reveals a free-text
+// box; the stored `purpose` is that text for Other, else the option itself.
+const PURPOSE_OPTIONS = ["Sourcing", "Shoot", "Event", "Exhibition", "Other"];
+
 export default function CommsInventory({ profile, showPopup }) {
   // Data
   const [products, setProducts] = useState([]);
@@ -54,8 +59,16 @@ export default function CommsInventory({ profile, showPopup }) {
   const [blockModal, setBlockModal] = useState(null); // { product, variant? }
   const [blockStart, setBlockStart] = useState(todayISO());
   const [blockEnd, setBlockEnd] = useState("");
-  const [blockPurpose, setBlockPurpose] = useState("");
+  const [blockPurpose, setBlockPurpose] = useState("");      // dropdown value
+  const [blockPurposeOther, setBlockPurposeOther] = useState(""); // free text when "Other"
+  // Recipient details — captured for Sourcing reservations (who it's for / where
+  // it ships). Name + address required for Sourcing; contact + POC optional.
+  const [blockRecipientName, setBlockRecipientName] = useState("");
+  const [blockRecipientAddress, setBlockRecipientAddress] = useState("");
+  const [blockRecipientContact, setBlockRecipientContact] = useState("");
+  const [blockRecipientPoc, setBlockRecipientPoc] = useState("");
   const [blockSaving, setBlockSaving] = useState(false);
+  const isSourcingBlock = blockPurpose === "Sourcing";
 
   // Initial load
   useEffect(() => {
@@ -130,6 +143,11 @@ export default function CommsInventory({ profile, showPopup }) {
     setBlockStart(todayISO());
     setBlockEnd("");
     setBlockPurpose("");
+    setBlockPurposeOther("");
+    setBlockRecipientName("");
+    setBlockRecipientAddress("");
+    setBlockRecipientContact("");
+    setBlockRecipientPoc("");
     setBlockModal({ product, variant });
   };
   const closeBlockModal = () => { if (!blockSaving) setBlockModal(null); };
@@ -137,7 +155,16 @@ export default function CommsInventory({ profile, showPopup }) {
   const handleSaveBlock = async () => {
     if (!blockModal) return;
     if (!blockEnd) { showPopup({ title: "Required", message: "Please pick an end date.", type: "warning" }); return; }
-    if (!blockPurpose.trim()) { showPopup({ title: "Required", message: "Please describe the purpose (shoot, event, etc.).", type: "warning" }); return; }
+    if (!blockPurpose) { showPopup({ title: "Required", message: "Please select a purpose.", type: "warning" }); return; }
+    if (blockPurpose === "Other" && !blockPurposeOther.trim()) {
+      showPopup({ title: "Required", message: "Please describe the purpose.", type: "warning" }); return;
+    }
+    // Sourcing reservations must record who the outfit is for and where it ships.
+    if (isSourcingBlock && (!blockRecipientName.trim() || !blockRecipientAddress.trim())) {
+      showPopup({ title: "Required", message: "Recipient Name and Address are required for a Sourcing reservation.", type: "warning" }); return;
+    }
+    // Stored purpose: the free text for "Other", else the chosen option.
+    const finalPurpose = blockPurpose === "Other" ? blockPurposeOther.trim() : blockPurpose;
     setBlockSaving(true);
     try {
       const payload = {
@@ -145,9 +172,14 @@ export default function CommsInventory({ profile, showPopup }) {
         variant_id: blockModal.variant ? blockModal.variant.id : null,
         start_date: blockStart,
         end_date: blockEnd,
-        purpose: blockPurpose.trim(),
+        purpose: finalPurpose,
         created_by: profile?.email || "comms",
         status: "active",
+        // Recipient details — only meaningful for Sourcing; null otherwise.
+        recipient_name: isSourcingBlock ? blockRecipientName.trim() : null,
+        recipient_address: isSourcingBlock ? blockRecipientAddress.trim() : null,
+        recipient_contact: isSourcingBlock ? (blockRecipientContact.trim() || null) : null,
+        recipient_poc: isSourcingBlock ? (blockRecipientPoc.trim() || null) : null,
       };
       const { data, error } = await supabase
         .from("comms_inventory_blocks")
@@ -240,7 +272,15 @@ export default function CommsInventory({ profile, showPopup }) {
                       {product?.name || "—"}
                       {variant && <span className="comms-muted" style={{ marginLeft: 8, fontSize: 12 }}>· size {variant.size}</span>}
                     </td>
-                    <td>{b.purpose}</td>
+                    <td>
+                      {b.purpose}
+                      {b.recipient_name && (
+                        <span className="comms-muted" style={{ display: "block", fontSize: 12 }}>
+                          → {b.recipient_name}
+                          {b.recipient_contact ? ` · ${b.recipient_contact}` : ""}
+                        </span>
+                      )}
+                    </td>
                     <td>{formatDate(b.start_date)}</td>
                     <td>{formatDate(b.end_date)}</td>
                     <td>
@@ -423,14 +463,86 @@ export default function CommsInventory({ profile, showPopup }) {
               <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
                 Purpose <span style={{ color: "#c62828" }}>*</span>
               </label>
-              <input
-                type="text"
-                placeholder="e.g. Diwali shoot for Kareena"
+              <select
                 value={blockPurpose}
                 onChange={(e) => setBlockPurpose(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, fontFamily: "inherit" }}
-              />
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, fontFamily: "inherit", background: "#fff" }}
+              >
+                <option value="">Select purpose…</option>
+                {PURPOSE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
+
+            {blockPurpose === "Other" && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
+                  Purpose (describe) <span style={{ color: "#c62828" }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Diwali shoot for Kareena"
+                  value={blockPurposeOther}
+                  onChange={(e) => setBlockPurposeOther(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, fontFamily: "inherit" }}
+                />
+              </div>
+            )}
+
+            {/* Recipient details — captured only for a Sourcing reservation,
+                which lends an outfit out to a specific person/place. Name +
+                address are required; contact + POC optional. */}
+            {isSourcingBlock && (
+              <>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
+                    Recipient Name <span style={{ color: "#c62828" }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Who the outfit is reserved for"
+                    value={blockRecipientName}
+                    onChange={(e) => setBlockRecipientName(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, fontFamily: "inherit" }}
+                  />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
+                    Recipient Address <span style={{ color: "#c62828" }}>*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Full shipping address with pincode"
+                    value={blockRecipientAddress}
+                    onChange={(e) => setBlockRecipientAddress(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, fontFamily: "inherit", resize: "vertical" }}
+                  />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
+                    Contact Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Phone number"
+                    value={blockRecipientContact}
+                    onChange={(e) => setBlockRecipientContact(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, fontFamily: "inherit" }}
+                  />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
+                    Point of Contact
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="POC name"
+                    value={blockRecipientPoc}
+                    onChange={(e) => setBlockRecipientPoc(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, fontFamily: "inherit" }}
+                  />
+                </div>
+              </>
+            )}
 
             <p style={{ fontSize: 11, color: "#888", marginTop: 12, lineHeight: 1.5 }}>
               While reserved, SAs trying to add this product to a customer order will be hard-blocked. You can release the block early from the Active Blocks panel above.
