@@ -733,6 +733,41 @@
   margin-bottom: 14px;
 }
 
+/* Security Gate exit — PH-approved vendor shown read-only (guard can't choose). */
+.wd-sec-locked {
+  border: 1px solid #e7e2d6;
+  border-radius: 8px;
+  background: #faf8f3;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.wd-sec-locked-row {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 14px;
+}
+.wd-sec-locked-key { width: 90px; color: #888; flex-shrink: 0; }
+.wd-sec-locked-val { color: #222; font-weight: 600; }
+.wd-sec-locked-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #8a6d2f;
+}
+
+/* No movement configured → exit blocked. */
+.wd-sec-blocked {
+  border: 1px solid #f3c6c6;
+  border-radius: 8px;
+  background: #fdf4f4;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  color: #b3261e;
+  font-size: 13px;
+}
+.wd-sec-blocked p { margin: 0 0 6px; }
+.wd-sec-blocked p:last-child { margin-bottom: 0; }
+
 .wd-form-group label {
   display: block;
   font-size: 13px;

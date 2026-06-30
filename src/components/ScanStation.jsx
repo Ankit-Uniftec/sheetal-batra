@@ -18,6 +18,7 @@ import {
     getStageColor,
     getStageTextColor,
     fetchApprovedVendors,
+    getConfiguredMovement,
 } from "../utils/barcodeService";
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
@@ -236,12 +237,21 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             // Security gate has its own flow
             if (selectedStation === "security_gate") {
                 const component = await fetchComponentByBarcode(barcode);
+                const scanType = component.is_outside_wh ? "entry" : "exit";
+                // On EXIT, the vendor + return date are LOCKED to the movement
+                // the Production Head approved — the guard does not choose. Read
+                // that configured movement so the popup shows it read-only.
+                let movement = null;
+                if (scanType === "exit") {
+                    movement = await getConfiguredMovement(component.id);
+                }
                 setSecurityPopup({
                     isOpen: true,
                     barcode,
-                    scanType: component.is_outside_wh ? "entry" : "exit",
-                    vendorName: component.vendor_name || "",
-                    vendorLocation: component.vendor_location || "",
+                    scanType,
+                    movement, // PH-approved { vendor_name, vendor_location, return_date } or null
+                    vendorName: movement?.vendor_name || component.vendor_name || "",
+                    vendorLocation: movement?.vendor_location || component.vendor_location || "",
                 });
                 setIsProcessing(false);
                 return;
@@ -686,19 +696,25 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     const handleSecuritySubmit = async () => {
         if (!securityPopup.barcode) return;
 
-        if (securityPopup.scanType === "exit" && !securityPopup.vendorName.trim()) {
-            showPopup({ title: "Required", message: "Please enter vendor name", type: "warning", confirmText: "OK" });
+        // Exit requires a Production-Head-configured movement. The guard cannot
+        // pick the vendor — it's taken from that approved record (server-side
+        // too). Block exit if no movement is configured.
+        if (securityPopup.scanType === "exit" && !securityPopup.movement) {
+            showPopup({ title: "Not configured", message: "The Production Head must configure the external movement (vendor + return date) before this component can be sent out.", type: "warning", confirmText: "OK" });
             return;
         }
 
         setIsProcessing(true);
         try {
+            // Vendor/location are intentionally NOT sent for exit — the RPC uses
+            // the approved external_movements record. (Passed only as a harmless
+            // hint; the server ignores them on exit.)
             const result = await securityGuardScan({
                 barcode: securityPopup.barcode,
                 scanType: securityPopup.scanType,
                 scannedBy: currentUserEmail,
-                vendorName: securityPopup.vendorName,
-                vendorLocation: securityPopup.vendorLocation,
+                vendorName: securityPopup.movement?.vendor_name || securityPopup.vendorName,
+                vendorLocation: securityPopup.movement?.vendor_location || securityPopup.vendorLocation,
             });
 
             if (result.success) {
@@ -1308,45 +1324,33 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         <p className="wd-mono" style={{ fontSize: 18, textAlign: "center", marginBottom: 20 }}>{securityPopup.barcode}</p>
 
                         {securityPopup.scanType === "exit" ? (
-                            <>
-                                <div className="wd-form-group">
-                                    <label>Vendor *</label>
-                                    <select
-                                        value={securityPopup.vendorName}
-                                        onChange={e => {
-                                            const name = e.target.value;
-                                            const v = approvedVendors.find(av => av.vendor_name === name);
-                                            setSecurityPopup(prev => ({
-                                                ...prev,
-                                                vendorName: name,
-                                                // Auto-fill location from the chosen vendor (still editable below).
-                                                vendorLocation: v?.vendor_location || prev.vendorLocation,
-                                            }));
-                                        }}
-                                    >
-                                        <option value="">Select vendor…</option>
-                                        {approvedVendors.map(v => (
-                                            <option key={v.id} value={v.vendor_name}>
-                                                {v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {approvedVendors.length === 0 && (
-                                        <p style={{ fontSize: 11, color: "#c0392b", marginTop: 4 }}>
-                                            No approved vendors. The Production Head must configure them first.
-                                        </p>
-                                    )}
+                            securityPopup.movement ? (
+                                // Vendor + return date are LOCKED to what the Production
+                                // Head approved — the guard confirms, doesn't choose.
+                                <div className="wd-sec-locked">
+                                    <div className="wd-sec-locked-row">
+                                        <span className="wd-sec-locked-key">Vendor</span>
+                                        <span className="wd-sec-locked-val">{securityPopup.movement.vendor_name}</span>
+                                    </div>
+                                    <div className="wd-sec-locked-row">
+                                        <span className="wd-sec-locked-key">Location</span>
+                                        <span className="wd-sec-locked-val">{securityPopup.movement.vendor_location || "—"}</span>
+                                    </div>
+                                    <div className="wd-sec-locked-row">
+                                        <span className="wd-sec-locked-key">Return by</span>
+                                        <span className="wd-sec-locked-val">{securityPopup.movement.return_date || "—"}</span>
+                                    </div>
+                                    <p className="wd-sec-locked-note">
+                                        Approved by the Production Head. Confirm to send this component out.
+                                    </p>
                                 </div>
-                                <div className="wd-form-group">
-                                    <label>Vendor Location</label>
-                                    <input
-                                        type="text"
-                                        value={securityPopup.vendorLocation}
-                                        onChange={e => setSecurityPopup(prev => ({ ...prev, vendorLocation: e.target.value }))}
-                                        placeholder="e.g. Ludhiana"
-                                    />
+                            ) : (
+                                // No PH-configured movement → cannot exit. Block it.
+                                <div className="wd-sec-blocked">
+                                    <p>External movement is <strong>not configured</strong> for this component.</p>
+                                    <p>The Production Head must configure the vendor and return date before it can be scanned out.</p>
                                 </div>
-                            </>
+                            )
                         ) : (
                             <p style={{ textAlign: "center", color: "#4caf50", fontSize: 16, marginBottom: 20 }}>
                                 Returning from: {securityPopup.vendorName || "External Vendor"}
@@ -1356,7 +1360,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         <button
                             className="wd-qc-submit-btn"
                             onClick={handleSecuritySubmit}
-                            disabled={isProcessing}
+                            disabled={isProcessing || (securityPopup.scanType === "exit" && !securityPopup.movement)}
                         >
                             {isProcessing ? "Processing..." : securityPopup.scanType === "exit" ? "Confirm Exit" : "Confirm Entry"}
                         </button>
