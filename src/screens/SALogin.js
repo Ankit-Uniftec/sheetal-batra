@@ -94,6 +94,9 @@ export default function SALogin() {
         navigate("/assistant-cmo-dashboard")
       } else if (userRecord.role === "comms") {
         navigate("/comms-dashboard")
+      } else if (userRecord.role === "walkin_viewer") {
+        // Walk-in-only login: lands on the dedicated Walk-Ins dashboard.
+        navigate("/walkin-dashboard")
       } else if (userRecord.role === "store_manager") {
         navigate("/store-manager-dashboard");
       } else if (userRecord.role === "executive") {

@@ -1,0 +1,126 @@
+/* ==================== WALK-IN DASHBOARD ==================== */
+/* Mirrors the InventoryDashboard shell (header + page bg) so the single-page
+   dashboards stay visually consistent. */
+
+.wid-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #fdfcfb 0%, #f5f0e8 100%);
+  background-image: url("../../images/Screen1bg.png");
+  background-size: cover;
+  background-attachment: fixed;
+  background-position: center;
+}
+
+/* Header */
+.wid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.wid-header-left,
+.wid-header-right {
+  flex: 1;
+}
+
+.wid-header-right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.wid-logo {
+  height: 50px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.wid-logo:hover {
+  transform: scale(1.02);
+}
+
+.wid-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  text-align: center;
+}
+
+.wid-logout-btn {
+  background: linear-gradient(135deg, #d5b85a 0%, #c4a94d 100%);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(213, 184, 90, 0.3);
+}
+
+.wid-logout-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(213, 184, 90, 0.4);
+}
+
+/* Content — wide (the 8-column walk-in table needs room). ~90% of the
+   viewport, capped so it doesn't stretch uncomfortably on ultrawide screens. */
+.wid-main {
+  padding: 28px 32px 56px;
+  width: 90%;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Loading */
+.wid-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  gap: 16px;
+}
+
+.wid-loading p {
+  color: #666;
+  font-size: 16px;
+}
+
+.wid-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #d5b85a;
+  border-radius: 50%;
+  animation: wid-spin 1s linear infinite;
+}
+
+@keyframes wid-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  .wid-header {
+    padding: 12px 16px;
+  }
+  .wid-title {
+    font-size: 18px;
+  }
+  .wid-logo {
+    height: 38px;
+  }
+  .wid-main {
+    width: 100%;
+    padding: 18px 12px 40px;
+  }
+}
