@@ -139,6 +139,14 @@ export function getStageColor(stageValue) {
   return getStageInfo(stageValue)?.color || "#9e9e9e";
 }
 
+// Allowed days for a stage (its SLA). Used to derive an expected return/
+// due-back date for components sent out to a vendor (exit date + maxDays).
+// Returns null when the stage has no defined SLA.
+export function getStageMaxDays(stageValue) {
+  const d = getStageInfo(stageValue)?.maxDays;
+  return typeof d === "number" ? d : null;
+}
+
 // ============================================================
 // 1. ADVANCE STAGE — Main scan handler
 // ============================================================
@@ -578,6 +586,23 @@ export async function configureExternalMovement({ barcode, vendorId, returnDate,
     p_created_by: createdBy,
   });
   if (error) throw error;
+  return data;
+}
+
+// The PH-approved external movement awaiting an exit scan for this component —
+// i.e. the 'configured' (not yet exited) row. The Security Gate reads THIS to
+// lock the exit to the approved vendor + return date; the guard cannot choose.
+// Returns null if the Production Head hasn't configured a movement yet.
+export async function getConfiguredMovement(componentId) {
+  const { data, error } = await supabase
+    .from("external_movements")
+    .select("id, vendor_name, vendor_location, return_date, status")
+    .eq("component_id", componentId)
+    .eq("status", "configured")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) { console.error("getConfiguredMovement failed:", error); return null; }
   return data;
 }
 

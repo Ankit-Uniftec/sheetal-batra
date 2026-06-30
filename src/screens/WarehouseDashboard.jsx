@@ -12,7 +12,7 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS } from "../utils/barcodeService";
+import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, getStageMaxDays, fetchTransitionHistory } from "../utils/barcodeService";
 import Badge from "../components/Badge";
 import SearchByDropdown from "../components/SearchByDropdown";
 
@@ -74,6 +74,35 @@ const getMeasurementLabel = (key) => {
   if (bottomKeys.includes(key)) return "Bottom";
   if (key === "Lehenga") return "Lehenga";
   return key;
+};
+
+// For a component currently out at a vendor, build the "At [vendor] · due
+// [date]" tag. The due-back date is derived from when it left the warehouse
+// (vendor_exit_at) + the current stage's allowed days (its SLA / maxDays).
+// Returns null if the piece isn't out; otherwise { text, overdue }.
+const getVendorTagInfo = (comp) => {
+  if (!comp?.is_outside_wh) return null;
+  const vendor = comp.vendor_name || "Vendor";
+  const maxDays = getStageMaxDays(comp.current_stage);
+  const exit = comp.vendor_exit_at ? new Date(comp.vendor_exit_at) : null;
+
+  // No exit timestamp or no SLA for this stage → show vendor only.
+  if (!exit || isNaN(exit.getTime()) || maxDays == null) {
+    return { text: `At ${vendor}`, overdue: false };
+  }
+
+  const due = new Date(exit);
+  due.setDate(due.getDate() + maxDays);
+
+  // Days remaining (date-only comparison so "today" isn't counted overdue).
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((startOfDay(due) - startOfDay(new Date())) / 86400000);
+
+  if (diffDays < 0) {
+    const od = Math.abs(diffDays);
+    return { text: `At ${vendor} · ${od} day${od === 1 ? "" : "s"} overdue`, overdue: true };
+  }
+  return { text: `At ${vendor} · due ${formatDate(due)}`, overdue: false };
 };
 
 const WarehouseDashboard = () => {
@@ -162,6 +191,11 @@ const WarehouseDashboard = () => {
   const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
   const [qcReportRecords, setQcReportRecords] = useState([]);
   const [qcReportLoading, setQcReportLoading] = useState(false);
+  // Order whose full component journey is being viewed in the modal.
+  const [journeyOrder, setJourneyOrder] = useState(null); // { order_no }
+  const [journeyData, setJourneyData] = useState([]);      // [{ component, transitions }]
+  const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeySelectedId, setJourneySelectedId] = useState(null); // active component tab
 
   // QC Fail Popup state
   // const [qcFailPopup, setQcFailPopup] = useState({
@@ -341,7 +375,7 @@ const WarehouseDashboard = () => {
     try {
       const { data, error } = await supabase
         .from("order_components")
-        .select("id, barcode, component_type, component_label, current_stage, is_active, qc_status, is_delayed, re_journey_count, is_outside_wh, vendor_name")
+        .select("id, barcode, component_type, component_label, current_stage, is_active, qc_status, is_delayed, re_journey_count, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
         .eq("order_id", orderId)
         .order("component_type", { ascending: true });
 
@@ -373,6 +407,33 @@ const WarehouseDashboard = () => {
       setQcReportRecords([]);
     }
     setQcReportLoading(false);
+  };
+
+  // Open the full-journey modal: for every component of the order, load its
+  // ordered stage-transition trail (each scan, who/when, and the notes — which
+  // carry vendor name/location on the security-gate exit/entry steps).
+  const openJourney = async (order) => {
+    setJourneyOrder({ order_no: order.order_no });
+    setJourneyLoading(true);
+    setJourneyData([]);
+    setJourneySelectedId(null);
+    try {
+      const comps = orderComponentsMap[order.id] || [];
+      const data = await Promise.all(
+        comps.map(async (component) => {
+          let transitions = [];
+          try { transitions = await fetchTransitionHistory(component.id); }
+          catch (e) { console.error("journey fetch failed for", component.barcode, e); }
+          return { component, transitions: transitions || [] };
+        })
+      );
+      setJourneyData(data);
+      setJourneySelectedId(data[0]?.component?.id || null); // default to first component
+    } catch (err) {
+      console.error("Failed to load journey:", err);
+      setJourneyData([]);
+    }
+    setJourneyLoading(false);
   };
 
   useEffect(() => {
@@ -1126,6 +1187,95 @@ const WarehouseDashboard = () => {
         </div>
       )}
 
+      {/* ===== COMPONENT JOURNEY MODAL ===== */}
+      {journeyOrder && (
+        <div className="wd-qc-overlay" onClick={() => setJourneyOrder(null)}>
+          <div className="wd-journey-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="wd-qc-modal-head">
+              <h3 className="wd-qc-modal-title">Component Journey — {journeyOrder.order_no}</h3>
+              <button className="wd-qc-modal-close" onClick={() => setJourneyOrder(null)}>×</button>
+            </div>
+
+            {journeyLoading ? (
+              <p className="wd-qc-empty">Loading journey…</p>
+            ) : journeyData.length === 0 ? (
+              <p className="wd-qc-empty">No components found for this order.</p>
+            ) : (() => {
+              const selected = journeyData.find((d) => d.component.id === journeySelectedId) || journeyData[0];
+              return (
+                <div className="wd-journey-body">
+                  {/* Left: one tab per component */}
+                  <div className="wd-journey-tabs">
+                    {journeyData.map(({ component: c }) => {
+                      const out = c.is_outside_wh ? getVendorTagInfo(c) : null;
+                      return (
+                        <button
+                          key={c.id}
+                          className={`wd-journey-tab ${selected?.component.id === c.id ? "active" : ""}`}
+                          onClick={() => setJourneySelectedId(c.id)}
+                        >
+                          <span className="wd-journey-tab-dot" style={{ backgroundColor: getStageColor(c.current_stage) }} />
+                          <span className="wd-journey-tab-text">
+                            <span className="wd-journey-tab-name">{c.component_label || c.component_type}</span>
+                            <span className="wd-journey-tab-bc">{c.barcode}</span>
+                          </span>
+                          {out && <span className={`wd-journey-tab-flag ${out.overdue ? "overdue" : ""}`} title={out.text}>●</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right: selected component's journey */}
+                  <div className="wd-journey-detail">
+                    {selected && (() => {
+                      const c = selected.component;
+                      const transitions = selected.transitions;
+                      const info = c.is_outside_wh ? getVendorTagInfo(c) : null;
+                      return (
+                        <>
+                          <div className="wd-journey-comp-head">
+                            <span className="wd-vendor-comp">{c.component_label || c.component_type}</span>
+                            <span className="wd-vendor-bc">{c.barcode}</span>
+                            <Badge color={getStageColor(c.current_stage)}>{getStageLabel(c.current_stage)}</Badge>
+                            {info && (
+                              <span className={`wd-journey-vendor-now ${info.overdue ? "wd-vendor-overdue" : ""}`}>
+                                {info.text}
+                              </span>
+                            )}
+                          </div>
+
+                          {transitions.length === 0 ? (
+                            <p className="wd-journey-empty">Not started yet — no scans recorded.</p>
+                          ) : (
+                            <div className="wd-timeline">
+                              {transitions.map((t) => (
+                                <div key={t.id} className="wd-timeline-item">
+                                  <div className="wd-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
+                                  <div className="wd-timeline-content">
+                                    <p className="wd-timeline-stage">
+                                      {t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}{getStageLabel(t.to_stage)}
+                                    </p>
+                                    <p className="wd-timeline-meta">
+                                      {t.scanned_by} {'•'} {new Date(t.scanned_at).toLocaleString("en-GB")}
+                                      {t.transition_type && t.transition_type !== "scan" && ` (${t.transition_type})`}
+                                    </p>
+                                    {t.notes && <p className="wd-timeline-notes">{t.notes}</p>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="wd-top-header">
         <div className="wd-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
@@ -1733,7 +1883,9 @@ const WarehouseDashboard = () => {
                                           </div>
                                           <div className="wd-comp-right">
                                             {comp.is_outside_wh && (
-                                              <span className="wd-comp-vendor-tag">At Vendor</span>
+                                              <span className={`wd-comp-vendor-tag ${getVendorTagInfo(comp)?.overdue ? "wd-comp-vendor-tag-overdue" : ""}`}>
+                                                At Vendor
+                                              </span>
                                             )}
                                             {comp.re_journey_count > 0 && (
                                               <span className="wd-comp-rework-tag">Rework {comp.re_journey_count}</span>
@@ -1759,6 +1911,17 @@ const WarehouseDashboard = () => {
                                         (order.status === "pending" || order.status === "order_received") ? "Order Received" :
                                           "Awaiting Production"}
                                   </div>
+                                )}
+                                {/* View Journey — full stage-by-stage flow of every
+                                    component in this order (vendor trips included,
+                                    shown inline on the security-gate steps). */}
+                                {(orderComponentsMap[order.id] || []).length > 0 && (
+                                  <button
+                                    className="wd-vendor-btn"
+                                    onClick={() => openJourney(order)}
+                                  >
+                                    View Journey
+                                  </button>
                                 )}
                                 {/* View the QC report (QC 1 + Final QC results) for this order */}
                                 <button
