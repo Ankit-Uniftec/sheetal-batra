@@ -1,0 +1,240 @@
+/* ============ STORE MANAGER — DELIVERY CALENDAR TAB ============ */
+/* Mirrors the Comms order-calendar look so calendars stay consistent. */
+
+.scal-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.scal-card {
+  background: #fff;
+  border: 1px solid #e7e2d6;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.scal-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.scal-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scal-card-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: #999;
+}
+
+.scal-today-pill {
+  background: #d5b85a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+.scal-muted {
+  color: #999;
+  font-size: 13px;
+}
+
+/* Month grid */
+.scal-month {
+  background: #fff;
+}
+
+.scal-month-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.scal-month-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.scal-nav-btn {
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #555;
+}
+
+.scal-nav-btn:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+.scal-weekrow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.scal-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 0;
+}
+
+.scal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.scal-cell {
+  position: relative;
+  min-height: 64px;
+  border: 1px solid #ececec;
+  border-radius: 6px;
+  background: #fafafa;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: background 0.12s, border-color 0.12s;
+  overflow: hidden;
+}
+
+.scal-cell:hover {
+  background: #f0f0f0;
+  border-color: #c8c8c8;
+}
+
+.scal-empty {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+.scal-empty:hover {
+  background: transparent;
+}
+
+.scal-cell-num {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.scal-today {
+  background: #fff8e1;
+  border-color: #d5b85a;
+}
+
+.scal-today .scal-cell-num {
+  color: #b8941f;
+  font-weight: 700;
+}
+
+.scal-selected {
+  background: #fff;
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.25);
+}
+
+.scal-has-events {
+  background: #fff;
+}
+
+.scal-cell-count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #d5b85a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 6px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* Selected-day order list */
+.scal-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.scal-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ececec;
+}
+
+.scal-table td {
+  font-size: 13px;
+  color: #333;
+  padding: 9px 10px;
+  border-bottom: 1px solid #f3f3f3;
+}
+
+.scal-table tbody tr:hover {
+  background: #faf8f3;
+}
+
+.scal-row-clickable {
+  cursor: pointer;
+}
+
+.scal-row-clickable:hover .scal-order-link {
+  text-decoration: underline;
+}
+
+.scal-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: #444;
+}
+
+.scal-order-link {
+  color: #b8941f;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .scal-cell {
+    min-height: 52px;
+    padding: 4px 5px;
+  }
+  .scal-table th, .scal-table td {
+    padding: 7px 6px;
+    font-size: 12px;
+  }
+}
