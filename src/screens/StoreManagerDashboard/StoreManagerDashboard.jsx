@@ -9,6 +9,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -825,6 +826,7 @@ export default function StoreManagerDashboard() {
                             { key: "sales", label: "Sales Overview" },
                             { key: "sa_performance", label: "SA Performance" },
                             { key: "orders", label: "Orders" },
+                            { key: "calendar", label: "Delivery Calendar" },
                             { key: "returns", label: "Returns & Issues" },
                             { key: "inventory", label: "Store Inventory" },
                             { key: "clients", label: "Client Book" },
@@ -1261,6 +1263,27 @@ export default function StoreManagerDashboard() {
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {/* ═══════════ TAB: DELIVERY CALENDAR ═══════════ */}
+                    {/* This store's orders plotted on their delivery date; pick a
+                        day to see each order number and the SA it's assigned to.
+                        Clicking an order jumps to it in the Orders tab. */}
+                    {activeTab === "calendar" && (
+                        <StoreCalendarTab
+                            orders={storeOrders}
+                            storeLabel={storeLabel}
+                            onOpenOrder={(orderNo) => {
+                                if (!orderNo) return;
+                                // Land the Orders tab on exactly this order: search
+                                // by order number, clear the status filter so it
+                                // isn't hidden, then switch tabs.
+                                setOrderSearchField("order_no");
+                                setOrderSearch(orderNo);
+                                setStatusTab("all");
+                                setActiveTab("orders");
+                            }}
+                        />
                     )}
 
                     {/* ═══════════ TAB 4: RETURNS & ISSUES ═══════════ */}
