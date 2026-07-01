@@ -1248,21 +1248,32 @@ const WarehouseDashboard = () => {
                             <p className="wd-journey-empty">Not started yet — no scans recorded.</p>
                           ) : (
                             <div className="wd-timeline">
-                              {transitions.map((t) => (
-                                <div key={t.id} className="wd-timeline-item">
-                                  <div className="wd-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
-                                  <div className="wd-timeline-content">
-                                    <p className="wd-timeline-stage">
-                                      {t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}{getStageLabel(t.to_stage)}
-                                    </p>
-                                    <p className="wd-timeline-meta">
-                                      {t.scanned_by} {'•'} {new Date(t.scanned_at).toLocaleString("en-GB")}
-                                      {t.transition_type && t.transition_type !== "scan" && ` (${t.transition_type})`}
-                                    </p>
-                                    {t.notes && <p className="wd-timeline-notes">{t.notes}</p>}
+                              {transitions.map((t) => {
+                                // The security gate doesn't change the stage (it's a
+                                // physical in/out checkpoint), so it logs the same
+                                // from/to stage. Show a clear action label for those
+                                // instead of a confusing "Cloth Issued → Cloth Issued".
+                                const isExit = t.transition_type === "security_exit";
+                                const isEntry = t.transition_type === "security_entry";
+                                const headline = isExit
+                                  ? "Sent to Vendor"
+                                  : isEntry
+                                    ? "Returned to Warehouse"
+                                    : `${t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}${getStageLabel(t.to_stage)}`;
+                                return (
+                                  <div key={t.id} className="wd-timeline-item">
+                                    <div className="wd-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
+                                    <div className="wd-timeline-content">
+                                      <p className="wd-timeline-stage">{headline}</p>
+                                      <p className="wd-timeline-meta">
+                                        {t.scanned_by} {'•'} {new Date(t.scanned_at).toLocaleString("en-GB")}
+                                        {!isExit && !isEntry && t.transition_type && t.transition_type !== "scan" && ` (${t.transition_type})`}
+                                      </p>
+                                      {t.notes && <p className="wd-timeline-notes">{t.notes}</p>}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </>
@@ -1882,11 +1893,8 @@ const WarehouseDashboard = () => {
                                             <span className="wd-comp-label">{comp.component_label || comp.component_type}</span>
                                           </div>
                                           <div className="wd-comp-right">
-                                            {comp.is_outside_wh && (
-                                              <span className={`wd-comp-vendor-tag ${getVendorTagInfo(comp)?.overdue ? "wd-comp-vendor-tag-overdue" : ""}`}>
-                                                At Vendor
-                                              </span>
-                                            )}
+                                            {/* "At Vendor" removed from the row — vendor + due-back
+                                                now live in the View Journey modal. */}
                                             {comp.re_journey_count > 0 && (
                                               <span className="wd-comp-rework-tag">Rework {comp.re_journey_count}</span>
                                             )}
