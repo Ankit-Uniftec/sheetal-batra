@@ -6,6 +6,8 @@ import {
   fetchAllVendors,
   configureExternalMovement,
   initiateReplacementJourney,
+  fetchAllMovements,
+  updateExternalMovement,
   SCAN_STATIONS,
 } from "../utils/barcodeService";
 
@@ -14,6 +16,43 @@ import {
 const EXTERNAL_ELIGIBLE_STEPS = SCAN_STATIONS
   .filter((s) => s.step >= 2 && s.step <= 8)
   .map((s) => ({ step: s.step, label: s.label }));
+
+// Render a stages_outside step-number array as readable stage labels.
+const stepLabels = (steps) => {
+  if (!Array.isArray(steps) || steps.length === 0) return "—";
+  return steps
+    .map((n) => EXTERNAL_ELIGIBLE_STEPS.find((s) => s.step === n)?.label || `Step ${n}`)
+    .join(", ");
+};
+
+const PAGE_SIZE = 10;
+
+// Friendly messages for the configure/update RPC error codes — so the PH sees
+// plain guidance instead of the raw technical DB message.
+const MOVEMENT_ERROR_MESSAGES = {
+  BARCODE_NOT_FOUND: "No component found with that barcode. Check and try again.",
+  VENDOR_NOT_APPROVED: "That vendor isn't approved. Pick an approved vendor.",
+  INVALID_RETURN_DATE: "The return date can't be in the past.",
+  NO_STAGES: "Select at least one stage that goes outside.",
+  INVALID_STAGE_FOR_MOVEMENT: "This piece isn't ready to go to a vendor yet — an earlier production stage (e.g. Cloth Issue) must be completed first.",
+  NOT_EDITABLE: "This movement has already been scanned out, so it can no longer be edited.",
+  MOVEMENT_NOT_FOUND: "That movement no longer exists.",
+};
+const friendlyMovementError = (res) =>
+  MOVEMENT_ERROR_MESSAGES[res?.error] || res?.message || "Could not complete the request. Please try again.";
+
+// Simple Prev/Next pager. Renders nothing when there's a single page.
+const Pager = ({ page, total, onChange }) => {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (pages <= 1) return null;
+  return (
+    <div className="phv-pager">
+      <button disabled={page === 1} onClick={() => onChange(page - 1)}>Prev</button>
+      <span>Page {page} of {pages}</span>
+      <button disabled={page === pages} onClick={() => onChange(page + 1)}>Next</button>
+    </div>
+  );
+};
 
 /**
  * ProductionHeadVendors
@@ -47,6 +86,17 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   const [approvedVendors, setApprovedVendors] = useState([]);
   const [allVendors, setAllVendors] = useState([]);
 
+  // Movement history + edit
+  const [movements, setMovements] = useState([]);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [movPage, setMovPage] = useState(1);
+  const [vendorPage, setVendorPage] = useState(1);
+  const [editMov, setEditMov] = useState(null); // the movement being edited
+  const [editVendorId, setEditVendorId] = useState("");
+  const [editReturnDate, setEditReturnDate] = useState("");
+  const [editStages, setEditStages] = useState([]);
+  const [editSaving, setEditSaving] = useState(false);
+
   const loadVendors = useCallback(async () => {
     try {
       const [approved, all] = await Promise.all([fetchApprovedVendors(), fetchAllVendors()]);
@@ -58,6 +108,49 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   }, []);
 
   useEffect(() => { loadVendors(); }, [loadVendors]);
+
+  const loadMovements = useCallback(async () => {
+    setMovementsLoading(true);
+    try { setMovements(await fetchAllMovements()); setMovPage(1); }
+    catch (e) { console.error("Failed to load movements:", e); }
+    setMovementsLoading(false);
+  }, []);
+
+  // Open the edit modal for a still-'configured' movement.
+  const openEdit = (m) => {
+    setEditMov(m);
+    setEditVendorId(m.vendor_id || "");
+    setEditReturnDate(m.return_date || "");
+    setEditStages(Array.isArray(m.stages_outside) ? m.stages_outside : []);
+  };
+  const toggleEditStage = (step) =>
+    setEditStages((prev) => prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step]);
+
+  const handleUpdateMovement = async () => {
+    if (!editVendorId) return showPopup({ title: "Required", message: "Select an approved vendor", type: "warning", confirmText: "OK" });
+    if (!editReturnDate) return showPopup({ title: "Required", message: "Pick a return date", type: "warning", confirmText: "OK" });
+    if (editStages.length === 0) return showPopup({ title: "Required", message: "Select at least one stage", type: "warning", confirmText: "OK" });
+    setEditSaving(true);
+    try {
+      const res = await updateExternalMovement({
+        movementId: editMov.id,
+        vendorId: editVendorId,
+        returnDate: editReturnDate,
+        stagesOutside: editStages,
+        updatedBy: currentUserEmail,
+      });
+      if (res?.success) {
+        showPopup({ title: "Movement Updated", message: `Now sent to ${res.vendor} — return by ${res.return_date}.`, type: "success", confirmText: "OK" });
+        setEditMov(null);
+        loadMovements();
+      } else {
+        showPopup({ title: "Could not update", message: friendlyMovementError(res), type: "error", confirmText: "OK" });
+      }
+    } catch (e) {
+      showPopup({ title: "Error", message: e.message || "Failed to update movement", type: "error", confirmText: "OK" });
+    }
+    setEditSaving(false);
+  };
 
   // Minimum selectable return date = today (no backdating; RPC also enforces).
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -104,10 +197,10 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         createdBy: currentUserEmail,
       });
       if (res?.success) {
-        showPopup({ title: "Movement Configured", message: `${res.vendor} — return by ${res.return_date}. The component can now be scanned out at the Security Gate.`, type: "success", confirmText: "OK" });
+        showPopup({ title: "Movement Configured", message: `Sent to ${res.vendor} — return by ${res.return_date}. It can now be scanned out at the Security Gate.`, type: "success", confirmText: "OK" });
         setBarcode(""); setVendorId(""); setReturnDate(""); setStages([]);
       } else {
-        showPopup({ title: "Could not configure", message: res?.message || res?.error || "Failed", type: "error", confirmText: "OK" });
+        showPopup({ title: "Could not configure", message: friendlyMovementError(res), type: "error", confirmText: "OK" });
       }
     } catch (e) {
       showPopup({ title: "Error", message: e.message || "Failed to configure movement", type: "error", confirmText: "OK" });
@@ -156,6 +249,7 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         <button className={`phv-tab ${tab === "movement" ? "active" : ""}`} onClick={() => setTab("movement")}>Configure External Movement</button>
         <button className={`phv-tab ${tab === "failure" ? "active" : ""}`} onClick={() => setTab("failure")}>Report Vendor Failure</button>
         <button className={`phv-tab ${tab === "vendors" ? "active" : ""}`} onClick={() => setTab("vendors")}>Vendors</button>
+        <button className={`phv-tab ${tab === "history" ? "active" : ""}`} onClick={() => { setTab("history"); loadMovements(); }}>Movement History</button>
       </div>
 
       {tab === "movement" && (
@@ -228,15 +322,93 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         <div className="phv-card">
           <h3 className="phv-title">Vendors</h3>
           <p className="phv-hint">New vendors are requested by the Production Manager and approved by Manish. You can select any <strong>approved</strong> vendor when configuring a movement.</p>
-          <div className="phv-vendor-list">
-            {allVendors.length === 0 ? (
-              <p className="phv-hint">No vendors yet.</p>
-            ) : allVendors.map((v) => (
-              <div key={v.id} className="phv-vendor-row">
-                <span className="phv-vendor-name">{v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}</span>
-                <span className={`phv-status phv-status-${v.status}`}>{v.status}</span>
+          {allVendors.length === 0 ? (
+            <p className="phv-hint">No vendors yet.</p>
+          ) : (
+            <>
+              <div className="phv-vendor-list">
+                {allVendors.slice((vendorPage - 1) * PAGE_SIZE, vendorPage * PAGE_SIZE).map((v) => (
+                  <div key={v.id} className="phv-vendor-row">
+                    <span className="phv-vendor-name">{v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}</span>
+                    <span className={`phv-status phv-status-${v.status}`}>{v.status}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+              <Pager page={vendorPage} total={allVendors.length} onChange={setVendorPage} />
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "history" && (
+        <div className="phv-card">
+          <h3 className="phv-title">Movement History</h3>
+          <p className="phv-hint">Configured external movements. A movement can be edited only while it's still <strong>configured</strong> (before the component is scanned out); exited/returned movements are read-only history.</p>
+          {movementsLoading ? (
+            <p className="phv-hint">Loading…</p>
+          ) : movements.length === 0 ? (
+            <p className="phv-hint">No external movements configured yet.</p>
+          ) : (
+            <>
+              <div className="phv-mov-list">
+                {movements.slice((movPage - 1) * PAGE_SIZE, movPage * PAGE_SIZE).map((m) => (
+                  <div key={m.id} className={`phv-mov-row phv-mov-${m.status}`}>
+                    <div className="phv-mov-main">
+                      <span className="phv-mov-bc">{m.barcode || "—"}</span>
+                      <span className="phv-mov-vendor">{m.vendor_name}{m.vendor_location ? ` · ${m.vendor_location}` : ""}</span>
+                      <span className="phv-mov-stages">{stepLabels(m.stages_outside)}</span>
+                    </div>
+                    <div className="phv-mov-meta">
+                      <span>Return by {m.return_date || "—"}</span>
+                      <span className={`phv-status phv-status-${m.status}`}>{m.status}</span>
+                      {m.status === "configured" ? (
+                        <button className="phv-mov-edit" onClick={() => openEdit(m)}>Edit</button>
+                      ) : (
+                        <span className="phv-mov-locked" title="Only configured movements can be edited">locked</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Pager page={movPage} total={movements.length} onChange={setMovPage} />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Edit modal — configured movements only */}
+      {editMov && (
+        <div className="phv-modal-overlay" onClick={() => setEditMov(null)}>
+          <div className="phv-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="phv-modal-head">
+              <h3 className="phv-title" style={{ margin: 0 }}>Edit Movement — {editMov.barcode}</h3>
+              <button className="phv-modal-close" onClick={() => setEditMov(null)}>×</button>
+            </div>
+
+            <label className="phv-label">Vendor (approved only)</label>
+            <SearchableSelect
+              options={vendorOptions}
+              value={editVendorId}
+              onChange={setEditVendorId}
+              placeholder="Search vendor by name or stage…"
+            />
+
+            <label className="phv-label">Return Date (cannot be backdated)</label>
+            <input className="phv-input" type="date" min={todayStr} value={editReturnDate} onChange={(e) => setEditReturnDate(e.target.value)} />
+
+            <label className="phv-label">Stages being done outside</label>
+            <div className="phv-stage-grid">
+              {EXTERNAL_ELIGIBLE_STEPS.map((s) => (
+                <label key={s.step} className={`phv-stage-pill ${editStages.includes(s.step) ? "active" : ""}`}>
+                  <input type="checkbox" checked={editStages.includes(s.step)} onChange={() => toggleEditStage(s.step)} />
+                  {s.label}
+                </label>
+              ))}
+            </div>
+
+            <button className="phv-submit" onClick={handleUpdateMovement} disabled={editSaving}>
+              {editSaving ? "Saving…" : "Save Changes"}
+            </button>
           </div>
         </div>
       )}

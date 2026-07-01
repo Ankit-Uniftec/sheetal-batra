@@ -12,7 +12,7 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, getStageMaxDays, fetchTransitionHistory } from "../utils/barcodeService";
+import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, getStageMaxDays, fetchTransitionHistory, fetchMovementHistory } from "../utils/barcodeService";
 import Badge from "../components/Badge";
 import SearchByDropdown from "../components/SearchByDropdown";
 
@@ -422,9 +422,14 @@ const WarehouseDashboard = () => {
       const data = await Promise.all(
         comps.map(async (component) => {
           let transitions = [];
-          try { transitions = await fetchTransitionHistory(component.id); }
-          catch (e) { console.error("journey fetch failed for", component.barcode, e); }
-          return { component, transitions: transitions || [] };
+          let movements = [];
+          try {
+            [transitions, movements] = await Promise.all([
+              fetchTransitionHistory(component.id),
+              fetchMovementHistory(component.id),
+            ]);
+          } catch (e) { console.error("journey fetch failed for", component.barcode, e); }
+          return { component, transitions: transitions || [], movements: movements || [] };
         })
       );
       setJourneyData(data);
@@ -1230,6 +1235,7 @@ const WarehouseDashboard = () => {
                     {selected && (() => {
                       const c = selected.component;
                       const transitions = selected.transitions;
+                      const movements = selected.movements || [];
                       const info = c.is_outside_wh ? getVendorTagInfo(c) : null;
                       return (
                         <>
@@ -1244,6 +1250,40 @@ const WarehouseDashboard = () => {
                             )}
                           </div>
 
+                          {/* Vendor history — every external trip for this component:
+                              which vendor, out/return dates, and status. */}
+                          {movements.length > 0 && (
+                            <div className="wd-vendor-hist">
+                              <p className="wd-vendor-hist-title">Vendor History</p>
+                              <table className="wd-vendor-hist-table">
+                                <thead>
+                                  <tr>
+                                    <th>Vendor</th>
+                                    <th>Sent</th>
+                                    <th>Returned</th>
+                                    <th>Due</th>
+                                    <th>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {movements.map((m) => (
+                                    <tr key={m.id}>
+                                      <td>
+                                        <strong>{m.vendor_name || "—"}</strong>
+                                        {m.vendor_location ? <span className="wd-vendor-hist-loc"> · {m.vendor_location}</span> : null}
+                                      </td>
+                                      <td>{m.exit_scan_at ? formatDate(m.exit_scan_at) : "—"}</td>
+                                      <td>{m.entry_scan_at ? formatDate(m.entry_scan_at) : "—"}</td>
+                                      <td>{m.return_date ? formatDate(m.return_date) : "—"}</td>
+                                      <td><span className={`wd-vendor-hist-status wd-vhs-${m.status}`}>{m.status}</span></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          <p className="wd-journey-section-title">Stage History</p>
                           {transitions.length === 0 ? (
                             <p className="wd-journey-empty">Not started yet — no scans recorded.</p>
                           ) : (

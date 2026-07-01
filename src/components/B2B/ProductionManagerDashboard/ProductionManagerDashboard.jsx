@@ -146,6 +146,10 @@ export default function ProductionManagerDashboard() {
     const [statusTab, setStatusTab] = useState("all");
     const [sortBy, setSortBy] = useState("newest");
     const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [] });
+    // Overview period filter (scopes the stage cards by each component's ORDER date).
+    const [overviewPeriod, setOverviewPeriod] = useState("all"); // all | day | month | year | custom
+    const [overviewFrom, setOverviewFrom] = useState("");
+    const [overviewTo, setOverviewTo] = useState("");
     const [openDropdown, setOpenDropdown] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const dropdownRef = useRef(null);
@@ -481,6 +485,31 @@ export default function ProductionManagerDashboard() {
     // Per-stage component counts. Source of truth: order_components.current_stage
     // (advanced live by the warehouse Scan Station). One row per top/bottom/
     // dupatta/extra so a single order contributes multiple data points.
+    // Orders placed within the selected Overview period — feeds the
+    // "Orders by Production Stage" cards (StageCountCards counts by order).
+    const overviewOrders = useMemo(() => {
+        if (overviewPeriod === "all") return orders;
+        const now = new Date();
+        let from = null, to = null;
+        if (overviewPeriod === "day") {
+            from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        } else if (overviewPeriod === "month") {
+            from = new Date(now.getFullYear(), now.getMonth(), 1);
+        } else if (overviewPeriod === "year") {
+            from = new Date(now.getFullYear(), 0, 1);
+        } else if (overviewPeriod === "custom") {
+            from = overviewFrom ? new Date(overviewFrom) : null;
+            to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
+        }
+        return orders.filter((o) => {
+            if (!o.created_at) return false;
+            const dt = new Date(o.created_at);
+            if (from && dt < from) return false;
+            if (to && dt > to) return false;
+            return true;
+        });
+    }, [orders, overviewPeriod, overviewFrom, overviewTo]);
+
     const stageStats = useMemo(() => {
         const counts = {};
         components.forEach((c) => {
@@ -1199,8 +1228,32 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "overview" && (
                             <>
                                 {/* ===== ORDERS BY PRODUCTION STAGE (click a card to drill into the orders list) ===== */}
-                                <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Orders by Production Stage</p>
-                                <StageCountCards orders={orders} onStageClick={handleStageCardClick} />
+                                <div className="pm-overview-head">
+                                    <p className="pm-card-title" style={{ margin: 0, color: "#8B7355" }}>Orders by Production Stage</p>
+                                    <div className="pm-period-pills">
+                                        {[
+                                            { key: "all", label: "All Time" },
+                                            { key: "day", label: "Today" },
+                                            { key: "month", label: "This Month" },
+                                            { key: "year", label: "This Year" },
+                                            { key: "custom", label: "Custom" },
+                                        ].map((p) => (
+                                            <button
+                                                key={p.key}
+                                                className={`pm-period-pill ${overviewPeriod === p.key ? "active" : ""}`}
+                                                onClick={() => setOverviewPeriod(p.key)}
+                                            >{p.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                {overviewPeriod === "custom" && (
+                                    <div className="pm-period-custom">
+                                        <input type="date" value={overviewFrom} onChange={(e) => setOverviewFrom(e.target.value)} />
+                                        <span>→</span>
+                                        <input type="date" value={overviewTo} min={overviewFrom || undefined} onChange={(e) => setOverviewTo(e.target.value)} />
+                                    </div>
+                                )}
+                                <StageCountCards orders={overviewOrders} onStageClick={handleStageCardClick} />
 
                                 {/* ===== BUSINESS METRICS SECTION ===== */}
                                 <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Business Performance</p>

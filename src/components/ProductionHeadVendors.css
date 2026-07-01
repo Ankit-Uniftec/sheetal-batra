@@ -1,5 +1,6 @@
 .phv-wrap {
-  max-width: 720px;
+  max-width: 1040px;
+  width: 94%;
   margin: 0 auto;
   padding: 16px;
 }
@@ -155,3 +156,53 @@
 .phv-status-approved { background: #e6f4ea; color: #1e7e34; }
 .phv-status-pending { background: #fff4e5; color: #b8860b; }
 .phv-status-rejected { background: #fdecea; color: #c0392b; }
+
+/* ---- Movement History tab ---- */
+.phv-mov-list { display: flex; flex-direction: column; gap: 10px; }
+.phv-mov-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid #ece6da; border-left: 4px solid #d5b85a; border-radius: 8px;
+  padding: 10px 14px; background: #fffdf8;
+}
+.phv-mov-configured { border-left-color: #e0913f; }
+.phv-mov-exited { border-left-color: #1565c0; }
+.phv-mov-returned { border-left-color: #2e7d32; }
+.phv-mov-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.phv-mov-bc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #555; }
+.phv-mov-vendor { font-size: 14px; font-weight: 600; color: #333; }
+.phv-mov-stages { font-size: 12px; color: #888; }
+.phv-mov-meta { display: flex; align-items: center; gap: 12px; font-size: 12.5px; color: #666; }
+.phv-mov-edit {
+  border: 1px solid #d5b85a; background: #fff; color: #8a6d2f; border-radius: 6px;
+  padding: 5px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.phv-mov-edit:hover { background: #faf4e6; }
+.phv-mov-locked { font-size: 11px; color: #aaa; font-style: italic; }
+.phv-status-configured { background: #fff3e0; color: #e65100; }
+.phv-status-exited { background: #e3f2fd; color: #1565c0; }
+.phv-status-returned { background: #e8f5e9; color: #2e7d32; }
+
+/* ---- Edit modal ---- */
+.phv-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+}
+.phv-modal {
+  background: #fff; border-radius: 12px; width: 100%; max-width: 520px;
+  max-height: 88vh; overflow-y: auto; padding: 20px 22px; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.phv-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.phv-modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #888; line-height: 1; }
+
+/* ---- Pagination ---- */
+.phv-pager {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  margin-top: 14px; font-size: 13px; color: #666;
+}
+.phv-pager button {
+  border: 1px solid #d5b85a; background: #fff; color: #8a6d2f;
+  border-radius: 6px; padding: 5px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.phv-pager button:hover:not(:disabled) { background: #faf4e6; }
+.phv-pager button:disabled { opacity: 0.45; cursor: not-allowed; }
