@@ -27,6 +27,20 @@ const stepLabels = (steps) => {
 
 const PAGE_SIZE = 10;
 
+// Friendly messages for the configure/update RPC error codes — so the PH sees
+// plain guidance instead of the raw technical DB message.
+const MOVEMENT_ERROR_MESSAGES = {
+  BARCODE_NOT_FOUND: "No component found with that barcode. Check and try again.",
+  VENDOR_NOT_APPROVED: "That vendor isn't approved. Pick an approved vendor.",
+  INVALID_RETURN_DATE: "The return date can't be in the past.",
+  NO_STAGES: "Select at least one stage that goes outside.",
+  INVALID_STAGE_FOR_MOVEMENT: "This piece isn't ready to go to a vendor yet — an earlier production stage (e.g. Cloth Issue) must be completed first.",
+  NOT_EDITABLE: "This movement has already been scanned out, so it can no longer be edited.",
+  MOVEMENT_NOT_FOUND: "That movement no longer exists.",
+};
+const friendlyMovementError = (res) =>
+  MOVEMENT_ERROR_MESSAGES[res?.error] || res?.message || "Could not complete the request. Please try again.";
+
 // Simple Prev/Next pager. Renders nothing when there's a single page.
 const Pager = ({ page, total, onChange }) => {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -126,11 +140,11 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         updatedBy: currentUserEmail,
       });
       if (res?.success) {
-        showPopup({ title: "Movement Updated", message: `${res.vendor} — return by ${res.return_date}.`, type: "success", confirmText: "OK" });
+        showPopup({ title: "Movement Updated", message: `Now sent to ${res.vendor} — return by ${res.return_date}.`, type: "success", confirmText: "OK" });
         setEditMov(null);
         loadMovements();
       } else {
-        showPopup({ title: "Could not update", message: res?.message || res?.error || "Failed", type: "error", confirmText: "OK" });
+        showPopup({ title: "Could not update", message: friendlyMovementError(res), type: "error", confirmText: "OK" });
       }
     } catch (e) {
       showPopup({ title: "Error", message: e.message || "Failed to update movement", type: "error", confirmText: "OK" });
@@ -183,10 +197,10 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         createdBy: currentUserEmail,
       });
       if (res?.success) {
-        showPopup({ title: "Movement Configured", message: `${res.vendor} — return by ${res.return_date}. The component can now be scanned out at the Security Gate.`, type: "success", confirmText: "OK" });
+        showPopup({ title: "Movement Configured", message: `Sent to ${res.vendor} — return by ${res.return_date}. It can now be scanned out at the Security Gate.`, type: "success", confirmText: "OK" });
         setBarcode(""); setVendorId(""); setReturnDate(""); setStages([]);
       } else {
-        showPopup({ title: "Could not configure", message: res?.message || res?.error || "Failed", type: "error", confirmText: "OK" });
+        showPopup({ title: "Could not configure", message: friendlyMovementError(res), type: "error", confirmText: "OK" });
       }
     } catch (e) {
       showPopup({ title: "Error", message: e.message || "Failed to configure movement", type: "error", confirmText: "OK" });
