@@ -13,12 +13,12 @@ import { supabase } from "../lib/supabaseClient";
 // ============================================================
 // V2 model: 10 logical stages. `step` = logical step (1..10), matching the
 // DB get_stage_step(). `mandatory: true` = always required; otherwise the
-// stage is skippable (Dyeing, Pattern Cutting, Dry Cleaning, and QC 1). Two
-// QCs: the existing qc_* values are QC 1 (after Embroidery), now OPTIONAL —
-// a piece may go Embroidery -> Stitching directly; final_qc_* are QC 2
-// (before Packaging), which remains mandatory. The authoritative skippable
-// set lives in the DB is_step_skippable(); `mandatory` here is descriptive
-// metadata only (not queried in JS).
+// stage is skippable (Dyeing, Pattern Cutting, and QC 1). Dry Cleaning is now
+// MANDATORY (client rule). Two QCs: the existing qc_* values are QC 1 (after
+// Embroidery), OPTIONAL — a piece may go Embroidery -> Stitching directly;
+// final_qc_* are QC 2 (before Packaging), which remains mandatory. The
+// authoritative skippable set lives in the DB is_step_skippable(); `mandatory`
+// here is descriptive metadata only (not queried in JS).
 //
 // Stages marked `legacy: true` were removed from the active flow
 // (pattern_printing / trims / cutting / finishing) but are KEPT here so
@@ -33,8 +33,8 @@ export const PRODUCTION_STAGES = [
   { value: "pattern_cutting_completed", label: "Pattern Cutting Completed", step: 3, color: "#9c27b0" },
   { value: "embroidery_in_progress", label: "Embroidery In-Progress", step: 4, color: "#3f51b5", maxDays: 21, mandatory: true },
   { value: "embroidery_completed", label: "Embroidery Completed", step: 4, color: "#3f51b5", mandatory: true },
-  { value: "dry_cleaning_in_progress", label: "Dry Cleaning In-Progress", step: 5, color: "#00bcd4", maxDays: 1 },
-  { value: "dry_cleaning_completed", label: "Dry Cleaning Completed", step: 5, color: "#00bcd4" },
+  { value: "dry_cleaning_in_progress", label: "Dry Cleaning In-Progress", step: 5, color: "#00bcd4", maxDays: 1, mandatory: true },
+  { value: "dry_cleaning_completed", label: "Dry Cleaning Completed", step: 5, color: "#00bcd4", mandatory: true },
   { value: "qc_in_progress", label: "QC 1 In-Progress", step: 6, color: "#f44336", maxDays: 1 },
   { value: "qc_passed", label: "QC 1 Passed", step: 6, color: "#4caf50" },
   { value: "qc_failed", label: "QC 1 Failed", step: 6, color: "#d32f2f" },
@@ -617,6 +617,38 @@ export async function fetchMovementHistory(componentId) {
     .order("created_at", { ascending: false });
   if (error) { console.error("fetchMovementHistory failed:", error); return []; }
   return data || [];
+}
+
+// All external movements (any status), newest first, with the component's
+// barcode + order_no — powers the "Movement History" tab on the Vendor/External
+// page where the PH can review and (while still 'configured') edit them.
+export async function fetchAllMovements() {
+  const { data, error } = await supabase
+    .from("external_movements")
+    .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, order_components ( barcode, order_no )")
+    .order("created_at", { ascending: false });
+  if (error) { console.error("fetchAllMovements failed:", error); return []; }
+  // Flatten the joined component fields for convenience.
+  return (data || []).map((m) => ({
+    ...m,
+    barcode: m.order_components?.barcode || null,
+    order_no: m.order_components?.order_no || null,
+  }));
+}
+
+// Edit a still-'configured' movement (vendor / return date / stages). The RPC
+// rejects edits to exited/returned movements and re-applies the vendor + stage
+// guards. Returns the RPC result { success, ... }.
+export async function updateExternalMovement({ movementId, vendorId, returnDate, stagesOutside, updatedBy }) {
+  const { data, error } = await supabase.rpc("update_external_movement", {
+    p_movement_id: movementId,
+    p_vendor_id: vendorId,
+    p_return_date: returnDate,
+    p_stages_outside: stagesOutside,
+    p_updated_by: updatedBy,
+  });
+  if (error) throw error;
+  return data;
 }
 
 // ============================================================
