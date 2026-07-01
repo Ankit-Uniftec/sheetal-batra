@@ -606,6 +606,19 @@ export async function getConfiguredMovement(componentId) {
   return data;
 }
 
+// Full external-vendor movement history for a component — every trip (any
+// status), newest first. Powers the "Vendor History" list in the journey modal
+// so you can see which vendor a piece went to and when.
+export async function fetchMovementHistory(componentId) {
+  const { data, error } = await supabase
+    .from("external_movements")
+    .select("id, vendor_name, vendor_location, stages_outside, return_date, status, created_at, exit_scan_at, entry_scan_at")
+    .eq("component_id", componentId)
+    .order("created_at", { ascending: false });
+  if (error) { console.error("fetchMovementHistory failed:", error); return []; }
+  return data || [];
+}
+
 // ============================================================
 // 11. RECORD OVERRIDE — Production Head override
 // ============================================================
