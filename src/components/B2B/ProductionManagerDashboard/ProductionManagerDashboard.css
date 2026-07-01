@@ -609,3 +609,23 @@
     font-size: 12px;
     color: #555;
 }
+
+/* ---- Overview period filter ---- */
+.pm-overview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px; margin: 4px 0 12px 2px;
+}
+.pm-period-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pm-period-pill {
+  border: 1px solid #e0d4b8; background: #fff; color: #8B7355;
+  border-radius: 18px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.pm-period-pill:hover { background: #faf4e6; }
+.pm-period-pill.active { background: #b8985a; border-color: #b8985a; color: #fff; }
+.pm-period-custom {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px;
+}
+.pm-period-custom input {
+  padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;
+}
+.pm-period-custom span { color: #999; }
