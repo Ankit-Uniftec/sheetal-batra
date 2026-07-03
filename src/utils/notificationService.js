@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = {
     DELIVERY_DUE_TODAY: "delivery_due_today",   // #17
     DELAY_1_DAY: "delay_1_day",                 // #22
     DELAY_2_DAY: "delay_2_day",                 // #23
+    VENDOR_RETURN_OVERDUE: "vendor_return_overdue", // component overdue at an external vendor
 
     // Future
     PRODUCTION_STAGE_DELAY: "production_stage_delay", // #16 (hold)

@@ -47,6 +47,7 @@ const TYPE_ICONS = {
     delay_1_day: "⚠️",
     delay_2_day: "🚨",
     production_stage_delay: "🏭",
+    vendor_return_overdue: "🛑",
 };
 
 /**
