@@ -12,7 +12,8 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, getStageMaxDays, fetchTransitionHistory, fetchMovementHistory } from "../utils/barcodeService";
+import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS } from "../utils/barcodeService";
+import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import Badge from "../components/Badge";
 import SearchByDropdown from "../components/SearchByDropdown";
 
@@ -76,35 +77,6 @@ const getMeasurementLabel = (key) => {
   return key;
 };
 
-// For a component currently out at a vendor, build the "At [vendor] · due
-// [date]" tag. The due-back date is derived from when it left the warehouse
-// (vendor_exit_at) + the current stage's allowed days (its SLA / maxDays).
-// Returns null if the piece isn't out; otherwise { text, overdue }.
-const getVendorTagInfo = (comp) => {
-  if (!comp?.is_outside_wh) return null;
-  const vendor = comp.vendor_name || "Vendor";
-  const maxDays = getStageMaxDays(comp.current_stage);
-  const exit = comp.vendor_exit_at ? new Date(comp.vendor_exit_at) : null;
-
-  // No exit timestamp or no SLA for this stage → show vendor only.
-  if (!exit || isNaN(exit.getTime()) || maxDays == null) {
-    return { text: `At ${vendor}`, overdue: false };
-  }
-
-  const due = new Date(exit);
-  due.setDate(due.getDate() + maxDays);
-
-  // Days remaining (date-only comparison so "today" isn't counted overdue).
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((startOfDay(due) - startOfDay(new Date())) / 86400000);
-
-  if (diffDays < 0) {
-    const od = Math.abs(diffDays);
-    return { text: `At ${vendor} · ${od} day${od === 1 ? "" : "s"} overdue`, overdue: true };
-  }
-  return { text: `At ${vendor} · due ${formatDate(due)}`, overdue: false };
-};
-
 const WarehouseDashboard = () => {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
@@ -134,6 +106,10 @@ const WarehouseDashboard = () => {
   // Other heads (B2B/Comms/Pvt) work from their own dashboards.
   const _designNorm = (userDesignation || "").trim().toLowerCase();
   const isWarehouseProdHead = _designNorm === "offline production head" || _designNorm === "online production head";
+
+  // The Offline Production Head handles retail (Store/Exhibition) orders, so
+  // their header reads "Retail Order Dashboard" instead of the generic title.
+  const dashboardTitle = _designNorm === "offline production head" ? "Retail Order Dashboard" : "Warehouse Dashboard";
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
@@ -191,11 +167,8 @@ const WarehouseDashboard = () => {
   const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
   const [qcReportRecords, setQcReportRecords] = useState([]);
   const [qcReportLoading, setQcReportLoading] = useState(false);
-  // Order whose full component journey is being viewed in the modal.
-  const [journeyOrder, setJourneyOrder] = useState(null); // { order_no }
-  const [journeyData, setJourneyData] = useState([]);      // [{ component, transitions }]
-  const [journeyLoading, setJourneyLoading] = useState(false);
-  const [journeySelectedId, setJourneySelectedId] = useState(null); // active component tab
+  // Order whose full component journey is being viewed (shared modal).
+  const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
 
   // QC Fail Popup state
   // const [qcFailPopup, setQcFailPopup] = useState({
@@ -409,36 +382,10 @@ const WarehouseDashboard = () => {
     setQcReportLoading(false);
   };
 
-  // Open the full-journey modal: for every component of the order, load its
-  // ordered stage-transition trail (each scan, who/when, and the notes — which
-  // carry vendor name/location on the security-gate exit/entry steps).
-  const openJourney = async (order) => {
-    setJourneyOrder({ order_no: order.order_no });
-    setJourneyLoading(true);
-    setJourneyData([]);
-    setJourneySelectedId(null);
-    try {
-      const comps = orderComponentsMap[order.id] || [];
-      const data = await Promise.all(
-        comps.map(async (component) => {
-          let transitions = [];
-          let movements = [];
-          try {
-            [transitions, movements] = await Promise.all([
-              fetchTransitionHistory(component.id),
-              fetchMovementHistory(component.id),
-            ]);
-          } catch (e) { console.error("journey fetch failed for", component.barcode, e); }
-          return { component, transitions: transitions || [], movements: movements || [] };
-        })
-      );
-      setJourneyData(data);
-      setJourneySelectedId(data[0]?.component?.id || null); // default to first component
-    } catch (err) {
-      console.error("Failed to load journey:", err);
-      setJourneyData([]);
-    }
-    setJourneyLoading(false);
+  // Open the full-journey modal (shared ComponentJourneyModal fetches the
+  // transition + movement data itself).
+  const openJourney = (order) => {
+    setJourneyOrder({ order_no: order.order_no, components: orderComponentsMap[order.id] || [] });
   };
 
   useEffect(() => {
@@ -1192,139 +1139,13 @@ const WarehouseDashboard = () => {
         </div>
       )}
 
-      {/* ===== COMPONENT JOURNEY MODAL ===== */}
+      {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
       {journeyOrder && (
-        <div className="wd-qc-overlay" onClick={() => setJourneyOrder(null)}>
-          <div className="wd-journey-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wd-qc-modal-head">
-              <h3 className="wd-qc-modal-title">Component Journey — {journeyOrder.order_no}</h3>
-              <button className="wd-qc-modal-close" onClick={() => setJourneyOrder(null)}>×</button>
-            </div>
-
-            {journeyLoading ? (
-              <p className="wd-qc-empty">Loading journey…</p>
-            ) : journeyData.length === 0 ? (
-              <p className="wd-qc-empty">No components found for this order.</p>
-            ) : (() => {
-              const selected = journeyData.find((d) => d.component.id === journeySelectedId) || journeyData[0];
-              return (
-                <div className="wd-journey-body">
-                  {/* Left: one tab per component */}
-                  <div className="wd-journey-tabs">
-                    {journeyData.map(({ component: c }) => {
-                      const out = c.is_outside_wh ? getVendorTagInfo(c) : null;
-                      return (
-                        <button
-                          key={c.id}
-                          className={`wd-journey-tab ${selected?.component.id === c.id ? "active" : ""}`}
-                          onClick={() => setJourneySelectedId(c.id)}
-                        >
-                          <span className="wd-journey-tab-dot" style={{ backgroundColor: getStageColor(c.current_stage) }} />
-                          <span className="wd-journey-tab-text">
-                            <span className="wd-journey-tab-name">{c.component_label || c.component_type}</span>
-                            <span className="wd-journey-tab-bc">{c.barcode}</span>
-                          </span>
-                          {out && <span className={`wd-journey-tab-flag ${out.overdue ? "overdue" : ""}`} title={out.text}>●</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right: selected component's journey */}
-                  <div className="wd-journey-detail">
-                    {selected && (() => {
-                      const c = selected.component;
-                      const transitions = selected.transitions;
-                      const movements = selected.movements || [];
-                      const info = c.is_outside_wh ? getVendorTagInfo(c) : null;
-                      return (
-                        <>
-                          <div className="wd-journey-comp-head">
-                            <span className="wd-vendor-comp">{c.component_label || c.component_type}</span>
-                            <span className="wd-vendor-bc">{c.barcode}</span>
-                            <Badge color={getStageColor(c.current_stage)}>{getStageLabel(c.current_stage)}</Badge>
-                            {info && (
-                              <span className={`wd-journey-vendor-now ${info.overdue ? "wd-vendor-overdue" : ""}`}>
-                                {info.text}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Vendor history — every external trip for this component:
-                              which vendor, out/return dates, and status. */}
-                          {movements.length > 0 && (
-                            <div className="wd-vendor-hist">
-                              <p className="wd-vendor-hist-title">Vendor History</p>
-                              <table className="wd-vendor-hist-table">
-                                <thead>
-                                  <tr>
-                                    <th>Vendor</th>
-                                    <th>Sent</th>
-                                    <th>Returned</th>
-                                    <th>Due</th>
-                                    <th>Status</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {movements.map((m) => (
-                                    <tr key={m.id}>
-                                      <td>
-                                        <strong>{m.vendor_name || "—"}</strong>
-                                        {m.vendor_location ? <span className="wd-vendor-hist-loc"> · {m.vendor_location}</span> : null}
-                                      </td>
-                                      <td>{m.exit_scan_at ? formatDate(m.exit_scan_at) : "—"}</td>
-                                      <td>{m.entry_scan_at ? formatDate(m.entry_scan_at) : "—"}</td>
-                                      <td>{m.return_date ? formatDate(m.return_date) : "—"}</td>
-                                      <td><span className={`wd-vendor-hist-status wd-vhs-${m.status}`}>{m.status}</span></td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-
-                          <p className="wd-journey-section-title">Stage History</p>
-                          {transitions.length === 0 ? (
-                            <p className="wd-journey-empty">Not started yet — no scans recorded.</p>
-                          ) : (
-                            <div className="wd-timeline">
-                              {transitions.map((t) => {
-                                // The security gate doesn't change the stage (it's a
-                                // physical in/out checkpoint), so it logs the same
-                                // from/to stage. Show a clear action label for those
-                                // instead of a confusing "Cloth Issued → Cloth Issued".
-                                const isExit = t.transition_type === "security_exit";
-                                const isEntry = t.transition_type === "security_entry";
-                                const headline = isExit
-                                  ? "Sent to Vendor"
-                                  : isEntry
-                                    ? "Returned to Warehouse"
-                                    : `${t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}${getStageLabel(t.to_stage)}`;
-                                return (
-                                  <div key={t.id} className="wd-timeline-item">
-                                    <div className="wd-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
-                                    <div className="wd-timeline-content">
-                                      <p className="wd-timeline-stage">{headline}</p>
-                                      <p className="wd-timeline-meta">
-                                        {t.scanned_by} {'•'} {new Date(t.scanned_at).toLocaleString("en-GB")}
-                                        {!isExit && !isEntry && t.transition_type && t.transition_type !== "scan" && ` (${t.transition_type})`}
-                                      </p>
-                                      {t.notes && <p className="wd-timeline-notes">{t.notes}</p>}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
+        <ComponentJourneyModal
+          orderNo={journeyOrder.order_no}
+          components={journeyOrder.components}
+          onClose={() => setJourneyOrder(null)}
+        />
       )}
 
       {/* HEADER */}
@@ -1337,7 +1158,7 @@ const WarehouseDashboard = () => {
         <div className="wd-header-left">
           <img src={Logo} className="logo" alt="logo" />
         </div>
-        <h1 className="wd-title">Warehouse Dashboard</h1>
+        <h1 className="wd-title">{dashboardTitle}</h1>
         <div className="wd-header-right">
           <NotificationBell
             userEmail={currentUserEmail}

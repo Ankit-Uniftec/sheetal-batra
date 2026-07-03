@@ -10,6 +10,7 @@ import NotificationBell from "../../components/NotificationBell";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import Badge from "../../components/Badge";
+import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import { getStageLabel, getStageColor } from "../../utils/barcodeService";
 
 export default function B2bProductionDashboard() {
@@ -20,6 +21,9 @@ export default function B2bProductionDashboard() {
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
     const [components, setComponents] = useState([]); // order_components for the journey row
+    // Order whose full component journey is open (shared ComponentJourneyModal).
+    const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+    const openJourney = (order, comps) => setJourneyOrder({ order_no: order.order_no, components: comps || [] });
     const [vendorMap, setVendorMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
@@ -122,7 +126,7 @@ export default function B2bProductionDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
@@ -453,7 +457,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>{"\u2728"} No orders pending production!</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "in_production" })} actionLabel={"\u2713 Accept for Production"} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "in_production" })} actionLabel={"\u2713 Accept for Production"} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 {filteredQueue.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
                                         <button disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
@@ -482,7 +486,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>No orders in production</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "ready_for_dispatch" })} actionLabel="Mark Ready for Dispatch" actionClass="prod-btn-ready" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "ready_for_dispatch" })} actionLabel="Mark Ready for Dispatch" actionClass="prod-btn-ready" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 {filteredInprod.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
                                         <button disabled={inprodPage === 1} onClick={() => setInprodPage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
@@ -520,7 +524,7 @@ export default function B2bProductionDashboard() {
                         ) : (
                             <div className="prod-list-scroll">
                                 {paginatedDispatch.map(order => (
-                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onView={handleViewOrder}
+                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder}
                                         onAction={dispatchSection === "ready" ? () => setStatusModal({ order, newStatus: "dispatched" }) : null}
                                         actionLabel={dispatchSection === "ready" ? "Mark as Dispatched" : null}
                                         actionClass="prod-btn-dispatch" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
@@ -570,7 +574,7 @@ export default function B2bProductionDashboard() {
                             {filteredOrders.length === 0 && <p className="prod-muted">No orders match your filters.</p>}
                             {paginatedOrders.map(order => {
                                 const nextAction = getNextAction(getProdStatus(order));
-                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onView={handleViewOrder} onAction={nextAction ? () => setStatusModal({ order, newStatus: nextAction.newStatus }) : null} actionLabel={nextAction?.label || null} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
+                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder} onAction={nextAction ? () => setStatusModal({ order, newStatus: nextAction.newStatus }) : null} actionLabel={nextAction?.label || null} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
                             })}
                             {filteredOrders.length > ORDERS_PER_PAGE && (
                                 <div className="prod-pagination">
@@ -669,6 +673,15 @@ export default function B2bProductionDashboard() {
                 )}
             </div>
 
+            {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
+            {journeyOrder && (
+                <ComponentJourneyModal
+                    orderNo={journeyOrder.order_no}
+                    components={journeyOrder.components}
+                    onClose={() => setJourneyOrder(null)}
+                />
+            )}
+
             {/* ===== STATUS UPDATE MODAL ===== */}
             {statusModal && (
                 <div className="prod-modal-overlay" onClick={() => { setStatusModal(null); setStatusNote(""); }}>
@@ -706,7 +719,7 @@ export default function B2bProductionDashboard() {
 }
 
 // ==================== ORDER CARD COMPONENT ====================
-function OrderCard({ order, vendorMap, components = [], onView, onAction, actionLabel, actionClass, getProdStatusClass, getProdStatusLabel, getProdStatus, onPdf, onWarehousePdf, pdfLoading }) {
+function OrderCard({ order, vendorMap, components = [], onView, onAction, actionLabel, actionClass, getProdStatusClass, getProdStatusLabel, getProdStatus, onPdf, onWarehousePdf, pdfLoading, onJourney }) {
     const item = order.items?.[0] || {};
     const imgSrc = item.image_url || "/placeholder.png";
     const ps = getProdStatus(order);
@@ -751,6 +764,11 @@ function OrderCard({ order, vendorMap, components = [], onView, onAction, action
                             <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
                         </div>
                     ))}
+                </div>
+            )}
+            {onJourney && components.length > 0 && (
+                <div className="prod-ocard-actions" onClick={(e) => e.stopPropagation()}>
+                    <button className="prod-btn-journey" onClick={() => onJourney(order, components)}>View Journey</button>
                 </div>
             )}
             {onAction && actionLabel && (
