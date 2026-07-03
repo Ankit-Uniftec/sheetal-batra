@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { usePopup } from "./Popup";
 import { SearchableSelect } from "./SearchableSelect";
+import formatDate from "../utils/formatDate";
 import {
   fetchApprovedVendors,
   fetchAllVendors,
@@ -80,7 +81,6 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   const [failBarcode, setFailBarcode] = useState("");
   const [failType, setFailType] = useState("damage"); // damage | loss | misplacement
   const [failReason, setFailReason] = useState("");
-  const [failCost, setFailCost] = useState("");
 
   // Vendors
   const [approvedVendors, setApprovedVendors] = useState([]);
@@ -91,6 +91,13 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   const [movementsLoading, setMovementsLoading] = useState(false);
   const [movPage, setMovPage] = useState(1);
   const [vendorPage, setVendorPage] = useState(1);
+  // Movement History filters
+  const [movVendorFilter, setMovVendorFilter] = useState("");
+  const [movTypeFilter, setMovTypeFilter] = useState("");      // component category
+  const [movReturnFilter, setMovReturnFilter] = useState("");  // exact return date
+  // Vendors tab filters
+  const [vendorStageFilter, setVendorStageFilter] = useState("");
+  const [vendorStatusFilter, setVendorStatusFilter] = useState("");
   const [editMov, setEditMov] = useState(null); // the movement being edited
   const [editVendorId, setEditVendorId] = useState("");
   const [editReturnDate, setEditReturnDate] = useState("");
@@ -115,6 +122,30 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
     catch (e) { console.error("Failed to load movements:", e); }
     setMovementsLoading(false);
   }, []);
+
+  // Distinct vendor names present in the history (for its vendor filter).
+  const movVendorOptions = useMemo(() => {
+    const set = new Set();
+    movements.forEach((m) => { if (m.vendor_name) set.add(m.vendor_name); });
+    return [...set].sort();
+  }, [movements]);
+
+  // Movement History after vendor / component-category / return-date filters.
+  const filteredMovements = useMemo(() => movements.filter((m) => {
+    if (movVendorFilter && m.vendor_name !== movVendorFilter) return false;
+    if (movTypeFilter && m.component_type !== movTypeFilter) return false;
+    if (movReturnFilter && m.return_date !== movReturnFilter) return false;
+    return true;
+  }), [movements, movVendorFilter, movTypeFilter, movReturnFilter]);
+  useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter]);
+
+  // Vendors tab after stage / status filters.
+  const filteredVendors = useMemo(() => allVendors.filter((v) => {
+    if (vendorStageFilter && String(v.stage_number) !== vendorStageFilter) return false;
+    if (vendorStatusFilter && v.status !== vendorStatusFilter) return false;
+    return true;
+  }), [allVendors, vendorStageFilter, vendorStatusFilter]);
+  useEffect(() => { setVendorPage(1); }, [vendorStageFilter, vendorStatusFilter]);
 
   // Open the edit modal for a still-'configured' movement.
   const openEdit = (m) => {
@@ -218,7 +249,7 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         barcode: failBarcode.trim().toUpperCase(),
         failureType: failType,
         reason: failReason.trim(),
-        costLoss: Number(failCost) || 0,
+        costLoss: 0, // cost-loss field removed from the form (client request)
         requestedBy: currentUserEmail,
       });
       if (res?.success) {
@@ -228,10 +259,10 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
           const { sendNotification, NOTIFICATION_TYPES } = await import("../utils/notificationService");
           await sendNotification(NOTIFICATION_TYPES.REPLACEMENT_REQUESTED, {
             orderNo: res.order_no || "",
-            metadata: { barcode: failBarcode.trim().toUpperCase(), failure_type: failType, cost_loss: Number(failCost) || 0 },
+            metadata: { barcode: failBarcode.trim().toUpperCase(), failure_type: failType, cost_loss: 0 },
           });
         } catch (notifErr) { console.error("Replacement-requested notification failed:", notifErr); }
-        setFailBarcode(""); setFailType("damage"); setFailReason(""); setFailCost("");
+        setFailBarcode(""); setFailType("damage"); setFailReason("");
       } else {
         showPopup({ title: "Could not submit", message: res?.message || res?.error || "Failed", type: "error", confirmText: "OK" });
       }
@@ -309,9 +340,6 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
           <label className="phv-label">What happened?</label>
           <textarea className="phv-input" rows={3} value={failReason} onChange={(e) => setFailReason(e.target.value)} placeholder="Describe the failure…" />
 
-          <label className="phv-label">Estimated Cost Loss (₹)</label>
-          <input className="phv-input" type="number" value={failCost} onChange={(e) => setFailCost(e.target.value)} placeholder="0" />
-
           <button className="phv-submit" onClick={handleReportFailure} disabled={submitting}>
             {submitting ? "Submitting…" : "Request Replacement Journey"}
           </button>
@@ -322,19 +350,38 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         <div className="phv-card">
           <h3 className="phv-title">Vendors</h3>
           <p className="phv-hint">New vendors are requested by the Production Manager and approved by Manish. You can select any <strong>approved</strong> vendor when configuring a movement.</p>
-          {allVendors.length === 0 ? (
-            <p className="phv-hint">No vendors yet.</p>
+          <div className="phv-filter-bar">
+            <select value={vendorStageFilter} onChange={(e) => setVendorStageFilter(e.target.value)} className="phv-filter-select">
+              <option value="">All stages</option>
+              {EXTERNAL_ELIGIBLE_STEPS.map((s) => <option key={s.step} value={String(s.step)}>{s.label}</option>)}
+            </select>
+            <select value={vendorStatusFilter} onChange={(e) => setVendorStatusFilter(e.target.value)} className="phv-filter-select">
+              <option value="">All statuses</option>
+              <option value="approved">Approved</option>
+              <option value="pending">Pending</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            {(vendorStageFilter || vendorStatusFilter) && (
+              <button className="phv-filter-clear" onClick={() => { setVendorStageFilter(""); setVendorStatusFilter(""); }}>Clear</button>
+            )}
+          </div>
+
+          {filteredVendors.length === 0 ? (
+            <p className="phv-hint">{allVendors.length === 0 ? "No vendors yet." : "No vendors match the filters."}</p>
           ) : (
             <>
               <div className="phv-vendor-list">
-                {allVendors.slice((vendorPage - 1) * PAGE_SIZE, vendorPage * PAGE_SIZE).map((v) => (
+                {filteredVendors.slice((vendorPage - 1) * PAGE_SIZE, vendorPage * PAGE_SIZE).map((v) => (
                   <div key={v.id} className="phv-vendor-row">
-                    <span className="phv-vendor-name">{v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}</span>
+                    <div className="phv-vendor-info">
+                      <span className="phv-vendor-name">{v.vendor_name}{v.vendor_location ? ` — ${v.vendor_location}` : ""}</span>
+                      <span className="phv-vendor-stage">{v.stage_name || (v.stage_number != null ? stepLabels([v.stage_number]) : "Stage not set")}</span>
+                    </div>
                     <span className={`phv-status phv-status-${v.status}`}>{v.status}</span>
                   </div>
                 ))}
               </div>
-              <Pager page={vendorPage} total={allVendors.length} onChange={setVendorPage} />
+              <Pager page={vendorPage} total={filteredVendors.length} onChange={setVendorPage} />
             </>
           )}
         </div>
@@ -344,22 +391,47 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         <div className="phv-card">
           <h3 className="phv-title">Movement History</h3>
           <p className="phv-hint">Configured external movements. A movement can be edited only while it's still <strong>configured</strong> (before the component is scanned out); exited/returned movements are read-only history.</p>
+          <div className="phv-filter-bar">
+            <select value={movVendorFilter} onChange={(e) => setMovVendorFilter(e.target.value)} className="phv-filter-select">
+              <option value="">All vendors</option>
+              {movVendorOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select value={movTypeFilter} onChange={(e) => setMovTypeFilter(e.target.value)} className="phv-filter-select">
+              <option value="">All components</option>
+              <option value="top">Top</option>
+              <option value="bottom">Bottom</option>
+              <option value="dupatta">Dupatta</option>
+              <option value="extra">Extra</option>
+            </select>
+            <label className="phv-filter-date">
+              Return date
+              <input type="date" value={movReturnFilter} onChange={(e) => setMovReturnFilter(e.target.value)} />
+            </label>
+            {(movVendorFilter || movTypeFilter || movReturnFilter) && (
+              <button className="phv-filter-clear" onClick={() => { setMovVendorFilter(""); setMovTypeFilter(""); setMovReturnFilter(""); }}>Clear</button>
+            )}
+          </div>
+
           {movementsLoading ? (
             <p className="phv-hint">Loading…</p>
-          ) : movements.length === 0 ? (
-            <p className="phv-hint">No external movements configured yet.</p>
+          ) : filteredMovements.length === 0 ? (
+            <p className="phv-hint">{movements.length === 0 ? "No external movements configured yet." : "No movements match the filters."}</p>
           ) : (
             <>
               <div className="phv-mov-list">
-                {movements.slice((movPage - 1) * PAGE_SIZE, movPage * PAGE_SIZE).map((m) => (
+                {filteredMovements.slice((movPage - 1) * PAGE_SIZE, movPage * PAGE_SIZE).map((m) => (
                   <div key={m.id} className={`phv-mov-row phv-mov-${m.status}`}>
                     <div className="phv-mov-main">
-                      <span className="phv-mov-bc">{m.barcode || "—"}</span>
+                      <span className="phv-mov-bc">
+                        {m.barcode || "—"}
+                        {m.component_type && <span className="phv-mov-type"> · {m.component_type.charAt(0).toUpperCase() + m.component_type.slice(1)}</span>}
+                      </span>
                       <span className="phv-mov-vendor">{m.vendor_name}{m.vendor_location ? ` · ${m.vendor_location}` : ""}</span>
                       <span className="phv-mov-stages">{stepLabels(m.stages_outside)}</span>
                     </div>
                     <div className="phv-mov-meta">
-                      <span>Return by {m.return_date || "—"}</span>
+                      <span>Ordered {m.order_created_at ? formatDate(m.order_created_at) : "—"}</span>
+                      <span>Return by {m.return_date ? formatDate(m.return_date) : "—"}</span>
                       <span className={`phv-status phv-status-${m.status}`}>{m.status}</span>
                       {m.status === "configured" ? (
                         <button className="phv-mov-edit" onClick={() => openEdit(m)}>Edit</button>
@@ -370,7 +442,7 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
                   </div>
                 ))}
               </div>
-              <Pager page={movPage} total={movements.length} onChange={setMovPage} />
+              <Pager page={movPage} total={filteredMovements.length} onChange={setMovPage} />
             </>
           )}
         </div>

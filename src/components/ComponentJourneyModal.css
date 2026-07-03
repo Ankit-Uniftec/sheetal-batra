@@ -1,0 +1,114 @@
+/* ComponentJourneyModal — shared by Warehouse + B2B Production dashboards. */
+
+.cjm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+  padding: 20px;
+}
+.cjm-modal {
+  background: #fff; border-radius: 12px; width: 96%; max-width: 940px;
+  max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.cjm-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid #eee; flex-shrink: 0; background: #fff;
+}
+.cjm-title { margin: 0; font-size: 17px; color: #6b5a2e; }
+.cjm-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #888; line-height: 1; }
+.cjm-empty { padding: 28px 20px; text-align: center; color: #888; }
+.cjm-empty-inline { font-size: 12px; color: #999; margin: 0; }
+
+.cjm-body { display: flex; min-height: 0; flex: 1; }
+
+/* Left: component tabs */
+.cjm-tabs {
+  width: 200px; flex-shrink: 0; border-right: 1px solid #eee; background: #faf8f3;
+  overflow-y: auto; padding: 10px 8px; display: flex; flex-direction: column; gap: 4px;
+}
+.cjm-tab {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  background: none; border: none; border-radius: 8px; padding: 8px 10px; cursor: pointer;
+}
+.cjm-tab:hover { background: #f0ebdf; }
+.cjm-tab.active { background: #fff; box-shadow: inset 3px 0 0 #d5b85a; }
+.cjm-tab-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.cjm-tab-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.cjm-tab-name { font-size: 13px; font-weight: 600; color: #333; }
+.cjm-tab-bc {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: #888;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cjm-tab-flag { color: #e65100; font-size: 11px; flex-shrink: 0; }
+.cjm-tab-flag.overdue { color: #c62828; }
+
+/* Right: detail pane */
+.cjm-detail { flex: 1; overflow-y: auto; padding: 16px 20px; min-width: 0; }
+.cjm-comp-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.cjm-comp-name { font-weight: 700; color: #333; font-size: 14px; }
+.cjm-comp-bc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #777; }
+.cjm-vendor-now {
+  margin-left: auto; font-size: 11px; font-weight: 600; color: #e65100;
+  background: #fff3e0; border-radius: 10px; padding: 2px 10px; white-space: nowrap;
+}
+.cjm-overdue { color: #c62828 !important; background: #ffebee !important; font-weight: 700; }
+
+.cjm-section-title {
+  font-size: 12px; font-weight: 700; color: #8a6d2f; text-transform: uppercase;
+  letter-spacing: 0.5px; margin: 4px 0 12px;
+}
+
+/* Vendor history table */
+.cjm-vendor-hist {
+  border: 1px solid #efe7d5; border-radius: 8px; background: #fffdf8;
+  padding: 12px 14px; margin-bottom: 18px;
+}
+.cjm-vendor-hist .cjm-section-title { margin: 0 0 8px; }
+.cjm-vendor-table { width: 100%; border-collapse: collapse; }
+.cjm-vendor-table th {
+  text-align: left; font-size: 11px; font-weight: 600; color: #999;
+  text-transform: uppercase; letter-spacing: 0.4px; padding: 5px 8px;
+  border-bottom: 1px solid #efe7d5;
+}
+.cjm-vendor-table td {
+  font-size: 12.5px; color: #333; padding: 7px 8px; border-bottom: 1px solid #f3efe4;
+}
+.cjm-vendor-table tr:last-child td { border-bottom: none; }
+.cjm-vendor-loc { color: #999; font-size: 11.5px; }
+.cjm-vhs {
+  font-size: 10.5px; font-weight: 700; border-radius: 8px; padding: 2px 8px;
+  text-transform: capitalize;
+}
+.cjm-vhs-configured { background: #fff3e0; color: #e65100; }
+.cjm-vhs-exited     { background: #e3f2fd; color: #1565c0; }
+.cjm-vhs-returned   { background: #e8f5e9; color: #2e7d32; }
+
+/* Timeline */
+.cjm-timeline { position: relative; padding-left: 24px; }
+.cjm-timeline::before {
+  content: ""; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: #e0e0e0;
+}
+.cjm-timeline-item { position: relative; margin-bottom: 16px; }
+.cjm-timeline-item:last-child { margin-bottom: 0; }
+.cjm-timeline-dot {
+  position: absolute; left: -21px; top: 4px; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 0 0 2px #e0e0e0;
+}
+.cjm-timeline-content { padding: 0; }
+.cjm-timeline-stage { font-size: 13px; font-weight: 600; color: #333; margin: 0 0 2px; }
+.cjm-timeline-meta { font-size: 11px; color: #888; margin: 0 0 2px; }
+.cjm-timeline-notes {
+  font-size: 11.5px; color: #555; margin: 2px 0 0; background: #f5f2ea;
+  border-radius: 6px; padding: 4px 8px;
+}
+
+@media (max-width: 768px) {
+  .cjm-body { flex-direction: column; }
+  .cjm-tabs {
+    width: 100%; flex-direction: row; overflow-x: auto; border-right: none;
+    border-bottom: 1px solid #eee;
+  }
+  .cjm-tab { width: auto; flex-shrink: 0; }
+}

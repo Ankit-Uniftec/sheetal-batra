@@ -620,20 +620,37 @@ export async function fetchMovementHistory(componentId) {
 }
 
 // All external movements (any status), newest first, with the component's
-// barcode + order_no — powers the "Movement History" tab on the Vendor/External
-// page where the PH can review and (while still 'configured') edit them.
+// barcode + order_no + type and the order's placement date — powers the
+// "Movement History" tab on the Vendor/External page where the PH can review,
+// filter and (while still 'configured') edit them.
 export async function fetchAllMovements() {
   const { data, error } = await supabase
     .from("external_movements")
-    .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, order_components ( barcode, order_no )")
+    .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, order_components ( barcode, order_no, component_type, order_id )")
     .order("created_at", { ascending: false });
   if (error) { console.error("fetchAllMovements failed:", error); return []; }
-  // Flatten the joined component fields for convenience.
-  return (data || []).map((m) => ({
+
+  const rows = (data || []).map((m) => ({
     ...m,
     barcode: m.order_components?.barcode || null,
     order_no: m.order_components?.order_no || null,
+    component_type: m.order_components?.component_type || null,
+    order_id: m.order_components?.order_id || m.order_id || null,
   }));
+
+  // Attach each movement's ORDER date. external_movements.order_id has no FK
+  // (so no nested select); batch-fetch created_at in chunks — a single .in()
+  // with a huge id list silently 400s on large data (URL length).
+  const orderIds = [...new Set(rows.map((r) => r.order_id).filter(Boolean))];
+  const dateById = {};
+  for (let i = 0; i < orderIds.length; i += 100) {
+    const chunk = orderIds.slice(i, i + 100);
+    const { data: ords, error: oErr } = await supabase
+      .from("orders").select("id, created_at").in("id", chunk);
+    if (oErr) { console.error("fetchAllMovements order-date fetch failed:", oErr); break; }
+    (ords || []).forEach((o) => { dateById[o.id] = o.created_at; });
+  }
+  return rows.map((r) => ({ ...r, order_created_at: dateById[r.order_id] || null }));
 }
 
 // Edit a still-'configured' movement (vendor / return date / stages). The RPC

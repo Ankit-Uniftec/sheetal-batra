@@ -206,3 +206,27 @@
 }
 .phv-pager button:hover:not(:disabled) { background: #faf4e6; }
 .phv-pager button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ---- Filter bars (Movement History + Vendors) ---- */
+.phv-filter-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+.phv-filter-select {
+  padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 13px; background: #fff; color: #444; min-width: 150px;
+}
+.phv-filter-date {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: #777;
+}
+.phv-filter-date input {
+  padding: 7px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px;
+}
+.phv-filter-clear {
+  border: none; background: none; color: #c0392b; font-size: 13px;
+  font-weight: 600; cursor: pointer; text-decoration: underline;
+}
+.phv-mov-type { color: #999; font-family: inherit; }
+.phv-vendor-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.phv-vendor-stage { font-size: 12px; color: #8a6d2f; font-weight: 600; }
