@@ -27,19 +27,36 @@ import "./ComponentJourneyModal.css";
  */
 
 // For a component currently out at a vendor, build the "At [vendor] · due
-// [date]" tag. Due-back = vendor_exit_at + the current stage's allowed days.
-const getVendorTagInfo = (comp) => {
+// [date]" tag. The due-back date is the ACTUAL return_date the PH configured on
+// the current (exited) movement — the same date shown in Vendor History — so
+// the tag and the table agree. Falls back to vendor_exit_at + the stage's
+// allowed days only when no movement return_date is available.
+const getVendorTagInfo = (comp, movements = []) => {
   if (!comp?.is_outside_wh) return null;
   const vendor = comp.vendor_name || "Vendor";
-  const maxDays = getStageMaxDays(comp.current_stage);
-  const exit = comp.vendor_exit_at ? new Date(comp.vendor_exit_at) : null;
 
-  if (!exit || isNaN(exit.getTime()) || maxDays == null) {
+  // The trip it's currently out on (most recent 'exited' movement).
+  const activeMov = (movements || [])
+    .filter((m) => m.status === "exited")
+    .sort((a, b) => new Date(b.exit_scan_at || b.created_at || 0) - new Date(a.exit_scan_at || a.created_at || 0))[0];
+
+  let due = null;
+  if (activeMov?.return_date) {
+    due = new Date(activeMov.return_date);
+  } else {
+    // Fallback: derive from exit + stage SLA.
+    const maxDays = getStageMaxDays(comp.current_stage);
+    const exit = comp.vendor_exit_at ? new Date(comp.vendor_exit_at) : null;
+    if (exit && !isNaN(exit.getTime()) && maxDays != null) {
+      due = new Date(exit);
+      due.setDate(due.getDate() + maxDays);
+    }
+  }
+
+  if (!due || isNaN(due.getTime())) {
     return { text: `At ${vendor}`, overdue: false };
   }
 
-  const due = new Date(exit);
-  due.setDate(due.getDate() + maxDays);
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const diffDays = Math.round((startOfDay(due) - startOfDay(new Date())) / 86400000);
 
@@ -103,8 +120,8 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
           <div className="cjm-body">
             {/* Left: one tab per component */}
             <div className="cjm-tabs">
-              {journeyData.map(({ component: c }) => {
-                const out = c.is_outside_wh ? getVendorTagInfo(c) : null;
+              {journeyData.map(({ component: c, movements: cm }) => {
+                const out = c.is_outside_wh ? getVendorTagInfo(c, cm) : null;
                 return (
                   <button
                     key={c.id}
@@ -128,7 +145,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                 const c = selected.component;
                 const transitions = selected.transitions;
                 const movements = selected.movements || [];
-                const info = c.is_outside_wh ? getVendorTagInfo(c) : null;
+                const info = c.is_outside_wh ? getVendorTagInfo(c, movements) : null;
                 return (
                   <>
                     <div className="cjm-comp-head">

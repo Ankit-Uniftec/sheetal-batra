@@ -9,8 +9,31 @@ import {
   initiateReplacementJourney,
   fetchAllMovements,
   updateExternalMovement,
+  fetchComponentByBarcode,
   SCAN_STATIONS,
+  PRODUCTION_STAGES,
 } from "../utils/barcodeService";
+
+// The skippable (optional) production steps — mirrors the DB is_step_skippable():
+// Dyeing(2), Pattern Cutting(3), QC 1(6). Everything else is mandatory. Used to
+// name exactly which stages a piece still needs before it can go to a vendor.
+const SKIPPABLE_STEPS = new Set([2, 3, 6]);
+
+// Distinct mandatory stage labels between the component's current step and the
+// target external step (exclusive), that gate the move — e.g. current=Cloth
+// Issued(1), target=Stitching(7) -> ["Embroidery", "Dry Cleaning"].
+const missingMandatoryStages = (currentStep, targetStep) => {
+  const seen = new Set();
+  const labels = [];
+  for (let step = currentStep + 1; step < targetStep; step++) {
+    if (SKIPPABLE_STEPS.has(step)) continue;
+    const s = PRODUCTION_STAGES.find((p) => p.step === step && p.mandatory);
+    // Use a clean label (strip the "In-Progress"/"Completed" suffix).
+    const name = s ? s.label.replace(/\s*(In-Progress|Completed|Passed).*$/i, "").trim() : null;
+    if (name && !seen.has(name)) { seen.add(name); labels.push(name); }
+  }
+  return labels;
+};
 
 // Logical steps eligible for external vendor work (Rule 7: stages 2..8).
 // Built from SCAN_STATIONS so labels stay in sync.
@@ -157,6 +180,26 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   const toggleEditStage = (step) =>
     setEditStages((prev) => prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step]);
 
+  // Build the error message for a failed configure/update. For the stage guard
+  // (INVALID_STAGE_FOR_MOVEMENT) it fetches the component and names the exact
+  // mandatory stages still to be done before it can go out — instead of a vague
+  // generic hint.
+  const stageAwareError = async (res, bc, selectedStages) => {
+    if (res?.error !== "INVALID_STAGE_FOR_MOVEMENT") return friendlyMovementError(res);
+    try {
+      const comp = await fetchComponentByBarcode(bc);
+      const curStep = (PRODUCTION_STAGES.find((p) => p.value === comp.current_stage)?.step) ?? 0;
+      const earliest = Math.min(...(selectedStages.length ? selectedStages : [1]));
+      const missing = missingMandatoryStages(curStep, earliest);
+      const target = EXTERNAL_ELIGIBLE_STEPS.find((s) => s.step === earliest)?.label || "the selected stage";
+      if (missing.length > 0) {
+        const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
+        return `This piece must complete ${list} before it can go out for ${target}.`;
+      }
+    } catch { /* fall through to generic */ }
+    return friendlyMovementError(res);
+  };
+
   const handleUpdateMovement = async () => {
     if (!editVendorId) return showPopup({ title: "Required", message: "Select an approved vendor", type: "warning", confirmText: "OK" });
     if (!editReturnDate) return showPopup({ title: "Required", message: "Pick a return date", type: "warning", confirmText: "OK" });
@@ -175,7 +218,8 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         setEditMov(null);
         loadMovements();
       } else {
-        showPopup({ title: "Could not update", message: friendlyMovementError(res), type: "error", confirmText: "OK" });
+        const msg = await stageAwareError(res, editMov.barcode, editStages);
+        showPopup({ title: "Could not update", message: msg, type: "error", confirmText: "OK" });
       }
     } catch (e) {
       showPopup({ title: "Error", message: e.message || "Failed to update movement", type: "error", confirmText: "OK" });
@@ -231,7 +275,8 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
         showPopup({ title: "Movement Configured", message: `Sent to ${res.vendor} — return by ${res.return_date}. It can now be scanned out at the Security Gate.`, type: "success", confirmText: "OK" });
         setBarcode(""); setVendorId(""); setReturnDate(""); setStages([]);
       } else {
-        showPopup({ title: "Could not configure", message: friendlyMovementError(res), type: "error", confirmText: "OK" });
+        const msg = await stageAwareError(res, barcode.trim().toUpperCase(), stages);
+        showPopup({ title: "Could not configure", message: msg, type: "error", confirmText: "OK" });
       }
     } catch (e) {
       showPopup({ title: "Error", message: e.message || "Failed to configure movement", type: "error", confirmText: "OK" });
