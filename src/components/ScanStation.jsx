@@ -1004,8 +1004,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                 {scanResult.data?.component_label && (
                                     <p className="wd-scan-result-label">{scanResult.data.component_label} ({scanResult.data.component_type})</p>
                                 )}
+                                {/* is_on_time=false means the piece exceeded the SLA of the
+                                    stage it was IN before this scan \u2014 i.e. it reached this
+                                    stage later than allowed. Word it that way (the previous
+                                    stage ran over), not "this stage is overdue". */}
                                 {scanResult.data?.is_on_time === false && (
-                                    <p className="wd-scan-result-delay">{'\u26A0'} This stage was overdue</p>
+                                    <p className="wd-scan-result-delay">{'\u26A0'} Reached this stage late {'\u2014'} the previous stage ran over its time limit</p>
                                 )}
                             </div>
                             {scanResult.data?.barcode && (
