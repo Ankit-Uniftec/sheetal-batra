@@ -429,9 +429,40 @@ export default function ProductionManagerDashboard() {
                 .eq("id", order.id);
             if (error) throw error;
             setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", production_status: "dispatched", delivered_at: new Date().toISOString() } : o));
-            showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as complete.` });
+            showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as delivered.` });
         } catch (err) {
             console.error("Mark complete error:", err);
+            showPopup({ type: "error", title: "Failed", message: err.message || "Could not update order" });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    // Temporary Manual Completion — force the order completed WITHOUT the normal
+    // production flow (bypass), behind a confirm. Sets status='completed' (same
+    // as the Production Head dashboards), separate from 'Mark as Delivered'.
+    const markManualComplete = async (order, e) => {
+        if (e) e.stopPropagation();
+        const ok = await new Promise((resolve) => {
+            showPopup({
+                type: "confirm",
+                title: "Temporary Manual Completion",
+                message: `Mark order ${order.order_no} as completed WITHOUT the production checks? This bypasses the normal flow.`,
+                confirmText: "Yes, complete it",
+                cancelText: "Cancel",
+                onConfirm: () => resolve(true),
+                onCancel: () => resolve(false),
+            });
+        });
+        if (!ok) return;
+        try {
+            setActionLoading(order.id);
+            const { error } = await supabase.from("orders").update({ status: "completed" }).eq("id", order.id);
+            if (error) throw error;
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed" } : o));
+            showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as completed.` });
+        } catch (err) {
+            console.error("Manual complete error:", err);
             showPopup({ type: "error", title: "Failed", message: err.message || "Could not update order" });
         } finally {
             setActionLoading(null);
@@ -1686,6 +1717,16 @@ export default function ProductionManagerDashboard() {
                                                                     actionLoading === order.id ? "Marking..." :
                                                                         "Mark as Delivered"}
                                                     </button>
+                                                    {/* Force-complete bypassing the production flow (status='completed'). */}
+                                                    {!["completed", "delivered", "cancelled"].includes(order.status) && (
+                                                        <button
+                                                            className="pm-action-btn pm-manual-complete-btn"
+                                                            disabled={actionLoading === order.id}
+                                                            onClick={(e) => markManualComplete(order, e)}
+                                                        >
+                                                            Temporary Manual Completion
+                                                        </button>
+                                                    )}
                                                     {/* <span className={`pm-recent-status ${getStatusClass(statusLabel)}`} style={{ marginLeft: "auto" }}>{statusLabel}</span> */}
                                                 </div>
                                             </div>
