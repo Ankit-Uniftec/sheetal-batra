@@ -147,6 +147,19 @@ export function getStageMaxDays(stageValue) {
   return typeof d === "number" ? d : null;
 }
 
+// Label for a logical STEP number (1..10) — e.g. 2 -> "Dyeing". Used to name
+// the stage a component went out to a vendor for (external_movements.stages_outside).
+export function getStepLabel(step) {
+  return STAGE_GROUPS.find((g) => g.step === step)?.label || null;
+}
+
+// Labels for a stages_outside array, e.g. [2] -> "Dyeing", [2,4] -> "Dyeing, Embroidery".
+export function getStagesOutsideLabel(steps) {
+  if (!Array.isArray(steps) || steps.length === 0) return null;
+  const labels = steps.map(getStepLabel).filter(Boolean);
+  return labels.length ? labels.join(", ") : null;
+}
+
 // ============================================================
 // 1. ADVANCE STAGE — Main scan handler
 // ============================================================

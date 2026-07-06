@@ -238,6 +238,35 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             if (selectedStation === "security_gate") {
                 const component = await fetchComponentByBarcode(barcode);
                 const scanType = component.is_outside_wh ? "entry" : "exit";
+
+                // 30-minute duplicate-scan guard: block a repeat exit (or entry)
+                // within 30 min of the last one for this component, so an
+                // accidental double-scan at the gate doesn't record twice.
+                {
+                    const txnType = scanType === "exit" ? "security_exit" : "security_entry";
+                    const { data: lastScan } = await supabase
+                        .from("stage_transitions")
+                        .select("scanned_at")
+                        .eq("component_id", component.id)
+                        .eq("transition_type", txnType)
+                        .order("scanned_at", { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+                    if (lastScan?.scanned_at) {
+                        const mins = Math.floor((Date.now() - new Date(lastScan.scanned_at).getTime()) / 60000);
+                        if (mins < 30) {
+                            showPopup({
+                                title: scanType === "exit" ? "Exit Already Recorded" : "Entry Already Recorded",
+                                message: `This component was scanned ${scanType === "exit" ? "out" : "in"} ${mins < 1 ? "just now" : `${mins} min${mins === 1 ? "" : "s"} ago`}. Please wait 30 minutes before scanning it ${scanType} again.`,
+                                type: "warning",
+                                confirmText: "OK",
+                            });
+                            setIsProcessing(false);
+                            return;
+                        }
+                    }
+                }
+
                 // On EXIT, the vendor + return date are LOCKED to the movement
                 // the Production Head approved — the guard does not choose. Read
                 // that configured movement so the popup shows it read-only.
