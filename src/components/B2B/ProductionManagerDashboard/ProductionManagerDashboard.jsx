@@ -1684,7 +1684,7 @@ export default function ProductionManagerDashboard() {
                                                             order.status === "completed" ? "Completed" :
                                                                 order.status === "cancelled" ? "Cancelled" :
                                                                     actionLoading === order.id ? "Marking..." :
-                                                                        "Mark as Completed"}
+                                                                        "Mark as Delivered"}
                                                     </button>
                                                     {/* <span className={`pm-recent-status ${getStatusClass(statusLabel)}`} style={{ marginLeft: "auto" }}>{statusLabel}</span> */}
                                                 </div>
@@ -1811,7 +1811,7 @@ export default function ProductionManagerDashboard() {
                                                                 className="pm-action-btn pm-action-complete"
                                                                 title="Mark this order as delivered"
                                                             >
-                                                                {isBusy ? "..." : "\u2713 Complete"}
+                                                                {isBusy ? "..." : "\u2713 Deliver"}
                                                             </button>
                                                             <button
                                                                 onClick={(e) => handleViewWarehousePdf(o, e)}

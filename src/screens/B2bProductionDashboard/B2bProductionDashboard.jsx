@@ -3,15 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "./B2bProductionDashboard.css";
 import Logo from "../../images/logo.png";
-import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadWarehousePdf } from "../../utils/pdfUtils";
 import NotificationBell from "../../components/NotificationBell";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import Badge from "../../components/Badge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
-import { getStageLabel, getStageColor } from "../../utils/barcodeService";
+import { getStageLabel, getStageColor, getStageGroupKey } from "../../utils/barcodeService";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -29,10 +28,9 @@ export default function B2bProductionDashboard() {
     const [showSidebar, setShowSidebar] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(null);
 
-    // Status update modal
-    const [statusModal, setStatusModal] = useState(null);
-    const [statusNote, setStatusNote] = useState("");
-    const [statusProcessing, setStatusProcessing] = useState(false);
+    // Temporary Manual Completion confirm modal
+    const [manualCompleteOrder, setManualCompleteOrder] = useState(null);
+    const [manualCompleteProcessing, setManualCompleteProcessing] = useState(false);
 
     // Calendar
     const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -147,8 +145,24 @@ export default function B2bProductionDashboard() {
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
 
-    // ==================== PRODUCTION STATUS HELPERS ====================
-    const getProdStatus = (order) => order.production_status || "pending_production";
+    // ==================== PRODUCTION STAGE HELPERS ====================
+    // The dashboard segments orders by their REAL barcode production stage
+    // (order.warehouse_stage, maintained by the DB trigger from component
+    // stages) — NOT a manual status. Bucket an order into one of:
+    //   queue         — not started yet (no stage / order_received)
+    //   in_production — a component is somewhere in the flow (cloth issue..final QC)
+    //   ready         — reached packaging, not yet dispatched
+    //   dispatched    — fully dispatched, OR the order is completed/delivered
+    //                   (covers Temporary Manual Completion + PM-delivered).
+    const getStageBucket = (order) => {
+        const st = (order.status || "").toLowerCase();
+        if (st === "completed" || st === "delivered" || st === "dispatched") return "dispatched";
+        const ws = order.warehouse_stage;
+        if (ws === "dispatched") return "dispatched";
+        if (ws === "packaging_dispatch") return "ready";
+        const group = getStageGroupKey(ws); // null for order_received/none/legacy
+        return group ? "in_production" : "queue";
+    };
 
     // Per-order component lookup for the card journey row (O(1) per card),
     // sorted by item then a stable TOP -> BTM -> DUP -> EXTRA order.
@@ -163,10 +177,10 @@ export default function B2bProductionDashboard() {
         return map;
     }, [components]);
 
-    const pendingProduction = useMemo(() => orders.filter(o => getProdStatus(o) === "pending_production"), [orders]);
-    const inProduction = useMemo(() => orders.filter(o => getProdStatus(o) === "in_production"), [orders]);
-    const readyForDispatch = useMemo(() => orders.filter(o => getProdStatus(o) === "ready_for_dispatch"), [orders]);
-    const dispatched = useMemo(() => orders.filter(o => getProdStatus(o) === "dispatched"), [orders]);
+    const pendingProduction = useMemo(() => orders.filter(o => getStageBucket(o) === "queue"), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const inProduction = useMemo(() => orders.filter(o => getStageBucket(o) === "in_production"), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const readyForDispatch = useMemo(() => orders.filter(o => getStageBucket(o) === "ready"), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const dispatched = useMemo(() => orders.filter(o => getStageBucket(o) === "dispatched"), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const stats = useMemo(() => {
         const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
@@ -174,12 +188,11 @@ export default function B2bProductionDashboard() {
         return {
             total: orders.length,
             salesCount: salesOrders.length,
-            pending: pendingProduction.length,
-            inProd: inProduction.length,
-            ready: readyForDispatch.length,
-            dispatched: dispatched.length,
-            salesValue: salesOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            consignmentValue: consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            // Counts now come from the real-stage buckets (below).
+            pending: pendingProduction.length,   // not started
+            inProd: inProduction.length,         // somewhere in the flow
+            ready: readyForDispatch.length,      // at packaging
+            dispatched: dispatched.length,       // dispatched / completed / delivered
             consignmentCount: consignmentOrders.length,
         };
     }, [orders, pendingProduction, inProduction, readyForDispatch, dispatched]);
@@ -201,7 +214,7 @@ export default function B2bProductionDashboard() {
     // ==================== FILTERED ORDERS ====================
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
-        if (prodFilter !== "all") filtered = filtered.filter(o => getProdStatus(o) === prodFilter);
+        if (prodFilter !== "all") filtered = filtered.filter(o => getStageBucket(o) === prodFilter);
         if (allTypeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type === allTypeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
@@ -254,43 +267,30 @@ export default function B2bProductionDashboard() {
     const paginatedDispatch = useMemo(() => dispatchList.slice((dispatchPage - 1) * ORDERS_PER_PAGE, dispatchPage * ORDERS_PER_PAGE), [dispatchList, dispatchPage]);
 
     // ==================== STATUS UPDATE ====================
-    const handleStatusUpdate = async () => {
-        if (!statusModal) return;
-        setStatusProcessing(true);
-        try {
-            const { order, newStatus } = statusModal;
-            const { error } = await supabase.from("orders").update({
-                production_status: newStatus,
-                [`${newStatus}_at`]: new Date().toISOString(),
-                [`${newStatus}_by`]: user?.email || "unknown",
-                production_notes: statusNote.trim() || null,
-            }).eq("id", order.id);
+    // Temporary Manual Completion — force the order completed WITHOUT the normal
+    // production flow (bypass). Opens a styled confirm modal (below); the actual
+    // update runs in confirmManualComplete.
+    const markManualComplete = (order) => setManualCompleteOrder(order);
 
+    const confirmManualComplete = async () => {
+        if (!manualCompleteOrder) return;
+        setManualCompleteProcessing(true);
+        try {
+            const { error } = await supabase.from("orders").update({ status: "completed" }).eq("id", manualCompleteOrder.id);
             if (error) throw error;
-            setStatusModal(null);
-            setStatusNote("");
-            loadAllData();
+            setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed" } : o));
+            setManualCompleteOrder(null);
         } catch (err) {
-            console.error("Status update error:", err);
-            alert("Failed to update. Please try again.");
-        } finally { setStatusProcessing(false); }
+            console.error("Manual complete error:", err);
+        } finally {
+            setManualCompleteProcessing(false);
+        }
     };
+
 
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
-
-    const handleDownloadPdf = async (e, order) => {
-        e.stopPropagation();
-        setPdfLoading(order.id);
-        try {
-            await downloadCustomerPdf(order);
-        } catch (err) {
-            console.error("PDF download failed:", err);
-        } finally {
-            setPdfLoading(null);
-        }
-    };
 
     const handleDownloadWarehousePdf = async (e, order) => {
         e.stopPropagation();
@@ -304,30 +304,27 @@ export default function B2bProductionDashboard() {
         }
     };
 
-    const getProdStatusLabel = (status) => {
-        switch (status) {
-            case "in_production": return "In Production";
-            case "ready_for_dispatch": return "Ready for Dispatch";
-            case "dispatched": return "Dispatched";
-            default: return "Pending Production";
+    // Status badge label from the real bucket. For an in-production order, show
+    // the actual current stage (e.g. "Embroidery") so the badge matches the
+    // per-piece journey chips instead of a generic word.
+    const getStageStatusLabel = (order) => {
+        const bucket = getStageBucket(order);
+        if (bucket === "queue") return "Not Started";
+        if (bucket === "ready") return "Ready for Dispatch";
+        if (bucket === "dispatched") {
+            const st = (order.status || "").toLowerCase();
+            return st === "completed" ? "Completed" : st === "delivered" ? "Delivered" : "Dispatched";
         }
+        // in_production → name the actual stage
+        return getStageLabel(order.warehouse_stage) || "In Production";
     };
 
-    const getProdStatusClass = (status) => {
-        switch (status) {
+    const getStageStatusClass = (order) => {
+        switch (getStageBucket(order)) {
             case "in_production": return "prod-status-inprod";
-            case "ready_for_dispatch": return "prod-status-ready";
+            case "ready": return "prod-status-ready";
             case "dispatched": return "prod-status-dispatched";
             default: return "prod-status-pending";
-        }
-    };
-
-    const getNextAction = (status) => {
-        switch (status) {
-            case "pending_production": return { label: "Accept for Production", newStatus: "in_production" };
-            case "in_production": return { label: "Mark Ready for Dispatch", newStatus: "ready_for_dispatch" };
-            case "ready_for_dispatch": return { label: "Mark as Dispatched", newStatus: "dispatched" };
-            default: return null;
         }
     };
 
@@ -405,7 +402,6 @@ export default function B2bProductionDashboard() {
                                             </div>
                                             <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
                                             <div className="prod-pending-btns">
-                                                <button className="prod-accept-sm" onClick={() => setStatusModal({ order, newStatus: "in_production" })}>{"\u2713"} Accept</button>
                                                 <button className="prod-detail-sm" onClick={() => handleViewOrder(order.id)}>View</button>
                                             </div>
                                         </div>
@@ -424,13 +420,12 @@ export default function B2bProductionDashboard() {
                                 <div className="prod-cardbox">
                                     {orders.length === 0 ? (<p className="prod-muted">No approved orders yet</p>) : (
                                         orders.slice(0, 10).map(o => {
-                                            const ps = getProdStatus(o);
                                             return (
                                                 <div className="prod-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
                                                     <p><b>Order No:</b> {o.order_no} &nbsp;|&nbsp; <b>PO:</b> {o.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Type:</b> {o.b2b_order_type || "\u2014"}</p>
                                                     <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "\u2014"}</p>
-                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span></p>
+                                                    <p><b>Status:</b> <span className={getStageStatusClass(o)}>{getStageStatusLabel(o)}</span></p>
                                                 </div>
                                             );
                                         })
@@ -457,7 +452,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>{"\u2728"} No orders pending production!</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "in_production" })} actionLabel={"\u2713 Accept for Production"} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 {filteredQueue.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
                                         <button disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
@@ -486,7 +481,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>No orders in production</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder} onAction={() => setStatusModal({ order, newStatus: "ready_for_dispatch" })} actionLabel="Mark Ready for Dispatch" actionClass="prod-btn-ready" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 {filteredInprod.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
                                         <button disabled={inprodPage === 1} onClick={() => setInprodPage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
@@ -524,10 +519,8 @@ export default function B2bProductionDashboard() {
                         ) : (
                             <div className="prod-list-scroll">
                                 {paginatedDispatch.map(order => (
-                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder}
-                                        onAction={dispatchSection === "ready" ? () => setStatusModal({ order, newStatus: "dispatched" }) : null}
-                                        actionLabel={dispatchSection === "ready" ? "Mark as Dispatched" : null}
-                                        actionClass="prod-btn-dispatch" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
+                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder}
+                                        getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
                                 ))}
                                 {dispatchList.length > ORDERS_PER_PAGE && (
                                     <div className="prod-pagination">
@@ -549,10 +542,10 @@ export default function B2bProductionDashboard() {
                             <input type="text" placeholder="Search order #, PO, vendor..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="prod-search-input" />
                             <select value={prodFilter} onChange={(e) => { setProdFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
                                 <option value="all">All Status</option>
-                                <option value="pending_production">Pending Production</option>
+                                <option value="queue">Not Started</option>
                                 <option value="in_production">In Production</option>
-                                <option value="ready_for_dispatch">Ready for Dispatch</option>
-                                <option value="dispatched">Dispatched</option>
+                                <option value="ready">Ready for Dispatch</option>
+                                <option value="dispatched">Dispatched / Done</option>
                             </select>
                             <select value={allTypeFilter} onChange={(e) => { setAllTypeFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
                                 <option value="all">All Types</option>
@@ -573,8 +566,7 @@ export default function B2bProductionDashboard() {
                         <div className="prod-list-scroll">
                             {filteredOrders.length === 0 && <p className="prod-muted">No orders match your filters.</p>}
                             {paginatedOrders.map(order => {
-                                const nextAction = getNextAction(getProdStatus(order));
-                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onView={handleViewOrder} onAction={nextAction ? () => setStatusModal({ order, newStatus: nextAction.newStatus }) : null} actionLabel={nextAction?.label || null} actionClass="prod-btn-accept" getProdStatusClass={getProdStatusClass} getProdStatusLabel={getProdStatusLabel} getProdStatus={getProdStatus} onPdf={handleDownloadPdf} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
+                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
                             })}
                             {filteredOrders.length > ORDERS_PER_PAGE && (
                                 <div className="prod-pagination">
@@ -636,12 +628,11 @@ export default function B2bProductionDashboard() {
                                         <p className="prod-muted">No deliveries on this date</p>
                                     ) : (
                                         orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).map(order => {
-                                            const ps = getProdStatus(order);
                                             return (
                                                 <div className="prod-order-item" key={order.id} onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
                                                     <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
-                                                    <p><b>Status:</b> <span className={getProdStatusClass(ps)}>{getProdStatusLabel(ps)}</span></p>
+                                                    <p><b>Status:</b> <span className={getStageStatusClass(order)}>{getStageStatusLabel(order)}</span></p>
                                                 </div>
                                             );
                                         })
@@ -682,34 +673,22 @@ export default function B2bProductionDashboard() {
                 />
             )}
 
-            {/* ===== STATUS UPDATE MODAL ===== */}
-            {statusModal && (
-                <div className="prod-modal-overlay" onClick={() => { setStatusModal(null); setStatusNote(""); }}>
+
+            {/* ===== TEMPORARY MANUAL COMPLETION CONFIRM ===== */}
+            {manualCompleteOrder && (
+                <div className="prod-modal-overlay" onClick={() => !manualCompleteProcessing && setManualCompleteOrder(null)}>
                     <div className="prod-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="prod-modal-top">
-                            <h3>Update Production Status</h3>
-                            <button className="prod-modal-close" onClick={() => { setStatusModal(null); setStatusNote(""); }}>{"\u00D7"}</button>
+                            <h3>Temporary Manual Completion</h3>
+                            <button className="prod-modal-close" onClick={() => setManualCompleteOrder(null)}>{"×"}</button>
                         </div>
                         <div className="prod-modal-body">
-                            <div className="prod-modal-info">
-                                <p><b>Order:</b> {statusModal.order.order_no}</p>
-                                <p><b>PO:</b> {statusModal.order.po_number || "N/A"}</p>
-                                <p><b>Type:</b> {statusModal.order.b2b_order_type || "N/A"}</p>
-                                <p><b>Vendor:</b> {vendorMap[statusModal.order.vendor_id]?.store_brand_name || "N/A"}</p>
-                            </div>
-                            <div className="prod-modal-status-change">
-                                <span className={getProdStatusClass(getProdStatus(statusModal.order))}>{getProdStatusLabel(getProdStatus(statusModal.order))}</span>
-                                <span className="prod-arrow">{"\u2192"}</span>
-                                <span className={getProdStatusClass(statusModal.newStatus)}>{getProdStatusLabel(statusModal.newStatus)}</span>
-                            </div>
-                            <div className="prod-modal-field">
-                                <label>Notes (Optional)</label>
-                                <textarea placeholder="Any production notes..." value={statusNote} onChange={(e) => setStatusNote(e.target.value)} rows={3} />
-                            </div>
+                            <p>Mark order <b>{manualCompleteOrder.order_no}</b> as completed <b>without</b> the production checks?</p>
+                            <p style={{ color: "#c4631a", fontSize: 13, marginTop: 8 }}>This bypasses the normal production flow.</p>
                         </div>
                         <div className="prod-modal-footer">
-                            <button className="prod-modal-cancel" onClick={() => { setStatusModal(null); setStatusNote(""); }}>Cancel</button>
-                            <button className="prod-modal-confirm" onClick={handleStatusUpdate} disabled={statusProcessing}>{statusProcessing ? "Updating..." : "Confirm"}</button>
+                            <button className="prod-modal-cancel" onClick={() => setManualCompleteOrder(null)} disabled={manualCompleteProcessing}>Cancel</button>
+                            <button className="prod-modal-confirm" onClick={confirmManualComplete} disabled={manualCompleteProcessing}>{manualCompleteProcessing ? "Completing..." : "Yes, complete it"}</button>
                         </div>
                     </div>
                 </div>
@@ -719,10 +698,9 @@ export default function B2bProductionDashboard() {
 }
 
 // ==================== ORDER CARD COMPONENT ====================
-function OrderCard({ order, vendorMap, components = [], onView, onAction, actionLabel, actionClass, getProdStatusClass, getProdStatusLabel, getProdStatus, onPdf, onWarehousePdf, pdfLoading, onJourney }) {
+function OrderCard({ order, vendorMap, components = [], onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete }) {
     const item = order.items?.[0] || {};
     const imgSrc = item.image_url || "/placeholder.png";
-    const ps = getProdStatus(order);
 
     return (
         <div className="prod-order-card-full" onClick={() => onView(order.id)} style={{ cursor: "pointer" }}>
@@ -734,7 +712,7 @@ function OrderCard({ order, vendorMap, components = [], onView, onAction, action
                     <div className="prod-ocard-field"><span className="prod-ocard-label">PO NUMBER:</span><span className="prod-ocard-val">{order.po_number || "\u2014"}</span></div>
                 </div>
                 <div className="prod-ocard-badges">
-                    <div className={`prod-order-status-badge ${getProdStatusClass(ps)}`}>{getProdStatusLabel(ps)}</div>
+                    <div className={`prod-order-status-badge ${getStageStatusClass(order)}`}>{getStageStatusLabel(order)}</div>
                     {order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
                     {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"\u26A0"} Urgent</div>)}
                     <button className="prod-pdf-btn" onClick={(e) => onWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
@@ -766,17 +744,16 @@ function OrderCard({ order, vendorMap, components = [], onView, onAction, action
                     ))}
                 </div>
             )}
-            {onJourney && components.length > 0 && (
-                <div className="prod-ocard-actions" onClick={(e) => e.stopPropagation()}>
+            <div className="prod-ocard-actions" onClick={(e) => e.stopPropagation()}>
+                {onJourney && components.length > 0 && (
                     <button className="prod-btn-journey" onClick={() => onJourney(order, components)}>View Journey</button>
-                </div>
-            )}
-            {onAction && actionLabel && (
-                <div className="prod-ocard-actions" onClick={(e) => e.stopPropagation()}>
-                    <button className={actionClass || "prod-btn-accept"} onClick={onAction}>{actionLabel}</button>
-                    <button className="prod-btn-detail" onClick={() => onView(order.id)}>View Details</button>
-                </div>
-            )}
+                )}
+                <button className="prod-btn-detail" onClick={() => onView(order.id)}>View Details</button>
+                {/* Production Head: force-complete bypassing the flow. */}
+                {onManualComplete && !["completed", "delivered", "cancelled"].includes((order.status || "").toLowerCase()) && (
+                    <button className="prod-btn-manual-complete" onClick={() => onManualComplete(order)}>Temporary Manual Completion</button>
+                )}
+            </div>
         </div>
     );
 }
