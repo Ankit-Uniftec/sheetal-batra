@@ -5,6 +5,7 @@ import {
   getStageLabel,
   getStageColor,
   getStageMaxDays,
+  getStagesOutsideLabel,
   fetchTransitionHistory,
   fetchMovementHistory,
 } from "../utils/barcodeService";
@@ -146,12 +147,22 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                 const transitions = selected.transitions;
                 const movements = selected.movements || [];
                 const info = c.is_outside_wh ? getVendorTagInfo(c, movements) : null;
+                // When the piece is physically out at a vendor, show "Out to
+                // Vendor (<stage>)" (the stage it went out for, from the active
+                // exited movement) instead of the raw current_stage.
+                const outStageLabel = c.is_outside_wh
+                  ? getStagesOutsideLabel(movements.find((m) => m.status === "exited")?.stages_outside)
+                  : null;
                 return (
                   <>
                     <div className="cjm-comp-head">
                       <span className="cjm-comp-name">{c.component_label || c.component_type}</span>
                       <span className="cjm-comp-bc">{c.barcode}</span>
-                      <Badge color={getStageColor(c.current_stage)}>{getStageLabel(c.current_stage)}</Badge>
+                      {c.is_outside_wh ? (
+                        <Badge color="#e0913f">{outStageLabel ? `Out to Vendor (${outStageLabel})` : "Out to Vendor"}</Badge>
+                      ) : (
+                        <Badge color={getStageColor(c.current_stage)}>{getStageLabel(c.current_stage)}</Badge>
+                      )}
                       {info && (
                         <span className={`cjm-vendor-now ${info.overdue ? "cjm-overdue" : ""}`}>
                           {info.text}
@@ -167,6 +178,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                           <thead>
                             <tr>
                               <th>Vendor</th>
+                              <th>Stage</th>
                               <th>Sent</th>
                               <th>Returned</th>
                               <th>Due</th>
@@ -180,6 +192,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                                   <strong>{m.vendor_name || "—"}</strong>
                                   {m.vendor_location ? <span className="cjm-vendor-loc"> · {m.vendor_location}</span> : null}
                                 </td>
+                                <td>{getStagesOutsideLabel(m.stages_outside) || "—"}</td>
                                 <td>{m.exit_scan_at ? formatDate(m.exit_scan_at) : "—"}</td>
                                 <td>{m.entry_scan_at ? formatDate(m.entry_scan_at) : "—"}</td>
                                 <td>{m.return_date ? formatDate(m.return_date) : "—"}</td>
@@ -199,13 +212,27 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         {transitions.map((t) => {
                           // The security gate doesn't change the stage (physical
                           // in/out checkpoint) — show a clear action label instead
-                          // of "Stage → same Stage".
+                          // of "Stage → same Stage". Name the stage the trip was
+                          // for by matching this scan to its movement (by the
+                          // exit/entry scan timestamp) and reading stages_outside.
                           const isExit = t.transition_type === "security_exit";
                           const isEntry = t.transition_type === "security_entry";
+                          const stageForTrip = (() => {
+                            if (!isExit && !isEntry) return null;
+                            const field = isExit ? "exit_scan_at" : "entry_scan_at";
+                            const scanTime = new Date(t.scanned_at).getTime();
+                            // Closest movement whose exit/entry time is within ~2 min of this scan.
+                            const mov = movements
+                              .filter((m) => m[field])
+                              .map((m) => ({ m, diff: Math.abs(new Date(m[field]).getTime() - scanTime) }))
+                              .filter((x) => x.diff < 120000)
+                              .sort((a, b) => a.diff - b.diff)[0]?.m;
+                            return mov ? getStagesOutsideLabel(mov.stages_outside) : null;
+                          })();
                           const headline = isExit
-                            ? "Sent to Vendor"
+                            ? `Sent to Vendor${stageForTrip ? ` (${stageForTrip})` : ""}`
                             : isEntry
-                              ? "Returned to Warehouse"
+                              ? `Returned to Warehouse${stageForTrip ? ` (${stageForTrip})` : ""}`
                               : `${t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}${getStageLabel(t.to_stage)}`;
                           return (
                             <div key={t.id} className="cjm-timeline-item">

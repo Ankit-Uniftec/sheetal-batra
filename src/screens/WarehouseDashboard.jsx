@@ -12,7 +12,7 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS } from "../utils/barcodeService";
+import { getStageLabel, getStageColor, getStageGroupKey, getStagesOutsideLabel, STAGE_GROUPS } from "../utils/barcodeService";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import Badge from "../components/Badge";
 import SearchByDropdown from "../components/SearchByDropdown";
@@ -353,7 +353,25 @@ const WarehouseDashboard = () => {
         .order("component_type", { ascending: true });
 
       if (!error && data) {
-        setOrderComponentsMap(prev => ({ ...prev, [orderId]: data }));
+        // For components currently out at a vendor, pull the stage(s) they went
+        // out for so the card badge can read "Out to Vendor (Embroidery)" rather
+        // than the stalled stage. stages_outside lives in external_movements.
+        const outsideIds = data.filter((c) => c.is_outside_wh).map((c) => c.id);
+        let stagesById = {};
+        if (outsideIds.length) {
+          const { data: movs } = await supabase
+            .from("external_movements")
+            .select("component_id, stages_outside")
+            .in("component_id", outsideIds)
+            .eq("status", "exited");
+          (movs || []).forEach((m) => { stagesById[m.component_id] = m.stages_outside; });
+        }
+        const enriched = data.map((c) =>
+          c.is_outside_wh && stagesById[c.id]
+            ? { ...c, stages_outside: stagesById[c.id] }
+            : c
+        );
+        setOrderComponentsMap(prev => ({ ...prev, [orderId]: enriched }));
       }
     } catch (err) {
       console.error("Failed to fetch components:", err);
@@ -1719,9 +1737,17 @@ const WarehouseDashboard = () => {
                                             {comp.re_journey_count > 0 && (
                                               <span className="wd-comp-rework-tag">Rework {comp.re_journey_count}</span>
                                             )}
-                                            <Badge color={getStageColor(comp.current_stage)}>
-                                              {getStageLabel(comp.current_stage)}
-                                            </Badge>
+                                            {comp.is_outside_wh ? (
+                                              <Badge color="#e0913f">
+                                                {getStagesOutsideLabel(comp.stages_outside)
+                                                  ? `Out to Vendor (${getStagesOutsideLabel(comp.stages_outside)})`
+                                                  : "Out to Vendor"}
+                                              </Badge>
+                                            ) : (
+                                              <Badge color={getStageColor(comp.current_stage)}>
+                                                {getStageLabel(comp.current_stage)}
+                                              </Badge>
+                                            )}
                                           </div>
                                         </div>
                                       ))}

@@ -10,7 +10,7 @@ import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import Badge from "../../components/Badge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
-import { getStageLabel, getStageColor, getStageGroupKey } from "../../utils/barcodeService";
+import { getStageLabel, getStageColor, getStageGroupKey, getStagesOutsideLabel } from "../../utils/barcodeService";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -132,6 +132,27 @@ export default function B2bProductionDashboard() {
                         all = [...all, ...cData];
                         if (cData.length < PAGE) break;
                         from += PAGE;
+                    }
+                    // Attach stages_outside for components currently at a vendor so
+                    // the card badge reads "Out to Vendor (Embroidery)" instead of
+                    // the stalled stage. stages_outside lives in external_movements.
+                    const outsideIds = all.filter((c) => c.is_outside_wh).map((c) => c.id);
+                    if (outsideIds.length) {
+                        const stagesById = {};
+                        for (let i = 0; i < outsideIds.length; i += 500) {
+                            const chunk = outsideIds.slice(i, i + 500);
+                            const { data: movs } = await supabase
+                                .from("external_movements")
+                                .select("component_id, stages_outside")
+                                .in("component_id", chunk)
+                                .eq("status", "exited");
+                            (movs || []).forEach((m) => { stagesById[m.component_id] = m.stages_outside; });
+                        }
+                        all = all.map((c) =>
+                            c.is_outside_wh && stagesById[c.id]
+                                ? { ...c, stages_outside: stagesById[c.id] }
+                                : c
+                        );
                     }
                     setComponents(all);
                 }
@@ -739,7 +760,15 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                                 <span className="prod-comp-barcode">{comp.barcode}</span>
                                 <span className="prod-comp-label">{comp.component_label || comp.component_type}</span>
                             </div>
-                            <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
+                            {comp.is_outside_wh ? (
+                                <Badge color="#e0913f">
+                                    {getStagesOutsideLabel(comp.stages_outside)
+                                        ? `Out to Vendor (${getStagesOutsideLabel(comp.stages_outside)})`
+                                        : "Out to Vendor"}
+                                </Badge>
+                            ) : (
+                                <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
+                            )}
                         </div>
                     ))}
                 </div>
