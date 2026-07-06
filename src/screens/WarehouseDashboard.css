@@ -1044,6 +1044,22 @@
   font-weight: bold;
 }
 
+/* Bypass action — distinct outlined amber so it reads as an override, not the
+   normal completion. */
+.wd-manual-complete-btn {
+  margin-top: 18px;
+  margin-left: 10px;
+  background: #fff;
+  border: 1px solid #e0913f;
+  padding: 10px 22px;
+  border-radius: 8px;
+  color: #c4631a;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.wd-manual-complete-btn:hover { background: #fff6ee; }
+
 .wd-complete-btn:hover:not(:disabled) {
   background: #c4a94d;
 }

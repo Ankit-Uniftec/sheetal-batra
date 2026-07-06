@@ -743,75 +743,35 @@ const WarehouseDashboard = () => {
     }
   };
 
-  // TEMP (prod): used by simple Mark as Completed fallback while barcode scan flow is hidden
-  const markAsCompleted = async (orderId) => {
-    // GATE: don't let an order be completed while its components are still in
-    // production. Previously this set status=completed blindly, so orders got
-    // "dispatched" with components still at Cloth Issued / Stitching — no QC,
-    // wrong stage, empty QC report. A component is "finished" when it reached
-    // the end of the flow (Final QC passed / Packaging / Dispatched) or was
-    // legitimately removed (disposed / scrapped).
-    const FINISHED_STAGES = new Set([
-      "final_qc_passed", "packaging_dispatch", "dispatched", "disposed", "scrapped",
-    ]);
-    try {
-      const { data: comps, error: cErr } = await supabase
-        .from("order_components")
-        .select("barcode, component_label, component_type, current_stage, is_active")
-        .eq("order_id", orderId);
-      if (cErr) throw cErr;
+  // Orders complete automatically once every component is scanned through to
+  // Dispatch (DB trigger fn_sync_order_warehouse_stage), so there's no manual
+  // "Mark as Completed" — only the Production-Head bypass below for orders that
+  // can't finish the normal flow.
 
-      // No components at all → it never went through production. Block.
-      if (!comps || comps.length === 0) {
-        showPopup({
-          type: "warning",
-          title: "Order Not Ready to Complete",
-          message: "This order has no tracked components — it hasn't been through the production/scan flow yet, so it can't be marked completed.",
-          confirmText: "OK",
-        });
-        return;
-      }
-
-      // A component is "finished" only if it reached an end stage. An INACTIVE
-      // component (never activated / still at Order Received) counts as
-      // unfinished — it hasn't even started.
-      const unfinished = comps.filter((c) => !FINISHED_STAGES.has(c.current_stage));
-
-      if (unfinished.length > 0) {
-        const lines = unfinished
-          .map((c) => `• ${c.barcode} (${c.component_label || c.component_type}) — ${getStageLabel(c.current_stage)}${c.is_active ? "" : " (not started)"}`)
-          .join("\n");
-        showPopup({
-          type: "warning",
-          title: "Order Not Ready to Complete",
-          message:
-            `This order still has components in production. Scan them through to Final QC and Packaging first:\n\n${lines}`,
-          confirmText: "OK",
-        });
-        return;
-      }
-    } catch (gateErr) {
-      console.error("Completion gate check failed:", gateErr);
+  // Temporary Manual Completion — the old pre-gate behaviour: mark the order
+  // completed WITHOUT the finished-stages check, behind a confirm. For the
+  // Production Head to force-complete an order that can't go through the normal
+  // gated flow. Only rendered for the Production Head (see the button below).
+  const markManualComplete = async (order) => {
+    const ok = await new Promise((resolve) => {
       showPopup({
-        type: "error",
-        title: "Check Failed",
-        message: "Could not verify component stages. Please try again.",
-        confirmText: "OK",
+        type: "confirm",
+        title: "Temporary Manual Completion",
+        message: `Mark order ${order.order_no} as completed WITHOUT the production checks? This bypasses the normal flow.`,
+        confirmText: "Yes, complete it",
+        cancelText: "Cancel",
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
       });
-      return;
-    }
+    });
+    if (!ok) return;
 
     const { error } = await supabase
       .from("orders")
       .update({ status: "completed" })
-      .eq("id", orderId);
+      .eq("id", order.id);
     if (error) {
-      showPopup({
-        type: "error",
-        title: "Update Failed",
-        message: error.message || "Could not mark order as completed.",
-        confirmText: "OK",
-      });
+      showPopup({ type: "error", title: "Update Failed", message: error.message || "Could not complete the order.", confirmText: "OK" });
       return;
     }
     fetchOrders();
@@ -1799,17 +1759,19 @@ const WarehouseDashboard = () => {
                                 >
                                   QC Report
                                 </button>
-                                {/* Mark as Completed remains available to the warehouse manager */}
-                                <button
-                                  className={`wd-complete-btn ${order.status === "cancelled" ? "wd-cancelled-btn" : ""}`}
-                                  disabled={order.status === "completed" || order.status === "delivered" || order.status === "cancelled"}
-                                  onClick={() => markAsCompleted(order.id)}
-                                >
-                                  {order.status === "completed" ? "Completed" :
-                                    order.status === "delivered" ? "Delivered" :
-                                      order.status === "cancelled" ? "Cancelled" :
-                                        "Mark as Completed"}
-                                </button>
+                                {/* No manual "Mark as Completed": an order completes
+                                    automatically once every component is scanned through
+                                    to Dispatch (DB trigger fn_sync_order_warehouse_stage).
+                                    Only the manual bypass below remains, for the
+                                    Production Head, when the flow can't finish normally. */}
+                                {isWarehouseProdHead && !["completed", "delivered", "cancelled"].includes(order.status) && (
+                                  <button
+                                    className="wd-manual-complete-btn"
+                                    onClick={() => markManualComplete(order)}
+                                  >
+                                    Temporary Manual Completion
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
