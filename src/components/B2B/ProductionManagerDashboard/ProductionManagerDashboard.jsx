@@ -494,24 +494,36 @@ export default function ProductionManagerDashboard() {
     };
 
 
-    const channelStats = useMemo(() => {
-        const total = orders.length;
-        const b2b = orders.filter(o => o.is_b2b === true).length;
+    // Channel + status counts are computed by the same logic over either the
+    // full order set (shared with the Production tab) or the Overview
+    // period-filtered set (overviewOrders). Extracted so the Overview filter can
+    // reuse it without changing the shared (full-orders) versions.
+    const computeChannelStats = (list) => {
+        const total = list.length;
+        const b2b = list.filter(o => o.is_b2b === true).length;
         const store = total - b2b;
         return {
             total, b2b, store: store > 0 ? store : 0,
             b2bPct: total > 0 ? Math.round((b2b / total) * 100) : 0,
             storePct: total > 0 ? Math.round((store > 0 ? store : 0) / total * 100) : 0,
         };
-    }, [orders]);
-
-    const statusStats = useMemo(() => {
-        const pending = orders.filter(o => o.status === "pending" || o.status === "order_received" || o.status === "confirmed").length;
-        const inProd = orders.filter(o => o.status === "prepared" || o.production_status === "in_production").length;
-        const dispatched = orders.filter(o => o.status === "delivered" || o.production_status === "dispatched").length;
-        const readyForDispatch = orders.filter(o => o.production_status === "ready_for_dispatch").length;
+    };
+    const computeStatusStats = (list) => {
+        const pending = list.filter(o => o.status === "pending" || o.status === "order_received" || o.status === "confirmed").length;
+        const inProd = list.filter(o => o.status === "prepared" || o.production_status === "in_production").length;
+        const dispatched = list.filter(o => o.status === "delivered" || o.production_status === "dispatched").length;
+        const readyForDispatch = list.filter(o => o.production_status === "ready_for_dispatch").length;
         return { pending, inProd, dispatched, readyForDispatch };
-    }, [orders]);
+    };
+    const channelStats = useMemo(() => computeChannelStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const statusStats = useMemo(() => computeStatusStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Human label for the current Overview period (used in the revenue card etc.).
+    const overviewPeriodLabel =
+        overviewPeriod === "day" ? "Today" :
+        overviewPeriod === "month" ? "This Month" :
+        overviewPeriod === "year" ? "This Year" :
+        overviewPeriod === "custom" ? "Custom Range" : "All Time";
 
     // Per-stage component counts. Source of truth: order_components.current_stage
     // (advanced live by the warehouse Scan Station). One row per top/bottom/
@@ -580,7 +592,7 @@ export default function ProductionManagerDashboard() {
         return components.filter((c) => (c.current_stage || "order_received") === stageDrillDown);
     }, [components, stageDrillDown]);
 
-    const productionMetrics = useMemo(() => {
+    const computeProductionMetrics = (orders, statusStats) => {
         const now = new Date();
         const activeOrders = orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
         const delayed = activeOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
@@ -635,66 +647,44 @@ export default function ProductionManagerDashboard() {
             avgLeadTime: (() => { let total = 0, count = 0; orders.forEach(o => { if (o.in_production_at && (o.ready_for_dispatch_at || o.delivered_at)) { const days = (new Date(o.ready_for_dispatch_at || o.delivered_at) - new Date(o.in_production_at)) / (1000 * 60 * 60 * 24); if (days > 0 && days < 365) { total += days; count++; } } }); return count > 0 ? (total / count).toFixed(1) : "0"; })(),
             exceedingDelivery: orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled" && o.delivery_date && new Date(o.delivery_date) < now).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date)),
         };
-    }, [orders, statusStats]);
+    };
+    const productionMetrics = useMemo(() => computeProductionMetrics(orders, statusStats), [orders, statusStats]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
 
-    // ==================== SALES & REVENUE METRICS ====================
+    // ==================== SALES & REVENUE METRICS (Overview, period-scoped) ====================
+    // Computed over the selected Overview period (overviewOrders — orders PLACED
+    // in the window). Revenue is the period TOTAL (not month/year), so the whole
+    // Overview reflects the chosen filter consistently.
     const salesMetrics = useMemo(() => {
         const now = new Date();
-        const currMonth = now.getMonth();
-        const currYear = now.getFullYear();
-        const prevMonth = currMonth === 0 ? 11 : currMonth - 1;
-        const prevMonthYear = currMonth === 0 ? currYear - 1 : currYear;
+        const isRevenue = isRevenueOrder; // shared rule — src/utils/revenue.js
 
-        // Revenue counts every received order, minus cancelled/refunded.
-        // Shared rule — see src/utils/revenue.js.
-        const isRevenue = isRevenueOrder;
+        // Total revenue for the period.
+        const revenuePeriod = overviewOrders.reduce((sum, o) => sum + (isRevenue(o) ? Number(o.grand_total || 0) : 0), 0);
 
-        let revenueMonthly = 0;
-        let revenueYearly = 0;
-        let revenuePrevMonth = 0;
-
-        orders.forEach(o => {
-            if (!isRevenue(o)) return;
-            const dateStr = o.delivered_at || o.created_at;
-            if (!dateStr) return;
-            const d = new Date(dateStr);
-            if (d.getFullYear() === currYear) {
-                revenueYearly += Number(o.grand_total || 0);
-                if (d.getMonth() === currMonth) revenueMonthly += Number(o.grand_total || 0);
-            }
-            if (d.getMonth() === prevMonth && d.getFullYear() === prevMonthYear) {
-                revenuePrevMonth += Number(o.grand_total || 0);
-            }
-        });
-
-        const salesGrowthPct = revenuePrevMonth > 0
-            ? (((revenueMonthly - revenuePrevMonth) / revenuePrevMonth) * 100).toFixed(1)
-            : (revenueMonthly > 0 ? "100.0" : "0.0");
-
-        // Pending + Delayed (exclude cancelled/delivered/completed)
-        const openOrders = orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
+        // Pending + Delayed (open orders in the period).
+        const openOrders = overviewOrders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
         const pendingCount = openOrders.length;
         const delayedCount = openOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now).length;
 
-        // Returns & Exchanges
-        const returnedOrders = orders.filter(o => o.return_reason || (o.returned_items && Array.isArray(o.returned_items) && o.returned_items.length > 0) || o.status === "returned");
-        const exchangeOrders = orders.filter(o => o.exchange_requested_at || o.exchange_reason);
-        const deliveredCount = orders.filter(isRevenue).length;
+        // Returns & Exchanges (in period).
+        const returnedOrders = overviewOrders.filter(o => o.return_reason || (o.returned_items && Array.isArray(o.returned_items) && o.returned_items.length > 0) || o.status === "returned");
+        const exchangeOrders = overviewOrders.filter(o => o.exchange_requested_at || o.exchange_reason);
+        const deliveredCount = overviewOrders.filter(isRevenue).length;
         const returnRate = deliveredCount > 0 ? ((returnedOrders.length / deliveredCount) * 100).toFixed(1) : "0.0";
 
-        // Refunded amount (sum of grand_total for orders with refund_status processed/completed)
-        const refundedAmount = orders
+        // Refunded amount (in period).
+        const refundedAmount = overviewOrders
             .filter(o => {
                 const rs = (o.refund_status || "").toLowerCase();
                 return rs === "processed" || rs === "completed" || rs === "refunded" || rs === "paid";
             })
             .reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
 
-        // Top selling product — count by items[].product_name across delivered/completed orders
+        // Top selling product (in period).
         const productCount = {};
-        orders.forEach(o => {
+        overviewOrders.forEach(o => {
             if (!isRevenue(o)) return;
             (o.items || []).forEach(item => {
                 const name = item.product_name;
@@ -706,18 +696,26 @@ export default function ProductionManagerDashboard() {
         const topProduct = topProductEntry ? { name: topProductEntry[0], count: topProductEntry[1] } : { name: "—", count: 0 };
 
         return {
-            revenueMonthly, revenueYearly, revenuePrevMonth,
-            salesGrowthPct,
+            revenuePeriod,
             pendingCount, delayedCount,
             returnCount: returnedOrders.length, returnRate,
             exchangeCount: exchangeOrders.length,
             refundedAmount,
             topProduct,
         };
-    }, [orders]);
+    }, [overviewOrders]);
 
-    // ==================== TOP PRODUCT / COLOR / SIZE BY STORE ====================
+    // Overview-scoped copies of the SHARED memos, computed over the period set.
+    // The originals (channelStats/statusStats/productionMetrics over full orders)
+    // stay untouched so the Production tab is unaffected.
+    const statusStatsOv = useMemo(() => computeStatusStats(overviewOrders), [overviewOrders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const channelStatsOv = useMemo(() => computeChannelStats(overviewOrders), [overviewOrders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const productionMetricsOv = useMemo(() => computeProductionMetrics(overviewOrders, statusStatsOv), [overviewOrders, statusStatsOv]); // eslint-disable-line react-hooks/exhaustive-deps
+    const recentOrdersOv = useMemo(() => overviewOrders.slice(0, 10), [overviewOrders]);
+
+    // ==================== TOP PRODUCT / COLOR / SIZE BY STORE (period-scoped) ====================
     const topByStore = useMemo(() => {
+        const orders = overviewOrders; // scope to the Overview period
         const isRevenue = isRevenueOrder; // shared rule — see src/utils/revenue.js
 
         const getStore = (o) => {
@@ -779,7 +777,7 @@ export default function ProductionManagerDashboard() {
         });
 
         return { stores: storeList, topProducts, topColors, topSizes };
-    }, [orders]);
+    }, [overviewOrders]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ==================== FILTERED + PAGINATED ORDERS ====================
     const filteredByStatus = useMemo(() => {
@@ -1286,21 +1284,21 @@ export default function ProductionManagerDashboard() {
                                 )}
                                 <StageCountCards orders={overviewOrders} onStageClick={handleStageCardClick} />
 
-                                {/* ===== BUSINESS METRICS SECTION ===== */}
+                                {/* ===== BUSINESS METRICS SECTION (scoped to the selected period) ===== */}
                                 <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Business Performance</p>
                                 <div className="pm-stats-row-3">
                                     <StatCard
-                                        title={`Revenue (${new Date().toLocaleString("en-US", { month: "short" })} ${new Date().getFullYear()})`}
-                                        value={`\u20B9${formatIndianNumber(Math.round(salesMetrics.revenueMonthly))}`}
-                                        subtitle={`Yearly: \u20B9${formatIndianNumber(Math.round(salesMetrics.revenueYearly))}`}
+                                        title={`Revenue (${overviewPeriodLabel})`}
+                                        value={`\u20B9${formatIndianNumber(Math.round(salesMetrics.revenuePeriod))}`}
+                                        subtitle={`${overviewOrders.length} order${overviewOrders.length === 1 ? "" : "s"} placed`}
                                         highlight={true}
                                         icon={Icons.rupee}
                                     />
                                     <StatCard
-                                        title="Monthly Sales Growth"
-                                        value={`${Number(salesMetrics.salesGrowthPct) >= 0 ? "+" : ""}${salesMetrics.salesGrowthPct}%`}
-                                        subtitle={`Prev month: \u20B9${formatIndianNumber(Math.round(salesMetrics.revenuePrevMonth))}`}
-                                        icon={Number(salesMetrics.salesGrowthPct) >= 0 ? Icons.trendingUp : Icons.trendingDown}
+                                        title="Top Product"
+                                        value={salesMetrics.topProduct.count > 0 ? `${salesMetrics.topProduct.count} pcs` : "\u2014"}
+                                        subtitle={salesMetrics.topProduct.name}
+                                        icon={Icons.trendingUp}
                                     />
                                     <StatCard
                                         title="Pending / Delayed Orders"
@@ -1420,27 +1418,27 @@ export default function ProductionManagerDashboard() {
                                 {/* ===== PRODUCTION METRICS SECTION ===== */}
                                 <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Production Overview</p>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStats.total)} subtitle={`B2B: ${channelStats.b2b} | Store: ${channelStats.store}`} highlight={true} icon={Icons.package} />
-                                    <StatCard title="Production Load" value={`${productionMetrics.productionLoad.percentage}%`} subtitle={`${productionMetrics.productionLoad.active} in production`} icon={Icons.gear} />
-                                    <StatCard title="Bottlenecks" value={productionMetrics.bottlenecks.count} subtitle={productionMetrics.bottlenecks.count > 0 ? `${productionMetrics.bottlenecks.topBottleneck} · ${productionMetrics.bottlenecks.topOverdue} overdue · avg ${productionMetrics.bottlenecks.topAvgDays}d late` : "No overdue stages"} highlight={productionMetrics.bottlenecks.count > 0} icon={Icons.warning} />
+                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStatsOv.total)} subtitle={`B2B: ${channelStatsOv.b2b} | Store: ${channelStatsOv.store}`} highlight={true} icon={Icons.package} />
+                                    <StatCard title="Production Load" value={`${productionMetricsOv.productionLoad.percentage}%`} subtitle={`${productionMetricsOv.productionLoad.active} in production`} icon={Icons.gear} />
+                                    <StatCard title="Bottlenecks" value={productionMetricsOv.bottlenecks.count} subtitle={productionMetricsOv.bottlenecks.count > 0 ? `${productionMetricsOv.bottlenecks.topBottleneck} · ${productionMetricsOv.bottlenecks.topOverdue} overdue · avg ${productionMetricsOv.bottlenecks.topAvgDays}d late` : "No overdue stages"} highlight={productionMetricsOv.bottlenecks.count > 0} icon={Icons.warning} />
                                 </div>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Delayed Orders" value={productionMetrics.delayed} subtitle={`Delay rate: ${productionMetrics.delayRate}%`} highlight={productionMetrics.delayed > 0} icon={Icons.clock} />
-                                    <StatCard title="Rework %" value={`${productionMetrics.rework.percentage}%`} subtitle={`${productionMetrics.rework.totalReworks} items ${"\u00B7"} ${productionMetrics.rework.trend === "down" ? "\u2193 Improving" : "\u2191 Rising"}`} icon={Icons.refresh} />
-                                    <StatCard title="Dispatch Backlog" value={productionMetrics.dispatchBacklog.pending} subtitle={`${productionMetrics.dispatchBacklog.overdue} overdue ${"\u00B7"} Avg: ${productionMetrics.dispatchBacklog.avgDelay}`} highlight={productionMetrics.dispatchBacklog.overdue > 0} icon={Icons.truck} />
+                                    <StatCard title="Delayed Orders" value={productionMetricsOv.delayed} subtitle={`Delay rate: ${productionMetricsOv.delayRate}%`} highlight={productionMetricsOv.delayed > 0} icon={Icons.clock} />
+                                    <StatCard title="Rework %" value={`${productionMetricsOv.rework.percentage}%`} subtitle={`${productionMetricsOv.rework.totalReworks} items ${"\u00B7"} ${productionMetricsOv.rework.trend === "down" ? "\u2193 Improving" : "\u2191 Rising"}`} icon={Icons.refresh} />
+                                    <StatCard title="Dispatch Backlog" value={productionMetricsOv.dispatchBacklog.pending} subtitle={`${productionMetricsOv.dispatchBacklog.overdue} overdue ${"\u00B7"} Avg: ${productionMetricsOv.dispatchBacklog.avgDelay}`} highlight={productionMetricsOv.dispatchBacklog.overdue > 0} icon={Icons.truck} />
                                 </div>
                                 <div className="pm-channel-card">
                                     <p className="pm-card-title">Orders by Channel</p>
                                     <div className="pm-channel-body">
-                                        <ChannelRow label="Store (Offline)" count={channelStats.store} percentage={channelStats.storePct} color="#2e7d32" />
-                                        <ChannelRow label="B2B" count={channelStats.b2b} percentage={channelStats.b2bPct} color="#d5b85a" />
+                                        <ChannelRow label="Store (Offline)" count={channelStatsOv.store} percentage={channelStatsOv.storePct} color="#2e7d32" />
+                                        <ChannelRow label="B2B" count={channelStatsOv.b2b} percentage={channelStatsOv.b2bPct} color="#d5b85a" />
                                     </div>
                                 </div>
                                 <div className="pm-bottom-row">
                                     <div className="pm-recent-card">
                                         <div className="pm-card-header"><p className="pm-card-title">Recent Orders</p><button className="pm-view-all-btn" onClick={() => setActiveTab("orders")}>View All</button></div>
                                         <div className="pm-recent-list">
-                                            {recentOrders.length === 0 ? <p className="pm-muted">No orders yet</p> : recentOrders.map(order => {
+                                            {recentOrdersOv.length === 0 ? <p className="pm-muted">No orders yet</p> : recentOrdersOv.map(order => {
                                                 const sl = getStatusLabel(order);
                                                 return (<div className="pm-recent-item" key={order.id} onClick={() => viewOrderDetails(order)} style={{ cursor: "pointer" }}><div className="pm-recent-top"><span className="pm-recent-orderno">{order.order_no || "—"}</span><span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span></div><div className="pm-recent-bottom"><span className="pm-recent-amount">₹{formatIndianNumber(order.grand_total || 0)}</span><span className={`pm-recent-status ${getStatusClass(sl)}`}>{sl}</span></div></div>);
                                             })}
@@ -1449,7 +1447,7 @@ export default function ProductionManagerDashboard() {
                                     <div className="pm-pipeline-card">
                                         <p className="pm-card-title">Production Pipeline</p>
                                         <div className="pm-pipeline-body">
-                                            {[{ label: "Pending", count: statusStats.pending, cls: "pm-dot-pending" }, { label: "In Production", count: statusStats.inProd, cls: "pm-dot-inprod" }, { label: "Ready for Dispatch", count: statusStats.readyForDispatch, cls: "pm-dot-ready" }, { label: "Dispatched", count: statusStats.dispatched, cls: "pm-dot-dispatched" }].map(s => (
+                                            {[{ label: "Pending", count: statusStatsOv.pending, cls: "pm-dot-pending" }, { label: "In Production", count: statusStatsOv.inProd, cls: "pm-dot-inprod" }, { label: "Ready for Dispatch", count: statusStatsOv.readyForDispatch, cls: "pm-dot-ready" }, { label: "Dispatched", count: statusStatsOv.dispatched, cls: "pm-dot-dispatched" }].map(s => (
                                                 <div className="pm-pipeline-stage" key={s.label}><div className="pm-pipeline-label"><span className={`pm-pipeline-dot ${s.cls}`}></span><span>{s.label}</span></div><span className="pm-pipeline-count">{s.count}</span></div>
                                             ))}
                                         </div>
