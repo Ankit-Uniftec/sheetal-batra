@@ -201,6 +201,10 @@
 .pm-complete-btn { background: #2e7d32; color: white !important; }
 .pm-complete-btn:hover:not(:disabled) { background: #256628; }
 .pm-complete-btn:disabled { background: #e0e0e0; color: #888 !important; }
+/* Bypass action — outlined amber so it reads as an override, not normal complete. */
+.pm-manual-complete-btn { background: #fff; border: 1px solid #e0913f !important; color: #c4631a !important; }
+.pm-manual-complete-btn:hover:not(:disabled) { background: #fff6ee; }
+.pm-manual-complete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Pagination */
 .pm-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 20px; padding: 10px 0; }
