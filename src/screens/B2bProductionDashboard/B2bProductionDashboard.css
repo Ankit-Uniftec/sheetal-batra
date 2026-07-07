@@ -16,11 +16,11 @@
 .prod-hamburger-icon { display: none; flex-direction: column; justify-content: space-around; width: 30px; height: 25px; cursor: pointer; z-index: 1001; }
 .prod-hamburger-icon .prod-bar { width: 100%; height: 3px; background-color: #d5b85a; border-radius: 5px; transition: all 0.3s ease; }
 
-/* ---------------- MAIN GRID (3 ROW x 4 COLUMN) ---------------- */
-.prod-grid-table { margin-top: 30px; width: 100%; display: grid; grid-template-columns: 180px 1fr 1fr 260px; grid-template-rows: auto auto auto; gap: 25px; }
+/* ---------------- MAIN GRID (4 ROW x 4 COLUMN) ---------------- */
+.prod-grid-table { margin-top: 30px; width: 100%; display: grid; grid-template-columns: 180px 1fr 1fr 260px; grid-template-rows: auto auto auto auto; gap: 25px; }
 
-/* ---------------- SIDEBAR (spans 3 rows) ---------------- */
-.prod-sidebar { grid-row: 1 / 4; grid-column: 1; background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 8px; overflow: visible; transition: transform 0.3s ease-in-out; }
+/* ---------------- SIDEBAR (spans all rows) ---------------- */
+.prod-sidebar { grid-row: 1 / 5; grid-column: 1; background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 8px; overflow: visible; transition: transform 0.3s ease-in-out; }
 .prod-menu { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
 .prod-menu-item { padding: 8px 12px; font-size: 15px; cursor: pointer; position: relative; }
 .prod-menu-item-logout { display: none; }
@@ -30,11 +30,14 @@
 
 /* ---------------- GRID CELLS ---------------- */
 .prod-cell { width: 100%; }
-.prod-stat-1 { grid-row: 1; grid-column: 2; }
-.prod-stat-2 { grid-row: 1; grid-column: 3; }
-.prod-stat-3 { grid-row: 1; grid-column: 4; }
-.prod-recent-orders { grid-row: 2; grid-column: 2 / 4; }
-.prod-pending-box { grid-row: 2 / 4; grid-column: 4; padding: 20px; border-radius: 12px; background: #FFFFFFB0; border: 1px solid #D4D4D4; }
+/* Orders by Production Stage sits on top, spanning the full content width. */
+.prod-stage-cards { grid-row: 1; grid-column: 2 / 5; }
+.prod-stat-1 { grid-row: 2; grid-column: 2; }
+.prod-stat-2 { grid-row: 2; grid-column: 3; }
+.prod-stat-3 { grid-row: 2; grid-column: 4; }
+.prod-recent-orders { grid-row: 3; grid-column: 2 / 4; }
+.prod-pending-box { grid-row: 3; grid-column: 4; padding: 20px; border-radius: 12px; background: #FFFFFFB0; border: 1px solid #D4D4D4; }
+.prod-overview-cell { grid-row: 4; grid-column: 2 / 5; }
 
 /* ---------------- STAT CARDS ---------------- */
 .prod-gold-text { color: #d5b85a !important; }

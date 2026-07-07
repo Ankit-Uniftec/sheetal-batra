@@ -196,6 +196,8 @@
 .pm-action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .pm-edit-btn { background: #d5b85a; color: white !important; }
 .pm-edit-btn:hover:not(:disabled) { background: #c9a94e; }
+.pm-journey-btn { background: #3f51b5; color: white !important; }
+.pm-journey-btn:hover:not(:disabled) { background: #354497; }
 .pm-priority-btn { background: #f5f5f5; color: #333 !important; border: 1px solid #ddd; }
 .pm-priority-btn:hover:not(:disabled) { border-color: #d5b85a; background: #faf6e8; }
 .pm-complete-btn { background: #2e7d32; color: white !important; }

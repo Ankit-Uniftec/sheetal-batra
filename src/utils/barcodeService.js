@@ -96,32 +96,128 @@ export const SCAN_STATIONS = [
 // `key` is the group id used by filters; `members` are the raw
 // production_stage enum values that map into this group.
 // ============================================================
+// `external` = pieces can be sent OUT to a vendor for this stage. On the
+// always-internal stages (order received, cloth issue, QC, packaging) the
+// stage cards hide the in-house/vendor split (there's never a "vendor" count).
 export const STAGE_GROUPS = [
-  { key: "cloth_issue", label: "Cloth Issue", step: 1, color: "#795548", members: ["cloth_issued"] },
-  { key: "dyeing", label: "Dyeing", step: 2, color: "#e91e63", members: ["dyeing_in_progress", "dyeing_completed"] },
-  { key: "pattern_cutting", label: "Pattern Cutting", step: 3, color: "#9c27b0", members: ["pattern_cutting_in_progress", "pattern_cutting_completed"] },
-  { key: "embroidery", label: "Embroidery", step: 4, color: "#3f51b5", members: ["embroidery_in_progress", "embroidery_completed"] },
-  { key: "dry_cleaning", label: "Dry Cleaning", step: 5, color: "#00bcd4", members: ["dry_cleaning_in_progress", "dry_cleaning_completed"] },
-  { key: "qc1", label: "QC 1", step: 6, color: "#f44336", members: ["qc_in_progress", "qc_passed", "qc_failed"] },
-  { key: "stitching", label: "Stitching", step: 7, color: "#ef6c00", members: ["stitching_in_progress", "stitching_completed"] },
-  { key: "hemming", label: "Hemming", step: 8, color: "#ff5722", members: ["hemming_in_progress", "hemming_completed"] },
-  { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
-  { key: "packaging", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", members: ["packaging_dispatch", "dispatched"] },
+  { key: "order_received", label: "Order Received", step: 0, color: "#9e9e9e", external: false, members: ["order_received"] },
+  { key: "cloth_issue", label: "Cloth Issue", step: 1, color: "#795548", external: false, members: ["cloth_issued"] },
+  { key: "dyeing", label: "Dyeing", step: 2, color: "#e91e63", external: true, members: ["dyeing_in_progress", "dyeing_completed"] },
+  { key: "pattern_cutting", label: "Pattern Cutting", step: 3, color: "#9c27b0", external: true, members: ["pattern_cutting_in_progress", "pattern_cutting_completed"] },
+  { key: "embroidery", label: "Embroidery", step: 4, color: "#3f51b5", external: true, members: ["embroidery_in_progress", "embroidery_completed"] },
+  { key: "dry_cleaning", label: "Dry Cleaning", step: 5, color: "#00bcd4", external: true, members: ["dry_cleaning_in_progress", "dry_cleaning_completed"] },
+  { key: "qc1", label: "QC 1", step: 6, color: "#f44336", external: false, members: ["qc_in_progress", "qc_passed", "qc_failed"] },
+  { key: "stitching", label: "Stitching", step: 7, color: "#ef6c00", external: true, members: ["stitching_in_progress", "stitching_completed"] },
+  { key: "hemming", label: "Hemming", step: 8, color: "#ff5722", external: true, members: ["hemming_in_progress", "hemming_completed"] },
+  { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", external: false, members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
+  { key: "packaging", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", external: false, members: ["packaging_dispatch", "dispatched"] },
 ];
 
 // Map a raw stage value (e.g. "embroidery_completed") to its group key
-// (e.g. "embroidery"). Returns null for stages outside the 10 (e.g.
-// order_received / disposed / scrapped / legacy).
+// (e.g. "embroidery"). Returns null for stages OFF the production flow
+// (order_received / disposed / scrapped / legacy). NOTE: order_received is
+// intentionally excluded here even though it now has a STAGE_GROUPS entry (for
+// the stage cards) — order-LEVEL logic (getStageBucket, order filters) relies
+// on this returning null for a not-yet-in-production order. Piece-level card
+// bucketing uses classifyComponentForStageCard, which DOES place it.
 export function getStageGroupKey(stageValue) {
-  if (!stageValue) return null;
+  if (!stageValue || stageValue === "order_received") return null;
   const g = STAGE_GROUPS.find(grp => grp.members.includes(stageValue));
   return g ? g.key : null;
+}
+
+// Map a logical step number (1..10) to its stage group key (e.g. 4 ->
+// "embroidery"). Used to bucket an out-at-vendor piece into the stage card
+// for the stage it went OUT for (external_movements.stages_outside is steps).
+export function getGroupKeyForStep(step) {
+  const g = STAGE_GROUPS.find((grp) => grp.step === step);
+  return g ? g.key : null;
+}
+
+// Order statuses that mean the order is finished (out the door), regardless of
+// where its pieces' current_stage got stuck — e.g. Temporary Manual Completion
+// / Mark Delivered bypass the stages and never advance current_stage.
+const DONE_ORDER_STATUSES = new Set(["completed", "delivered", "dispatched", "cancelled"]);
+
+// Which stage-card bucket a single component belongs to, and whether it's an
+// INTERNAL (in-house at a stage) or EXTERNAL (out at a vendor) piece. One place
+// so every dashboard's split cards agree.
+//   comp         the component (needs current_stage, is_outside_wh, stages_outside)
+//   orderStatus  optional status of the piece's ORDER. If the order is done
+//                (completed/delivered/dispatched/cancelled), the piece counts as
+//                Packaging & Dispatch even if its current_stage never advanced
+//                (bypass completions leave current_stage stalled).
+//   returns { key, kind: 'internal' | 'external' } or null (not on the flow).
+// External pieces are bucketed by the EARLIEST stage they went out for.
+export function classifyComponentForStageCard(comp, orderStatus) {
+  if (!comp) return null;
+  // A finished order's pieces belong in the dispatch bucket, not their stalled
+  // stage — this is what "marked complete bypassing the stages" should look like.
+  if (orderStatus && DONE_ORDER_STATUSES.has(String(orderStatus).toLowerCase())) {
+    return { key: "packaging", kind: "internal" };
+  }
+  // Card key for a raw stage, INCLUDING order_received (which getStageGroupKey
+  // deliberately maps to null for order-level logic; the cards want its bucket).
+  const cardKey = (stage) => (stage === "order_received" ? "order_received" : getStageGroupKey(stage));
+  if (comp.is_outside_wh) {
+    const steps = Array.isArray(comp.stages_outside) ? comp.stages_outside : [];
+    const earliest = steps.length ? Math.min(...steps) : null;
+    const key = earliest != null ? getGroupKeyForStep(earliest) : null;
+    // Fall back to current_stage's group if stages_outside is missing, so the
+    // piece still lands somewhere sensible and is still marked external.
+    return { key: key || cardKey(comp.current_stage), kind: "external" };
+  }
+  return { key: cardKey(comp.current_stage), kind: "internal" };
 }
 
 // Text color for a stage badge. Stage colors are mid/dark tones, so we use
 // white text consistently across all stage badges for a uniform look.
 export function getStageTextColor() {
   return "#ffffff";
+}
+
+// ============================================================
+// Production Head → channel scoping (analytics only)
+// ============================================================
+// Mirrors db/barcode_system/v2/14_production_head_resolver.sql
+// (get_head_designation_for_source): which order channel a Production Head
+// "owns", so we can scope their stage cards + overview to their own workload.
+// This is for ANALYTICS ONLY — it must NOT be used to hide orders from an
+// order-history list (offline heads still look up any order).
+//
+// Returns the channel key for an order, matching the designation buckets:
+//   'website' | 'comms' | 'b2b' | 'private' | 'offline'  (offline = exhibition/store)
+export function getOrderChannelKey(order) {
+  if (!order) return null;
+  const store = (order.salesperson_store || "").trim();
+  // Website (LXRTS): first item sync_enabled = true
+  if (order.items?.[0]?.sync_enabled === true) return "website";
+  if (store === "COMMS" || order.is_comms) return "comms";
+  if (store === "B2B" || order.is_b2b) return "b2b";
+  if (store === "Private" || order.is_private_order) return "private";
+  // Exhibition / Delhi Store / Ludhiana Store → offline (also the safe default)
+  return "offline";
+}
+
+// The channel key a Production Head owns, from their designation. Returns null
+// for roles that aren't a single-channel head (e.g. Production Manager sees
+// all channels — caller should skip scoping when this is null).
+export function getChannelKeyForDesignation(designation) {
+  const d = (designation || "").trim().toLowerCase();
+  if (d === "online production head") return "website";
+  if (d === "communications executive") return "comms";
+  if (d === "b2b production head") return "b2b";
+  if (d === "private sa") return "private";
+  if (d === "offline production head") return "offline";
+  return null; // not a single-channel head → no scoping
+}
+
+// Filter orders to the channel a designation owns. If the designation isn't a
+// single-channel head, returns the list unchanged (no scoping).
+export function scopeOrdersToDesignation(orders, designation) {
+  const channel = getChannelKeyForDesignation(designation);
+  if (!channel || !Array.isArray(orders)) return orders || [];
+  return orders.filter((o) => getOrderChannelKey(o) === channel);
 }
 
 // ============================================================
@@ -158,6 +254,56 @@ export function getStagesOutsideLabel(steps) {
   if (!Array.isArray(steps) || steps.length === 0) return null;
   const labels = steps.map(getStepLabel).filter(Boolean);
   return labels.length ? labels.join(", ") : null;
+}
+
+// ------------------------------------------------------------
+// describeTransition — the ONE place that classifies a stage_transitions row
+// as an INTERNAL production scan vs an EXTERNAL vendor movement, and builds its
+// human headline. Every timeline (journey modal, scan station, overrides) uses
+// this so internal/external segregation is identical everywhere.
+//
+//   t         a stage_transitions row (needs transition_type, from_stage,
+//             to_stage, scanned_at)
+//   movements optional external_movements[] for this component — lets us name
+//             the stage a vendor trip was for ("Sent to Vendor (Dyeing)") by
+//             matching the scan time to the movement's exit/entry_scan_at.
+//
+// Returns { kind: 'internal' | 'external', headline, tagLabel, showType }.
+//   kind      drives the Internal (green) / External (orange) tag
+//   headline  the primary line ("Cloth Issued → Dyeing" or "Sent to Vendor (Dyeing)")
+//   tagLabel  "Internal Scan" | "External / Vendor"
+//   showType  whether to append the raw "(manual_override)" etc. suffix
+// ------------------------------------------------------------
+export function describeTransition(t, movements) {
+  const isExit = t.transition_type === "security_exit";
+  const isEntry = t.transition_type === "security_entry";
+  const external = isExit || isEntry;
+
+  let stageForTrip = null;
+  if (external && Array.isArray(movements)) {
+    const field = isExit ? "exit_scan_at" : "entry_scan_at";
+    const scanTime = new Date(t.scanned_at).getTime();
+    const mov = movements
+      .filter((m) => m[field])
+      .map((m) => ({ m, diff: Math.abs(new Date(m[field]).getTime() - scanTime) }))
+      .filter((x) => x.diff < 120000)
+      .sort((a, b) => a.diff - b.diff)[0]?.m;
+    stageForTrip = mov ? getStagesOutsideLabel(mov.stages_outside) : null;
+  }
+
+  const headline = isExit
+    ? `Sent to Vendor${stageForTrip ? ` (${stageForTrip})` : ""}`
+    : isEntry
+      ? `Returned to Warehouse${stageForTrip ? ` (${stageForTrip})` : ""}`
+      : `${t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}${getStageLabel(t.to_stage)}`;
+
+  return {
+    kind: external ? "external" : "internal",
+    headline,
+    tagLabel: external ? "External / Vendor" : "Internal Scan",
+    // only show the raw type suffix for non-scan internal rows (e.g. manual_override)
+    showType: !external && t.transition_type && t.transition_type !== "scan",
+  };
 }
 
 // ============================================================
@@ -630,6 +776,35 @@ export async function fetchMovementHistory(componentId) {
     .order("created_at", { ascending: false });
   if (error) { console.error("fetchMovementHistory failed:", error); return []; }
   return data || [];
+}
+
+// Attach `stages_outside` to any components currently out at a vendor
+// (is_outside_wh === true) by reading their active 'exited' external_movements
+// row. This is the ONE place every dashboard uses so the "Out to Vendor (stage)"
+// badge is computed identically everywhere (no per-screen re-implementation).
+// Returns a new array; components not outside are returned unchanged.
+export async function enrichComponentsWithMovements(components) {
+  if (!Array.isArray(components) || components.length === 0) return components || [];
+  const outsideIds = components.filter((c) => c && c.is_outside_wh).map((c) => c.id);
+  if (outsideIds.length === 0) return components;
+
+  const stagesById = {};
+  for (let i = 0; i < outsideIds.length; i += 500) {
+    const chunk = outsideIds.slice(i, i + 500);
+    const { data, error } = await supabase
+      .from("external_movements")
+      .select("component_id, stages_outside")
+      .in("component_id", chunk)
+      .eq("status", "exited");
+    if (error) { console.error("enrichComponentsWithMovements failed:", error); continue; }
+    (data || []).forEach((m) => { stagesById[m.component_id] = m.stages_outside; });
+  }
+
+  return components.map((c) =>
+    c && c.is_outside_wh && stagesById[c.id]
+      ? { ...c, stages_outside: stagesById[c.id] }
+      : c
+  );
 }
 
 // All external movements (any status), newest first, with the component's

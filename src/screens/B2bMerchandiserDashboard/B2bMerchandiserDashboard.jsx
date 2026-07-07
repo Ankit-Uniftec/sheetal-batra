@@ -9,8 +9,8 @@ import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils"
 import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
-import Badge from "../../components/Badge";
-import { getStageLabel, getStageColor } from "../../utils/barcodeService";
+import ComponentStageBadge from "../../components/ComponentStageBadge";
+import { enrichComponentsWithMovements } from "../../utils/barcodeService";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -124,7 +124,7 @@ export default function B2bMerchandiserDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
@@ -133,6 +133,9 @@ export default function B2bMerchandiserDashboard() {
                         if (cData.length < PAGE) break;
                         from += PAGE;
                     }
+                    // Attach stages_outside for pieces out at a vendor so the badge
+                    // reads "Out to Vendor (Embroidery)" instead of the stalled stage.
+                    all = await enrichComponentsWithMovements(all);
                     setComponents(all);
                 }
             }
@@ -807,7 +810,7 @@ export default function B2bMerchandiserDashboard() {
                                                             <span className="merch-comp-barcode">{comp.barcode}</span>
                                                             <span className="merch-comp-label">{comp.component_label || comp.component_type}</span>
                                                         </div>
-                                                        <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
+                                                        <ComponentStageBadge comp={comp} />
                                                     </div>
                                                 ))}
                                             </div>

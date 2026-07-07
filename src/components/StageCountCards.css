@@ -1,33 +1,48 @@
 .scc-wrap {
-  margin: 0 0 20px;
+  margin: 0 0 22px;
 }
 
 .scc-title {
   margin: 0 0 12px;
-  font-size: 16px;
-  color: #444;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #6b5842;
 }
 
 .scc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: 12px;
 }
 
 .scc-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
-  padding: 14px 16px;
+  gap: 3px;
+  padding: 16px 16px 14px;
   background: #fff;
-  border: 1px solid #ececec;
-  border-top: 3px solid #ccc;
-  border-radius: 10px;
+  border: 1px solid #eee6d8;
+  border-radius: 12px;
   text-align: left;
   font: inherit;
   cursor: default;
-  transition: box-shadow 0.15s, transform 0.15s;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(80, 60, 30, 0.04);
+  transition: box-shadow 0.16s ease, transform 0.16s ease, border-color 0.16s ease;
+}
+
+/* Slim colored accent bar down the left edge instead of a full top border. */
+.scc-accent-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--scc-accent, #ccc);
+  border-radius: 12px 0 0 12px;
 }
 
 .scc-card.scc-clickable {
@@ -35,18 +50,95 @@
 }
 
 .scc-card.scc-clickable:hover {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 20px rgba(80, 60, 30, 0.12);
   transform: translateY(-2px);
+  border-color: #e2d4bd;
+}
+
+.scc-card.scc-clickable:active {
+  transform: translateY(0);
 }
 
 .scc-count {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.05;
+  color: #2f2a22;
+  font-variant-numeric: tabular-nums;
 }
 
 .scc-label {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #666;
+  color: #7a6f5f;
+  line-height: 1.25;
+}
+
+/* Internal / external split (piece-count mode) */
+.scc-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #f1ebe0;
+  width: 100%;
+}
+
+.scc-split-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  /* button reset */
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  padding: 3px 6px;
+  margin: -3px -2px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.scc-split-item:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.scc-split-item:disabled {
+  cursor: default;
+}
+
+.scc-card:focus-visible,
+.scc-split-item:focus-visible {
+  outline: 2px solid var(--scc-accent, #8B7355);
+  outline-offset: 2px;
+}
+
+.scc-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.scc-split-in { color: #2e7d32; }
+.scc-split-in .scc-dot { background: #2e7d32; }
+
+.scc-split-ext { color: #d98324; }
+.scc-split-ext .scc-dot { background: #e0913f; }
+
+/* This app is light-only (dashboards use hardcoded light surfaces), so the
+   cards must NOT follow the OS dark preference — keep them light everywhere.
+   Force the light values even when the OS reports a dark scheme. */
+@media (prefers-color-scheme: dark) {
+  .scc-card { background: #fff; border-color: #eee6d8; }
+  .scc-count { color: #2f2a22; }
+  .scc-label { color: #7a6f5f; }
+  .scc-title { color: #6b5842; }
+  .scc-split { border-top-color: #f1ebe0; }
 }

@@ -12,9 +12,11 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageLabel, getStageColor, getStageGroupKey, getStagesOutsideLabel, STAGE_GROUPS } from "../utils/barcodeService";
+import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, classifyComponentForStageCard } from "../utils/barcodeService";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
-import Badge from "../components/Badge";
+import ComponentStageBadge from "../components/ComponentStageBadge";
+import StageCountCards from "../components/StageCountCards";
+import ProductionOverview from "../components/ProductionOverview";
 import SearchByDropdown from "../components/SearchByDropdown";
 
 // Status options for alterations
@@ -86,6 +88,11 @@ const WarehouseDashboard = () => {
   };
 
   const [orders, setOrders] = useState([]);
+  // Components of THIS PH's channel orders — powers the channel-scoped
+  // "Orders by Production Stage" overview (Offline/Online head only). The order
+  // LIST stays global; only these analytics are scoped to their channel.
+  const [overviewComponents, setOverviewComponents] = useState([]);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   // Maps vendor.id → vendor row. Used to resolve B2B orders' "client name"
   // (B2B orders have no delivery_name; the vendor's store_brand_name is the
   // operations-facing analogue, same convention as PM dashboard + PDFs).
@@ -106,10 +113,14 @@ const WarehouseDashboard = () => {
   // Other heads (B2B/Comms/Pvt) work from their own dashboards.
   const _designNorm = (userDesignation || "").trim().toLowerCase();
   const isWarehouseProdHead = _designNorm === "offline production head" || _designNorm === "online production head";
+  // The Offline PH runs the Retail dashboard — B2B orders belong to the B2B
+  // Production Head, so they're hidden from this list (only for this designation;
+  // every other warehouse user's view is unchanged).
+  const isOfflineProdHead = _designNorm === "offline production head";
 
   // The Offline Production Head handles retail (Store/Exhibition) orders, so
   // their header reads "Retail Order Dashboard" instead of the generic title.
-  const dashboardTitle = _designNorm === "offline production head" ? "Retail Order Dashboard" : "Warehouse Dashboard";
+  const dashboardTitle = isOfflineProdHead ? "Retail Order Dashboard" : "Warehouse Dashboard";
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
@@ -134,7 +145,8 @@ const WarehouseDashboard = () => {
     orderType: [],
     store: [],
     salesperson: "",
-    stage: [],   // warehouse_stage values (10 V2 stages)
+    stage: [],   // stage group keys
+    stageKind: "both", // 'both' | 'internal' | 'external' (from a card sub-count click)
   });
 
   // Filter dropdown states
@@ -181,14 +193,24 @@ const WarehouseDashboard = () => {
   // });
   // const [stageUpdating, setStageUpdating] = useState(null);
 
+  // Orders visible on THIS dashboard. The Offline Production Head runs the
+  // Retail dashboard, so B2B orders (owned by the B2B Production Head) are
+  // hidden from every list/count/calendar here. Every other warehouse user
+  // (generic warehouse, Online PH) sees the full set, unchanged. Data-load and
+  // the channel-scoped overview are handled separately and are not affected.
+  const visibleOrders = useMemo(
+    () => (isOfflineProdHead ? orders.filter(o => !o.is_b2b) : orders),
+    [orders, isOfflineProdHead]
+  );
+
   // Get unique salespersons from orders
   const salespersons = useMemo(() => {
     const spSet = new Set();
-    orders.forEach(o => {
+    visibleOrders.forEach(o => {
       if (o.salesperson) spSet.add(o.salesperson);
     });
     return Array.from(spSet).sort();
-  }, [orders]);
+  }, [visibleOrders]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -353,24 +375,9 @@ const WarehouseDashboard = () => {
         .order("component_type", { ascending: true });
 
       if (!error && data) {
-        // For components currently out at a vendor, pull the stage(s) they went
-        // out for so the card badge can read "Out to Vendor (Embroidery)" rather
-        // than the stalled stage. stages_outside lives in external_movements.
-        const outsideIds = data.filter((c) => c.is_outside_wh).map((c) => c.id);
-        let stagesById = {};
-        if (outsideIds.length) {
-          const { data: movs } = await supabase
-            .from("external_movements")
-            .select("component_id, stages_outside")
-            .in("component_id", outsideIds)
-            .eq("status", "exited");
-          (movs || []).forEach((m) => { stagesById[m.component_id] = m.stages_outside; });
-        }
-        const enriched = data.map((c) =>
-          c.is_outside_wh && stagesById[c.id]
-            ? { ...c, stages_outside: stagesById[c.id] }
-            : c
-        );
+        // Attach stages_outside for any piece out at a vendor so the badge can
+        // read "Out to Vendor (Embroidery)" (shared helper — one impl app-wide).
+        const enriched = await enrichComponentsWithMovements(data);
         setOrderComponentsMap(prev => ({ ...prev, [orderId]: enriched }));
       }
     } catch (err) {
@@ -378,6 +385,76 @@ const WarehouseDashboard = () => {
     }
     setComponentLoadingMap(prev => ({ ...prev, [orderId]: false }));
   };
+
+  // Orders scoped to THIS Production Head's channel (Offline → retail/store,
+  // Online → website). Used ONLY for the overview analytics; the order list
+  // stays global so heads can still look up any order.
+  const scopedOrders = useMemo(
+    () => scopeOrdersToDesignation(orders, userDesignation),
+    [orders, userDesignation]
+  );
+
+  // order_id -> status for the scoped orders, so a bypass-completed order's
+  // pieces show under Packaging & Dispatch instead of their stalled stage.
+  const overviewOrderStatusById = useMemo(() => {
+    const m = {};
+    scopedOrders.forEach((o) => { m[o.id] = o.status; });
+    return m;
+  }, [scopedOrders]);
+
+  // order_id -> { stageKey: Set('internal'|'external') }, from the channel-scoped
+  // overview components, so clicking a card / sub-count drills the order list to
+  // exactly the pieces the card counted. Because it's built only from the PH's
+  // channel components, an out-of-channel order simply won't appear — the drilled
+  // list stays consistent with the (channel-scoped) card.
+  const overviewOrderStageGroups = useMemo(() => {
+    const map = {};
+    overviewComponents.forEach((c) => {
+      const info = classifyComponentForStageCard(c, overviewOrderStatusById[c.order_id]);
+      if (!info || !info.key) return;
+      const byStage = map[c.order_id] || (map[c.order_id] = {});
+      (byStage[info.key] || (byStage[info.key] = new Set())).add(info.kind);
+    });
+    return map;
+  }, [overviewComponents, overviewOrderStatusById]);
+
+  // Clicking a stage card / sub-count on the Overview: filter the order list to
+  // that stage (kind narrows to in-house / vendor) and jump to Order History.
+  const handleStageCardClick = (stageKey, kind = "both") => {
+    setFilters((prev) => ({ ...prev, stage: [stageKey], stageKind: kind }));
+    setStatusTab("all");
+    setActiveTab("orders");
+  };
+
+  // Load the components of the PH's channel orders when the Overview tab opens,
+  // enriched with vendor movement so the stage cards can split internal/external.
+  useEffect(() => {
+    if (!isWarehouseProdHead || activeTab !== "overview") return;
+    if (scopedOrders.length === 0) { setOverviewComponents([]); return; }
+    let cancelled = false;
+    (async () => {
+      setOverviewLoading(true);
+      try {
+        const ids = scopedOrders.map((o) => o.id);
+        let all = [];
+        for (let i = 0; i < ids.length; i += 200) {
+          const chunk = ids.slice(i, i + 200);
+          const { data, error } = await supabase
+            .from("order_components")
+            .select("id, order_id, barcode, component_type, current_stage, is_active, is_outside_wh")
+            .in("order_id", chunk);
+          if (error) { console.error("overview components fetch failed:", error); break; }
+          all = all.concat(data || []);
+        }
+        const enriched = await enrichComponentsWithMovements(all);
+        if (!cancelled) setOverviewComponents(enriched);
+      } catch (e) {
+        console.error("overview components load error:", e);
+      }
+      if (!cancelled) setOverviewLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [isWarehouseProdHead, activeTab, scopedOrders]);
 
   // Open the QC report for an order — loads every QC check (QC 1 + Final QC)
   // recorded for its components, newest stage first per component.
@@ -486,7 +563,7 @@ const WarehouseDashboard = () => {
 
   // Filter orders based on status tab
   const filteredByStatus = useMemo(() => {
-    return orders.filter(o => {
+    return visibleOrders.filter(o => {
       if (isLxrtsOrder(o)) return false;
 
       const status = o.status?.toLowerCase();
@@ -512,7 +589,7 @@ const WarehouseDashboard = () => {
           return !o.is_alteration || o.alteration_location === "Warehouse";
       }
     });
-  }, [orders, statusTab]);
+  }, [visibleOrders, statusTab]);
 
   // Apply secondary filters
   const filteredOrders = useMemo(() => {
@@ -570,10 +647,29 @@ const WarehouseDashboard = () => {
       result = result.filter((order) => filters.store.includes(order.salesperson_store));
     }
 
-    // Stage filter — match the order's warehouse_stage (earliest/slowest
-    // active component) to one of the 10 V2 logical stage groups.
+    // Stage filter. Two sources match the same filters.stage:
+    //   • Card drill-through (PH overview): component-level, "any piece at this
+    //     stage", optionally narrowed to in-house / vendor (filters.stageKind).
+    //     Uses overviewOrderStageGroups (built from the channel-scoped pieces).
+    //   • Manual Stage dropdown (any warehouse user): order-level fallback on
+    //     warehouse_stage, since the component map only covers the PH channel.
     if (filters.stage.length > 0) {
-      result = result.filter((order) => filters.stage.includes(getStageGroupKey(order.warehouse_stage)));
+      result = result.filter((order) => {
+        const byStage = overviewOrderStageGroups[order.id];
+        if (byStage) {
+          return filters.stage.some((k) => {
+            const kinds = byStage[k];
+            if (!kinds) return false;
+            if (filters.stageKind === "internal") return kinds.has("internal");
+            if (filters.stageKind === "external") return kinds.has("external");
+            return true;
+          });
+        }
+        // Fallback: order-level warehouse_stage group match (kind not available).
+        const ws = order.warehouse_stage;
+        const key = ws === "order_received" ? "order_received" : getStageGroupKey(ws);
+        return filters.stage.includes(key);
+      });
     }
 
     // Salesperson filter
@@ -605,7 +701,7 @@ const WarehouseDashboard = () => {
     });
 
     return result;
-  }, [filteredByStatus, searchQuery, searchField, filters, sortBy]);
+  }, [filteredByStatus, searchQuery, searchField, filters, sortBy, overviewOrderStageGroups]);
 
   const handleExportCSV = () => {
     if (filteredOrders.length === 0) return;
@@ -639,7 +735,7 @@ const WarehouseDashboard = () => {
 
   // Tab counts
   const tabCounts = useMemo(() => {
-    const validOrders = orders.filter(o => !isLxrtsOrder(o));
+    const validOrders = visibleOrders.filter(o => !isLxrtsOrder(o));
     return {
       all: validOrders.filter(o => !o.is_alteration || o.alteration_location === "Warehouse").length,
       unfulfilled: validOrders.filter(o => {
@@ -661,7 +757,7 @@ const WarehouseDashboard = () => {
       }).length,
       alteration: validOrders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
     };
-  }, [orders]);
+  }, [visibleOrders]);
 
   // Applied filters for chips
   const appliedFilters = useMemo(() => {
@@ -678,7 +774,11 @@ const WarehouseDashboard = () => {
     filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
     filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t === "b2b" ? "B2B" : (t.charAt(0).toUpperCase() + t.slice(1)) }));
     filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
-    filters.stage.forEach(k => chips.push({ type: "stage", value: k, label: STAGE_GROUPS.find(g => g.key === k)?.label || k }));
+    filters.stage.forEach(k => {
+      const base = STAGE_GROUPS.find(g => g.key === k)?.label || k;
+      const suffix = filters.stageKind === "internal" ? " · In-house" : filters.stageKind === "external" ? " · Vendor" : "";
+      chips.push({ type: "stage", value: k, label: base + suffix });
+    });
     if (filters.salesperson) {
       chips.push({ type: "salesperson", label: filters.salesperson });
     }
@@ -693,6 +793,8 @@ const WarehouseDashboard = () => {
       setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
     } else if (type === "salesperson") {
       setFilters(prev => ({ ...prev, salesperson: "" }));
+    } else if (type === "stage") {
+      setFilters(prev => ({ ...prev, stage: prev.stage.filter(v => v !== value), stageKind: "both" }));
     } else {
       setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     }
@@ -710,6 +812,7 @@ const WarehouseDashboard = () => {
       store: [],
       salesperson: "",
       stage: [],
+      stageKind: "both",
     });
   };
 
@@ -719,7 +822,9 @@ const WarehouseDashboard = () => {
       ...prev,
       [category]: prev[category].includes(value)
         ? prev[category].filter(v => v !== value)
-        : [...prev[category], value]
+        : [...prev[category], value],
+      // Manual stage-dropdown picks are kind-agnostic.
+      ...(category === "stage" ? { stageKind: "both" } : {}),
     }));
   };
 
@@ -797,7 +902,7 @@ const WarehouseDashboard = () => {
 
   // Calendar ordersByDate
   const ordersByDate = useMemo(() => {
-    return orders
+    return visibleOrders
       .filter(o => !isLxrtsOrder(o))
       .reduce((acc, order) => {
         if (!order.delivery_date) return acc;
@@ -807,20 +912,20 @@ const WarehouseDashboard = () => {
         }
         return acc;
       }, {});
-  }, [orders]);
+  }, [visibleOrders]);
 
   // Set of calendar dates that have at least one stock order. Rendered as a
   // small brown dot on the calendar so WH staff spot stock days at a glance.
   const stockOrderDates = useMemo(() => {
     const s = new Set();
-    orders
+    visibleOrders
       .filter(o => !isLxrtsOrder(o) && o.is_stock_order && o.delivery_date)
       .forEach((order) => {
         const d = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
         if (d) s.add(d);
       });
     return s;
-  }, [orders]);
+  }, [visibleOrders]);
 
   // Update warehouse stage from dropdown
   // const updateWarehouseStage = async (orderId, orderNo, newStage) => {
@@ -1154,6 +1259,12 @@ const WarehouseDashboard = () => {
         {/* SIDEBAR */}
         <aside className={`wd-sidebar ${showSidebar ? "wd-open" : ""}`}>
           <nav className="wd-menu">
+            {isWarehouseProdHead && (
+              <a className={`wd-menu-item ${activeTab === "overview" ? "active" : ""}`}
+                onClick={() => { setActiveTab("overview"); setShowSidebar(false); }}>
+                Overview
+              </a>
+            )}
             <a className={`wd-menu-item ${activeTab === "orders" ? "active" : ""}`}
               onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>
               Order History
@@ -1178,6 +1289,24 @@ const WarehouseDashboard = () => {
 
         {/* CONTENT AREA */}
         <div className="wd-content-area">
+          {activeTab === "overview" && isWarehouseProdHead && (
+            <div className="wd-orders-section">
+              <div className="wd-orders-header">
+                <h2 className="wd-section-title">Orders by Production Stage</h2>
+                <span className="wd-orders-count">{scopedOrders.length} orders in your channel</span>
+              </div>
+              {overviewLoading ? (
+                <p className="wd-muted" style={{ padding: "12px 2px" }}>Loading production stages…</p>
+              ) : (
+                <StageCountCards components={overviewComponents} orderStatusById={overviewOrderStatusById} onStageClick={handleStageCardClick} />
+              )}
+
+              {/* Production Overview — operational metrics for the PH's own
+                  channel orders (retail for Offline, website for Online). */}
+              <ProductionOverview orders={scopedOrders} totalLabel="Total Orders (Your Channel)" />
+            </div>
+          )}
+
           {activeTab === "orders" && (
             <div className="wd-orders-section">
               {/* Header */}
@@ -1737,17 +1866,7 @@ const WarehouseDashboard = () => {
                                             {comp.re_journey_count > 0 && (
                                               <span className="wd-comp-rework-tag">Rework {comp.re_journey_count}</span>
                                             )}
-                                            {comp.is_outside_wh ? (
-                                              <Badge color="#e0913f">
-                                                {getStagesOutsideLabel(comp.stages_outside)
-                                                  ? `Out to Vendor (${getStagesOutsideLabel(comp.stages_outside)})`
-                                                  : "Out to Vendor"}
-                                              </Badge>
-                                            ) : (
-                                              <Badge color={getStageColor(comp.current_stage)}>
-                                                {getStageLabel(comp.current_stage)}
-                                              </Badge>
-                                            )}
+                                            <ComponentStageBadge comp={comp} />
                                           </div>
                                         </div>
                                       ))}
@@ -1917,14 +2036,14 @@ const WarehouseDashboard = () => {
                 <div className="wd-calendar-orders-section">
                   <div className="wd-calendar-header">
                     <span className="wd-calendar-title">
-                      Orders for {selectedCalendarDate} ({orders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length})
+                      Orders for {selectedCalendarDate} ({visibleOrders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length})
                     </span>
                   </div>
                   <div className="wd-calendar-orders-list">
-                    {orders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length === 0 ? (
+                    {visibleOrders.filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate).length === 0 ? (
                       <p className="wd-no-orders">No orders scheduled for this date</p>
                     ) : (
-                      orders
+                      visibleOrders
                         .filter(o => getWarehouseDateForCalendar(o.delivery_date, o.created_at) === selectedCalendarDate)
                         .map((order) => (
                           <div
