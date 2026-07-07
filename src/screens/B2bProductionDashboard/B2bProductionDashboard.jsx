@@ -8,9 +8,11 @@ import { downloadWarehousePdf } from "../../utils/pdfUtils";
 import NotificationBell from "../../components/NotificationBell";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
-import Badge from "../../components/Badge";
+import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
-import { getStageLabel, getStageColor, getStageGroupKey, getStagesOutsideLabel } from "../../utils/barcodeService";
+import StageCountCards from "../../components/StageCountCards";
+import ProductionOverview from "../../components/ProductionOverview";
+import { getStageLabel, getStageGroupKey, enrichComponentsWithMovements, classifyComponentForStageCard, STAGE_GROUPS } from "../../utils/barcodeService";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -63,6 +65,9 @@ export default function B2bProductionDashboard() {
     const [merchandiserFilter, setMerchandiserFilter] = useState("all");
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
+    // Stage-card drill-through: filter the All Orders list to a stage (and kind).
+    const [stageFilter, setStageFilter] = useState(null);      // stage group key or null
+    const [stageKindFilter, setStageKindFilter] = useState("both"); // 'both' | 'internal' | 'external'
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -133,27 +138,17 @@ export default function B2bProductionDashboard() {
                         if (cData.length < PAGE) break;
                         from += PAGE;
                     }
-                    // Attach stages_outside for components currently at a vendor so
-                    // the card badge reads "Out to Vendor (Embroidery)" instead of
-                    // the stalled stage. stages_outside lives in external_movements.
-                    const outsideIds = all.filter((c) => c.is_outside_wh).map((c) => c.id);
-                    if (outsideIds.length) {
-                        const stagesById = {};
-                        for (let i = 0; i < outsideIds.length; i += 500) {
-                            const chunk = outsideIds.slice(i, i + 500);
-                            const { data: movs } = await supabase
-                                .from("external_movements")
-                                .select("component_id, stages_outside")
-                                .in("component_id", chunk)
-                                .eq("status", "exited");
-                            (movs || []).forEach((m) => { stagesById[m.component_id] = m.stages_outside; });
-                        }
-                        all = all.map((c) =>
-                            c.is_outside_wh && stagesById[c.id]
-                                ? { ...c, stages_outside: stagesById[c.id] }
-                                : c
-                        );
-                    }
+                    // Keep ONLY components of THIS dashboard's B2B (approved)
+                    // orders. The query above pages the whole order_components
+                    // table (no server-side order filter — a big .in() list
+                    // truncates on live), so we scope it here. Without this the
+                    // "Orders by Production Stage" cards would count every piece
+                    // in the system, not just B2B.
+                    const b2bOrderIds = new Set(approvedOrders.map(o => o.id));
+                    all = all.filter(c => b2bOrderIds.has(c.order_id));
+                    // Attach stages_outside for pieces out at a vendor so the badge
+                    // reads "Out to Vendor (Embroidery)" (shared helper — one impl).
+                    all = await enrichComponentsWithMovements(all);
                     setComponents(all);
                 }
             }
@@ -198,6 +193,37 @@ export default function B2bProductionDashboard() {
         return map;
     }, [components]);
 
+    // order_id -> status, so bypass-completed orders' pieces land under
+    // Packaging & Dispatch on the stage cards, not their stalled stage.
+    const orderStatusById = useMemo(() => {
+        const m = {};
+        orders.forEach((o) => { m[o.id] = o.status; });
+        return m;
+    }, [orders]);
+
+    // order_id -> { stageKey: Set('internal'|'external') }, using the SAME
+    // classifier the cards use, so clicking a card / sub-count drills the order
+    // list to exactly the pieces the card counted.
+    const orderStageGroups = useMemo(() => {
+        const map = {};
+        components.forEach((c) => {
+            const info = classifyComponentForStageCard(c, orderStatusById[c.order_id]);
+            if (!info || !info.key) return;
+            const byStage = map[c.order_id] || (map[c.order_id] = {});
+            (byStage[info.key] || (byStage[info.key] = new Set())).add(info.kind);
+        });
+        return map;
+    }, [components, orderStatusById]);
+
+    // Clicking a stage card / sub-count: filter the All Orders list to that
+    // stage (kind narrows to in-house / vendor) and jump to the orders tab.
+    const handleStageCardClick = (stageKey, kind = "both") => {
+        setStageFilter(stageKey);
+        setStageKindFilter(kind);
+        setProdFilter("all");
+        setCurrentPage(1);
+        setActiveTab("orders");
+    };
     const pendingProduction = useMemo(() => orders.filter(o => getStageBucket(o) === "queue"), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
     const inProduction = useMemo(() => orders.filter(o => getStageBucket(o) === "in_production"), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
     const readyForDispatch = useMemo(() => orders.filter(o => getStageBucket(o) === "ready"), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -251,8 +277,18 @@ export default function B2bProductionDashboard() {
                 vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q)
             );
         }
+        // Stage-card drill-through: any-piece-at-stage, narrowed by kind.
+        if (stageFilter) {
+            filtered = filtered.filter(o => {
+                const kinds = orderStageGroups[o.id]?.[stageFilter];
+                if (!kinds) return false;
+                if (stageKindFilter === "internal") return kinds.has("internal");
+                if (stageKindFilter === "external") return kinds.has("external");
+                return true;
+            });
+        }
         return filtered;
-    }, [orders, prodFilter, allTypeFilter, merchandiserFilter, dateFrom, dateTo, orderSearch, vendorMap]);
+    }, [orders, prodFilter, allTypeFilter, merchandiserFilter, dateFrom, dateTo, orderSearch, vendorMap, stageFilter, stageKindFilter, orderStageGroups]);
 
     const paginatedOrders = useMemo(() => {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -395,6 +431,18 @@ export default function B2bProductionDashboard() {
                 {/* ===== DASHBOARD TAB ===== */}
                 {activeTab === "dashboard" && (
                     <>
+                        {/* Orders by Production Stage — piece counts, split internal vs
+                            out-at-vendor. Shown on top. B2B PH sees B2B orders only,
+                            so this is already channel-scoped by the data load. */}
+                        <div className="prod-cell prod-stage-cards">
+                            <div className="prod-orders-card">
+                                <div className="prod-card-header">
+                                    <span className="prod-card-title">Orders by Production Stage</span>
+                                </div>
+                                <StageCountCards components={components} orderStatusById={orderStatusById} onStageClick={handleStageCardClick} />
+                            </div>
+                        </div>
+
                         <div className="prod-cell prod-stat-1">
                             <StatCard title="Alerts" value={stats.pending} change={`Sales Orders: ${stats.salesCount}`} highlight={stats.pending > 0} />
                         </div>
@@ -453,6 +501,12 @@ export default function B2bProductionDashboard() {
                                     )}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Production Overview — operational metrics for THIS
+                            dashboard's B2B orders (single channel, no channel split). */}
+                        <div className="prod-cell prod-overview-cell">
+                            <ProductionOverview orders={orders} totalLabel="Total B2B Orders" />
                         </div>
                     </>
                 )}
@@ -580,6 +634,14 @@ export default function B2bProductionDashboard() {
                             </select>
                             <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="prod-filter-select" title="From date" />
                             <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="prod-filter-select" title="To date" />
+                            {stageFilter && (
+                                <button onClick={() => { setStageFilter(null); setStageKindFilter("both"); setCurrentPage(1); }} title="Clear stage filter"
+                                    style={{ padding: "6px 12px", borderRadius: 999, border: "1px solid #d5b85a", background: "#faf6e8", color: "#6b5842", fontSize: 12, cursor: "pointer", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                    {(STAGE_GROUPS.find(g => g.key === stageFilter)?.label || stageFilter)}
+                                    {stageKindFilter === "internal" ? " · In-house" : stageKindFilter === "external" ? " · Vendor" : ""}
+                                    <span aria-hidden="true">{"✕"}</span>
+                                </button>
+                            )}
                             {(prodFilter !== "all" || allTypeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
                                 <button onClick={() => { setProdFilter("all"); setAllTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
                             )}
@@ -760,15 +822,7 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                                 <span className="prod-comp-barcode">{comp.barcode}</span>
                                 <span className="prod-comp-label">{comp.component_label || comp.component_type}</span>
                             </div>
-                            {comp.is_outside_wh ? (
-                                <Badge color="#e0913f">
-                                    {getStagesOutsideLabel(comp.stages_outside)
-                                        ? `Out to Vendor (${getStagesOutsideLabel(comp.stages_outside)})`
-                                        : "Out to Vendor"}
-                                </Badge>
-                            ) : (
-                                <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
-                            )}
+                            <ComponentStageBadge comp={comp} />
                         </div>
                     ))}
                 </div>

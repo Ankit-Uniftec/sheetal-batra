@@ -14,9 +14,11 @@ import VendorRequest from "../../../components/VendorRequest";
 import ReplacementApprovals from "../../../components/ReplacementApprovals";
 import StageCountCards from "../../../components/StageCountCards";
 import Badge from "../../../components/Badge";
+import ComponentStageBadge from "../../../components/ComponentStageBadge";
+import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
-import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS } from "../../../utils/barcodeService";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard } from "../../../utils/barcodeService";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
@@ -145,7 +147,7 @@ export default function ProductionManagerDashboard() {
     const [channelFilter, setChannelFilter] = useState("all");
     const [statusTab, setStatusTab] = useState("all");
     const [sortBy, setSortBy] = useState("newest");
-    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [] });
+    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both" });
     // Overview period filter (scopes the stage cards by each component's ORDER date).
     const [overviewPeriod, setOverviewPeriod] = useState("all"); // all | day | month | year | custom
     const [overviewFrom, setOverviewFrom] = useState("");
@@ -159,6 +161,9 @@ export default function ProductionManagerDashboard() {
     const [editingOrder, setEditingOrder] = useState(null);
     const [editFormData, setEditFormData] = useState({});
     const [actionLoading, setActionLoading] = useState(null);
+    // Order whose full component journey is open (shared ComponentJourneyModal).
+    const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+    const openJourney = (e, order, comps) => { e?.stopPropagation?.(); setJourneyOrder({ order_no: order.order_no, components: comps || [] }); };
     const [editMeasurements, setEditMeasurements] = useState({});
     const [editActiveCategory, setEditActiveCategory] = useState("Kurta/Choga/Kaftan");
     const [colors, setColors] = useState([]);
@@ -259,7 +264,7 @@ export default function ProductionManagerDashboard() {
             while (!cDone) {
                 const { data: cData, error: cErr } = await supabase
                     .from("order_components")
-                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, item_index")
+                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, item_index, is_outside_wh")
                     .order("created_at", { ascending: false })
                     .range(cFrom, cFrom + PAGE_SIZE - 1);
                 if (cErr) {
@@ -274,6 +279,9 @@ export default function ProductionManagerDashboard() {
                     cDone = true;
                 }
             }
+            // Attach stages_outside for pieces out at a vendor so the badge reads
+            // "Out to Vendor (Embroidery)" instead of the stalled stage.
+            allComponents = await enrichComponentsWithMovements(allComponents);
             setComponents(allComponents);
 
             setLoading(false);
@@ -333,22 +341,27 @@ export default function ProductionManagerDashboard() {
     }, [orders]);
 
     const toggleFilter = (category, value) => setFilters(prev => ({
-        ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value]
+        ...prev,
+        [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value],
+        // Picking stages from the dropdown is a plain (kind-agnostic) filter.
+        ...(category === "stage" ? { stageKind: "both" } : {}),
     }));
 
     const removeFilter = (type, value) => {
         if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
         else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
         else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
+        else if (type === "stage") setFilters(prev => ({ ...prev, stage: prev.stage.filter(v => v !== value), stageKind: "both" }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [] });
+    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both" });
 
     // Clicking a stage-count card: scope the orders list to that one stage and
     // jump to the All Orders tab (status reset to "all" so nothing else hides it).
-    const handleStageCardClick = (stageKey) => {
-        setFilters(prev => ({ ...prev, stage: [stageKey] }));
+    // kind: 'both' (whole card), 'internal' (in-house sub-count), 'external' (vendor).
+    const handleStageCardClick = (stageKey, kind = "both") => {
+        setFilters(prev => ({ ...prev, stage: [stageKey], stageKind: kind }));
         setStatusTab("all");
         setActiveTab("orders");
     };
@@ -363,7 +376,11 @@ export default function ProductionManagerDashboard() {
         filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p === "unpaid" ? "Unpaid (COD)" : p.charAt(0).toUpperCase() + p.slice(1) }));
         filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
         filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
-        filters.stage.forEach(k => chips.push({ type: "stage", value: k, label: STAGE_GROUPS.find(g => g.key === k)?.label || k }));
+        filters.stage.forEach(k => {
+            const base = STAGE_GROUPS.find(g => g.key === k)?.label || k;
+            const suffix = filters.stageKind === "internal" ? " · In-house" : filters.stageKind === "external" ? " · Vendor" : "";
+            chips.push({ type: "stage", value: k, label: base + suffix });
+        });
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
         return chips;
     }, [filters]);
@@ -528,8 +545,9 @@ export default function ProductionManagerDashboard() {
     // Per-stage component counts. Source of truth: order_components.current_stage
     // (advanced live by the warehouse Scan Station). One row per top/bottom/
     // dupatta/extra so a single order contributes multiple data points.
-    // Orders placed within the selected Overview period — feeds the
-    // "Orders by Production Stage" cards (StageCountCards counts by order).
+    // Orders placed within the selected Overview period. Their COMPONENTS
+    // (overviewComponents) feed the "Orders by Production Stage" cards, which
+    // count pieces and split in-house vs out-at-vendor.
     const overviewOrders = useMemo(() => {
         if (overviewPeriod === "all") return orders;
         const now = new Date();
@@ -552,6 +570,14 @@ export default function ProductionManagerDashboard() {
             return true;
         });
     }, [orders, overviewPeriod, overviewFrom, overviewTo]);
+
+    // Components belonging to the period-scoped orders — powers the piece-count
+    // stage cards with the internal/external split. (components carry
+    // is_outside_wh + stages_outside from enrichComponentsWithMovements.)
+    const overviewComponents = useMemo(() => {
+        const ids = new Set(overviewOrders.map((o) => o.id));
+        return components.filter((c) => ids.has(c.order_id));
+    }, [overviewOrders, components]);
 
     const stageStats = useMemo(() => {
         const counts = {};
@@ -585,6 +611,30 @@ export default function ProductionManagerDashboard() {
         ));
         return map;
     }, [components]);
+
+    // order_id -> status, so the cards can bucket a bypass-completed order's
+    // pieces under Packaging & Dispatch instead of their stalled stage.
+    const orderStatusById = useMemo(() => {
+        const m = {};
+        orders.forEach((o) => { m[o.id] = o.status; });
+        return m;
+    }, [orders]);
+
+    // For each order, which stage buckets its pieces occupy AND of what kind
+    // (internal / external), using the SAME classifier the cards use. Shape:
+    //   { [orderId]: { [stageKey]: Set('internal'|'external') } }
+    // The Stage filter matches an order if ANY of its pieces is at the chosen
+    // stage; the in-house/vendor sub-count click narrows it to that kind.
+    const orderStageGroups = useMemo(() => {
+        const map = {};
+        components.forEach((c) => {
+            const info = classifyComponentForStageCard(c, orderStatusById[c.order_id]);
+            if (!info || !info.key) return;
+            const byStage = map[c.order_id] || (map[c.order_id] = {});
+            (byStage[info.key] || (byStage[info.key] = new Set())).add(info.kind);
+        });
+        return map;
+    }, [components, orderStatusById]);
 
     // Components in the currently-drilled-down stage (for the modal list)
     const drillDownComponents = useMemo(() => {
@@ -830,7 +880,17 @@ export default function ProductionManagerDashboard() {
         if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
         if (filters.store.length > 0) result = result.filter(o => filters.store.includes(o.salesperson_store));
         if (filters.salesperson) result = result.filter(o => o.salesperson === filters.salesperson);
-        if (filters.stage.length > 0) result = result.filter(o => filters.stage.includes(getStageGroupKey(o.warehouse_stage)));
+        if (filters.stage.length > 0) result = result.filter(o => {
+            const byStage = orderStageGroups[o.id];
+            if (!byStage) return false;
+            return filters.stage.some(k => {
+                const kinds = byStage[k];
+                if (!kinds) return false;
+                if (filters.stageKind === "internal") return kinds.has("internal");
+                if (filters.stageKind === "external") return kinds.has("external");
+                return true; // 'both'
+            });
+        });
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
             const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
@@ -849,7 +909,8 @@ export default function ProductionManagerDashboard() {
         });
         return result;
         // vendorMap is a dep because client_name search resolves through it for B2B orders
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap]);
+        // orderStageGroups is a dep because the Stage filter matches on it (any-piece-at-stage)
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups]);
 
     const orderTabCounts = useMemo(() => {
         const base = channelFilter === "b2b" ? orders.filter(o => o.is_b2b) : channelFilter === "store" ? orders.filter(o => !o.is_b2b) : orders;
@@ -1061,6 +1122,15 @@ export default function ProductionManagerDashboard() {
     return (
         <>
             {PopupComponent}
+
+            {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
+            {journeyOrder && (
+                <ComponentJourneyModal
+                    orderNo={journeyOrder.order_no}
+                    components={journeyOrder.components}
+                    onClose={() => setJourneyOrder(null)}
+                />
+            )}
 
             {/* ===== EDIT MODAL ===== */}
             {editingOrder && (
@@ -1282,7 +1352,7 @@ export default function ProductionManagerDashboard() {
                                         <input type="date" value={overviewTo} min={overviewFrom || undefined} onChange={(e) => setOverviewTo(e.target.value)} />
                                     </div>
                                 )}
-                                <StageCountCards orders={overviewOrders} onStageClick={handleStageCardClick} />
+                                <StageCountCards components={overviewComponents} orderStatusById={orderStatusById} onStageClick={handleStageCardClick} />
 
                                 {/* ===== BUSINESS METRICS SECTION (scoped to the selected period) ===== */}
                                 <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Business Performance</p>
@@ -1695,13 +1765,16 @@ export default function ProductionManagerDashboard() {
                                                                     <span className="pm-comp-barcode">{comp.barcode}</span>
                                                                     <span className="pm-comp-label">{comp.component_label || comp.component_type}</span>
                                                                 </div>
-                                                                <Badge color={getStageColor(comp.current_stage)}>{getStageLabel(comp.current_stage)}</Badge>
+                                                                <ComponentStageBadge comp={comp} />
                                                             </div>
                                                         ))}
                                                     </div>
                                                 )}
 
                                                 <div className="pm-order-actions">
+                                                    {(componentsByOrder[order.id]?.length > 0) && (
+                                                        <button className="pm-action-btn pm-journey-btn" onClick={(e) => openJourney(e, order, componentsByOrder[order.id])}>View Journey</button>
+                                                    )}
                                                     <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
                                                     <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
                                                     <button

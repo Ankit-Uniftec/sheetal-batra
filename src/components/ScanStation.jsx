@@ -11,6 +11,10 @@ import {
     fetchOrderComponents,
     fetchComponentByBarcode,
     fetchTransitionHistory,
+    fetchMovementHistory,
+    enrichComponentsWithMovements,
+    describeTransition,
+    getStagesOutsideLabel,
     PRODUCTION_STAGES,
     SCAN_STATIONS,
     REJOURNEY_STAGES,
@@ -20,6 +24,7 @@ import {
     fetchApprovedVendors,
     getConfiguredMovement,
 } from "../utils/barcodeService";
+import ScanKindTag from "./ScanKindTag";
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
 // labels (e.g. "Embroidery In-Progress") so RPC error messages read
@@ -142,6 +147,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     // Component detail view
     const [selectedComponent, setSelectedComponent] = useState(null);
     const [componentHistory, setComponentHistory] = useState([]);
+    const [componentMovements, setComponentMovements] = useState([]);
     const [orderComponents, setOrderComponents] = useState([]);
 
     // QC popup. `qcStage` distinguishes QC 1 ("qc1") from Final QC ("final").
@@ -888,13 +894,19 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     const handleViewComponent = async (barcode) => {
         try {
             const component = await fetchComponentByBarcode(barcode);
-            setSelectedComponent(component);
+            // Attach stages_outside so the badge reads "Out to Vendor (Embroidery)".
+            const [enrichedComp] = await enrichComponentsWithMovements([component]);
+            setSelectedComponent(enrichedComp || component);
 
             const history = await fetchTransitionHistory(component.id);
             setComponentHistory(history);
 
+            // Vendor trips — lets the timeline name the stage each security
+            // exit/entry was for ("Sent to Vendor (Dyeing)").
+            setComponentMovements(await fetchMovementHistory(component.id));
+
             const allComponents = await fetchOrderComponents(component.order_id);
-            setOrderComponents(allComponents);
+            setOrderComponents(await enrichComponentsWithMovements(allComponents));
         } catch (err) {
             console.error("Failed to fetch component detail:", err);
         }
@@ -1126,12 +1138,20 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                             </div>
                             <div className="wd-detail-item">
                                 <span className="wd-detail-label">Current Stage</span>
-                                <span
-                                    className="wd-stage-badge"
-                                    style={{ backgroundColor: getStageColor(selectedComponent.current_stage), color: getStageTextColor(selectedComponent.current_stage) }}
-                                >
-                                    {getStageLabel(selectedComponent.current_stage)}
-                                </span>
+                                {selectedComponent.is_outside_wh ? (
+                                    <span className="wd-stage-badge" style={{ backgroundColor: "#e0913f", color: "#fff" }}>
+                                        {getStagesOutsideLabel(selectedComponent.stages_outside)
+                                            ? `Out to Vendor (${getStagesOutsideLabel(selectedComponent.stages_outside)})`
+                                            : "Out to Vendor"}
+                                    </span>
+                                ) : (
+                                    <span
+                                        className="wd-stage-badge"
+                                        style={{ backgroundColor: getStageColor(selectedComponent.current_stage), color: getStageTextColor(selectedComponent.current_stage) }}
+                                    >
+                                        {getStageLabel(selectedComponent.current_stage)}
+                                    </span>
+                                )}
                             </div>
                             <div className="wd-detail-item">
                                 <span className="wd-detail-label">Active</span>
@@ -1182,12 +1202,20 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                         >
                                             <span className="wd-sibling-barcode">{comp.barcode}</span>
                                             <span className="wd-sibling-label">{comp.component_label || comp.component_type}</span>
-                                            <span
-                                                className="wd-stage-badge wd-stage-badge-sm"
-                                                style={{ backgroundColor: getStageColor(comp.current_stage), color: getStageTextColor(comp.current_stage) }}
-                                            >
-                                                {getStageLabel(comp.current_stage)}
-                                            </span>
+                                            {comp.is_outside_wh ? (
+                                                <span className="wd-stage-badge wd-stage-badge-sm" style={{ backgroundColor: "#e0913f", color: "#fff" }}>
+                                                    {getStagesOutsideLabel(comp.stages_outside)
+                                                        ? `Out to Vendor (${getStagesOutsideLabel(comp.stages_outside)})`
+                                                        : "Out to Vendor"}
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    className="wd-stage-badge wd-stage-badge-sm"
+                                                    style={{ backgroundColor: getStageColor(comp.current_stage), color: getStageTextColor(comp.current_stage) }}
+                                                >
+                                                    {getStageLabel(comp.current_stage)}
+                                                </span>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -1199,21 +1227,25 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                             <div className="wd-detail-history">
                                 <h4>Stage History</h4>
                                 <div className="wd-timeline">
-                                    {componentHistory.map((t, idx) => (
+                                    {componentHistory.map((t) => {
+                                        const d = describeTransition(t, componentMovements);
+                                        return (
                                         <div key={t.id} className="wd-timeline-item">
                                             <div className="wd-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
                                             <div className="wd-timeline-content">
-                                                <p className="wd-timeline-stage">
-                                                    {t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}{getStageLabel(t.to_stage)}
+                                                <p className="wd-timeline-stage" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                                    {d.headline}
+                                                    <ScanKindTag kind={d.kind} />
                                                 </p>
                                                 <p className="wd-timeline-meta">
                                                     {t.scanned_by} {'\u2022'} {new Date(t.scanned_at).toLocaleString()}
-                                                    {t.transition_type !== "scan" && ` (${t.transition_type})`}
+                                                    {d.showType && ` (${t.transition_type})`}
                                                 </p>
                                                 {t.notes && <p className="wd-timeline-notes">{t.notes}</p>}
                                             </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

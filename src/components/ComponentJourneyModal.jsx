@@ -6,9 +6,11 @@ import {
   getStageColor,
   getStageMaxDays,
   getStagesOutsideLabel,
+  describeTransition,
   fetchTransitionHistory,
   fetchMovementHistory,
 } from "../utils/barcodeService";
+import ScanKindTag from "./ScanKindTag";
 import "./ComponentJourneyModal.css";
 
 /**
@@ -210,38 +212,22 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                     ) : (
                       <div className="cjm-timeline">
                         {transitions.map((t) => {
-                          // The security gate doesn't change the stage (physical
-                          // in/out checkpoint) — show a clear action label instead
-                          // of "Stage → same Stage". Name the stage the trip was
-                          // for by matching this scan to its movement (by the
-                          // exit/entry scan timestamp) and reading stages_outside.
-                          const isExit = t.transition_type === "security_exit";
-                          const isEntry = t.transition_type === "security_entry";
-                          const stageForTrip = (() => {
-                            if (!isExit && !isEntry) return null;
-                            const field = isExit ? "exit_scan_at" : "entry_scan_at";
-                            const scanTime = new Date(t.scanned_at).getTime();
-                            // Closest movement whose exit/entry time is within ~2 min of this scan.
-                            const mov = movements
-                              .filter((m) => m[field])
-                              .map((m) => ({ m, diff: Math.abs(new Date(m[field]).getTime() - scanTime) }))
-                              .filter((x) => x.diff < 120000)
-                              .sort((a, b) => a.diff - b.diff)[0]?.m;
-                            return mov ? getStagesOutsideLabel(mov.stages_outside) : null;
-                          })();
-                          const headline = isExit
-                            ? `Sent to Vendor${stageForTrip ? ` (${stageForTrip})` : ""}`
-                            : isEntry
-                              ? `Returned to Warehouse${stageForTrip ? ` (${stageForTrip})` : ""}`
-                              : `${t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}${getStageLabel(t.to_stage)}`;
+                          // Shared classifier: internal production scan vs external
+                          // vendor movement (+ headline). The security gate doesn't
+                          // change the stage, so it reads "Sent to Vendor (Dyeing)"
+                          // instead of "Stage → same Stage".
+                          const d = describeTransition(t, movements);
                           return (
                             <div key={t.id} className="cjm-timeline-item">
                               <div className="cjm-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
                               <div className="cjm-timeline-content">
-                                <p className="cjm-timeline-stage">{headline}</p>
+                                <p className="cjm-timeline-stage" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                  {d.headline}
+                                  <ScanKindTag kind={d.kind} />
+                                </p>
                                 <p className="cjm-timeline-meta">
                                   {t.scanned_by} {'•'} {new Date(t.scanned_at).toLocaleString("en-GB")}
-                                  {!isExit && !isEntry && t.transition_type && t.transition_type !== "scan" && ` (${t.transition_type})`}
+                                  {d.showType && ` (${t.transition_type})`}
                                 </p>
                                 {t.notes && <p className="cjm-timeline-notes">{t.notes}</p>}
                               </div>

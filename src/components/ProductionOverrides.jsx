@@ -5,12 +5,17 @@ import {
   fetchComponentByBarcode,
   fetchOrderComponents,
   fetchTransitionHistory,
+  fetchMovementHistory,
+  enrichComponentsWithMovements,
+  describeTransition,
+  getStagesOutsideLabel,
   recordOverride,
   PRODUCTION_STAGES,
   REJOURNEY_STAGES,
   getStageLabel,
   getStageColor,
 } from "../utils/barcodeService";
+import ScanKindTag from "./ScanKindTag";
 
 const ProductionOverrides = ({ currentUserEmail }) => {
   const [searchBarcode, setSearchBarcode] = useState("");
@@ -18,6 +23,7 @@ const ProductionOverrides = ({ currentUserEmail }) => {
   const [component, setComponent] = useState(null);
   const [orderComponents, setOrderComponents] = useState([]);
   const [history, setHistory] = useState([]);
+  const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [actionResult, setActionResult] = useState(null);
 
@@ -28,6 +34,26 @@ const ProductionOverrides = ({ currentUserEmail }) => {
   const [extendDays, setExtendDays] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Load a component's scan history + its vendor trips together, so the
+  // timeline can name the stage each security exit/entry was for and tag it
+  // Internal vs External (shared describeTransition).
+  const loadHistoryAndMovements = async (componentId) => {
+    const [hist, movs] = await Promise.all([
+      fetchTransitionHistory(componentId),
+      fetchMovementHistory(componentId),
+    ]);
+    setHistory(hist);
+    setMovements(movs);
+  };
+
+  // Fetch an order's components and attach stages_outside for any out at a
+  // vendor, so the stage badge reads "Out to Vendor (Embroidery)".
+  const loadOrderComponents = async (orderId) => {
+    const comps = await enrichComponentsWithMovements(await fetchOrderComponents(orderId));
+    setOrderComponents(comps);
+    return comps;
+  };
+
   // Search by barcode
   const handleBarcodeSearch = async () => {
     if (!searchBarcode.trim()) return;
@@ -35,11 +61,10 @@ const ProductionOverrides = ({ currentUserEmail }) => {
     setActionResult(null);
     try {
       const comp = await fetchComponentByBarcode(searchBarcode.trim().toUpperCase());
-      setComponent(comp);
-      const allComps = await fetchOrderComponents(comp.order_id);
-      setOrderComponents(allComps);
-      const hist = await fetchTransitionHistory(comp.id);
-      setHistory(hist);
+      const [enriched] = await enrichComponentsWithMovements([comp]);
+      setComponent(enriched || comp);
+      await loadOrderComponents(comp.order_id);
+      await loadHistoryAndMovements(comp.id);
     } catch (err) {
       setActionResult({ success: false, message: "Component not found: " + err.message });
       setComponent(null);
@@ -60,12 +85,10 @@ const ProductionOverrides = ({ currentUserEmail }) => {
         .limit(1);
 
       if (orders && orders.length > 0) {
-        const allComps = await fetchOrderComponents(orders[0].id);
-        setOrderComponents(allComps);
+        const allComps = await loadOrderComponents(orders[0].id);
         if (allComps.length > 0) {
           setComponent(allComps[0]);
-          const hist = await fetchTransitionHistory(allComps[0].id);
-          setHistory(hist);
+          await loadHistoryAndMovements(allComps[0].id);
         }
       } else {
         setActionResult({ success: false, message: "Order not found" });
@@ -80,8 +103,7 @@ const ProductionOverrides = ({ currentUserEmail }) => {
   const selectComponent = async (comp) => {
     setComponent(comp);
     try {
-      const hist = await fetchTransitionHistory(comp.id);
-      setHistory(hist);
+      await loadHistoryAndMovements(comp.id);
     } catch (err) {
       console.error("Failed to fetch history:", err);
     }
@@ -139,11 +161,10 @@ const ProductionOverrides = ({ currentUserEmail }) => {
 
           // Refresh component
           const updated = await fetchComponentByBarcode(component.barcode);
-          setComponent(updated);
-          const hist = await fetchTransitionHistory(updated.id);
-          setHistory(hist);
-          const allComps = await fetchOrderComponents(updated.order_id);
-          setOrderComponents(allComps);
+          const [enriched] = await enrichComponentsWithMovements([updated]);
+          setComponent(enriched || updated);
+          await loadHistoryAndMovements(updated.id);
+          await loadOrderComponents(updated.order_id);
         } else {
           setActionResult({ success: false, message: result.message });
         }
@@ -180,11 +201,10 @@ const ProductionOverrides = ({ currentUserEmail }) => {
           setActionResult({ success: true, message: `Skipped to ${getStageLabel(targetStage)}` });
 
           const updated = await fetchComponentByBarcode(component.barcode);
-          setComponent(updated);
-          const hist = await fetchTransitionHistory(updated.id);
-          setHistory(hist);
-          const allComps = await fetchOrderComponents(updated.order_id);
-          setOrderComponents(allComps);
+          const [enriched] = await enrichComponentsWithMovements([updated]);
+          setComponent(enriched || updated);
+          await loadHistoryAndMovements(updated.id);
+          await loadOrderComponents(updated.order_id);
         } else {
           setActionResult({ success: false, message: result.message });
         }
@@ -229,9 +249,9 @@ const ProductionOverrides = ({ currentUserEmail }) => {
           setActionResult({ success: true, message: `Timeline extended by ${days} days` });
 
           const updated = await fetchComponentByBarcode(component.barcode);
-          setComponent(updated);
-          const allComps = await fetchOrderComponents(updated.order_id);
-          setOrderComponents(allComps);
+          const [enriched] = await enrichComponentsWithMovements([updated]);
+          setComponent(enriched || updated);
+          await loadOrderComponents(updated.order_id);
         } else {
           setActionResult({ success: false, message: error.message });
         }
@@ -315,12 +335,20 @@ const ProductionOverrides = ({ currentUserEmail }) => {
               >
                 <div className="pm-comp-card-top">
                   <span className="pm-comp-card-barcode">{comp.barcode}</span>
-                  <span
-                    className="pm-comp-card-stage"
-                    style={{ backgroundColor: getStageColor(comp.current_stage) }}
-                  >
-                    {getStageLabel(comp.current_stage)}
-                  </span>
+                  {comp.is_outside_wh ? (
+                    <span className="pm-comp-card-stage" style={{ backgroundColor: "#e0913f", color: "#fff" }}>
+                      {getStagesOutsideLabel(comp.stages_outside)
+                        ? `Out to Vendor (${getStagesOutsideLabel(comp.stages_outside)})`
+                        : "Out to Vendor"}
+                    </span>
+                  ) : (
+                    <span
+                      className="pm-comp-card-stage"
+                      style={{ backgroundColor: getStageColor(comp.current_stage) }}
+                    >
+                      {getStageLabel(comp.current_stage)}
+                    </span>
+                  )}
                 </div>
                 <div className="pm-comp-card-bottom">
                   <span className="pm-comp-card-label">{comp.component_label || comp.component_type}</span>
@@ -347,9 +375,17 @@ const ProductionOverrides = ({ currentUserEmail }) => {
             </div>
             <div className="pm-override-detail-item">
               <span className="pm-detail-label">Current Stage</span>
-              <span className="pm-comp-card-stage" style={{ backgroundColor: getStageColor(component.current_stage) }}>
-                {getStageLabel(component.current_stage)}
-              </span>
+              {component.is_outside_wh ? (
+                <span className="pm-comp-card-stage" style={{ backgroundColor: "#e0913f", color: "#fff" }}>
+                  {getStagesOutsideLabel(component.stages_outside)
+                    ? `Out to Vendor (${getStagesOutsideLabel(component.stages_outside)})`
+                    : "Out to Vendor"}
+                </span>
+              ) : (
+                <span className="pm-comp-card-stage" style={{ backgroundColor: getStageColor(component.current_stage) }}>
+                  {getStageLabel(component.current_stage)}
+                </span>
+              )}
             </div>
             <div className="pm-override-detail-item">
               <span className="pm-detail-label">QC Status</span>
@@ -453,21 +489,25 @@ const ProductionOverrides = ({ currentUserEmail }) => {
             <div className="pm-override-history">
               <h4>Stage History</h4>
               <div className="pm-timeline">
-                {history.map((t) => (
+                {history.map((t) => {
+                  const d = describeTransition(t, movements);
+                  return (
                   <div key={t.id} className="pm-timeline-item">
                     <div className="pm-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
                     <div className="pm-timeline-content">
-                      <p className="pm-timeline-stage">
-                        {t.from_stage ? `${getStageLabel(t.from_stage)} \u2192 ` : ""}{getStageLabel(t.to_stage)}
+                      <p className="pm-timeline-stage" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        {d.headline}
+                        <ScanKindTag kind={d.kind} />
                       </p>
                       <p className="pm-timeline-meta">
                         {t.scanned_by} {"\u2022"} {new Date(t.scanned_at).toLocaleString()}
-                        {t.transition_type !== "scan" && <span className="pm-timeline-type"> ({t.transition_type})</span>}
+                        {d.showType && <span className="pm-timeline-type"> ({t.transition_type})</span>}
                       </p>
                       {t.notes && <p className="pm-timeline-notes">{t.notes}</p>}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
