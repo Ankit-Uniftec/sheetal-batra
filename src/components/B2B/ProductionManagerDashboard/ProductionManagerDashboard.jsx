@@ -829,6 +829,20 @@ export default function ProductionManagerDashboard() {
         return { stores: storeList, topProducts, topColors, topSizes };
     }, [overviewOrders]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Resolves the "client" string for either channel: retail uses delivery_name,
+    // B2B uses the vendor's store_brand_name (resolved via vendorMap). Returns
+    // empty string if neither is available (caller decides the fallback dash).
+    // Declared BEFORE the filter memos below, which call it when searching by
+    // client name — a const isn't hoisted, so a later declaration would crash
+    // (TDZ: "Cannot access before initialization") the moment you type a search.
+    const getClientName = (order) => {
+        if (order?.is_b2b) {
+            const v = order.vendor_id ? vendorMap[order.vendor_id] : null;
+            return v?.store_brand_name || order.delivery_name || "";
+        }
+        return order?.delivery_name || "";
+    };
+
     // ==================== FILTERED + PAGINATED ORDERS ====================
     const filteredByStatus = useMemo(() => {
         return orders.filter(o => {
@@ -934,16 +948,6 @@ export default function ProductionManagerDashboard() {
 
     const getChannelLabel = (order) => { if (order.is_b2b) return "B2B"; return "Store"; };
     const getChannelClass = (order) => { if (order.is_b2b) return "pm-channel-b2b"; return "pm-channel-store"; };
-    // Resolves the "client" string for either channel: retail uses delivery_name,
-    // B2B uses the vendor's store_brand_name (resolved via vendorMap). Returns
-    // empty string if neither is available (caller decides the fallback dash).
-    const getClientName = (order) => {
-        if (order?.is_b2b) {
-            const v = order.vendor_id ? vendorMap[order.vendor_id] : null;
-            return v?.store_brand_name || order.delivery_name || "";
-        }
-        return order?.delivery_name || "";
-    };
 
     const getStatusLabel = (order) => {
         if (order.production_status === "dispatched" || order.status === "delivered") return "Dispatched";
