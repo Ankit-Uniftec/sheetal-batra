@@ -1947,7 +1947,20 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "dispatch" && (() => {
                             const now = new Date();
                             const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
-                            const recentlyDispatched = orders.filter(o => o.dispatched_at).sort((a, b) => new Date(b.dispatched_at) - new Date(a.dispatched_at)).slice(0, 20);
+                            // An order is dispatched when it actually reached a finished
+                            // state — NOT only when the manual dispatched_at was set (that
+                            // field is written only by the "Mark as Delivered" button, so
+                            // the list used to freeze whenever orders were completed by any
+                            // other path: barcode packaging, warehouse manual-complete, etc.).
+                            const DONE = new Set(["delivered", "completed", "dispatched"]);
+                            const isDispatched = (o) =>
+                                DONE.has((o.status || "").toLowerCase()) || o.warehouse_stage === "dispatched";
+                            // Best available "dispatched on" timestamp, newest signal first.
+                            const dispatchedDate = (o) => o.dispatched_at || o.delivered_at || o.updated_at || null;
+                            const recentlyDispatched = orders
+                                .filter(isDispatched)
+                                .sort((a, b) => new Date(dispatchedDate(b) || 0) - new Date(dispatchedDate(a) || 0))
+                                .slice(0, 20);
                             const overdueReady = readyNotDispatched.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
                             const avgWaitDays = readyNotDispatched.length > 0 ? (readyNotDispatched.reduce((s, o) => s + (now - new Date(o.ready_for_dispatch_at)) / (1000 * 60 * 60 * 24), 0) / readyNotDispatched.length).toFixed(1) : "0";
                             return (
@@ -1981,7 +1994,7 @@ export default function ProductionManagerDashboard() {
                                             <div style={{ overflowX: "auto" }}>
                                                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                                                     <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Dispatched On</th><th style={{ padding: "8px 10px" }}>By</th></tr></thead>
-                                                    <tbody>{recentlyDispatched.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{getClientName(o) || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.dispatched_at)}</td><td style={{ padding: "8px 10px" }}>{o.dispatched_by || "-"}</td></tr>))}</tbody>
+                                                    <tbody>{recentlyDispatched.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{getClientName(o) || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(dispatchedDate(o)) || "-"}</td><td style={{ padding: "8px 10px" }}>{o.dispatched_by || "-"}</td></tr>))}</tbody>
                                                 </table>
                                             </div>
                                         </div>

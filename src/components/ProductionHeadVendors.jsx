@@ -12,6 +12,7 @@ import {
   fetchComponentByBarcode,
   SCAN_STATIONS,
   PRODUCTION_STAGES,
+  getStepLabel,
 } from "../utils/barcodeService";
 
 // The skippable (optional) production steps — mirrors the DB is_step_skippable():
@@ -37,16 +38,20 @@ const missingMandatoryStages = (currentStep, targetStep) => {
 
 // Logical steps eligible for external vendor work (Rule 7: stages 2..8).
 // Built from SCAN_STATIONS so labels stay in sync.
+// Pattern Cutting (step 3) and QC 1 (step 6) are intentionally NOT offered as
+// external stages for now (client request) — they're hidden from the picker.
+const EXTERNAL_HIDDEN_STEPS = new Set([3, 6]);
 const EXTERNAL_ELIGIBLE_STEPS = SCAN_STATIONS
-  .filter((s) => s.step >= 2 && s.step <= 8)
+  .filter((s) => s.step >= 2 && s.step <= 8 && !EXTERNAL_HIDDEN_STEPS.has(s.step))
   .map((s) => ({ step: s.step, label: s.label }));
 
-// Render a stages_outside step-number array as readable stage labels.
+// Render a stages_outside step-number array as readable stage labels. Resolve
+// from the FULL stage model (getStepLabel), not the eligible-picker list, so
+// historical movements to a now-hidden stage (Pattern Cutting / QC 1) still
+// show their real name instead of "Step 3".
 const stepLabels = (steps) => {
   if (!Array.isArray(steps) || steps.length === 0) return "—";
-  return steps
-    .map((n) => EXTERNAL_ELIGIBLE_STEPS.find((s) => s.step === n)?.label || `Step ${n}`)
-    .join(", ");
+  return steps.map((n) => getStepLabel(n) || `Step ${n}`).join(", ");
 };
 
 const PAGE_SIZE = 10;
