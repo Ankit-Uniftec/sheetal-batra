@@ -425,14 +425,27 @@ export async function fetchOrderComponents(orderId) {
 // 7. FETCH COMPONENT BY BARCODE — Quick lookup after scan
 // ============================================================
 export async function fetchComponentByBarcode(barcode) {
+  // NOTE: intentionally NOT .single() — that throws PostgREST's cryptic
+  // "Cannot coerce the result to a single JSON object" (PGRST116) when the
+  // barcode matches 0 rows (wrong/mistyped scan) OR >1 row (a duplicate
+  // barcode). Fetch the rows and give the worker a plain-English error instead.
   const { data, error } = await supabase
     .from("order_components")
     .select("*, orders(order_no, delivery_name, delivery_date, salesperson, salesperson_email, status)")
-    .eq("barcode", barcode)
-    .single();
+    .eq("barcode", barcode);
 
   if (error) throw error;
-  return data;
+  if (!data || data.length === 0) {
+    const e = new Error(`Barcode "${barcode}" was not found. Check the tag and scan again.`);
+    e.code = "BARCODE_NOT_FOUND";
+    throw e;
+  }
+  if (data.length > 1) {
+    const e = new Error(`Barcode "${barcode}" matches more than one piece — it can't be scanned safely. Report this to the Production Head.`);
+    e.code = "BARCODE_DUPLICATE";
+    throw e;
+  }
+  return data[0];
 }
 
 // ============================================================

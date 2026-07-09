@@ -234,6 +234,12 @@ export default function ProductionManagerDashboard() {
                     done = true;
                 }
             }
+            // B2B orders enter production only AFTER the merchandiser approves
+            // them — an unapproved B2B order isn't real production yet, so it's
+            // hidden from the Production Manager (same rule the B2B Production
+            // Head + Warehouse dashboards already apply). Non-B2B orders are
+            // unaffected.
+            allOrders = allOrders.filter(o => !o.is_b2b || o.approval_status === "approved");
             setOrders(allOrders);
 
             // Resolve B2B "client name" — fetch all vendors referenced by the
@@ -279,6 +285,11 @@ export default function ProductionManagerDashboard() {
                     cDone = true;
                 }
             }
+            // Keep only components of the orders we actually show (allOrders is
+            // already filtered to exclude unapproved B2B), so the stage cards
+            // don't count pieces of orders that aren't in production yet.
+            const visibleOrderIds = new Set(allOrders.map(o => o.id));
+            allComponents = allComponents.filter(c => visibleOrderIds.has(c.order_id));
             // Attach stages_outside for pieces out at a vendor so the badge reads
             // "Out to Vendor (Embroidery)" instead of the stalled stage.
             allComponents = await enrichComponentsWithMovements(allComponents);

@@ -70,8 +70,16 @@ const getNextStationAfterStage = (stageValue) => {
 // Build a worker-friendly explanation from a raw RPC error string. Tells
 // them where the piece currently is and where it should be scanned next.
 // Falls back to the prettified raw message when we can't parse a stage.
-const buildFriendlyScanError = (rawMsg) => {
+const buildFriendlyScanError = (rawMsg, toStage) => {
     if (!rawMsg) return rawMsg;
+    // Safety net: PostgREST's "Cannot coerce the result to a single JSON object"
+    // (PGRST116) is raw jargon. It means the barcode lookup matched 0 rows (wrong
+    // scan) or the retry exhausted on a transient hiccup. Show plain English.
+    if (/coerce.*single json object/i.test(rawMsg) || /pgrst116/i.test(rawMsg)) {
+        return "Couldn't read this barcode. Check the tag and scan again — if it keeps failing, report it to the Production Head.";
+    }
+    // toStage (optional): the stage the worker was TRYING to scan into. Lets us
+    // tell the two very different "cannot move" cases apart.
     const fromStage = extractCurrentStageFromError(rawMsg);
     if (!fromStage) return prettifyStageMessage(rawMsg);
 
@@ -81,8 +89,20 @@ const buildFriendlyScanError = (rawMsg) => {
         ? ` Next scan should happen at the ${nextStation.label} station.`
         : " It has passed the last production stage.";
 
-    // Forward-movement error from advance_component_stage
+    // Forward-movement error from advance_component_stage. Two very different causes:
     if (/cannot move from/i.test(rawMsg)) {
+        const fromStep = PRODUCTION_STAGES.find((s) => s.value === fromStage)?.step ?? -1;
+        const toStep = toStage ? (PRODUCTION_STAGES.find((s) => s.value === toStage)?.step ?? -1) : -1;
+        const toLabel = toStage ? (getStageLabel(toStage) || toStage.replace(/_/g, " ")) : "this stage";
+        // Case 2 — moving FORWARD but blocked: a mandatory EARLIER stage isn't
+        // recorded as done (commonly work done at a vendor that was never scanned
+        // back in as completed). Don't tell them to go to the station they're at.
+        if (toStep > fromStep) {
+            return `This piece can't start "${toLabel}" yet — an earlier required stage isn't marked complete. ` +
+                `The piece is recorded at "${currentLabel}". If a stage (e.g. embroidery) was done at a vendor, ` +
+                `it must be scanned back in / confirmed first. Please check with the Production Head.`;
+        }
+        // Case 1 — moving BACKWARD: the piece is already past this station.
         return `This piece has already completed up to "${currentLabel}".${nextMsg}` +
             ` If this piece genuinely needs rework, route it through QC first.`;
     }
@@ -326,7 +346,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                             setScanResult({
                                 success: false,
                                 error: advRes.error || "QC_ENTRY_ERROR",
-                                message: buildFriendlyScanError(advRes.message || ""),
+                                message: buildFriendlyScanError(advRes.message || "", entryStage),
                             });
                             setIsProcessing(false);
                             return;
@@ -338,7 +358,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         setScanResult({
                             success: false,
                             error: "QC_ENTRY_ERROR",
-                            message: buildFriendlyScanError(rawMsg),
+                            message: buildFriendlyScanError(rawMsg, entryStage),
                         });
                         setIsProcessing(false);
                         return;
@@ -475,8 +495,8 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             } catch (err) {
                 setScanResult({
                     success: false,
-                    error: "FETCH_ERROR",
-                    message: err.message || "Failed to look up component",
+                    error: err.code || "FETCH_ERROR",
+                    message: buildFriendlyScanError(err.message) || err.message || "Failed to look up component",
                 });
                 setIsProcessing(false);
                 return;
@@ -536,7 +556,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 setScanResult({
                     success: false,
                     error: result.error,
-                    message: result.message,
+                    message: buildFriendlyScanError(result.message, targetStage) || result.message,
                     data: result,
                 });
             }
@@ -601,7 +621,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     setScanResult({ success: false, error: result.error, message: result.message });
                 }
             } catch (err) {
-                setScanResult({ success: false, error: "QC_ERROR", message: err.message });
+                setScanResult({ success: false, error: "QC_ERROR", message: buildFriendlyScanError(err.message) || err.message });
             }
             setQcPopup(prev => ({ ...prev, isOpen: false }));
             setIsProcessing(false);
@@ -718,7 +738,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 setScanResult({ success: false, error: result.error, message: result.message });
             }
         } catch (err) {
-            setScanResult({ success: false, error: "QC_ERROR", message: err.message });
+            setScanResult({ success: false, error: "QC_ERROR", message: buildFriendlyScanError(err.message) || err.message });
         }
 
         setQcPopup(prev => ({ ...prev, isOpen: false }));
@@ -764,7 +784,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 setScanResult({ success: false, error: result.error, message: result.message });
             }
         } catch (err) {
-            setScanResult({ success: false, error: "SECURITY_ERROR", message: err.message });
+            setScanResult({ success: false, error: "SECURITY_ERROR", message: buildFriendlyScanError(err.message) || err.message });
         }
 
         setSecurityPopup(prev => ({ ...prev, isOpen: false }));
@@ -797,7 +817,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 setScanResult({ success: false, error: "ACTIVATION_ERROR", message: "Activation failed" });
             }
         } catch (err) {
-            setScanResult({ success: false, error: "ACTIVATION_ERROR", message: err.message });
+            setScanResult({ success: false, error: "ACTIVATION_ERROR", message: buildFriendlyScanError(err.message) || err.message });
         }
 
         setActivationPopup(prev => ({ ...prev, isOpen: false }));
@@ -881,7 +901,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 });
             }
         } catch (err) {
-            setScanResult({ success: false, error: "PACKAGING_ERROR", message: err.message });
+            setScanResult({ success: false, error: "PACKAGING_ERROR", message: buildFriendlyScanError(err.message) || err.message });
         }
 
         setPackagingPopup(prev => ({ ...prev, isOpen: false, scannedBarcodes: [] }));
