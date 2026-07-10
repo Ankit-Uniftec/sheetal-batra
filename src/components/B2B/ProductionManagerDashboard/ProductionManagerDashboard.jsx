@@ -270,7 +270,7 @@ export default function ProductionManagerDashboard() {
             while (!cDone) {
                 const { data: cData, error: cErr } = await supabase
                     .from("order_components")
-                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, item_index, is_outside_wh")
+                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, stage_updated_at")
                     .order("created_at", { ascending: false })
                     .range(cFrom, cFrom + PAGE_SIZE - 1);
                 if (cErr) {
@@ -597,13 +597,34 @@ export default function ProductionManagerDashboard() {
         });
     }, [orders, overviewPeriod, overviewFrom, overviewTo]);
 
-    // Components belonging to the period-scoped orders — powers the piece-count
-    // stage cards with the internal/external split. (components carry
-    // is_outside_wh + stages_outside from enrichComponentsWithMovements.)
+    // Components whose stage activity (stage_updated_at) falls in the selected
+    // Overview period — powers the piece-count stage cards with the in-house/
+    // vendor split. Filtered by the PIECE's own scan time, not its order's
+    // created_at, so a scan today on an old order shows up under "Today".
+    // (components carry is_outside_wh + stages_outside from enrichComponentsWithMovements.)
     const overviewComponents = useMemo(() => {
-        const ids = new Set(overviewOrders.map((o) => o.id));
-        return components.filter((c) => ids.has(c.order_id));
-    }, [overviewOrders, components]);
+        if (overviewPeriod === "all") return components;
+        const now = new Date();
+        let from = null, to = null;
+        if (overviewPeriod === "day") {
+            from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        } else if (overviewPeriod === "month") {
+            from = new Date(now.getFullYear(), now.getMonth(), 1);
+        } else if (overviewPeriod === "year") {
+            from = new Date(now.getFullYear(), 0, 1);
+        } else if (overviewPeriod === "custom") {
+            from = overviewFrom ? new Date(overviewFrom) : null;
+            to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
+        }
+        return components.filter((c) => {
+            const ts = c.stage_updated_at || c.created_at;
+            if (!ts) return false;
+            const dt = new Date(ts);
+            if (from && dt < from) return false;
+            if (to && dt > to) return false;
+            return true;
+        });
+    }, [components, overviewPeriod, overviewFrom, overviewTo]);
 
     const stageStats = useMemo(() => {
         const counts = {};

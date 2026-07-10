@@ -69,6 +69,12 @@ export default function B2bProductionDashboard() {
     const [stageFilter, setStageFilter] = useState(null);      // stage group key or null
     const [stageKindFilter, setStageKindFilter] = useState("both"); // 'both' | 'internal' | 'external'
 
+    // Overview date-period filter for the stage cards (by piece scan time, not
+    // order placement date — same pattern as PM / Offline PH dashboards).
+    const [overviewPeriod, setOverviewPeriod] = useState("all"); // all | day | month | year | custom
+    const [overviewFrom, setOverviewFrom] = useState("");
+    const [overviewTo, setOverviewTo] = useState("");
+
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
         try {
@@ -129,7 +135,7 @@ export default function B2bProductionDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
@@ -201,19 +207,44 @@ export default function B2bProductionDashboard() {
         return m;
     }, [orders]);
 
+    // Components whose stage activity (stage_updated_at) falls in the selected
+    // Overview period — powers the stage cards. Filtered by the PIECE's own
+    // scan time, not its order's created_at, so a scan today on an old order
+    // shows up under "Today".
+    const componentsInPeriod = useMemo(() => {
+        if (overviewPeriod === "all") return components;
+        const now = new Date();
+        let from = null, to = null;
+        if (overviewPeriod === "day") from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        else if (overviewPeriod === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
+        else if (overviewPeriod === "year") from = new Date(now.getFullYear(), 0, 1);
+        else if (overviewPeriod === "custom") {
+            from = overviewFrom ? new Date(overviewFrom) : null;
+            to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
+        }
+        return components.filter((c) => {
+            const ts = c.stage_updated_at || c.created_at;
+            if (!ts) return false;
+            const dt = new Date(ts);
+            if (from && dt < from) return false;
+            if (to && dt > to) return false;
+            return true;
+        });
+    }, [components, overviewPeriod, overviewFrom, overviewTo]);
+
     // order_id -> { stageKey: Set('internal'|'external') }, using the SAME
     // classifier the cards use, so clicking a card / sub-count drills the order
     // list to exactly the pieces the card counted.
     const orderStageGroups = useMemo(() => {
         const map = {};
-        components.forEach((c) => {
+        componentsInPeriod.forEach((c) => {
             const info = classifyComponentForStageCard(c, orderStatusById[c.order_id]);
             if (!info || !info.key) return;
             const byStage = map[c.order_id] || (map[c.order_id] = {});
             (byStage[info.key] || (byStage[info.key] = new Set())).add(info.kind);
         });
         return map;
-    }, [components, orderStatusById]);
+    }, [componentsInPeriod, orderStatusById]);
 
     // Clicking a stage card / sub-count: filter the All Orders list to that
     // stage (kind narrows to in-house / vendor) and jump to the orders tab.
@@ -435,13 +466,37 @@ export default function B2bProductionDashboard() {
                     <>
                         {/* Orders by Production Stage — piece counts, split internal vs
                             out-at-vendor. Shown on top. B2B PH sees B2B orders only,
-                            so this is already channel-scoped by the data load. */}
+                            so this is already channel-scoped by the data load. Date
+                            pills filter by piece scan time (stage_updated_at), not
+                            order placement date. */}
                         <div className="prod-cell prod-stage-cards">
                             <div className="prod-orders-card">
                                 <div className="prod-card-header">
                                     <span className="prod-card-title">Orders by Production Stage</span>
                                 </div>
-                                <StageCountCards components={components} orderStatusById={orderStatusById} onStageClick={handleStageCardClick} />
+                                <div className="prod-overview-period">
+                                    {[
+                                        { key: "all", label: "All Time" },
+                                        { key: "day", label: "Today" },
+                                        { key: "month", label: "This Month" },
+                                        { key: "year", label: "This Year" },
+                                        { key: "custom", label: "Custom" },
+                                    ].map((p) => (
+                                        <button
+                                            key={p.key}
+                                            className={`prod-period-pill ${overviewPeriod === p.key ? "active" : ""}`}
+                                            onClick={() => setOverviewPeriod(p.key)}
+                                        >{p.label}</button>
+                                    ))}
+                                    {overviewPeriod === "custom" && (
+                                        <span className="prod-period-custom">
+                                            <input type="date" value={overviewFrom} onChange={(e) => setOverviewFrom(e.target.value)} />
+                                            <span>→</span>
+                                            <input type="date" value={overviewTo} min={overviewFrom || undefined} onChange={(e) => setOverviewTo(e.target.value)} />
+                                        </span>
+                                    )}
+                                </div>
+                                <StageCountCards components={componentsInPeriod} orderStatusById={orderStatusById} onStageClick={handleStageCardClick} />
                             </div>
                         </div>
 

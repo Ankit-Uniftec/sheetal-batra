@@ -404,7 +404,9 @@ const WarehouseDashboard = () => {
   );
 
   // Channel-scoped orders further narrowed by the Overview date period (by order
-  // created_at). This is what the stage cards + Production Overview summarise.
+  // created_at). Drives the orders-count label + Production Overview summary —
+  // NOT the stage cards, which filter by the piece's own scan time instead (see
+  // overviewComponentsInPeriod below).
   const periodScopedOrders = useMemo(() => {
     if (overviewPeriod === "all") return scopedOrders;
     const now = new Date();
@@ -425,29 +427,53 @@ const WarehouseDashboard = () => {
     });
   }, [scopedOrders, overviewPeriod, overviewFrom, overviewTo]);
 
-  // order_id -> status for the scoped orders, so a bypass-completed order's
-  // pieces show under Packaging & Dispatch instead of their stalled stage.
+  // order_id -> status for ALL channel-scoped orders (not date-narrowed), so a
+  // bypass-completed order's pieces show under Packaging & Dispatch even when
+  // its own created_at falls outside the selected period.
   const overviewOrderStatusById = useMemo(() => {
     const m = {};
-    periodScopedOrders.forEach((o) => { m[o.id] = o.status; });
+    scopedOrders.forEach((o) => { m[o.id] = o.status; });
     return m;
-  }, [periodScopedOrders]);
+  }, [scopedOrders]);
 
-  // order_id -> { stageKey: Set('internal'|'external') }, from the channel-scoped
-  // overview components, so clicking a card / sub-count drills the order list to
-  // exactly the pieces the card counted. Because it's built only from the PH's
-  // channel components, an out-of-channel order simply won't appear — the drilled
-  // list stays consistent with the (channel-scoped) card.
+  // Components whose stage activity (stage_updated_at) falls in the selected
+  // Overview period — powers the stage cards. Filtered by the PIECE's own scan
+  // time, not its order's created_at, so a scan today on an old order shows up
+  // under "Today".
+  const overviewComponentsInPeriod = useMemo(() => {
+    if (overviewPeriod === "all") return overviewComponents;
+    const now = new Date();
+    let from = null, to = null;
+    if (overviewPeriod === "day") from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    else if (overviewPeriod === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
+    else if (overviewPeriod === "year") from = new Date(now.getFullYear(), 0, 1);
+    else if (overviewPeriod === "custom") {
+      from = overviewFrom ? new Date(overviewFrom) : null;
+      to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
+    }
+    return overviewComponents.filter((c) => {
+      const ts = c.stage_updated_at || c.created_at;
+      if (!ts) return false;
+      const dt = new Date(ts);
+      if (from && dt < from) return false;
+      if (to && dt > to) return false;
+      return true;
+    });
+  }, [overviewComponents, overviewPeriod, overviewFrom, overviewTo]);
+
+  // order_id -> { stageKey: Set('internal'|'external') }, from the period-
+  // filtered overview components, so clicking a card / sub-count drills the
+  // order list to exactly the pieces the card counted.
   const overviewOrderStageGroups = useMemo(() => {
     const map = {};
-    overviewComponents.forEach((c) => {
+    overviewComponentsInPeriod.forEach((c) => {
       const info = classifyComponentForStageCard(c, overviewOrderStatusById[c.order_id]);
       if (!info || !info.key) return;
       const byStage = map[c.order_id] || (map[c.order_id] = {});
       (byStage[info.key] || (byStage[info.key] = new Set())).add(info.kind);
     });
     return map;
-  }, [overviewComponents, overviewOrderStatusById]);
+  }, [overviewComponentsInPeriod, overviewOrderStatusById]);
 
   // Clicking a stage card / sub-count on the Overview: filter the order list to
   // that stage (kind narrows to in-house / vendor) and jump to Order History.
@@ -457,22 +483,24 @@ const WarehouseDashboard = () => {
     setActiveTab("orders");
   };
 
-  // Load the components of the PH's channel orders when the Overview tab opens,
-  // enriched with vendor movement so the stage cards can split internal/external.
+  // Load the components of the PH's channel orders (ALL dates — the stage
+  // cards apply their own period filter by scan time, see
+  // overviewComponentsInPeriod) when the Overview tab opens, enriched with
+  // vendor movement so the stage cards can split internal/external.
   useEffect(() => {
     if (!isWarehouseProdHead || activeTab !== "overview") return;
-    if (periodScopedOrders.length === 0) { setOverviewComponents([]); return; }
+    if (scopedOrders.length === 0) { setOverviewComponents([]); return; }
     let cancelled = false;
     (async () => {
       setOverviewLoading(true);
       try {
-        const ids = periodScopedOrders.map((o) => o.id);
+        const ids = scopedOrders.map((o) => o.id);
         let all = [];
         for (let i = 0; i < ids.length; i += 200) {
           const chunk = ids.slice(i, i + 200);
           const { data, error } = await supabase
             .from("order_components")
-            .select("id, order_id, barcode, component_type, current_stage, is_active, is_outside_wh")
+            .select("id, order_id, barcode, component_type, current_stage, is_active, is_outside_wh, stage_updated_at")
             .in("order_id", chunk);
           if (error) { console.error("overview components fetch failed:", error); break; }
           all = all.concat(data || []);
@@ -485,7 +513,7 @@ const WarehouseDashboard = () => {
       if (!cancelled) setOverviewLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [isWarehouseProdHead, activeTab, periodScopedOrders]);
+  }, [isWarehouseProdHead, activeTab, scopedOrders]);
 
   // Open the QC report for an order — loads every QC check (QC 1 + Final QC)
   // recorded for its components, newest stage first per component.
@@ -1330,8 +1358,9 @@ const WarehouseDashboard = () => {
                 <span className="wd-orders-count">{periodScopedOrders.length} orders in your channel</span>
               </div>
 
-              {/* Date-period filter — scopes the stage cards + Production Overview
-                  by order placement date (same as the PM dashboard). */}
+              {/* Date-period filter — scopes the stage cards by piece scan time
+                  (stage_updated_at) and Production Overview by order placement
+                  date (created_at). Same pattern as the PM dashboard. */}
               <div className="wd-overview-period">
                 {[
                   { key: "all", label: "All Time" },
@@ -1358,7 +1387,7 @@ const WarehouseDashboard = () => {
               {overviewLoading ? (
                 <p className="wd-muted" style={{ padding: "12px 2px" }}>Loading production stages…</p>
               ) : (
-                <StageCountCards components={overviewComponents} orderStatusById={overviewOrderStatusById} onStageClick={handleStageCardClick} />
+                <StageCountCards components={overviewComponentsInPeriod} orderStatusById={overviewOrderStatusById} onStageClick={handleStageCardClick} />
               )}
 
               {/* Production Overview — operational metrics for the PH's own
