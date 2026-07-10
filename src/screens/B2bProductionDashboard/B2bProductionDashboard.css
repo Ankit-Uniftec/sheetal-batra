@@ -81,8 +81,19 @@
 
 /* ---------------- ORDERS CARD (dashboard) ---------------- */
 .prod-orders-card { background: #FFFFFFB0; height: 320px; padding: 15px !important; border-radius: 12px; border: 1px solid #D4D4D4; overflow: hidden; }
+/* The stage-cards tile carries the period-pill row too, so it needs more room
+   than the plain stat-card tiles that share the .prod-orders-card class. */
+.prod-stage-cards .prod-orders-card { height: auto; min-height: 320px; overflow: visible; }
 .prod-card-header { display: flex; justify-content: space-between; }
 .prod-card-title { font-family: "Athleas", serif !important; font-size: 16px !important; color: #d5b85a !important; }
+
+/* Overview date-period filter pills (stage cards) */
+.prod-overview-period { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
+.prod-period-pill { padding: 6px 14px; border: 1px solid #e2d4bd; background: #fff; color: #6b5842; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.prod-period-pill:hover { border-color: #d5b85a; background: #faf6e8; }
+.prod-period-pill.active { background: #d5b85a; border-color: #d5b85a; color: #3a2f1e; }
+.prod-period-custom { display: inline-flex; align-items: center; gap: 8px; margin-left: 4px; }
+.prod-period-custom input[type="date"] { padding: 5px 8px; border: 1px solid #e2d4bd; border-radius: 8px; font-size: 12px; color: #4a4030; }
 .prod-view-btn { width: 60px; padding: 2px 5px !important; border-radius: 3px !important; background-color: #d5b85a; color: white !important; border: none; cursor: pointer; font-size: 14px; }
 .prod-cardbox { height: 250px !important; overflow-y: auto; overflow-x: auto; padding-right: 6px; }
 .prod-order-item { padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
