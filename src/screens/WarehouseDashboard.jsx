@@ -93,6 +93,11 @@ const WarehouseDashboard = () => {
   // LIST stays global; only these analytics are scoped to their channel.
   const [overviewComponents, setOverviewComponents] = useState([]);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  // Overview date-period filter (scopes the stage cards + Production Overview by
+  // order placement date). all | day | month | year | custom.
+  const [overviewPeriod, setOverviewPeriod] = useState("all");
+  const [overviewFrom, setOverviewFrom] = useState("");
+  const [overviewTo, setOverviewTo] = useState("");
   // Maps vendor.id → vendor row. Used to resolve B2B orders' "client name"
   // (B2B orders have no delivery_name; the vendor's store_brand_name is the
   // operations-facing analogue, same convention as PM dashboard + PDFs).
@@ -198,8 +203,12 @@ const WarehouseDashboard = () => {
   // hidden from every list/count/calendar here. Every other warehouse user
   // (generic warehouse, Online PH) sees the full set, unchanged. Data-load and
   // the channel-scoped overview are handled separately and are not affected.
+  // NOTE: detect B2B by BOTH the is_b2b flag AND salesperson_store='B2B' — some
+  // B2B orders carry the store but not the flag, so !is_b2b alone let them slip
+  // through (this is why they were still showing).
+  const isB2bOrder = (o) => o?.is_b2b === true || (o?.salesperson_store || "").trim().toUpperCase() === "B2B";
   const visibleOrders = useMemo(
-    () => (isOfflineProdHead ? orders.filter(o => !o.is_b2b) : orders),
+    () => (isOfflineProdHead ? orders.filter(o => !isB2bOrder(o)) : orders),
     [orders, isOfflineProdHead]
   );
 
@@ -394,13 +403,35 @@ const WarehouseDashboard = () => {
     [orders, userDesignation]
   );
 
+  // Channel-scoped orders further narrowed by the Overview date period (by order
+  // created_at). This is what the stage cards + Production Overview summarise.
+  const periodScopedOrders = useMemo(() => {
+    if (overviewPeriod === "all") return scopedOrders;
+    const now = new Date();
+    let from = null, to = null;
+    if (overviewPeriod === "day") from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    else if (overviewPeriod === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
+    else if (overviewPeriod === "year") from = new Date(now.getFullYear(), 0, 1);
+    else if (overviewPeriod === "custom") {
+      from = overviewFrom ? new Date(overviewFrom) : null;
+      to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
+    }
+    return scopedOrders.filter((o) => {
+      if (!o.created_at) return false;
+      const dt = new Date(o.created_at);
+      if (from && dt < from) return false;
+      if (to && dt > to) return false;
+      return true;
+    });
+  }, [scopedOrders, overviewPeriod, overviewFrom, overviewTo]);
+
   // order_id -> status for the scoped orders, so a bypass-completed order's
   // pieces show under Packaging & Dispatch instead of their stalled stage.
   const overviewOrderStatusById = useMemo(() => {
     const m = {};
-    scopedOrders.forEach((o) => { m[o.id] = o.status; });
+    periodScopedOrders.forEach((o) => { m[o.id] = o.status; });
     return m;
-  }, [scopedOrders]);
+  }, [periodScopedOrders]);
 
   // order_id -> { stageKey: Set('internal'|'external') }, from the channel-scoped
   // overview components, so clicking a card / sub-count drills the order list to
@@ -430,12 +461,12 @@ const WarehouseDashboard = () => {
   // enriched with vendor movement so the stage cards can split internal/external.
   useEffect(() => {
     if (!isWarehouseProdHead || activeTab !== "overview") return;
-    if (scopedOrders.length === 0) { setOverviewComponents([]); return; }
+    if (periodScopedOrders.length === 0) { setOverviewComponents([]); return; }
     let cancelled = false;
     (async () => {
       setOverviewLoading(true);
       try {
-        const ids = scopedOrders.map((o) => o.id);
+        const ids = periodScopedOrders.map((o) => o.id);
         let all = [];
         for (let i = 0; i < ids.length; i += 200) {
           const chunk = ids.slice(i, i + 200);
@@ -454,7 +485,7 @@ const WarehouseDashboard = () => {
       if (!cancelled) setOverviewLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [isWarehouseProdHead, activeTab, scopedOrders]);
+  }, [isWarehouseProdHead, activeTab, periodScopedOrders]);
 
   // Open the QC report for an order — loads every QC check (QC 1 + Final QC)
   // recorded for its components, newest stage first per component.
@@ -1296,8 +1327,34 @@ const WarehouseDashboard = () => {
             <div className="wd-orders-section">
               <div className="wd-orders-header">
                 <h2 className="wd-section-title">Orders by Production Stage</h2>
-                <span className="wd-orders-count">{scopedOrders.length} orders in your channel</span>
+                <span className="wd-orders-count">{periodScopedOrders.length} orders in your channel</span>
               </div>
+
+              {/* Date-period filter — scopes the stage cards + Production Overview
+                  by order placement date (same as the PM dashboard). */}
+              <div className="wd-overview-period">
+                {[
+                  { key: "all", label: "All Time" },
+                  { key: "day", label: "Today" },
+                  { key: "month", label: "This Month" },
+                  { key: "year", label: "This Year" },
+                  { key: "custom", label: "Custom" },
+                ].map((p) => (
+                  <button
+                    key={p.key}
+                    className={`wd-period-pill ${overviewPeriod === p.key ? "active" : ""}`}
+                    onClick={() => setOverviewPeriod(p.key)}
+                  >{p.label}</button>
+                ))}
+                {overviewPeriod === "custom" && (
+                  <span className="wd-period-custom">
+                    <input type="date" value={overviewFrom} onChange={(e) => setOverviewFrom(e.target.value)} />
+                    <span>→</span>
+                    <input type="date" value={overviewTo} min={overviewFrom || undefined} onChange={(e) => setOverviewTo(e.target.value)} />
+                  </span>
+                )}
+              </div>
+
               {overviewLoading ? (
                 <p className="wd-muted" style={{ padding: "12px 2px" }}>Loading production stages…</p>
               ) : (
@@ -1306,7 +1363,7 @@ const WarehouseDashboard = () => {
 
               {/* Production Overview — operational metrics for the PH's own
                   channel orders (retail for Offline, website for Online). */}
-              <ProductionOverview orders={scopedOrders} totalLabel="Total Orders (Your Channel)" />
+              <ProductionOverview orders={periodScopedOrders} totalLabel="Total Orders (Your Channel)" />
             </div>
           )}
 

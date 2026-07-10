@@ -177,6 +177,45 @@
   margin-bottom: 16px;
 }
 
+/* Overview date-period filter pills */
+.wd-overview-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.wd-period-pill {
+  padding: 7px 16px;
+  border: 1px solid #e2d4bd;
+  background: #fff;
+  color: #6b5842;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.wd-period-pill:hover { border-color: #d5b85a; background: #faf6e8; }
+.wd-period-pill.active {
+  background: #d5b85a;
+  border-color: #d5b85a;
+  color: #3a2f1e;
+}
+.wd-period-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+.wd-period-custom input[type="date"] {
+  padding: 6px 10px;
+  border: 1px solid #e2d4bd;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #4a4030;
+}
+
 .wd-section-title {
   font-family: "Athleas", serif !important;
   font-size: 24px;
