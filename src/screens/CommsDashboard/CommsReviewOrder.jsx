@@ -339,6 +339,19 @@ export default function CommsReviewOrder() {
         }
       }
 
+      // 2.7) Generate order components (barcodes) — same as the retail/B2B flow
+      // (ReviewDetail.js). Comms orders now get barcodes for tracking. Non-
+      // blocking: the order is already placed; a component-gen failure never
+      // fails the order.
+      try {
+        const { generateOrderComponents } = await import("../../utils/barcodeService");
+        const orderForComponents = { ...insertedOrder, items: insertedOrder.items || [] };
+        const components = await generateOrderComponents(orderForComponents);
+        console.log(`Generated ${components.length} components for comms order ${insertedOrder.order_no}`);
+      } catch (compError) {
+        console.error("Comms component generation failed (non-blocking):", compError);
+      }
+
       // 3) Notify Jahnavi (admin) if the approval gate fired.
       // Uses the comms-specific notification type so the recipient and
       // template are right (B2B_APPROVAL_AWAITED also notifies merchandisers
