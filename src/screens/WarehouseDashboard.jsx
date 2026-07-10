@@ -889,12 +889,15 @@ const WarehouseDashboard = () => {
     });
     if (!ok) return;
 
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "completed" })
-      .eq("id", order.id);
-    if (error) {
-      showPopup({ type: "error", title: "Update Failed", message: error.message || "Could not complete the order.", confirmText: "OK" });
+    // Force-complete the whole order: dispatch every active component (badge ->
+    // Dispatched, pieces become non-scannable) and mark the order completed —
+    // one atomic RPC instead of just flipping orders.status.
+    const { data, error } = await supabase.rpc("manual_complete_order", {
+      p_order_id: order.id,
+      p_by: currentUserEmail,
+    });
+    if (error || data?.success === false) {
+      showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
       return;
     }
     fetchOrders();

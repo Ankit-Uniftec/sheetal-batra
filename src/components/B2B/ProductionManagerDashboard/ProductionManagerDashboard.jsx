@@ -445,6 +445,13 @@ export default function ProductionManagerDashboard() {
         if (!confirmed) return;
         try {
             setActionLoading(order.id);
+            // Dispatch every active component (badge -> Dispatched, non-scannable),
+            // then stamp the order as delivered with the dispatch metadata (the
+            // "Mark as Delivered" semantics + Recently-Dispatched fields).
+            const { data: rpcData, error: rpcErr } = await supabase.rpc("manual_complete_order", {
+                p_order_id: order.id, p_by: currentUserEmail,
+            });
+            if (rpcErr || rpcData?.success === false) throw new Error(rpcErr?.message || rpcData?.message || "Could not update order");
             const { error } = await supabase
                 .from("orders")
                 .update({
@@ -456,7 +463,9 @@ export default function ProductionManagerDashboard() {
                 })
                 .eq("id", order.id);
             if (error) throw error;
-            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", production_status: "dispatched", delivered_at: new Date().toISOString() } : o));
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", production_status: "dispatched", warehouse_stage: "dispatched", delivered_at: new Date().toISOString() } : o));
+            // Re-fetch components so the piece badges reflect "Dispatched" live.
+            loadAllData();
             showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as delivered.` });
         } catch (err) {
             console.error("Mark complete error:", err);
@@ -485,9 +494,15 @@ export default function ProductionManagerDashboard() {
         if (!ok) return;
         try {
             setActionLoading(order.id);
-            const { error } = await supabase.from("orders").update({ status: "completed" }).eq("id", order.id);
-            if (error) throw error;
-            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed" } : o));
+            // Force-complete: dispatch every active component (badge -> Dispatched,
+            // pieces non-scannable) + mark the order completed, via one RPC.
+            const { data, error } = await supabase.rpc("manual_complete_order", {
+                p_order_id: order.id, p_by: currentUserEmail,
+            });
+            if (error || data?.success === false) throw new Error(error?.message || data?.message || "Could not update order");
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed", warehouse_stage: "dispatched" } : o));
+            // Re-fetch components so the piece badges reflect "Dispatched" live.
+            loadAllData();
             showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as completed.` });
         } catch (err) {
             console.error("Manual complete error:", err);

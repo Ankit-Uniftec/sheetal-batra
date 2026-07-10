@@ -333,10 +333,16 @@ export default function B2bProductionDashboard() {
         if (!manualCompleteOrder) return;
         setManualCompleteProcessing(true);
         try {
-            const { error } = await supabase.from("orders").update({ status: "completed" }).eq("id", manualCompleteOrder.id);
-            if (error) throw error;
-            setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed" } : o));
+            // Force-complete: dispatch every active component (badge -> Dispatched,
+            // pieces non-scannable) + mark the order completed, via one RPC.
+            const { data, error } = await supabase.rpc("manual_complete_order", {
+                p_order_id: manualCompleteOrder.id, p_by: user?.email,
+            });
+            if (error || data?.success === false) throw new Error(error?.message || data?.message);
+            setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed", warehouse_stage: "dispatched" } : o));
             setManualCompleteOrder(null);
+            // Re-fetch components so the piece badges reflect "Dispatched" live.
+            loadAllData();
         } catch (err) {
             console.error("Manual complete error:", err);
         } finally {
