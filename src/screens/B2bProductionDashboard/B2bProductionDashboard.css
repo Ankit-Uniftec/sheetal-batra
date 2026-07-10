@@ -10,6 +10,7 @@
 /* ---------------- HEADER ---------------- */
 .prod-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; top: 0; z-index: 100; width: 100%; margin-bottom: 20px; }
 .prod-header-logo { height: 70px; cursor: pointer; }
+.prod-header-title { flex: 1; text-align: center; margin: 0; font-family: "Athleas", serif; font-size: 26px; font-weight: 600; color: #d5b85a; letter-spacing: 0.02em; }
 .prod-header-right { display: flex; align-items: center; gap: 15px; }
 .prod-header-btn { background: #d5b85a; color: white !important; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
 .prod-header-btn:hover { background: #c9a94e; }
@@ -23,7 +24,9 @@
 .prod-sidebar { grid-row: 1 / 5; grid-column: 1; background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 8px; overflow: visible; transition: transform 0.3s ease-in-out; }
 .prod-menu { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
 .prod-menu-item { padding: 8px 12px; font-size: 15px; cursor: pointer; position: relative; }
-.prod-menu-item-logout { display: none; }
+/* Sidebar logout — always visible now (the top-bar logout button was removed),
+   styled as a red action at the end of the menu. */
+.prod-menu-item-logout { color: #c62828; font-weight: 600; margin-top: 8px; }
 .prod-menu-item.active { font-weight: bold; color: #d5b85a; }
 .prod-menu-item.active::after { content: ""; position: absolute; left: 12px; bottom: 4px; width: 95px; height: 3px; background-color: #d5b85a; border-radius: 2px; }
 .prod-badge-count { background: #c62828; color: white !important; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
@@ -262,6 +265,7 @@
 @media (max-width: 768px) {
   .prod-dashboard-wrapper { padding: 10px 10px; }
   .prod-header { padding: 10px 16px; }
+  .prod-header-title { font-size: 17px; }
   .prod-header-logo { height: 35px; }
   .prod-header-btn { display: none; }
   .prod-hamburger-icon { display: flex; }
