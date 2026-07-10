@@ -400,14 +400,12 @@ export default function B2bProductionDashboard() {
             {/* ===== HEADER ===== */}
             <header className="prod-header">
                 <img src={Logo} alt="logo" className="prod-header-logo" onClick={() => setActiveTab("dashboard")} />
+                <h1 className="prod-header-title">B2B Production</h1>
                 <div className="prod-header-right">
                     <NotificationBell
                         userEmail={user?.email}
                         onOrderClick={(orderId) => handleViewOrder(orderId)}
                     />
-                    <button className="prod-header-btn" onClick={handleLogout}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
-                    </button>
                     <div className="prod-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
                         <div className="prod-bar"></div><div className="prod-bar"></div><div className="prod-bar"></div>
                     </div>
@@ -420,17 +418,15 @@ export default function B2bProductionDashboard() {
                 {/* ===== SIDEBAR ===== */}
                 <aside className={`prod-sidebar ${showSidebar ? "prod-open" : ""}`}>
                     <nav className="prod-menu">
-                        <a className={`prod-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>View Profile</a>
-                        <a className={`prod-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
-                        <a className={`prod-menu-item ${activeTab === "queue" ? "active" : ""}`} onClick={() => { setActiveTab("queue"); setShowSidebar(false); }}>
-                            Production Queue
-                        </a>
-                        <a className={`prod-menu-item ${activeTab === "inprod" ? "active" : ""}`} onClick={() => { setActiveTab("inprod"); setShowSidebar(false); }}>In Production</a>
-                        <a className={`prod-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
-                        <a className={`prod-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders</a>
+                        <a className={`prod-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Overview</a>
+                        {/* Production Queue / In Production / Dispatch tabs hidden —
+                            everything they showed is available in Order History (with
+                            stage badges + status filter). The tab BLOCKS remain in
+                            the code, just not linked, so they're easy to restore. */}
+                        <a className={`prod-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
                         <a className={`prod-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`prod-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor / External</a>
-                        <a className="prod-menu-item-logout" onClick={handleLogout}>Log Out</a>
+                        <a className="prod-menu-item prod-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
 
@@ -463,7 +459,7 @@ export default function B2bProductionDashboard() {
                         <aside className="prod-cell prod-pending-box">
                             <div className="prod-pending-header">
                                 <span className="prod-pending-title">Alerts</span>
-                                <button className="prod-view-btn" onClick={() => setActiveTab("queue")}>View All</button>
+                                <button className="prod-view-btn" onClick={() => setActiveTab("orders")}>View All</button>
                             </div>
                             <div className="prod-pending-body">
                                 {pendingProduction.length === 0 ? (
