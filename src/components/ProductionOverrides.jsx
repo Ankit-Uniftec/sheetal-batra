@@ -267,11 +267,17 @@ const ProductionOverrides = ({ currentUserEmail }) => {
     setExtendDays("");
   };
 
-  // Get stages that come after current stage (for manual advance)
+  // Stages a Production Head can override to. Override is the full-bypass
+  // correction tool, so it offers EVERY stage — forward OR backward — not just
+  // the ones after the current stage (a common reason to override is pushing a
+  // piece BACK to an earlier stage). Terminal states are excluded. The DB
+  // (advance_component_stage, manual_override) accepts any direction; this must
+  // match, or the PH can't request a backward correction.
   const getAdvanceableStages = () => {
     if (!component) return [];
-    const currentIdx = PRODUCTION_STAGES.findIndex(s => s.value === component.current_stage);
-    return PRODUCTION_STAGES.filter((s, idx) => idx > currentIdx && !["disposed", "scrapped"].includes(s.value));
+    return PRODUCTION_STAGES.filter((s) =>
+      !["disposed", "scrapped", "order_received"].includes(s.value)
+    );
   };
 
   return (
