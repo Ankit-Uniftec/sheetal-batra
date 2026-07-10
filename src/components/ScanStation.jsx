@@ -89,22 +89,12 @@ const buildFriendlyScanError = (rawMsg, toStage) => {
         ? ` Next scan should happen at the ${nextStation.label} station.`
         : " It has passed the last production stage.";
 
-    // Forward-movement error from advance_component_stage. Two very different causes:
-    if (/cannot move from/i.test(rawMsg)) {
-        const fromStep = PRODUCTION_STAGES.find((s) => s.value === fromStage)?.step ?? -1;
-        const toStep = toStage ? (PRODUCTION_STAGES.find((s) => s.value === toStage)?.step ?? -1) : -1;
-        const toLabel = toStage ? (getStageLabel(toStage) || toStage.replace(/_/g, " ")) : "this stage";
-        // Case 2 — moving FORWARD but blocked: a mandatory EARLIER stage isn't
-        // recorded as done (commonly work done at a vendor that was never scanned
-        // back in as completed). Don't tell them to go to the station they're at.
-        if (toStep > fromStep) {
-            return `This piece can't start "${toLabel}" yet — an earlier required stage isn't marked complete. ` +
-                `The piece is recorded at "${currentLabel}". If a stage (e.g. embroidery) was done at a vendor, ` +
-                `it must be scanned back in / confirmed first. Please check with the Production Head.`;
-        }
-        // Case 1 — moving BACKWARD: the piece is already past this station.
-        return `This piece has already completed up to "${currentLabel}".${nextMsg}` +
-            ` If this piece genuinely needs rework, route it through QC first.`;
+    // Only Cloth Issue is mandatory now, and stages can be scanned in any
+    // direction — so the one remaining "invalid transition" reason is that Cloth
+    // Issue hasn't been completed yet. (The DB message already says this; keep a
+    // clear fallback.)
+    if (/cannot move from/i.test(rawMsg) || /cloth issue must be completed/i.test(rawMsg)) {
+        return `This piece can't be scanned here until Cloth Issue is completed. Scan it at the Cloth Issue station first.`;
     }
     // Security gate error — piece is inside, trying to exit again
     if (/security|exit not valid/i.test(rawMsg)) {

@@ -15,10 +15,11 @@ import {
   getStepLabel,
 } from "../utils/barcodeService";
 
-// The skippable (optional) production steps — mirrors the DB is_step_skippable():
-// Dyeing(2), Pattern Cutting(3), QC 1(6). Everything else is mandatory. Used to
-// name exactly which stages a piece still needs before it can go to a vendor.
-const SKIPPABLE_STEPS = new Set([2, 3, 6]);
+// The skippable (optional) production steps — mirrors the DB is_step_skippable().
+// Only Cloth Issue (step 1) is mandatory now; every other step is skippable and
+// a piece can be scanned/sent to a vendor for any stage in any order. Used only
+// to name which stages an error refers to (the DB is the real gate).
+const SKIPPABLE_STEPS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
 // Distinct mandatory stage labels between the component's current step and the
 // target external step (exclusive), that gate the move — e.g. current=Cloth
@@ -63,7 +64,8 @@ const MOVEMENT_ERROR_MESSAGES = {
   VENDOR_NOT_APPROVED: "That vendor isn't approved. Pick an approved vendor.",
   INVALID_RETURN_DATE: "The return date can't be in the past.",
   NO_STAGES: "Select at least one stage that goes outside.",
-  INVALID_STAGE_FOR_MOVEMENT: "This piece isn't ready to go to a vendor yet — an earlier production stage (e.g. Cloth Issue) must be completed first.",
+  INVALID_STAGE_FOR_MOVEMENT: "This piece isn't ready to go to a vendor yet — Cloth Issue must be completed first.",
+  PRIOR_STAGE_IN_PROGRESS: "This piece has a stage still In-Progress. Scan it to Completed before sending it to a vendor.",
   NOT_EDITABLE: "This movement has already been scanned out, so it can no longer be edited.",
   MOVEMENT_NOT_FOUND: "That movement no longer exists.",
 };
