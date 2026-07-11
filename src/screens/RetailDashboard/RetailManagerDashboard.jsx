@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isRevenueOrder, orderRevenueAmount } from "../../utils/revenue";
 import "./RetailManagerDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -116,6 +116,7 @@ export default function RetailManagerDashboard() {
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
+    const [vendors, setVendors] = useState([]);
     const [activeTab, setActiveTab] = useState("store_analytics");
     const [showSidebar, setShowSidebar] = useState(false);
 
@@ -134,6 +135,7 @@ export default function RetailManagerDashboard() {
 
     // Day-wise tab
     const [dayWiseStore, setDayWiseStore] = useState("all");
+
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
@@ -175,12 +177,14 @@ export default function RetailManagerDashboard() {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [ordersRes, productsRes] = await Promise.all([
+            const [ordersRes, productsRes, vendorsRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 supabase.from("products").select("*").order("name", { ascending: true }),
+                supabase.from("vendors").select("id, store_brand_name, vendor_code, location"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
             if (productsRes.data) setProducts(productsRes.data);
+            if (vendorsRes.data) setVendors(vendorsRes.data);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
@@ -212,6 +216,19 @@ export default function RetailManagerDashboard() {
     const retailOrders = useMemo(() => {
         return orders.filter(o => getOrderChannel(o) !== "B2B");
     }, [orders]);
+
+    // B2B-only slice — the exact inverse of retailOrders. Used only for the
+    // B2B-specific customers/status block (Top 10 customers, order-status counts).
+    const b2bOrders = useMemo(() => {
+        return orders.filter(o => getOrderChannel(o) === "B2B");
+    }, [orders]);
+
+    // Everything the manager's ANALYTICS cover: retail stores + B2B as a
+    // first-class channel, but NOT website/LXRTS (its own reporting). Comms is
+    // already excluded upstream at fetch time (!o.is_comms). B2B surfaces via
+    // getOrderChannel(o) === "B2B", so any chart grouped by channel/store shows
+    // a B2B slice automatically.
+    const analyticsOrders = useMemo(() => orders, [orders]);
 
     const getOrderSalesperson = (order) => order.salesperson || null;
 
@@ -326,13 +343,13 @@ export default function RetailManagerDashboard() {
     };
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 1: STORE ANALYTICS (no B2B)
+    // TAB 1: STORE ANALYTICS (retail stores + B2B as a channel)
     // ═══════════════════════════════════════════════════════════
     const dashboardStats = useMemo(() => {
         const dateRange = getDateRange(timeline);
         const compRange = getComparisonDateRange(timeline, comparison);
-        const cur = filterByDateRange(retailOrders, dateRange);
-        const prev = compRange ? filterByDateRange(retailOrders, compRange) : [];
+        const cur = filterByDateRange(analyticsOrders, dateRange);
+        const prev = compRange ? filterByDateRange(analyticsOrders, compRange) : [];
 
         const totalRevenue = cur.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalOrders = cur.length;
@@ -344,7 +361,7 @@ export default function RetailManagerDashboard() {
         const totalItems = cur.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-        // Channel breakdown (no B2B since retailOrders already filtered)
+        // Channel breakdown — B2B shows up as its own slice (getOrderChannel → "B2B")
         const channelMap = {};
         cur.forEach(o => {
             const ch = getOrderChannel(o);
@@ -400,14 +417,15 @@ export default function RetailManagerDashboard() {
             showComparison: comparison !== "none",
             channelBreakdown, revenueMix, topProducts, topColors,
         };
-    }, [retailOrders, timeline, comparison, customDateFrom, customDateTo]);
+    }, [analyticsOrders, timeline, comparison, customDateFrom, customDateTo]);
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 2: DAY-WISE SALES (Delhi & Ludhiana)
+    // TAB 2: DAY-WISE SALES (Delhi, Ludhiana & B2B)
     // ═══════════════════════════════════════════════════════════
     const dayWiseData = useMemo(() => {
         const dateRange = getDateRange(timeline);
         const storeOrders = filterByDateRange(retailOrders, dateRange).filter(o => !isLxrtsOrder(o));
+        const b2bPeriodOrders = filterByDateRange(b2bOrders, dateRange);
 
         // Split by store
         const delhiOrders = storeOrders.filter(o => (o.salesperson_store || "").toLowerCase().includes("delhi") || (o.salesperson_store || "") === "DLC");
@@ -419,7 +437,7 @@ export default function RetailManagerDashboard() {
                 const d = new Date(o.created_at);
                 const key = `${d.getDate()}/${d.getMonth() + 1}`;
                 if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
-                buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+                buckets[key].revenue += orderRevenueAmount(o);
                 buckets[key].orders += 1;
             });
             return Object.values(buckets).sort((a, b) => a.fullDate.localeCompare(b.fullDate)).map(b => ({
@@ -429,43 +447,43 @@ export default function RetailManagerDashboard() {
 
         const delhiDaily = buildDailyBuckets(delhiOrders);
         const ludhianaDaily = buildDailyBuckets(ludhianaOrders);
+        const b2bDaily = buildDailyBuckets(b2bPeriodOrders);
 
-        // Combined daily (merge by date)
+        // Combined daily (merge by date) — Delhi, Ludhiana, B2B as 3 series
         const combinedMap = {};
-        [...delhiOrders, ...ludhianaOrders].forEach(o => {
+        const touchBucket = (o, field) => {
             const d = new Date(o.created_at);
             const key = `${d.getDate()}/${d.getMonth() + 1}`;
-            if (!combinedMap[key]) combinedMap[key] = { date: key, fullDate: d.toISOString().split("T")[0], delhi: 0, ludhiana: 0 };
-        });
-        delhiOrders.forEach(o => {
-            const d = new Date(o.created_at);
-            const key = `${d.getDate()}/${d.getMonth() + 1}`;
-            if (!combinedMap[key]) combinedMap[key] = { date: key, fullDate: d.toISOString().split("T")[0], delhi: 0, ludhiana: 0 };
-            combinedMap[key].delhi += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-        });
-        ludhianaOrders.forEach(o => {
-            const d = new Date(o.created_at);
-            const key = `${d.getDate()}/${d.getMonth() + 1}`;
-            if (!combinedMap[key]) combinedMap[key] = { date: key, fullDate: d.toISOString().split("T")[0], delhi: 0, ludhiana: 0 };
-            combinedMap[key].ludhiana += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-        });
+            if (!combinedMap[key]) combinedMap[key] = { date: key, fullDate: d.toISOString().split("T")[0], delhi: 0, ludhiana: 0, b2b: 0 };
+            combinedMap[key][field] += orderRevenueAmount(o);
+        };
+        delhiOrders.forEach(o => touchBucket(o, "delhi"));
+        ludhianaOrders.forEach(o => touchBucket(o, "ludhiana"));
+        b2bPeriodOrders.forEach(o => touchBucket(o, "b2b"));
         const combinedDaily = Object.values(combinedMap).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
+        const delhiTotal = delhiOrders.reduce((s, o) => s + orderRevenueAmount(o), 0);
+        const ludhianaTotal = ludhianaOrders.reduce((s, o) => s + orderRevenueAmount(o), 0);
+        const b2bTotal = b2bPeriodOrders.reduce((s, o) => s + orderRevenueAmount(o), 0);
+
         return {
-            delhiDaily, ludhianaDaily, combinedDaily,
-            delhiTotal: delhiOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            ludhianaTotal: ludhianaOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+            delhiDaily, ludhianaDaily, b2bDaily, combinedDaily,
+            delhiTotal, ludhianaTotal, b2bTotal,
             delhiOrders: delhiOrders.length,
             ludhianaOrders: ludhianaOrders.length,
+            b2bOrders: b2bPeriodOrders.length,
+            delhiAov: delhiOrders.length > 0 ? Math.round(delhiTotal / delhiOrders.length) : 0,
+            ludhianaAov: ludhianaOrders.length > 0 ? Math.round(ludhianaTotal / ludhianaOrders.length) : 0,
+            b2bAov: b2bPeriodOrders.length > 0 ? Math.round(b2bTotal / b2bPeriodOrders.length) : 0,
         };
-    }, [retailOrders, timeline, customDateFrom, customDateTo]);
+    }, [retailOrders, b2bOrders, timeline, customDateFrom, customDateTo]);
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 3: PRODUCT ANALYTICS (no B2B)
+    // TAB 3: PRODUCT ANALYTICS (retail stores + B2B as a channel)
     // ═══════════════════════════════════════════════════════════
     const productAnalytics = useMemo(() => {
         const dateRange = getAnalyticsDateRange(analyticsTimeline);
-        const valid = retailOrders.filter(o => {
+        const valid = analyticsOrders.filter(o => {
             if (!isRevenueOrder(o)) return false;
             const d = new Date(o.created_at);
             return d >= dateRange.start && d <= dateRange.end;
@@ -531,10 +549,48 @@ export default function RetailManagerDashboard() {
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);
 
         return { topProducts, bottomProducts, topColors, bottomColors, salesBySalesperson, salesByStore };
-    }, [retailOrders, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
+    }, [analyticsOrders, retailOrders, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 4: ORDERS (no customer PII, no B2B)
+    // B2B-SPECIFIC block on Store Analytics — only the two things B2B has that
+    // retail doesn't: order-status counts + Top 10 customers. B2B's revenue/
+    // orders/AOV are already folded into the main KPIs & channel breakdown, so
+    // they're deliberately NOT repeated here. Shares the page's timeline filter.
+    // ═══════════════════════════════════════════════════════════
+    const b2bAnalytics = useMemo(() => {
+        const dateRange = getDateRange(timeline);
+        const periodOrders = filterByDateRange(b2bOrders, dateRange);
+        const revenueOrders = periodOrders.filter(isRevenueOrder);
+
+        const newCount = periodOrders.length;
+        const pendingCount = periodOrders.filter(o => ["order_received", "in_production", "ready", "dispatched"].includes((o.status || "").toLowerCase())).length;
+        const fulfilledCount = periodOrders.filter(o => ["delivered", "completed"].includes((o.status || "").toLowerCase())).length;
+        const cancelledReturnedCount = periodOrders.filter(o =>
+            (o.status || "").toLowerCase() === "cancelled" ||
+            (o.status || "").toLowerCase() === "returned" ||
+            o.return_reason ||
+            (Array.isArray(o.returned_items) && o.returned_items.length > 0)
+        ).length;
+
+        // Top 10 B2B customers/accounts by sales
+        const clientSales = {};
+        revenueOrders.forEach(o => {
+            const client = o.delivery_name || vendors.find(v => v.id === o.vendor_id)?.store_brand_name || "Unknown";
+            const amt = orderRevenueAmount(o);
+            if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0 };
+            clientSales[client].sales += amt;
+            clientSales[client].orders += 1;
+        });
+        const top10Clients = Object.values(clientSales)
+            .map(c => ({ ...c, aov: c.orders > 0 ? Math.round(c.sales / c.orders) : 0 }))
+            .sort((a, b) => b.sales - a.sales)
+            .slice(0, 10);
+
+        return { newCount, pendingCount, fulfilledCount, cancelledReturnedCount, top10Clients };
+    }, [b2bOrders, vendors, timeline, customDateFrom, customDateTo]);
+
+    // ═══════════════════════════════════════════════════════════
+    // TAB 4: ORDERS (B2B included by default)
     // ═══════════════════════════════════════════════════════════
     const salespersons = useMemo(() => {
         const spSet = new Set();
@@ -545,9 +601,10 @@ export default function RetailManagerDashboard() {
         return Array.from(spSet).sort();
     }, [retailOrders, knownStoreNames]);
 
-    // Only non-LXRTS, non-B2B orders in the orders tab
+    // Non-LXRTS orders in the orders tab — B2B included by default (Store filter
+    // below can isolate it, same as Delhi/Ludhiana), only website/LXRTS is excluded.
     const filteredByStatus = useMemo(() => {
-        return retailOrders.filter(o => {
+        return orders.filter(o => {
             if (isLxrtsOrder(o)) return false;
             const status = o.status?.toLowerCase();
             switch (statusTab) {
@@ -558,7 +615,7 @@ export default function RetailManagerDashboard() {
                 default: return true;
             }
         });
-    }, [retailOrders, statusTab]);
+    }, [orders, statusTab]);
 
     const filteredOrders = useMemo(() => {
         let result = filteredByStatus;
@@ -593,7 +650,11 @@ export default function RetailManagerDashboard() {
         if (filters.payment.length > 0) result = result.filter(order => filters.payment.includes(getPaymentStatus(order)));
         if (filters.priority.length > 0) result = result.filter(order => filters.priority.includes(getPriority(order)));
         if (filters.orderType.length > 0) result = result.filter(order => filters.orderType.includes(getOrderType(order)));
-        if (filters.store.length > 0) result = result.filter(order => filters.store.includes(order.salesperson_store));
+        if (filters.store.length > 0) result = result.filter(order => {
+            // "B2B" isn't a literal salesperson_store value — match it via the
+            // same channel classifier the rest of the dashboard uses.
+            return filters.store.some(s => s === "B2B" ? getOrderChannel(order) === "B2B" : order.salesperson_store === s);
+        });
         if (filters.salesperson) result = result.filter(order => getOrderSalesperson(order) === filters.salesperson);
 
         const getOrderNum = (no) => {
@@ -615,7 +676,7 @@ export default function RetailManagerDashboard() {
     }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
 
     const orderTabCounts = useMemo(() => {
-        const valid = retailOrders.filter(o => !isLxrtsOrder(o));
+        const valid = orders.filter(o => !isLxrtsOrder(o));
         return {
             all: valid.length,
             unfulfilled: valid.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length,
@@ -623,7 +684,7 @@ export default function RetailManagerDashboard() {
             delivered: valid.filter(o => o.status?.toLowerCase() === "delivered").length,
             cancelled: valid.filter(o => o.status?.toLowerCase() === "cancelled").length,
         };
-    }, [retailOrders]);
+    }, [orders]);
 
     const ordersTotalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
     const currentOrders = useMemo(() => {
@@ -882,6 +943,63 @@ export default function RetailManagerDashboard() {
                                     </ResponsiveContainer>
                                 ) : <div className="rm-no-chart-data">No data available</div>}
                             </div>
+
+                            {/* ═══ B2B CUSTOMERS & ORDERS — the two things B2B has that retail doesn't.
+                                 B2B revenue/orders/AOV already live in the main KPIs & channel breakdown above. ═══ */}
+                            <h3 className="rm-subsection-title" style={{ marginTop: 28 }}>B2B Customers & Orders</h3>
+                            <div className="rm-stats-grid overview-grid b2b-kpi-grid">
+                                <div className="rm-stat-card overview-card">
+                                    <span className="stat-label">New</span>
+                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.newCount)}</span>
+                                    <span className="stat-sub">Placed in selected period</span>
+                                </div>
+                                <div className="rm-stat-card overview-card">
+                                    <span className="stat-label">Pending</span>
+                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.pendingCount)}</span>
+                                    <span className="stat-sub">In production / not yet delivered</span>
+                                </div>
+                                <div className="rm-stat-card overview-card">
+                                    <span className="stat-label">Fulfilled</span>
+                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.fulfilledCount)}</span>
+                                    <span className="stat-sub">Delivered or completed</span>
+                                </div>
+                                <div className="rm-stat-card overview-card">
+                                    <span className="stat-label">Cancelled / Returned</span>
+                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.cancelledReturnedCount)}</span>
+                                </div>
+                            </div>
+
+                            <div className="rm-chart-card">
+                                <h3 className="rm-chart-title">Top 10 B2B Customers / Accounts</h3>
+                                {b2bAnalytics.top10Clients.length > 0 ? (
+                                    <div className="rm-table-wrapper">
+                                        <div className="rm-table-container">
+                                            <table className="rm-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Rank</th>
+                                                        <th>Customer / Account</th>
+                                                        <th>Orders</th>
+                                                        <th>Sales</th>
+                                                        <th>Avg Order Value</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {b2bAnalytics.top10Clients.map((c, i) => (
+                                                        <tr key={c.name}>
+                                                            <td>{i + 1}</td>
+                                                            <td className="rm-product-cell">{c.name}</td>
+                                                            <td>{c.orders}</td>
+                                                            <td>{"₹"}{formatIndianNumber(Math.round(c.sales))}</td>
+                                                            <td>{"₹"}{formatIndianNumber(c.aov)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ) : <div className="rm-no-chart-data">No B2B sales in this period</div>}
+                            </div>
                         </div>
                     )}
 
@@ -924,14 +1042,41 @@ export default function RetailManagerDashboard() {
                                     <span className="stat-sub">{dayWiseData.ludhianaOrders} orders</span>
                                 </div>
                                 <div className="rm-stat-card overview-card">
-                                    <span className="stat-label">Combined Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal)}</span>
-                                    <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders} orders</span>
+                                    <span className="stat-label">B2B Revenue</span>
+                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.b2bTotal)}</span>
+                                    <span className="stat-sub">{dayWiseData.b2bOrders} orders</span>
                                 </div>
                                 <div className="rm-stat-card overview-card">
-                                    <span className="stat-label">Delhi AOV</span>
-                                    <span className="stat-value">{"\u20B9"}{dayWiseData.delhiOrders > 0 ? formatIndianNumber(Math.round(dayWiseData.delhiTotal / dayWiseData.delhiOrders)) : 0}</span>
+                                    <span className="stat-label">Combined Revenue</span>
+                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.b2bTotal)}</span>
+                                    <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders + dayWiseData.b2bOrders} orders</span>
                                 </div>
+                            </div>
+
+                            {/* AOV comparison \u2014 Delhi vs Ludhiana vs B2B, side by side */}
+                            <div className="rm-chart-card" style={{ marginBottom: 20 }}>
+                                <h3 className="rm-chart-title">Average Order Value {"\u2014"} by Store</h3>
+                                <ResponsiveContainer width="100%" height={180}>
+                                    <BarChart
+                                        data={[
+                                            { name: "Delhi", aov: dayWiseData.delhiAov },
+                                            { name: "Ludhiana", aov: dayWiseData.ludhianaAov },
+                                            { name: "B2B", aov: dayWiseData.b2bAov },
+                                        ]}
+                                        layout="vertical"
+                                        margin={{ top: 5, right: 40, left: 5, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eee" />
+                                        <XAxis type="number" tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
+                                        <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12, fill: '#444' }} axisLine={false} tickLine={false} />
+                                        <Tooltip formatter={(v) => [`\u20B9${formatIndianNumber(v)}`, "AOV"]} />
+                                        <Bar dataKey="aov" radius={[0, 6, 6, 0]} barSize={26}>
+                                            <Cell fill="#d5b85a" />
+                                            <Cell fill="#8B7355" />
+                                            <Cell fill="#C9A94E" />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
 
                             {/* Store toggle */}
@@ -939,22 +1084,24 @@ export default function RetailManagerDashboard() {
                                 <button className={`rm-store-btn ${dayWiseStore === "all" ? "active" : ""}`} onClick={() => setDayWiseStore("all")}>Both Stores</button>
                                 <button className={`rm-store-btn ${dayWiseStore === "delhi" ? "active" : ""}`} onClick={() => setDayWiseStore("delhi")}>Delhi</button>
                                 <button className={`rm-store-btn ${dayWiseStore === "ludhiana" ? "active" : ""}`} onClick={() => setDayWiseStore("ludhiana")}>Ludhiana</button>
+                                <button className={`rm-store-btn ${dayWiseStore === "b2b" ? "active" : ""}`} onClick={() => setDayWiseStore("b2b")}>B2B</button>
                             </div>
 
                             {/* Combined chart */}
                             {dayWiseStore === "all" && (
                                 <div className="rm-chart-card" style={{ marginBottom: 20 }}>
-                                    <h3 className="rm-chart-title">Daily Revenue {"\u2014"} Delhi vs Ludhiana</h3>
+                                    <h3 className="rm-chart-title">Daily Revenue {"\u2014"} Delhi vs Ludhiana vs B2B</h3>
                                     {dayWiseData.combinedDaily.length > 1 ? (
                                         <ResponsiveContainer width="100%" height={350}>
                                             <BarChart data={dayWiseData.combinedDaily} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <YAxis tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name === "delhi" ? "Delhi" : "Ludhiana"]} />
+                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name]} />
                                                 <Legend />
                                                 <Bar dataKey="delhi" name="Delhi" fill="#d5b85a" radius={[4, 4, 0, 0]} />
                                                 <Bar dataKey="ludhiana" name="Ludhiana" fill="#8B7355" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="b2b" name="B2B" fill="#C9A94E" radius={[4, 4, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     ) : <div className="rm-no-chart-data">Select a wider date range to see trends</div>}
@@ -962,7 +1109,6 @@ export default function RetailManagerDashboard() {
                             )}
 
                             {/* Delhi chart */}
-                            {(dayWiseStore === "delhi" || dayWiseStore === "all") && dayWiseStore !== "ludhiana" && dayWiseStore !== "all" && null}
                             {dayWiseStore === "delhi" && (
                                 <div className="rm-chart-card" style={{ marginBottom: 20 }}>
                                     <h3 className="rm-chart-title">Daily Revenue {"\u2014"} Delhi Store</h3>
@@ -972,7 +1118,7 @@ export default function RetailManagerDashboard() {
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <YAxis tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name === "revenue" ? "Revenue" : "AOV"]} />
+                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name]} />
                                                 <Legend />
                                                 <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#d5b85a" fill="rgba(213,184,90,0.15)" strokeWidth={2} />
                                                 <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
@@ -992,13 +1138,33 @@ export default function RetailManagerDashboard() {
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <YAxis tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name === "revenue" ? "Revenue" : "AOV"]} />
+                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name]} />
                                                 <Legend />
                                                 <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#8B7355" fill="rgba(139,115,85,0.15)" strokeWidth={2} />
                                                 <Line type="monotone" dataKey="aov" name="AOV" stroke="#C9A94E" strokeWidth={2} dot={false} />
                                             </AreaChart>
                                         </ResponsiveContainer>
                                     ) : <div className="rm-no-chart-data">Not enough data for Ludhiana</div>}
+                                </div>
+                            )}
+
+                            {/* B2B chart */}
+                            {dayWiseStore === "b2b" && (
+                                <div className="rm-chart-card" style={{ marginBottom: 20 }}>
+                                    <h3 className="rm-chart-title">Daily Revenue {"—"} B2B</h3>
+                                    {dayWiseData.b2bDaily.length > 1 ? (
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <AreaChart data={dayWiseData.b2bDaily} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
+                                                <Tooltip formatter={(v, name) => [`₹${formatIndianNumber(v)}`, name]} />
+                                                <Legend />
+                                                <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#C9A94E" fill="rgba(201,169,78,0.15)" strokeWidth={2} />
+                                                <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    ) : <div className="rm-no-chart-data">Not enough data for B2B</div>}
                                 </div>
                             )}
                         </div>
@@ -1294,7 +1460,7 @@ export default function RetailManagerDashboard() {
                                     {openDropdown === "store" && (
                                         <div className="rm-dropdown-panel">
                                             <div className="rm-dropdown-title">Store</div>
-                                            {["Delhi Store", "Ludhiana Store"].map(opt => (
+                                            {["Delhi Store", "Ludhiana Store", "B2B"].map(opt => (
                                                 <label key={opt} className="rm-checkbox-label">
                                                     <input type="checkbox" checked={filters.store.includes(opt)} onChange={() => toggleFilter("store", opt)} />
                                                     <span>{opt}</span>
@@ -1363,7 +1529,7 @@ export default function RetailManagerDashboard() {
                                                                 {(order.status === "pending" || order.status === "order_received" || !order.status) ? "Order Received" : (order.status.charAt(0).toUpperCase() + order.status.slice(1).replace("_", " "))}
                                                             </span>
                                                         </td>
-                                                        <td>{order.salesperson_store || "-"}</td>
+                                                        <td>{getOrderChannel(order) === "B2B" ? "B2B" : (order.salesperson_store || "-")}</td>
                                                         <td>{getOrderSalesperson(order) || "-"}</td>
                                                         <td>{formatDate(order.created_at)}</td>
                                                     </tr>
