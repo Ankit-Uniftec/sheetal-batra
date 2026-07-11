@@ -354,6 +354,12 @@
     grid-template-columns: repeat(5, 1fr);
 }
 
+/* B2B KPI rows have 3 or 4 cards (not 5) — auto-fit so they fill the row
+   evenly instead of stretching across 5 fixed columns with a gap. */
+.rm-stats-grid.overview-grid.b2b-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .rm-stat-card {
     background: #FFFFFFB0;
     border: 1px solid #D4D4D4;
