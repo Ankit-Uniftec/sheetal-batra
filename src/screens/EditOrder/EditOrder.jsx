@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
 import "./EditOrder.css";
 import { usePopup } from "../../components/Popup";
 
@@ -233,6 +234,7 @@ export default function EditOrder() {
 
     if (!window.confirm("Are you sure you want to cancel this order?")) return;
 
+    const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
     try {
       setSaving(true);
 
@@ -246,6 +248,9 @@ export default function EditOrder() {
         .eq("id", order.id);
 
       if (error) throw error;
+
+      // Restore the inventory this order reserved at placement (once).
+      if (!wasCancelled) await restoreOrderInventory(order);
 
       showPopup({
         title: "Order update",

@@ -65,6 +65,7 @@ export const PRODUCTION_STAGES = [
 // Stages available for re-journey restart (Production Head dropdown).
 // Only active V2 stages — legacy/removed stages are not offered.
 export const REJOURNEY_STAGES = [
+  { value: "cloth_issued", label: "Cloth Issue" },
   { value: "dyeing_in_progress", label: "Dyeing" },
   { value: "pattern_cutting_in_progress", label: "Pattern Cutting" },
   { value: "embroidery_in_progress", label: "Embroidery" },

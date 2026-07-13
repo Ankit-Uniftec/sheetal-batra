@@ -13,6 +13,7 @@ import ComponentStageBadge from "../../components/ComponentStageBadge";
 import { enrichComponentsWithMovements, getOrderChannelKey } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
+import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -591,6 +592,7 @@ export default function B2bMerchandiserDashboard() {
         if (!order) return;
         if (!cancelReason.trim()) { alert("Please enter a reason for cancellation."); return; }
         if (hoursSince(order.created_at) >= 24) { alert("The 24-hour cancellation window has expired."); return; }
+        const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
         setCancelProcessing(true);
         try {
             // 1. Cancel — same 3 fields every existing cancel handler writes.
@@ -600,6 +602,9 @@ export default function B2bMerchandiserDashboard() {
                 cancelled_at: new Date().toISOString(),
             }).eq("id", order.id);
             if (error) throw error;
+
+            // Restore the inventory this order reserved at placement (once).
+            if (!wasCancelled) await restoreOrderInventory(order);
 
             // 2. B2B Buyout credit reversal — only for an approved Buyout order that
             //    actually added to the vendor's used credit at approval time.

@@ -624,7 +624,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             return;
         }
         if (!qcPopup.outcome) {
-            showPopup({ title: "Required", message: "Please select an outcome (Dispose / Scrap / Re-journey)", type: "warning", confirmText: "OK" });
+            showPopup({ title: "Required", message: "Please select an outcome (Dispose / Re-journey)", type: "warning", confirmText: "OK" });
             return;
         }
         if (qcPopup.outcome === "rejourney" && !qcPopup.rejourneyStage) {
@@ -1327,12 +1327,6 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                         >
                                             Dispose
                                         </button>
-                                        <button
-                                            className={`wd-outcome-btn ${qcPopup.outcome === "scrap" ? "active" : ""}`}
-                                            onClick={() => setQcPopup(prev => ({ ...prev, outcome: "scrap" }))}
-                                        >
-                                            Scrap
-                                        </button>
                                     </div>
                                 </div>
 
@@ -1351,7 +1345,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                     </div>
                                 )}
 
-                                {(qcPopup.outcome === "dispose" || qcPopup.outcome === "scrap") && (
+                                {qcPopup.outcome === "dispose" && (
                                     <div className="wd-form-group">
                                         <label>Loss Amount ({'\u20B9'})</label>
                                         <input

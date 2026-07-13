@@ -12,6 +12,7 @@ import { usePopup } from "../components/Popup";
 import config from "../config/config";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
+import { restoreOrderInventory } from "../utils/restoreOrderInventory";
 
 // Measurement categories and fields (same as Screen4)
 const CATEGORY_KEY_MAP = {
@@ -584,6 +585,7 @@ export default function OrderHistory() {
 
     const order = actionModal.order;
     const finalReason = actionReason === "other" ? `Other: ${actionOtherReason}` : actionReason;
+    const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
 
     setActionLoading(order.id);
     try {
@@ -592,6 +594,9 @@ export default function OrderHistory() {
         cancellation_reason: finalReason,
         cancelled_at: new Date().toISOString(),
       }).eq("id", order.id);
+
+      // Restore the inventory this order reserved at placement (once).
+      if (!wasCancelled) await restoreOrderInventory(order);
 
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: finalReason } : o));
       closeActionModal();
