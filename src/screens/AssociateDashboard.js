@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "../utils/fetchAllRows";
 import { isRevenueOrder } from "../utils/revenue";
+import { restoreOrderInventory } from "../utils/restoreOrderInventory";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
@@ -758,6 +759,7 @@ export default function Dashboard() {
       confirmText: "Yes, Cancel",
       cancelText: "No",
       onConfirm: async () => {
+        const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
         setActionLoading(order.id);
         try {
           const { error } = await supabase
@@ -770,6 +772,9 @@ export default function Dashboard() {
             .eq("id", order.id);
 
           if (error) throw error;
+
+          // Restore the inventory this order reserved at placement (once).
+          if (!wasCancelled) await restoreOrderInventory(order);
 
           setOrders(prev => prev.map(o =>
             o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: reason } : o
