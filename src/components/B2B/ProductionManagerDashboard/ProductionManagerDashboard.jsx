@@ -1774,10 +1774,11 @@ export default function ProductionManagerDashboard() {
                                                     </div>
                                                     <div className="pm-oheader-actions">
                                                         <span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span>
-                                                        {/* Show the live production stage (from warehouse_stage = slowest
-                                                            active component). Fall back to the order status badge only when
-                                                            there's no production stage yet (not started) or it's terminal. */}
-                                                        {getStageGroupKey(order.warehouse_stage) ? (
+                                                        {/* Cancelled takes precedence over any stale production stage — a
+                                                            cancelled order must read "Cancelled", not its last stage. */}
+                                                        {order.status === "cancelled" ? (
+                                                            <div className={`pm-order-status-badge ${getStatusBadgeClass("cancelled")}`}>Cancelled</div>
+                                                        ) : getStageGroupKey(order.warehouse_stage) ? (
                                                             <Badge color={getStageColor(order.warehouse_stage)}>{getStageLabel(order.warehouse_stage)}</Badge>
                                                         ) : (
                                                             <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{order.status === "pending" ? "Order Received" : (order.status === "order_received" ? "Order Received" : (order.status || "Order Received"))}</div>
@@ -1826,8 +1827,13 @@ export default function ProductionManagerDashboard() {
                                                     {(componentsByOrder[order.id]?.length > 0) && (
                                                         <button className="pm-action-btn pm-journey-btn" onClick={(e) => openJourney(e, order, componentsByOrder[order.id])}>View Journey</button>
                                                     )}
-                                                    <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
-                                                    <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
+                                                    {/* A cancelled order can't be edited or re-prioritised. */}
+                                                    {order.status !== "cancelled" && (
+                                                        <>
+                                                            <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
+                                                            <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
+                                                        </>
+                                                    )}
                                                     <button
                                                         className="pm-action-btn pm-complete-btn"
                                                         disabled={order.status === "completed" || order.status === "delivered" || order.status === "cancelled" || actionLoading === order.id}

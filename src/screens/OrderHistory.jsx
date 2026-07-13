@@ -605,12 +605,20 @@ export default function OrderHistory() {
         template: WA_TEMPLATES.ORDER_CANCELLED,
       }).catch(err => console.error("WA cancelled error:", err));
 
-      // Notify warehouse — Order Cancelled (#21)
+      // Notify production — Order Cancelled (#21). Production Manager always gets
+      // it (static recipient); the channel-correct production head is resolved
+      // per-order and added dynamically so a non-offline order alerts the right head.
+      let cancelHeadEmail = null;
+      try {
+        const { data: he } = await supabase.rpc("get_production_head_email", { p_order_id: order.id });
+        cancelHeadEmail = he || null;
+      } catch (e) { /* non-fatal — PM still gets it via the static map */ }
       sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
         orderId: order.id,
         orderNo: order.order_no,
         metadata: { client_name: order.delivery_name },
         attachments: order.customer_url ? [{ type: "order_pdf", url: order.customer_url }] : [],
+        extraRecipients: cancelHeadEmail ? [{ email: cancelHeadEmail.toLowerCase(), channel: "in_app" }] : [],
       }).catch(err => console.error("Notification error:", err));
     } catch (err) {
       showPopup({ type: "error", title: "Error", message: "Failed: " + err.message, confirmText: "OK" });

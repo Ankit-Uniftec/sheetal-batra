@@ -126,10 +126,13 @@ const RECIPIENT_MAP = {
         { designation: "Offline Production Head", channel: "in_app" },
         { designation: "Offline Production Assistant", channel: "in_app" },
     ],
+    // Production Manager always gets every cancel. The channel-correct production
+    // head (offline for store/exhibition, comms/b2b/private for those) is added
+    // per-order via extraRecipients using get_production_head_email, so the
+    // offline head is no longer hardcoded here (it would wrongly get B2B/comms
+    // cancels). Callers must pass the resolved head in extraRecipients.
     [NOTIFICATION_TYPES.ORDER_CANCELLED]: [
         { designation: "Production Manager", channel: "in_app" },
-        { designation: "Offline Production Head", channel: "in_app" },
-        { designation: "Offline Production Assistant", channel: "in_app" },
     ],
     [NOTIFICATION_TYPES.DELAY_1_DAY]: [
         { designation: "Production Manager", channel: "both" },

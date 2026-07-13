@@ -115,6 +115,8 @@
 .prod-order-status-badge.prod-status-inprod { background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
 .prod-order-status-badge.prod-status-ready { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
 .prod-order-status-badge.prod-status-dispatched { background: #f3e5f5; color: #6a1b9a; border: 1px solid #e1bee7; }
+.prod-status-cancelled { color: #c62828; font-weight: 600; }
+.prod-order-status-badge.prod-status-cancelled { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
 
 /* Type Badge */
 .prod-order-type-badge { padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }

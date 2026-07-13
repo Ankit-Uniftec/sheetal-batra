@@ -95,12 +95,14 @@
 .merch-status-pending { color: #e65100; font-weight: 600; }
 .merch-status-approved { color: #2e7d32; font-weight: 600; }
 .merch-status-rejected { color: #c62828; font-weight: 600; }
+.merch-status-cancelled { color: #b71c1c; font-weight: 600; }
 
 /* Status Badge (pill) */
 .merch-order-status-badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
 .merch-order-status-badge.merch-status-pending { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
 .merch-order-status-badge.merch-status-approved { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
 .merch-order-status-badge.merch-status-rejected { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+.merch-order-status-badge.merch-status-cancelled { background: #ffcdd2; color: #b71c1c; border: 1px solid #ef9a9a; }
 
 /* Type Badge */
 .merch-order-type-badge { padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
