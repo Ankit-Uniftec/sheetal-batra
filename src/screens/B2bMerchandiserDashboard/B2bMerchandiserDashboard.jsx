@@ -10,7 +10,7 @@ import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
-import { enrichComponentsWithMovements } from "../../utils/barcodeService";
+import { enrichComponentsWithMovements, getOrderChannelKey } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 
@@ -58,6 +58,14 @@ export default function B2bMerchandiserDashboard() {
     const [showSizeCharts, setShowSizeCharts] = useState(false);       // library list modal
     const [editingChart, setEditingChart] = useState(null);            // { id?, name, chart } being edited, or null
     const [chartSaving, setChartSaving] = useState(false);
+
+    // Cancel Order tool (24h no-approval cancel, any channel)
+    const [cancelSearch, setCancelSearch] = useState("");
+    const [cancelLoading, setCancelLoading] = useState(false);
+    const [cancelError, setCancelError] = useState("");
+    const [cancelOrder, setCancelOrder] = useState(null);   // the looked-up order (with vendors join)
+    const [cancelReason, setCancelReason] = useState("");
+    const [cancelProcessing, setCancelProcessing] = useState(false);
 
     // Edit vendor
     const [editingVendor, setEditingVendor] = useState(null);
@@ -263,7 +271,8 @@ export default function B2bMerchandiserDashboard() {
     // ==================== FILTERED ORDERS ====================
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
-        if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter);
+        if (statusFilter === "cancelled") filtered = filtered.filter(o => (o.status || "").toLowerCase() === "cancelled");
+        else if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter && (o.status || "").toLowerCase() !== "cancelled");
         if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
@@ -548,6 +557,88 @@ export default function B2bMerchandiserDashboard() {
         }
     };
 
+    // ==================== CANCEL ORDER (24h, any channel, no approval) ====================
+    const CHANNEL_LABELS = { website: "Website", comms: "Comms", b2b: "B2B", private: "Private", offline: "Store / Exhibition" };
+    const hoursSince = (ts) => (ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : Infinity);
+    const orderAmount = (o) => Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
+
+    const handleFindCancelOrder = async () => {
+        const term = cancelSearch.trim();
+        if (!term) return;
+        setCancelLoading(true);
+        setCancelError("");
+        setCancelOrder(null);
+        setCancelReason("");
+        try {
+            const { data, error } = await supabase
+                .from("orders")
+                .select("*, vendors:vendor_id ( store_brand_name, vendor_code )")
+                .eq("order_no", term)
+                .maybeSingle();
+            if (error) throw error;
+            if (!data) { setCancelError(`No order found with number "${term}".`); return; }
+            setCancelOrder(data);
+        } catch (err) {
+            console.error("Cancel lookup error:", err);
+            setCancelError("Lookup failed: " + (err.message || "Unknown error"));
+        } finally {
+            setCancelLoading(false);
+        }
+    };
+
+    const handleConfirmCancel = async () => {
+        const order = cancelOrder;
+        if (!order) return;
+        if (!cancelReason.trim()) { alert("Please enter a reason for cancellation."); return; }
+        if (hoursSince(order.created_at) >= 24) { alert("The 24-hour cancellation window has expired."); return; }
+        setCancelProcessing(true);
+        try {
+            // 1. Cancel — same 3 fields every existing cancel handler writes.
+            const { error } = await supabase.from("orders").update({
+                status: "cancelled",
+                cancellation_reason: cancelReason.trim(),
+                cancelled_at: new Date().toISOString(),
+            }).eq("id", order.id);
+            if (error) throw error;
+
+            // 2. B2B Buyout credit reversal — only for an approved Buyout order that
+            //    actually added to the vendor's used credit at approval time.
+            if (order.is_b2b && order.b2b_order_type === "Buyout" && order.vendor_id && order.approval_status === "approved") {
+                try {
+                    const { data: v } = await supabase.from("vendors").select("current_credit_used").eq("id", order.vendor_id).single();
+                    await supabase.from("vendors").update({
+                        current_credit_used: Math.max(0, Number(v?.current_credit_used || 0) - orderAmount(order)),
+                    }).eq("id", order.vendor_id);
+                } catch (creditErr) {
+                    console.error("Credit reversal failed (order still cancelled):", creditErr);
+                }
+            }
+
+            // 3. Notify production — PM always (static), channel-correct head added
+            //    dynamically. No customer notification.
+            let headEmail = null;
+            try {
+                const { data: he } = await supabase.rpc("get_production_head_email", { p_order_id: order.id });
+                headEmail = he || null;
+            } catch (e) { /* non-fatal — PM still gets it */ }
+            sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
+                orderId: order.id,
+                orderNo: order.order_no,
+                metadata: { client_name: order.delivery_name, source: order.salesperson_store, cancelled_by: profile?.saleperson || "" },
+                extraRecipients: headEmail ? [{ email: headEmail.toLowerCase(), channel: "in_app" }] : [],
+            }).catch(err => console.error("Notification error:", err));
+
+            setCancelOrder(prev => prev ? { ...prev, status: "cancelled", cancellation_reason: cancelReason.trim() } : prev);
+            setCancelReason("");
+            showPopup({ type: "success", title: "Order Cancelled", message: `Order ${order.order_no} has been cancelled.`, confirmText: "OK" });
+        } catch (err) {
+            console.error("Cancel error:", err);
+            showPopup({ type: "error", title: "Error", message: "Failed to cancel: " + (err.message || "Unknown error"), confirmText: "OK" });
+        } finally {
+            setCancelProcessing(false);
+        }
+    };
+
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
@@ -588,9 +679,16 @@ export default function B2bMerchandiserDashboard() {
         switch (status?.toLowerCase()) {
             case "approved": return "merch-status-approved";
             case "rejected": return "merch-status-rejected";
+            case "cancelled": return "merch-status-cancelled";
             default: return "merch-status-pending";
         }
     };
+
+    // The badge to show for an order: "Cancelled" overrides the approval badge,
+    // since a cancelled order keeps approval_status="approved" and would
+    // otherwise misleadingly read "Approved".
+    const orderBadgeLabel = (order) => (order.status || "").toLowerCase() === "cancelled" ? "Cancelled" : (order.approval_status || "Pending");
+    const orderBadgeClass = (order) => (order.status || "").toLowerCase() === "cancelled" ? "merch-status-cancelled" : getStatusBadgeClass(order.approval_status);
 
     if (loading) return <p className="loading-text">Loading Dashboard...</p>;
 
@@ -625,6 +723,7 @@ export default function B2bMerchandiserDashboard() {
                         <a className={`merch-menu-item ${activeTab === "approvals" ? "active" : ""}`} onClick={() => { setActiveTab("approvals"); setShowSidebar(false); }}>Approvals {stats.pending.length > 0 && <span className="merch-badge-count">{stats.pending.length}</span>}</a>
                         <a className={`merch-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders</a>
                         <a className={`merch-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor Book</a>
+                        <a className={`merch-menu-item ${activeTab === "cancel_order" ? "active" : ""}`} onClick={() => { setActiveTab("cancel_order"); setShowSidebar(false); }}>Cancel Order</a>
                         <a className={`merch-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`merch-menu-item ${activeTab === "consignment" ? "active" : ""}`} onClick={() => { setActiveTab("consignment"); setShowSidebar(false); }}>Consignment</a>
                         <a className={`merch-menu-item ${activeTab === "analytics" ? "active" : ""}`} onClick={() => { setActiveTab("analytics"); setShowSidebar(false); }}>Analytics</a>
@@ -732,7 +831,7 @@ export default function B2bMerchandiserDashboard() {
                                             <div className="merch-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
                                                 <p><b>Order No:</b> {o.order_no}</p>
                                                 <p><b>PO:</b> {o.po_number || "\u2014"} &nbsp;|&nbsp; <b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"}</p>
-                                                <p><b>Type:</b> {o.b2b_order_type || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={getStatusBadgeClass(o.approval_status)}>{o.approval_status || "Pending"}</span></p>
+                                                <p><b>Type:</b> {o.b2b_order_type || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={orderBadgeClass(o)}>{orderBadgeLabel(o)}</span></p>
                                                 <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "\u2014"}</p>
                                                 <p><b>Total:</b> {`\u20B9${formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}`}</p>
                                             </div>
@@ -804,7 +903,7 @@ export default function B2bMerchandiserDashboard() {
                         <h2 className="merch-tab-title">All Orders</h2>
                         <div className="merch-filters-row" style={{ flexWrap: "wrap" }}>
                             <input type="text" placeholder="Search order #, PO, vendor, merchandiser..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="merch-search-input" />
-                            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
+                            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>
                             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option></select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Merchandisers</option>{uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}</select>
                             <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="merch-filter-select" title="From date" />
@@ -828,7 +927,7 @@ export default function B2bMerchandiserDashboard() {
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">PO NUMBER:</span><span className="merch-ocard-val">{order.po_number || "\u2014"}</span></div>
                                             </div>
                                             <div className="merch-ocard-badges">
-                                                <div className={`merch-order-status-badge ${getStatusBadgeClass(order.approval_status)}`}>{order.approval_status || "Pending"}</div>
+                                                <div className={`merch-order-status-badge ${orderBadgeClass(order)}`}>{orderBadgeLabel(order)}</div>
                                                 {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
                                                 {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"\u26A0"} Urgent</div>)}
                                                 {order.credit_exceeded && (<div className="merch-credit-badge">Credit Exceeded</div>)}
@@ -979,6 +1078,104 @@ export default function B2bMerchandiserDashboard() {
                     </div>
                 )}
 
+                {/* ===== CANCEL ORDER TAB ===== */}
+                {activeTab === "cancel_order" && (
+                    <div className="merch-tab-wrapper">
+                        <h2 className="merch-tab-title">Cancel Order</h2>
+                        <p className="merch-muted" style={{ marginTop: -4, marginBottom: 16 }}>
+                            Any order can be cancelled within 24 hours of being placed — no approval needed. Enter the order number to look it up.
+                        </p>
+
+                        <div style={{ display: "flex", gap: 8, maxWidth: 460, marginBottom: 20 }}>
+                            <input
+                                type="text"
+                                placeholder="Enter order number (e.g. SB-DLC-0626-000100)"
+                                value={cancelSearch}
+                                onChange={(e) => setCancelSearch(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleFindCancelOrder(); }}
+                                style={{ flex: 1, padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14 }}
+                            />
+                            <button className="merch-btn-approve" style={{ padding: "8px 18px", fontSize: 13 }} onClick={handleFindCancelOrder} disabled={cancelLoading || !cancelSearch.trim()}>
+                                {cancelLoading ? "Finding..." : "Find Order"}
+                            </button>
+                        </div>
+
+                        {cancelError && <p className="merch-muted" style={{ color: "#c62828" }}>{cancelError}</p>}
+
+                        {cancelOrder && (() => {
+                            const o = cancelOrder;
+                            const channel = getOrderChannelKey(o);
+                            const hrs = hoursSince(o.created_at);
+                            const isCancelled = (o.status || "").toLowerCase() === "cancelled";
+                            const withinWindow = hrs < 24;
+                            const hoursLeft = Math.max(0, Math.floor(24 - hrs));
+                            return (
+                                <div className="merch-modal" style={{ maxWidth: 560, margin: 0, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" }}>
+                                    <div className="merch-modal-top">
+                                        <h3>{o.order_no}</h3>
+                                        <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, background: "#f0ece2", color: "#6b5842" }}>{CHANNEL_LABELS[channel] || channel}</span>
+                                    </div>
+                                    <div className="merch-modal-body">
+                                        {/* Eligibility banner */}
+                                        {isCancelled ? (
+                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#f5f5f5", color: "#888", fontWeight: 600, marginBottom: 14 }}>
+                                                This order is already cancelled{o.cancellation_reason ? ` — "${o.cancellation_reason}"` : ""}.
+                                            </div>
+                                        ) : withinWindow ? (
+                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#e8f5e9", color: "#2e7d32", fontWeight: 600, marginBottom: 14 }}>
+                                                ✓ Eligible for cancellation — about {hoursLeft} hour{hoursLeft === 1 ? "" : "s"} left in the 24-hour window.
+                                            </div>
+                                        ) : (
+                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#ffebee", color: "#c62828", fontWeight: 600, marginBottom: 14 }}>
+                                                Cancellation window expired — this order was placed {Math.floor(hrs)} hours ago (limit is 24).
+                                            </div>
+                                        )}
+
+                                        {/* Details */}
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", fontSize: 13 }}>
+                                            <div><span className="merch-ocard-dlabel">Status:</span> <span className="merch-ocard-dval">{o.status || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Placed:</span> <span className="merch-ocard-dval">{formatDate(o.created_at)}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Amount:</span> <span className="merch-ocard-dval">{`₹${formatIndianNumber(orderAmount(o))}`}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Store:</span> <span className="merch-ocard-dval">{o.salesperson_store || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Customer:</span> <span className="merch-ocard-dval">{o.delivery_name || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Salesperson:</span> <span className="merch-ocard-dval">{o.salesperson || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Delivery Date:</span> <span className="merch-ocard-dval">{o.delivery_date ? formatDate(o.delivery_date) : "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Product:</span> <span className="merch-ocard-dval">{o.items?.[0]?.product_name || "—"}</span></div>
+                                            {o.is_b2b && (
+                                                <>
+                                                    <div><span className="merch-ocard-dlabel">Vendor:</span> <span className="merch-ocard-dval">{o.vendors?.store_brand_name || "—"}</span></div>
+                                                    <div><span className="merch-ocard-dlabel">B2B Type:</span> <span className="merch-ocard-dval">{o.b2b_order_type || "—"}</span></div>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {/* Cancel action — only when eligible */}
+                                        {!isCancelled && withinWindow && (
+                                            <div style={{ marginTop: 18 }}>
+                                                <label className="merch-ocard-dlabel" style={{ display: "block", marginBottom: 6 }}>Reason for cancellation *</label>
+                                                <textarea
+                                                    rows={3}
+                                                    value={cancelReason}
+                                                    onChange={(e) => setCancelReason(e.target.value)}
+                                                    placeholder="Why is this order being cancelled?"
+                                                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, resize: "vertical" }}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {!isCancelled && withinWindow && (
+                                        <div className="merch-modal-footer">
+                                            <button className="merch-modal-confirm reject" onClick={handleConfirmCancel} disabled={cancelProcessing || !cancelReason.trim()}>
+                                                {cancelProcessing ? "Cancelling..." : "Cancel This Order"}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                )}
+
                 {/* ===== CONSIGNMENT TAB ===== */}
                 {activeTab === "consignment" && (
                     <div className="merch-tab-wrapper">
@@ -996,7 +1193,7 @@ export default function B2bMerchandiserDashboard() {
                                 orders.filter(o => o.b2b_order_type === "Consignment").map(order => (
                                     <div key={order.id} className="merch-order-item" onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
                                         <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
-                                        <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={getStatusBadgeClass(order.approval_status)}>{order.approval_status || "Pending"}</span></p>
+                                        <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={orderBadgeClass(order)}>{orderBadgeLabel(order)}</span></p>
                                         <p><b>Total:</b> {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`} &nbsp;|&nbsp; <b>Qty:</b> {order.total_quantity || 0} &nbsp;|&nbsp; <b>Date:</b> {formatDate(order.created_at)}</p>
                                     </div>
                                 ))
@@ -1150,7 +1347,7 @@ export default function B2bMerchandiserDashboard() {
                                                     <p><b>Order No:</b> {order.order_no}</p>
                                                     <p><b>PO:</b> {order.po_number || "\u2014"}</p>
                                                     <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
-                                                    <p><b>Status:</b> {order.approval_status || "Pending"}
+                                                    <p><b>Status:</b> {orderBadgeLabel(order)}
                                                         {order.order_flag === "Urgent" && <b style={{ color: "#e53935", marginLeft: 8 }}>{"\u26A0"} Urgent</b>}
                                                     </p>
                                                     <p><b>Delivery:</b> {formatDate(order.delivery_date)}</p>

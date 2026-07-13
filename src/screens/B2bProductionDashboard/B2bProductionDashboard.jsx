@@ -292,7 +292,8 @@ export default function B2bProductionDashboard() {
     // ==================== FILTERED ORDERS ====================
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
-        if (prodFilter !== "all") filtered = filtered.filter(o => getStageBucket(o) === prodFilter);
+        if (prodFilter === "cancelled") filtered = filtered.filter(o => (o.status || "").toLowerCase() === "cancelled");
+        else if (prodFilter !== "all") filtered = filtered.filter(o => (o.status || "").toLowerCase() !== "cancelled" && getStageBucket(o) === prodFilter);
         if (allTypeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type === allTypeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
@@ -402,6 +403,8 @@ export default function B2bProductionDashboard() {
     // the actual current stage (e.g. "Embroidery") so the badge matches the
     // per-piece journey chips instead of a generic word.
     const getStageStatusLabel = (order) => {
+        // Cancelled wins over any stale production stage.
+        if ((order.status || "").toLowerCase() === "cancelled") return "Cancelled";
         const bucket = getStageBucket(order);
         if (bucket === "queue") return "Not Started";
         if (bucket === "ready") return "Ready for Dispatch";
@@ -414,6 +417,7 @@ export default function B2bProductionDashboard() {
     };
 
     const getStageStatusClass = (order) => {
+        if ((order.status || "").toLowerCase() === "cancelled") return "prod-status-cancelled";
         switch (getStageBucket(order)) {
             case "in_production": return "prod-status-inprod";
             case "ready": return "prod-status-ready";
@@ -678,6 +682,7 @@ export default function B2bProductionDashboard() {
                                 <option value="in_production">In Production</option>
                                 <option value="ready">Ready for Dispatch</option>
                                 <option value="dispatched">Dispatched / Done</option>
+                                <option value="cancelled">Cancelled</option>
                             </select>
                             <select value={allTypeFilter} onChange={(e) => { setAllTypeFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
                                 <option value="all">All Types</option>
