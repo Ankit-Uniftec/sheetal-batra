@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 import ExtrasPopup from "../../components/ExtrasPopup";
+import { B2B_SIZE_OPTIONS, SIZE_CHART_US, resolveSizeChart, chartValueSet } from "../../utils/b2bSizeChart";
 
 /**
  * Session Storage Keys
@@ -64,30 +65,13 @@ export function SearchableSelect({ options, value, onChange, placeholder = "Sele
     );
 }
 
-const SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
-
-const SIZE_CHART_US = {
-    XXS: { Bust: 30, Waist: 24, Hip: 34 }, XS: { Bust: 32, Waist: 26, Hip: 36 }, S: { Bust: 34, Waist: 28, Hip: 38 },
-    M: { Bust: 36, Waist: 30, Hip: 40 }, L: { Bust: 38, Waist: 32, Hip: 42 }, XL: { Bust: 40, Waist: 34, Hip: 44 },
-    "2XL": { Bust: 42, Waist: 36, Hip: 46 }, "3XL": { Bust: 44, Waist: 38, Hip: 48 }, "4XL": { Bust: 46, Waist: 40, Hip: 50 },
-    "5XL": { Bust: 48, Waist: 42, Hip: 52 }, "6XL": { Bust: 50, Waist: 44, Hip: 54 }, "7XL": { Bust: 52, Waist: 46, Hip: 56 },
-    "8XL": { Bust: 54, Waist: 48, Hip: 58 },
-};
+// Default B2B size list + house size chart live in one shared module so the
+// vendor admin grid and this order form's lookup can never drift apart.
+const SIZE_OPTIONS = B2B_SIZE_OPTIONS;
 
 // CUSTOM size — a deliberate "no standard size" choice. Not in any size chart,
 // so the auto-fill effect skips it; the user enters every measurement.
 const CUSTOM_SIZE = "Custom";
-
-// Every numeric value in the adult size chart — used to recognise (and clear)
-// chart-derived measurement values when switching to Custom, while keeping
-// values the user typed themselves.
-const SIZE_CHART_VALUE_SET = (() => {
-    const set = new Set();
-    Object.values(SIZE_CHART_US).forEach((d) =>
-        Object.values(d).forEach((v) => { if (v != null) set.add(Number(v)); })
-    );
-    return set;
-})();
 
 const CATEGORY_KEY_MAP = {
     "Short Kurta": "KurtaChogaKaftan", "Kurta": "KurtaChogaKaftan", "Long Kurta": "KurtaChogaKaftan",
@@ -203,6 +187,26 @@ export default function B2bProductForm() {
     const [availableSizes, setAvailableSizes] = useState(SIZE_OPTIONS);
 
     const [isKidsProduct, setIsKidsProduct] = useState(false);
+
+    // The adult size chart in effect: the selected vendor's chart
+    // (vendors.size_chart_id → size_charts.chart, joined in on selection) layered
+    // over the house default, so any size the vendor left blank (e.g. XXS) still
+    // resolves to the standard number instead of auto-filling nothing. No vendor
+    // chart → the plain default. Kids products bypass this. One place resolves it
+    // so the auto-fill effect and the Custom-clear logic agree on what's
+    // "chart-derived".
+    const activeAdultSizeChart = useMemo(
+        () => resolveSizeChart(vendor?.size_charts?.chart),
+        [vendor]
+    );
+    // Numbers that count as chart-derived when clearing on "Custom" — spans both
+    // the default AND the active vendor chart, so a vendor value is still
+    // recognised and cleared (and a hand-typed value is still preserved).
+    const currentChartValueSet = useMemo(() => {
+        const set = chartValueSet(SIZE_CHART_US);
+        chartValueSet(activeAdultSizeChart).forEach((v) => set.add(v));
+        return set;
+    }, [activeAdultSizeChart]);
 
     // Measurements
     const [measurements, setMeasurements] = useState({});
@@ -358,7 +362,7 @@ export default function B2bProductForm() {
             Object.entries(prev || {}).forEach(([categoryKey, fields]) => {
                 const newFields = {};
                 Object.entries(fields || {}).forEach(([field, value]) => {
-                    const isChartValue = value !== "" && value != null && SIZE_CHART_VALUE_SET.has(Number(value));
+                    const isChartValue = value !== "" && value != null && currentChartValueSet.has(Number(value));
                     newFields[field] = isChartValue ? "" : value;
                 });
                 cleared[categoryKey] = newFields;
@@ -372,7 +376,7 @@ export default function B2bProductForm() {
         if (isRestoredRef.current || !selectedSize || !selectedProduct) return;
         // CUSTOM never auto-fills — the user enters every measurement.
         if (selectedSize === CUSTOM_SIZE) return;
-        const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : SIZE_CHART_US;
+        const currentSizeChart = isKidsProduct ? KIDS_SIZE_CHART : activeAdultSizeChart;
         const sizeData = currentSizeChart[selectedSize];
         if (!sizeData) return;
         const relevantKeys = new Set();
@@ -399,7 +403,7 @@ export default function B2bProductForm() {
                 return newM;
             });
         }
-    }, [selectedSize, isKidsProduct, selectedProduct, selectedTop, selectedBottom]);
+    }, [selectedSize, isKidsProduct, selectedProduct, selectedTop, selectedBottom, activeAdultSizeChart]);
 
     // Helpers
     const toOptions = (arr = []) => arr.map(x => ({ label: String(x), value: x }));
@@ -442,7 +446,7 @@ export default function B2bProductForm() {
         Object.entries(item.measurements || {}).forEach(([categoryKey, fields]) => {
             const newFields = {};
             Object.entries(fields || {}).forEach(([field, value]) => {
-                const isChartValue = value !== "" && value != null && SIZE_CHART_VALUE_SET.has(Number(value));
+                const isChartValue = value !== "" && value != null && currentChartValueSet.has(Number(value));
                 newFields[field] = isChartValue ? "" : value;
             });
             clearedMeasurements[categoryKey] = newFields;

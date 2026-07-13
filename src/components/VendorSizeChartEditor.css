@@ -1,0 +1,108 @@
+.vsc-wrap {
+    margin-top: 16px;
+}
+
+.vsc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #555;
+    cursor: pointer;
+    user-select: none;
+}
+
+.vsc-toggle input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.vsc-editor {
+    margin-top: 12px;
+    border: 1px solid #e6e0d2;
+    border-radius: 8px;
+    padding: 12px;
+    background: #fbf9f3;
+}
+
+.vsc-editor-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.vsc-hint {
+    margin: 0;
+    font-size: 11.5px;
+    color: #999;
+    line-height: 1.4;
+    max-width: 340px;
+}
+
+.vsc-copy-btn {
+    flex-shrink: 0;
+    border: 1px solid #d5b85a;
+    background: #fff;
+    color: #8B7355;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.vsc-copy-btn:hover {
+    background: #faf6e8;
+}
+
+.vsc-grid-scroll {
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.vsc-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.vsc-grid th {
+    position: sticky;
+    top: 0;
+    background: #f0ece2;
+    color: #6b5842;
+    font-weight: 600;
+    text-align: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e0d8c6;
+}
+
+.vsc-grid td {
+    padding: 3px 6px;
+    border-bottom: 1px solid #efe9dc;
+    text-align: center;
+}
+
+.vsc-size-cell {
+    font-weight: 600;
+    color: #555;
+    background: #f7f3ea;
+}
+
+.vsc-grid input {
+    width: 64px;
+    padding: 5px 6px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 13px;
+    text-align: center;
+}
+
+.vsc-grid input:focus {
+    outline: none;
+    border-color: #d5b85a;
+}

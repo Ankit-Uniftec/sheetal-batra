@@ -11,6 +11,8 @@ import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationSe
 import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import { enrichComponentsWithMovements } from "../../utils/barcodeService";
+import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
+import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -23,6 +25,7 @@ export default function B2bMerchandiserDashboard() {
     const [components, setComponents] = useState([]); // order_components for the journey row
     const [vendors, setVendors] = useState([]);
     const [vendorMap, setVendorMap] = useState({});
+    const [sizeCharts, setSizeCharts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(null);
@@ -47,9 +50,14 @@ export default function B2bMerchandiserDashboard() {
     const [vendorPage, setVendorPage] = useState(1);
     const VENDORS_PER_PAGE = 10;
     const [showAddVendor, setShowAddVendor] = useState(false);
-    const [newVendor, setNewVendor] = useState({ store_brand_name: "", legal_name: "", vendor_code: "", location: "", gst_number: "", billing_address: "", shipping_address: "", payment_terms: "Credit", payment_type: "", contract_date: "", default_order_type: "Buyout", default_markdown_percent: 0, remarks: "", credit_limit: 1000000, credit_timeline_days: 30, advance_percent: 0 });
+    const [newVendor, setNewVendor] = useState({ store_brand_name: "", legal_name: "", vendor_code: "", location: "", gst_number: "", billing_address: "", shipping_address: "", payment_terms: "Credit", payment_type: "", contract_date: "", default_order_type: "Buyout", default_markdown_percent: 0, remarks: "", credit_limit: 1000000, credit_timeline_days: 30, advance_percent: 0, size_chart_id: null });
     const [newContact, setNewContact] = useState({ contact_name: "", contact_email: "", contact_phone: "" });
     const [vendorSaving, setVendorSaving] = useState(false);
+
+    // Size-chart library (reusable charts picked by vendors)
+    const [showSizeCharts, setShowSizeCharts] = useState(false);       // library list modal
+    const [editingChart, setEditingChart] = useState(null);            // { id?, name, chart } being edited, or null
+    const [chartSaving, setChartSaving] = useState(false);
 
     // Edit vendor
     const [editingVendor, setEditingVendor] = useState(null);
@@ -91,12 +99,14 @@ export default function B2bMerchandiserDashboard() {
 
             setUser(user);
 
-            const [profileResult, ordersResult, vendorsResult] = await Promise.all([
+            const [profileResult, ordersResult, vendorsResult, sizeChartsResult] = await Promise.all([
                 supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
                 supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false }),
-                supabase.from("vendors").select("*").eq("is_active", true).order("store_brand_name", { ascending: true })
+                supabase.from("vendors").select("*").eq("is_active", true).order("store_brand_name", { ascending: true }),
+                supabase.from("size_charts").select("*").eq("is_active", true).order("name", { ascending: true })
             ]);
 
+            if (sizeChartsResult.data) setSizeCharts(sizeChartsResult.data);
             if (profileResult.data) setProfile(profileResult.data);
             if (ordersResult.data) {
                 setOrders(ordersResult.data);
@@ -440,6 +450,7 @@ export default function B2bMerchandiserDashboard() {
             credit_limit: vendor.credit_limit || 0,
             credit_timeline_days: vendor.credit_timeline_days || 30,
             advance_percent: vendor.advance_percent || 0,
+            size_chart_id: vendor.size_chart_id || null,
         });
         // Fetch primary contact
         try {
@@ -494,6 +505,47 @@ export default function B2bMerchandiserDashboard() {
             console.error("Error updating vendor:", err);
             alert("Failed to update vendor: " + (err.message || "Unknown error"));
         } finally { setVendorSaving(false); }
+    };
+
+    // ==================== SIZE-CHART LIBRARY ====================
+    const handleSaveChart = async () => {
+        const name = (editingChart?.name || "").trim();
+        if (!name) { alert("Chart name is required."); return; }
+        const chart = normalizeSizeChart(editingChart?.chart);
+        if (!chart) { alert("Enter at least one size's measurements."); return; }
+        setChartSaving(true);
+        try {
+            if (editingChart.id) {
+                const { error } = await supabase.from("size_charts").update({ name, chart }).eq("id", editingChart.id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from("size_charts").insert([{ name, chart }]);
+                if (error) throw error;
+            }
+            setEditingChart(null);
+            loadAllData();
+        } catch (err) {
+            console.error("Error saving size chart:", err);
+            alert("Failed to save size chart: " + (err.message || "Unknown error"));
+        } finally { setChartSaving(false); }
+    };
+
+    const handleDeleteChart = async (chart) => {
+        const usedBy = vendors.filter(v => v.size_chart_id === chart.id).length;
+        const msg = usedBy > 0
+            ? `"${chart.name}" is used by ${usedBy} vendor${usedBy === 1 ? "" : "s"}. Deleting it will revert them to the default size chart. Continue?`
+            : `Delete size chart "${chart.name}"?`;
+        if (!window.confirm(msg)) return;
+        try {
+            // Soft-delete so any vendor still pointing at it FK-resolves to null
+            // (their join returns nothing → order form falls back to default).
+            const { error } = await supabase.from("size_charts").update({ is_active: false }).eq("id", chart.id);
+            if (error) throw error;
+            loadAllData();
+        } catch (err) {
+            console.error("Error deleting size chart:", err);
+            alert("Failed to delete size chart: " + (err.message || "Unknown error"));
+        }
     };
 
     // ==================== HELPERS ====================
@@ -840,7 +892,10 @@ export default function B2bMerchandiserDashboard() {
                     <div className="merch-tab-wrapper">
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                             <h2 className="merch-tab-title" style={{ margin: 0 }}>Vendor Book</h2>
-                            <button className="merch-btn-approve" onClick={() => setShowAddVendor(true)} style={{ padding: "8px 16px", fontSize: 13 }}>+ Add Vendor</button>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button className="merch-btn-reject" onClick={() => setShowSizeCharts(true)} style={{ padding: "8px 16px", fontSize: 13 }}>Manage Size Charts</button>
+                                <button className="merch-btn-approve" onClick={() => setShowAddVendor(true)} style={{ padding: "8px 16px", fontSize: 13 }}>+ Add Vendor</button>
+                            </div>
                         </div>
                         <div className="merch-vendor-search-bar"><input type="text" placeholder="Search vendors by name, code, or location..." value={vendorSearch} onChange={(e) => { setVendorSearch(e.target.value); setVendorPage(1); }} /></div>
                         <div className="merch-order-list-scroll">
@@ -850,6 +905,7 @@ export default function B2bMerchandiserDashboard() {
                                     const creditLimit = vendor.credit_limit || 0;
                                     const available = creditLimit - creditUsed;
                                     const pct = creditLimit > 0 ? (creditUsed / creditLimit) * 100 : 0;
+                                    const vendorChartName = vendor.size_chart_id ? (sizeCharts.find(sc => sc.id === vendor.size_chart_id)?.name || null) : null;
                                     return (
                                         <div key={vendor.id} className="merch-vendor-card-full" onClick={() => handleViewVendorOrders(vendor.id)} style={{ cursor: "pointer" }}>
                                             {/* Header - like order card */}
@@ -861,6 +917,22 @@ export default function B2bMerchandiserDashboard() {
                                                 </div>
                                                 <div className="merch-ocard-badges">
                                                     <div className={`merch-vc-pct-badge ${pct > 80 ? "danger" : pct > 50 ? "warn" : "safe"}`}>{pct.toFixed(0)}% Credit Used</div>
+                                                    <div
+                                                        className="merch-vc-chart-badge"
+                                                        title={vendorChartName ? `Uses the "${vendorChartName}" size chart` : "Uses the default size chart"}
+                                                        style={{
+                                                            fontSize: 11,
+                                                            fontWeight: 600,
+                                                            padding: "3px 10px",
+                                                            borderRadius: 999,
+                                                            border: `1px solid ${vendorChartName ? "#d5b85a" : "#ddd"}`,
+                                                            background: vendorChartName ? "#fff8e6" : "#f5f5f5",
+                                                            color: vendorChartName ? "#8b7240" : "#888",
+                                                            whiteSpace: "nowrap",
+                                                        }}
+                                                    >
+                                                        {"📏 "}{vendorChartName || "Default"} chart
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -1197,6 +1269,15 @@ export default function B2bMerchandiserDashboard() {
                             <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Shipping Address</label><textarea rows={2} value={newVendor.shipping_address} onChange={(e) => setNewVendor(p => ({ ...p, shipping_address: e.target.value }))} /></div>
                             <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Remarks</label><textarea rows={2} value={newVendor.remarks} onChange={(e) => setNewVendor(p => ({ ...p, remarks: e.target.value }))} /></div>
 
+                            <div className="merch-modal-field" style={{ marginTop: 12 }}>
+                                <label>Size Chart</label>
+                                <select value={newVendor.size_chart_id || ""} onChange={(e) => setNewVendor(p => ({ ...p, size_chart_id: e.target.value || null }))}>
+                                    <option value="">Default (house chart)</option>
+                                    {sizeCharts.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+                                </select>
+                                <p style={{ fontSize: 11, color: "#999", margin: "4px 0 0" }}>Manage charts via "Manage Size Charts" on the Vendors list.</p>
+                            </div>
+
                             <h4 style={{ margin: "16px 0 8px", fontSize: 14, color: "#555" }}>Primary Contact</h4>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                                 <div className="merch-modal-field"><label>Name</label><input type="text" value={newContact.contact_name} onChange={(e) => setNewContact(p => ({ ...p, contact_name: e.target.value }))} /></div>
@@ -1263,6 +1344,14 @@ export default function B2bMerchandiserDashboard() {
                             <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Shipping Address</label><textarea rows={2} value={editVendorData.shipping_address} onChange={(e) => setEditVendorData(p => ({ ...p, shipping_address: e.target.value }))} /></div>
                             <div className="merch-modal-field" style={{ marginTop: 8 }}><label>Remarks</label><textarea rows={2} value={editVendorData.remarks} onChange={(e) => setEditVendorData(p => ({ ...p, remarks: e.target.value }))} /></div>
 
+                            <div className="merch-modal-field" style={{ marginTop: 12 }}>
+                                <label>Size Chart</label>
+                                <select value={editVendorData.size_chart_id || ""} onChange={(e) => setEditVendorData(p => ({ ...p, size_chart_id: e.target.value || null }))}>
+                                    <option value="">Default (house chart)</option>
+                                    {sizeCharts.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+                                </select>
+                            </div>
+
                             <h4 style={{ margin: "16px 0 8px", fontSize: 14, color: "#555" }}>Primary Contact</h4>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                                 <div className="merch-modal-field"><label>Name</label><input type="text" value={editContact.contact_name} onChange={(e) => setEditContact(p => ({ ...p, contact_name: e.target.value }))} /></div>
@@ -1273,6 +1362,76 @@ export default function B2bMerchandiserDashboard() {
                         <div className="merch-modal-footer">
                             <button className="merch-modal-cancel" onClick={() => { setEditingVendor(null); setEditVendorData(null); }}>Cancel</button>
                             <button className="merch-modal-confirm approve" onClick={handleUpdateVendor} disabled={vendorSaving}>{vendorSaving ? "Saving..." : "Update Vendor"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ===== SIZE-CHART LIBRARY: list ===== */}
+            {showSizeCharts && (
+                <div className="merch-modal-overlay" onClick={() => setShowSizeCharts(false)}>
+                    <div className="merch-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+                        <div className="merch-modal-top">
+                            <h3>Size Charts</h3>
+                            <button className="merch-modal-close" onClick={() => setShowSizeCharts(false)}>{"×"}</button>
+                        </div>
+                        <div className="merch-modal-body" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+                            <p style={{ fontSize: 12, color: "#999", marginBottom: 12 }}>
+                                Create a chart once, then pick it on any vendor. A vendor set to "Default" uses the house chart.
+                            </p>
+                            {sizeCharts.length === 0 ? (
+                                <p className="merch-muted">No custom size charts yet.</p>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    {sizeCharts.map(sc => {
+                                        const rows = sc.chart ? Object.keys(sc.chart).length : 0;
+                                        const usedBy = vendors.filter(v => v.size_chart_id === sc.id).length;
+                                        return (
+                                            <div key={sc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid #eee", borderRadius: 8, padding: "10px 12px" }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 600 }}>{sc.name}</div>
+                                                    <div style={{ fontSize: 11.5, color: "#999" }}>{rows} size{rows === 1 ? "" : "s"} · used by {usedBy} vendor{usedBy === 1 ? "" : "s"}</div>
+                                                </div>
+                                                <div style={{ display: "flex", gap: 8 }}>
+                                                    <button className="merch-btn-approve" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => setEditingChart({ id: sc.id, name: sc.name, chart: sc.chart || {} })}>Edit</button>
+                                                    <button className="merch-btn-reject" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => handleDeleteChart(sc)}>Delete</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="merch-modal-footer">
+                            <button className="merch-modal-cancel" onClick={() => setShowSizeCharts(false)}>Close</button>
+                            <button className="merch-modal-confirm approve" onClick={() => setEditingChart({ name: "", chart: {} })}>+ New Chart</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ===== SIZE-CHART LIBRARY: editor ===== */}
+            {editingChart && (
+                <div className="merch-modal-overlay" onClick={() => setEditingChart(null)}>
+                    <div className="merch-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+                        <div className="merch-modal-top">
+                            <h3>{editingChart.id ? "Edit Size Chart" : "New Size Chart"}</h3>
+                            <button className="merch-modal-close" onClick={() => setEditingChart(null)}>{"×"}</button>
+                        </div>
+                        <div className="merch-modal-body" style={{ maxHeight: "65vh", overflowY: "auto" }}>
+                            <div className="merch-modal-field">
+                                <label>Chart Name *</label>
+                                <input type="text" placeholder="e.g. Aza" value={editingChart.name} onChange={(e) => setEditingChart(p => ({ ...p, name: e.target.value }))} />
+                            </div>
+                            <VendorSizeChartEditor
+                                hideToggle
+                                value={editingChart.chart}
+                                onChange={(chart) => setEditingChart(p => ({ ...p, chart: chart || {} }))}
+                            />
+                        </div>
+                        <div className="merch-modal-footer">
+                            <button className="merch-modal-cancel" onClick={() => setEditingChart(null)}>Cancel</button>
+                            <button className="merch-modal-confirm approve" onClick={handleSaveChart} disabled={chartSaving}>{chartSaving ? "Saving..." : "Save Chart"}</button>
                         </div>
                     </div>
                 </div>

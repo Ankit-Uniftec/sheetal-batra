@@ -143,7 +143,7 @@ export default function B2bVendorSelection() {
             try {
                 const { data, error } = await supabase
                     .from("vendors")
-                    .select(`*, vendor_contacts (*)`)
+                    .select(`*, vendor_contacts (*), size_charts:size_chart_id ( chart )`)
                     .eq("is_active", true)
                     .order("store_brand_name", { ascending: true });
                 if (error) throw error;
