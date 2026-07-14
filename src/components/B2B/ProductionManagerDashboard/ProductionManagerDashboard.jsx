@@ -15,6 +15,8 @@ import ReplacementApprovals from "../../../components/ReplacementApprovals";
 import StageCountCards from "../../../components/StageCountCards";
 import QcHistoryPanel from "../../../components/QcHistoryPanel";
 import { fetchQcRecords } from "../../../utils/qcHistory";
+import ReJourneyPanel from "../../../components/ReJourneyPanel";
+import { fetchReJourneys } from "../../../utils/reJourneys";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
@@ -128,6 +130,8 @@ export default function ProductionManagerDashboard() {
     const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
+    const [reJourneys, setReJourneys] = useState([]);
+    const [reJourneysLoading, setReJourneysLoading] = useState(false);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -316,6 +320,18 @@ export default function ProductionManagerDashboard() {
             setQcHistoryLoading(true);
             const recs = await fetchQcRecords({ paged: true });
             if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab]);
+
+    // Load live re-journeys (all channels) when the Re-journeys tab opens.
+    useEffect(() => {
+        if (activeTab !== "rejourneys") return;
+        let cancelled = false;
+        (async () => {
+            setReJourneysLoading(true);
+            const rows = await fetchReJourneys({ paged: true });
+            if (!cancelled) { setReJourneys(rows); setReJourneysLoading(false); }
         })();
         return () => { cancelled = true; };
     }, [activeTab]);
@@ -1378,6 +1394,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders <span className="pm-badge-count">{orders.length}</span></a>
                             <a className={`pm-menu-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</a>
                             <a className={`pm-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
+                            <a className={`pm-menu-item ${activeTab === "rejourneys" ? "active" : ""}`} onClick={() => { setActiveTab("rejourneys"); setShowSidebar(false); }}>Re-journeys</a>
                             <a className={`pm-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
@@ -2022,6 +2039,14 @@ export default function ProductionManagerDashboard() {
                             <>
                                 <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>QC History — All Channels</p>
                                 <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
+                            </>
+                        )}
+
+                        {/* ===== RE-JOURNEYS TAB (all channels) ===== */}
+                        {activeTab === "rejourneys" && (
+                            <>
+                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>Re-journeys — Currently in Rework (All Channels)</p>
+                                <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} />
                             </>
                         )}
 

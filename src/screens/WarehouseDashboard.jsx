@@ -18,6 +18,8 @@ import ComponentStageBadge from "../components/ComponentStageBadge";
 import QcHistoryTable from "../components/QcHistoryTable";
 import QcHistoryPanel from "../components/QcHistoryPanel";
 import { fetchQcRecords } from "../utils/qcHistory";
+import ReJourneyPanel from "../components/ReJourneyPanel";
+import { fetchReJourneys } from "../utils/reJourneys";
 import StageCountCards from "../components/StageCountCards";
 import ProductionOverview from "../components/ProductionOverview";
 import SearchByDropdown from "../components/SearchByDropdown";
@@ -190,6 +192,9 @@ const WarehouseDashboard = () => {
   // QC History tab (channel-scoped to this PH's orders).
   const [qcHistory, setQcHistory] = useState([]);
   const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
+  // Re-journeys tab (channel-scoped).
+  const [reJourneys, setReJourneys] = useState([]);
+  const [reJourneysLoading, setReJourneysLoading] = useState(false);
   // Order whose full component journey is being viewed (shared modal).
   const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
 
@@ -417,6 +422,18 @@ const WarehouseDashboard = () => {
       setQcHistoryLoading(true);
       const recs = await fetchQcRecords({ orderIds: scopedOrders.map((o) => o.id) });
       if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [isWarehouseProdHead, activeTab, scopedOrders]);
+
+  // Load live re-journeys for this PH's channel when the Re-journeys tab opens.
+  useEffect(() => {
+    if (!isWarehouseProdHead || activeTab !== "rejourneys") return;
+    let cancelled = false;
+    (async () => {
+      setReJourneysLoading(true);
+      const rows = await fetchReJourneys({ orderIds: scopedOrders.map((o) => o.id) });
+      if (!cancelled) { setReJourneys(rows); setReJourneysLoading(false); }
     })();
     return () => { cancelled = true; };
   }, [isWarehouseProdHead, activeTab, scopedOrders]);
@@ -1341,6 +1358,12 @@ const WarehouseDashboard = () => {
                 QC History
               </a>
             )}
+            {isWarehouseProdHead && (
+              <a className={`wd-menu-item ${activeTab === "rejourneys" ? "active" : ""}`}
+                onClick={() => { setActiveTab("rejourneys"); setShowSidebar(false); }}>
+                Re-journeys
+              </a>
+            )}
             <a className="wd-menu-item" onClick={handleLogout}>Log Out</a>
           </nav>
         </aside>
@@ -2174,6 +2197,15 @@ const WarehouseDashboard = () => {
                 <span className="wd-orders-count">{scopedOrders.length} orders in your channel</span>
               </div>
               <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
+            </div>
+          )}
+          {activeTab === "rejourneys" && isWarehouseProdHead && (
+            <div className="wd-orders-section" style={{ maxWidth: "none" }}>
+              <div className="wd-orders-header">
+                <h2 className="wd-section-title">Re-journeys</h2>
+                <span className="wd-orders-count">Currently in rework · your channel</span>
+              </div>
+              <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} />
             </div>
           )}
         </div>

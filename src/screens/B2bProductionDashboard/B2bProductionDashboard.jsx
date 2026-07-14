@@ -13,8 +13,10 @@ import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import StageCountCards from "../../components/StageCountCards";
 import ProductionOverview from "../../components/ProductionOverview";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
+import ReJourneyPanel from "../../components/ReJourneyPanel";
 import { getStageLabel, getStageGroupKey, enrichComponentsWithMovements, classifyComponentForStageCard, STAGE_GROUPS } from "../../utils/barcodeService";
 import { fetchQcRecords } from "../../utils/qcHistory";
+import { fetchReJourneys } from "../../utils/reJourneys";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -22,6 +24,8 @@ export default function B2bProductionDashboard() {
     const [activeTab, setActiveTab] = useState("dashboard");
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
+    const [reJourneys, setReJourneys] = useState([]);
+    const [reJourneysLoading, setReJourneysLoading] = useState(false);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -179,6 +183,18 @@ export default function B2bProductionDashboard() {
             setQcHistoryLoading(true);
             const recs = await fetchQcRecords({ orderIds: orders.map((o) => o.id) });
             if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab, orders]);
+
+    // Load live re-journeys for this B2B PH's orders when the tab opens.
+    useEffect(() => {
+        if (activeTab !== "rejourneys") return;
+        let cancelled = false;
+        (async () => {
+            setReJourneysLoading(true);
+            const rows = await fetchReJourneys({ orderIds: orders.map((o) => o.id) });
+            if (!cancelled) { setReJourneys(rows); setReJourneysLoading(false); }
         })();
         return () => { cancelled = true; };
     }, [activeTab, orders]);
@@ -478,6 +494,7 @@ export default function B2bProductionDashboard() {
                         <a className={`prod-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`prod-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor / External</a>
                         <a className={`prod-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
+                        <a className={`prod-menu-item ${activeTab === "rejourneys" ? "active" : ""}`} onClick={() => { setActiveTab("rejourneys"); setShowSidebar(false); }}>Re-journeys</a>
                         <a className="prod-menu-item prod-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
@@ -828,6 +845,12 @@ export default function B2bProductionDashboard() {
                     <div className="prod-tab-wrapper">
                         <h2 className="prod-tab-title">QC History</h2>
                         <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
+                    </div>
+                )}
+                {activeTab === "rejourneys" && (
+                    <div className="prod-tab-wrapper">
+                        <h2 className="prod-tab-title">Re-journeys</h2>
+                        <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} />
                     </div>
                 )}
             </div>
