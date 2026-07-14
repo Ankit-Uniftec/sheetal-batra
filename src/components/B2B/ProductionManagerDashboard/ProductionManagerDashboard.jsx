@@ -17,12 +17,14 @@ import QcHistoryPanel from "../../../components/QcHistoryPanel";
 import { fetchQcRecords } from "../../../utils/qcHistory";
 import ReJourneyPanel from "../../../components/ReJourneyPanel";
 import { fetchReJourneys } from "../../../utils/reJourneys";
+import ExternalVendorsPanel from "../../../components/ExternalVendorsPanel";
+import { fetchExternalMovements } from "../../../utils/externalMovements";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
-import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard } from "../../../utils/barcodeService";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey } from "../../../utils/barcodeService";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
@@ -90,8 +92,14 @@ const STATUS_TABS = [
 ];
 
 
-const StatCard = ({ title, value, subtitle, highlight, icon }) => (
-    <div className={`pm-stat-card-inner ${highlight ? "pm-stat-highlight" : ""}`}>
+const StatCard = ({ title, value, subtitle, highlight, icon, onClick }) => (
+    <div
+        className={`pm-stat-card-inner ${highlight ? "pm-stat-highlight" : ""} ${onClick ? "pm-stat-clickable" : ""}`}
+        onClick={onClick}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(e); } : undefined}
+    >
         <div className="pm-stat-top-row">
             {icon && <span className="pm-stat-icon">{icon}</span>}
             <p className="pm-stat-title">{title}</p>
@@ -102,6 +110,25 @@ const StatCard = ({ title, value, subtitle, highlight, icon }) => (
         </div>
     </div>
 );
+
+// ==================== STORE / CHANNEL FILTER OPTIONS ====================
+// The "Store" order filter lists every channel the client operates. Delhi,
+// Ludhiana and Exhibitions all resolve to the "offline" channel key, so they're
+// disambiguated by salesperson_store; the rest match on getOrderChannelKey.
+const STORE_FILTER_OPTIONS = [
+    { value: "Delhi Store", label: "Delhi Store", match: (o) => (o.salesperson_store || "").trim() === "Delhi Store" },
+    { value: "Ludhiana Store", label: "Ludhiana Store", match: (o) => (o.salesperson_store || "").trim() === "Ludhiana Store" },
+    { value: "B2B", label: "B2B", match: (o) => getOrderChannelKey(o) === "b2b" },
+    { value: "Private", label: "Private", match: (o) => getOrderChannelKey(o) === "private" },
+    { value: "Comms", label: "Comms", match: (o) => getOrderChannelKey(o) === "comms" },
+    // Exhibitions = offline orders that aren't the two physical stores.
+    { value: "Exhibitions", label: "Exhibitions", match: (o) => {
+        const s = (o.salesperson_store || "").trim();
+        return getOrderChannelKey(o) === "offline" && s !== "Delhi Store" && s !== "Ludhiana Store";
+    } },
+];
+const matchesStoreFilter = (order, selected) =>
+    STORE_FILTER_OPTIONS.some((opt) => selected.includes(opt.value) && opt.match(order));
 
 // ==================== CHANNEL BREAKDOWN ROW ====================
 const ChannelRow = ({ label, count, percentage, color }) => (
@@ -132,6 +159,8 @@ export default function ProductionManagerDashboard() {
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
     const [reJourneys, setReJourneys] = useState([]);
     const [reJourneysLoading, setReJourneysLoading] = useState(false);
+    const [extMovements, setExtMovements] = useState([]);
+    const [extMovementsLoading, setExtMovementsLoading] = useState(false);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -155,7 +184,7 @@ export default function ProductionManagerDashboard() {
     const [channelFilter, setChannelFilter] = useState("all");
     const [statusTab, setStatusTab] = useState("all");
     const [sortBy, setSortBy] = useState("newest");
-    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both" });
+    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
     // Overview period filter (scopes the stage cards by each component's ORDER date).
     const [overviewPeriod, setOverviewPeriod] = useState("all"); // all | day | month | year | custom
     const [overviewFrom, setOverviewFrom] = useState("");
@@ -278,7 +307,7 @@ export default function ProductionManagerDashboard() {
             while (!cDone) {
                 const { data: cData, error: cErr } = await supabase
                     .from("order_components")
-                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, stage_updated_at")
+                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason")
                     .order("created_at", { ascending: false })
                     .range(cFrom, cFrom + PAGE_SIZE - 1);
                 if (cErr) {
@@ -332,6 +361,18 @@ export default function ProductionManagerDashboard() {
             setReJourneysLoading(true);
             const rows = await fetchReJourneys({ paged: true });
             if (!cancelled) { setReJourneys(rows); setReJourneysLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab]);
+
+    // Load external vendor movements (all channels) when the tab opens.
+    useEffect(() => {
+        if (activeTab !== "external_vendors") return;
+        let cancelled = false;
+        (async () => {
+            setExtMovementsLoading(true);
+            const rows = await fetchExternalMovements();
+            if (!cancelled) { setExtMovements(rows); setExtMovementsLoading(false); }
         })();
         return () => { cancelled = true; };
     }, [activeTab]);
@@ -395,10 +436,32 @@ export default function ProductionManagerDashboard() {
         else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
         else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
         else if (type === "stage") setFilters(prev => ({ ...prev, stage: prev.stage.filter(v => v !== value), stageKind: "both" }));
+        else if (type === "disposedOnly") setFilters(prev => ({ ...prev, disposedOnly: false }));
+        else if (type === "delayedOnly") setFilters(prev => ({ ...prev, delayedOnly: false }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both" });
+    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
+
+    // Jump from a QC-history / re-journey / external-vendor row to that order's
+    // card in All Orders: switch tab, search by order #, highlight + scroll, then
+    // auto-clear the highlight. Same flow the notification bell uses. Resets other
+    // filters so nothing hides the target (channel/status view is "all" for PM).
+    const goToOrder = (orderId, orderNo) => {
+        setActiveTab("orders");
+        setStatusTab("all");
+        setChannelFilter("all");
+        clearAllFilters();
+        setOrderSearchField("order_no");
+        setOrderSearch(orderNo || "");
+        setCurrentPage(1);
+        setHighlightOrderId(orderId);
+        setTimeout(() => {
+            const card = document.querySelector(`[data-order-id="${orderId}"]`);
+            if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 350);
+        setTimeout(() => setHighlightOrderId(null), 4000);
+    };
 
     // Clicking a stage-count card: scope the orders list to that one stage and
     // jump to the All Orders tab (status reset to "all" so nothing else hides it).
@@ -406,6 +469,26 @@ export default function ProductionManagerDashboard() {
     const handleStageCardClick = (stageKey, kind = "both") => {
         setFilters(prev => ({ ...prev, stage: [stageKey], stageKind: kind }));
         setStatusTab("all");
+        setActiveTab("orders");
+    };
+
+    // Disposed pieces are excluded from stage grouping, so the stage filter
+    // can't target them — drill via a dedicated disposedOnly flag instead.
+    const handleDisposedClick = () => {
+        setFilters(prev => ({ ...prev, disposedOnly: true }));
+        setStatusTab("all");
+        setActiveTab("orders");
+    };
+
+    // Pending/Delayed card: drill to the delayed (past-delivery) open orders when
+    // there are any — the urgent set — otherwise to all pending/open orders.
+    // "Pending" == the existing "unfulfilled" status tab; "Delayed" adds the
+    // past-delivery-date filter on top of it.
+    const handlePendingDelayedClick = () => {
+        const hasDelayed = (salesMetrics?.delayedCount || 0) > 0;
+        setFilters(prev => ({ ...prev, delayedOnly: hasDelayed }));
+        setStatusTab("unfulfilled");
+        setChannelFilter("all");
         setActiveTab("orders");
     };
 
@@ -425,6 +508,8 @@ export default function ProductionManagerDashboard() {
             chips.push({ type: "stage", value: k, label: base + suffix });
         });
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
+        if (filters.disposedOnly) chips.push({ type: "disposedOnly", label: "Disposed components" });
+        if (filters.delayedOnly) chips.push({ type: "delayedOnly", label: "Delayed (past delivery)" });
         return chips;
     }, [filters]);
 
@@ -657,6 +742,21 @@ export default function ProductionManagerDashboard() {
             return true;
         });
     }, [components, overviewPeriod, overviewFrom, overviewTo]);
+
+    // Disposed components in the selected Overview period (disposal sets
+    // stage_updated_at = NOW(), so overviewComponents already scopes by when it
+    // was disposed). Powers the clickable "Disposed" Business Performance card.
+    const disposedCount = useMemo(
+        () => overviewComponents.filter((c) => c.current_stage === "disposed").length,
+        [overviewComponents]
+    );
+    // Orders (all-time, not period-scoped) that contain a disposed component —
+    // the set the "Disposed" card drills the order list into.
+    const disposedOrderIds = useMemo(() => {
+        const s = new Set();
+        components.forEach((c) => { if (c.current_stage === "disposed") s.add(c.order_id); });
+        return s;
+    }, [components]);
 
     const stageStats = useMemo(() => {
         const counts = {};
@@ -971,7 +1071,7 @@ export default function ProductionManagerDashboard() {
         }
         if (filters.payment.length > 0) result = result.filter(o => filters.payment.includes(getPaymentStatus(o)));
         if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
-        if (filters.store.length > 0) result = result.filter(o => filters.store.includes(o.salesperson_store));
+        if (filters.store.length > 0) result = result.filter(o => matchesStoreFilter(o, filters.store));
         if (filters.salesperson) result = result.filter(o => o.salesperson === filters.salesperson);
         if (filters.stage.length > 0) result = result.filter(o => {
             const byStage = orderStageGroups[o.id];
@@ -984,6 +1084,18 @@ export default function ProductionManagerDashboard() {
                 return true; // 'both'
             });
         });
+        // Disposed drill-down: keep only orders that have ≥1 disposed component.
+        if (filters.disposedOnly) result = result.filter(o => disposedOrderIds.has(o.id));
+        // Delayed drill-down: open orders whose delivery date has passed (same
+        // rule as the Pending/Delayed card).
+        if (filters.delayedOnly) {
+            const now = new Date();
+            result = result.filter(o => {
+                const s = (o.status || "").toLowerCase();
+                if (s === "delivered" || s === "completed" || s === "cancelled") return false;
+                return o.delivery_date && new Date(o.delivery_date) < now;
+            });
+        }
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
             const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
@@ -1003,7 +1115,7 @@ export default function ProductionManagerDashboard() {
         return result;
         // vendorMap is a dep because client_name search resolves through it for B2B orders
         // orderStageGroups is a dep because the Stage filter matches on it (any-piece-at-stage)
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups, disposedOrderIds]);
 
     const orderTabCounts = useMemo(() => {
         const base = channelFilter === "b2b" ? orders.filter(o => o.is_b2b) : channelFilter === "store" ? orders.filter(o => !o.is_b2b) : orders;
@@ -1395,6 +1507,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</a>
                             <a className={`pm-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
                             <a className={`pm-menu-item ${activeTab === "rejourneys" ? "active" : ""}`} onClick={() => { setActiveTab("rejourneys"); setShowSidebar(false); }}>Re-journeys</a>
+                            <a className={`pm-menu-item ${activeTab === "external_vendors" ? "active" : ""}`} onClick={() => { setActiveTab("external_vendors"); setShowSidebar(false); }}>At External Vendors</a>
                             <a className={`pm-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
@@ -1456,11 +1569,12 @@ export default function ProductionManagerDashboard() {
                                         icon={Icons.trendingUp}
                                     />
                                     <StatCard
-                                        title="Pending / Delayed Orders"
+                                        title="In-Progress / Delayed"
                                         value={`${salesMetrics.pendingCount} / ${salesMetrics.delayedCount}`}
-                                        subtitle={salesMetrics.delayedCount > 0 ? `${salesMetrics.delayedCount} past delivery date` : "All on track"}
+                                        subtitle={salesMetrics.delayedCount > 0 ? `View ${salesMetrics.delayedCount} past delivery date` : salesMetrics.pendingCount > 0 ? "View in-progress orders" : "All on track"}
                                         highlight={salesMetrics.delayedCount > 0}
                                         icon={Icons.clock}
+                                        onClick={salesMetrics.pendingCount > 0 ? handlePendingDelayedClick : undefined}
                                     />
                                 </div>
                                 <div className="pm-stats-row-3">
@@ -1476,6 +1590,14 @@ export default function ProductionManagerDashboard() {
                                         value={`\u20B9${formatIndianNumber(Math.round(salesMetrics.refundedAmount))}`}
                                         subtitle="Total processed refunds"
                                         icon={Icons.wallet}
+                                    />
+                                    <StatCard
+                                        title="Disposed"
+                                        value={disposedCount}
+                                        subtitle={disposedCount > 0 ? "View disposed components" : "No components disposed"}
+                                        highlight={disposedCount > 0}
+                                        icon={Icons.xCircle}
+                                        onClick={disposedCount > 0 ? handleDisposedClick : undefined}
                                     />
                                 </div>
 
@@ -1739,10 +1861,10 @@ export default function ProductionManagerDashboard() {
                                         {openDropdown === "store" && (
                                             <div className="pm-dropdown-panel">
                                                 <div className="pm-dropdown-title">Store</div>
-                                                {["Delhi Store", "Ludhiana Store", "B2B"].map(opt => (
-                                                    <label key={opt} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
-                                                        <input type="checkbox" checked={filters.store.includes(opt)} onChange={() => toggleFilter("store", opt)} />
-                                                        <span>{opt}</span>
+                                                {STORE_FILTER_OPTIONS.map(opt => (
+                                                    <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
+                                                        <input type="checkbox" checked={filters.store.includes(opt.value)} onChange={() => toggleFilter("store", opt.value)} />
+                                                        <span>{opt.label}</span>
                                                     </label>
                                                 ))}
                                                 <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
@@ -2038,7 +2160,7 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "qc_history" && (
                             <>
                                 <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>QC History — All Channels</p>
-                                <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
+                                <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} onOrderClick={goToOrder} />
                             </>
                         )}
 
@@ -2046,7 +2168,15 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "rejourneys" && (
                             <>
                                 <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>Re-journeys — Currently in Rework (All Channels)</p>
-                                <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} />
+                                <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} onOrderClick={goToOrder} />
+                            </>
+                        )}
+
+                        {/* ===== EXTERNAL VENDORS TAB (all channels) ===== */}
+                        {activeTab === "external_vendors" && (
+                            <>
+                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>At External Vendors — Items Out & History (All Channels)</p>
+                                <ExternalVendorsPanel rows={extMovements} loading={extMovementsLoading} onOrderClick={goToOrder} />
                             </>
                         )}
 

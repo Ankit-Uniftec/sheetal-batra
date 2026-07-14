@@ -39,6 +39,9 @@
 .pm-stat-card-inner { background: #FFFFFFB0; padding: 20px; border-radius: 12px; border: 1px solid #D4D4D4; transition: transform 0.2s, box-shadow 0.2s; }
 .pm-stat-card-inner:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
 .pm-stat-card-inner.pm-stat-highlight { border-color: #d5b85a; border-width: 2px; }
+.pm-stat-card-inner.pm-stat-clickable { cursor: pointer; }
+.pm-stat-card-inner.pm-stat-clickable:hover { box-shadow: 0 6px 20px rgba(197,40,40,0.14); }
+.pm-stat-card-inner.pm-stat-clickable:focus-visible { outline: 2px solid #d5b85a; outline-offset: 2px; }
 .pm-stat-top-row { display: flex; align-items: center; gap: 8px; }
 .pm-stat-icon { font-size: 20px; }
 .pm-stat-title { margin: 0; font-family: "Athleas", serif !important; font-size: 14px !important; color: #d5b85a !important; }
