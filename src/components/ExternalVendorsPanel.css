@@ -1,0 +1,93 @@
+.ev-panel { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---- Filter bar (single line, wraps on narrow) ---- */
+.ev-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ev-input {
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #333;
+    background: #fff;
+    height: 38px;
+    box-sizing: border-box;
+}
+.ev-input:focus { outline: none; border-color: #d5b85a; }
+.ev-filters > input[type="text"] { flex: 1 1 180px; min-width: 160px; }
+.ev-filters > select.ev-input { flex: 0 0 auto; width: auto; min-width: 130px; }
+
+.ev-check {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: #555; cursor: pointer; white-space: nowrap;
+}
+.ev-check input { width: 15px; height: 15px; cursor: pointer; }
+
+.ev-clear {
+    border: 1px solid #e0d8c6; background: #fff; color: #8b7355;
+    font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+}
+.ev-clear:hover { background: #faf6e8; }
+
+/* ---- Summary strip (clickable status chips) ---- */
+.ev-summary {
+    display: flex; flex-wrap: wrap; gap: 10px;
+}
+.ev-sum-item {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    padding: 8px 14px;
+    background: #faf7f0; border: 1px solid #eee4cf; border-radius: 8px;
+    font-size: 14px; color: #555; cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ev-sum-item:hover { border-color: #d5b85a; }
+.ev-sum-item.ev-sum-active { border-color: #d5b85a; box-shadow: 0 0 0 1px #d5b85a inset; background: #fbf6e6; }
+.ev-sum-item b { color: #333; font-size: 16px; }
+.ev-sum-out b { color: #ef6c00; }
+.ev-sum-overdue b { color: #c62828; }
+.ev-sum-returned b { color: #2e7d32; }
+
+/* ---- List ---- */
+.ev-empty { padding: 28px 20px; text-align: center; color: #888; }
+.ev-list { display: flex; flex-direction: column; gap: 10px; }
+
+.ev-row {
+    border: 1px solid #eee;
+    border-left: 4px solid #ef6c00;
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #fffaf4;
+}
+/* Returned trips are history — mute them; configured (not yet out) sits neutral. */
+.ev-row-returned { border-left-color: #a5d6a7; background: #f6fbf6; }
+.ev-row-configured { border-left-color: #cfc6b0; background: #fbfaf6; }
+.ev-row-overdue { border-left-color: #c62828 !important; background: #fdf4f4 !important; }
+.ev-row-click { cursor: pointer; transition: box-shadow 0.15s, transform 0.1s; }
+.ev-row-click:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.1); }
+.ev-row-click:focus-visible { outline: 2px solid #d5b85a; outline-offset: 2px; }
+
+.ev-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ev-barcode { font-family: "Courier New", monospace; font-size: 13px; font-weight: 700; color: #333; }
+.ev-order { font-size: 11px; color: #555; background: #eef2f7; padding: 2px 8px; border-radius: 10px; }
+.ev-type { font-size: 12px; color: #444; }
+
+.ev-status {
+    font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px;
+    margin-left: auto;
+}
+.ev-status-exited { color: #ef6c00; background: #fff3e0; border: 1px solid #ffe0b2; }
+.ev-status-returned { color: #2e7d32; background: #e8f5e9; border: 1px solid #c8e6c9; }
+.ev-status-configured { color: #6d6349; background: #f0ece2; border: 1px solid #e0d8c6; }
+
+.ev-overdue {
+    font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px;
+    color: #c62828; background: #ffebee; border: 1px solid #ffcdd2;
+}
+
+.ev-meta { display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+.ev-vendor { font-size: 13px; color: #444; font-weight: 600; }
+.ev-stage { font-size: 12px; color: #555; background: #f0ece2; padding: 3px 10px; border-radius: 8px; }
+
+.ev-dates { display: flex; gap: 18px; margin-top: 8px; flex-wrap: wrap; font-size: 12px; color: #777; }
+.ev-dates b { color: #444; font-weight: 600; }
+.ev-date-late { color: #c62828 !important; }
