@@ -13,6 +13,8 @@ import ProductionOverrides from "../../../components/ProductionOverrides";
 import VendorRequest from "../../../components/VendorRequest";
 import ReplacementApprovals from "../../../components/ReplacementApprovals";
 import StageCountCards from "../../../components/StageCountCards";
+import QcHistoryPanel from "../../../components/QcHistoryPanel";
+import { fetchQcRecords } from "../../../utils/qcHistory";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
@@ -124,6 +126,8 @@ export default function ProductionManagerDashboard() {
     // Restore tab from navigation state (e.g. when returning from order detail)
     const [activeTab, setActiveTab] = useState(location.state?.activeTab || "overview");
     const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
+    const [qcHistory, setQcHistory] = useState([]);
+    const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -303,6 +307,18 @@ export default function ProductionManagerDashboard() {
     }, [navigate]);
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
+
+    // Load QC records (all channels) when the QC History tab opens.
+    useEffect(() => {
+        if (activeTab !== "qc_history") return;
+        let cancelled = false;
+        (async () => {
+            setQcHistoryLoading(true);
+            const recs = await fetchQcRecords({ paged: true });
+            if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab]);
 
     // Fetch colors
     useEffect(() => {
@@ -1361,6 +1377,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "overview" ? "active" : ""}`} onClick={() => { setActiveTab("overview"); setShowSidebar(false); }}>Overview</a>
                             <a className={`pm-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders <span className="pm-badge-count">{orders.length}</span></a>
                             <a className={`pm-menu-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</a>
+                            <a className={`pm-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
                             <a className={`pm-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
@@ -1998,6 +2015,14 @@ export default function ProductionManagerDashboard() {
                                     </div>
                                 )}
                             </div>
+                        )}
+
+                        {/* ===== QC HISTORY TAB (all channels) ===== */}
+                        {activeTab === "qc_history" && (
+                            <>
+                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>QC History — All Channels</p>
+                                <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
+                            </>
                         )}
 
                         {/* ===== DISPATCH TAB ===== */}

@@ -12,12 +12,16 @@ import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import StageCountCards from "../../components/StageCountCards";
 import ProductionOverview from "../../components/ProductionOverview";
+import QcHistoryPanel from "../../components/QcHistoryPanel";
 import { getStageLabel, getStageGroupKey, enrichComponentsWithMovements, classifyComponentForStageCard, STAGE_GROUPS } from "../../utils/barcodeService";
+import { fetchQcRecords } from "../../utils/qcHistory";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
 
     const [activeTab, setActiveTab] = useState("dashboard");
+    const [qcHistory, setQcHistory] = useState([]);
+    const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -166,6 +170,18 @@ export default function B2bProductionDashboard() {
     }, []);
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
+
+    // Load QC records for this B2B PH's orders when the QC History tab opens.
+    useEffect(() => {
+        if (activeTab !== "qc_history") return;
+        let cancelled = false;
+        (async () => {
+            setQcHistoryLoading(true);
+            const recs = await fetchQcRecords({ orderIds: orders.map((o) => o.id) });
+            if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab, orders]);
 
     // ==================== PRODUCTION STAGE HELPERS ====================
     // The dashboard segments orders by their REAL barcode production stage
@@ -461,6 +477,7 @@ export default function B2bProductionDashboard() {
                         <a className={`prod-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
                         <a className={`prod-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`prod-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendor / External</a>
+                        <a className={`prod-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
                         <a className="prod-menu-item prod-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
@@ -805,6 +822,12 @@ export default function B2bProductionDashboard() {
                 {activeTab === "vendors" && (
                     <div className="prod-tab-wrapper">
                         <ProductionHeadVendors currentUserEmail={profile?.email || user?.email} />
+                    </div>
+                )}
+                {activeTab === "qc_history" && (
+                    <div className="prod-tab-wrapper">
+                        <h2 className="prod-tab-title">QC History</h2>
+                        <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
                     </div>
                 )}
             </div>

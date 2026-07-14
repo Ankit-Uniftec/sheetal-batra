@@ -15,6 +15,9 @@ import "../components/ProductionHeadVendors.css";
 import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, classifyComponentForStageCard } from "../utils/barcodeService";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import ComponentStageBadge from "../components/ComponentStageBadge";
+import QcHistoryTable from "../components/QcHistoryTable";
+import QcHistoryPanel from "../components/QcHistoryPanel";
+import { fetchQcRecords } from "../utils/qcHistory";
 import StageCountCards from "../components/StageCountCards";
 import ProductionOverview from "../components/ProductionOverview";
 import SearchByDropdown from "../components/SearchByDropdown";
@@ -184,6 +187,9 @@ const WarehouseDashboard = () => {
   const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
   const [qcReportRecords, setQcReportRecords] = useState([]);
   const [qcReportLoading, setQcReportLoading] = useState(false);
+  // QC History tab (channel-scoped to this PH's orders).
+  const [qcHistory, setQcHistory] = useState([]);
+  const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
   // Order whose full component journey is being viewed (shared modal).
   const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
 
@@ -402,6 +408,18 @@ const WarehouseDashboard = () => {
     () => scopeOrdersToDesignation(orders, userDesignation),
     [orders, userDesignation]
   );
+
+  // Load QC records for this PH's channel when the QC History tab opens.
+  useEffect(() => {
+    if (!isWarehouseProdHead || activeTab !== "qc_history") return;
+    let cancelled = false;
+    (async () => {
+      setQcHistoryLoading(true);
+      const recs = await fetchQcRecords({ orderIds: scopedOrders.map((o) => o.id) });
+      if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [isWarehouseProdHead, activeTab, scopedOrders]);
 
   // Channel-scoped orders further narrowed by the Overview date period (by order
   // created_at). Drives the orders-count label + Production Overview summary —
@@ -1249,37 +1267,9 @@ const WarehouseDashboard = () => {
               <button className="wd-qc-modal-close" onClick={() => setQcReportOrder(null)}>×</button>
             </div>
 
-            {qcReportLoading ? (
-              <p className="wd-qc-empty">Loading QC report…</p>
-            ) : qcReportRecords.length === 0 ? (
-              <p className="wd-qc-empty">No QC checks recorded for this order yet.</p>
-            ) : (
-              <div className="wd-qc-list">
-                {qcReportRecords.map((q) => (
-                  <div key={q.id} className={`wd-qc-row ${q.result === "fail" ? "wd-qc-row-fail" : "wd-qc-row-pass"}`}>
-                    <div className="wd-qc-row-head">
-                      <span className="wd-qc-barcode">{q.barcode}</span>
-                      <span className="wd-qc-which">{q.which_qc === "final" ? "Final QC" : "QC 1"}</span>
-                      <span className={`wd-qc-result ${q.result === "fail" ? "wd-qc-fail" : "wd-qc-pass"}`}>
-                        {q.result === "fail" ? "FAIL" : "PASS"}
-                      </span>
-                    </div>
-                    {q.result === "fail" && (
-                      <div className="wd-qc-detail">
-                        {q.fail_reason && <div><strong>Reason:</strong> {q.fail_reason}</div>}
-                        {q.outcome && <div><strong>Outcome:</strong> {q.outcome}{q.rejourney_number ? ` (re-journey ${q.rejourney_number})` : ""}</div>}
-                        {q.scrap_location && <div><strong>Scrap location:</strong> {q.scrap_location}</div>}
-                        {Number(q.scrap_loss_amount) > 0 && <div><strong>Loss:</strong> ₹{q.scrap_loss_amount}</div>}
-                      </div>
-                    )}
-                    <div className="wd-qc-meta">
-                      {q.inspected_by ? `Inspected by ${q.inspected_by}` : ""}
-                      {q.created_at ? ` · ${new Date(q.created_at).toLocaleString("en-GB")}` : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div style={{ padding: "12px 16px" }}>
+              <QcHistoryTable records={qcReportRecords} loading={qcReportLoading} emptyText="No QC checks recorded for this order yet." />
+            </div>
           </div>
         </div>
       )}
@@ -1343,6 +1333,12 @@ const WarehouseDashboard = () => {
               <a className={`wd-menu-item ${activeTab === "vendors" ? "active" : ""}`}
                 onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>
                 Vendor / External
+              </a>
+            )}
+            {isWarehouseProdHead && (
+              <a className={`wd-menu-item ${activeTab === "qc_history" ? "active" : ""}`}
+                onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>
+                QC History
               </a>
             )}
             <a className="wd-menu-item" onClick={handleLogout}>Log Out</a>
@@ -2170,6 +2166,15 @@ const WarehouseDashboard = () => {
           )}
           {activeTab === "vendors" && isWarehouseProdHead && (
             <ProductionHeadVendors currentUserEmail={currentUserEmail} />
+          )}
+          {activeTab === "qc_history" && isWarehouseProdHead && (
+            <div className="wd-orders-section" style={{ maxWidth: "none" }}>
+              <div className="wd-orders-header">
+                <h2 className="wd-section-title">QC History</h2>
+                <span className="wd-orders-count">{scopedOrders.length} orders in your channel</span>
+              </div>
+              <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
+            </div>
           )}
         </div>
       </div>

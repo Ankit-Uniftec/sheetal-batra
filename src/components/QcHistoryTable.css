@@ -1,0 +1,16 @@
+/* QC history rows — shared across all dashboards (neutral qch- namespace,
+   lifted from WarehouseDashboard's wd-qc-* styles). */
+.qch-empty { padding: 28px 20px; text-align: center; color: #888; }
+.qch-list { display: flex; flex-direction: column; gap: 10px; }
+.qch-row { border: 1px solid #eee; border-radius: 8px; padding: 10px 12px; background: #fff; }
+.qch-row-pass { border-left: 4px solid #4caf50; background: #f6fbf6; }
+.qch-row-fail { border-left: 4px solid #e53935; background: #fdf4f4; }
+.qch-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.qch-barcode { font-family: "Courier New", monospace; font-size: 13px; font-weight: 700; color: #333; }
+.qch-order { font-size: 11px; color: #555; background: #eef2f7; padding: 2px 8px; border-radius: 10px; }
+.qch-which { font-size: 11px; color: #777; background: #f0f0f0; padding: 2px 8px; border-radius: 10px; }
+.qch-result { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 10px; margin-left: auto; }
+.qch-pass { color: #2e7d32; background: #e8f5e9; }
+.qch-fail { color: #c62828; background: #ffebee; }
+.qch-detail { margin-top: 8px; font-size: 13px; color: #444; display: flex; flex-direction: column; gap: 3px; }
+.qch-meta { margin-top: 8px; font-size: 11px; color: #999; }
