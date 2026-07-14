@@ -12,8 +12,9 @@ import "./ReJourneyTable.css";
  * @param {object[]} rows
  * @param {boolean}  loading
  * @param {string}   [emptyText]
+ * @param {function} [onOrderClick] (orderId, orderNo) => void — jump to the order
  */
-export default function ReJourneyTable({ rows = [], loading, emptyText = "No components currently in re-journey." }) {
+export default function ReJourneyTable({ rows = [], loading, emptyText = "No components currently in re-journey.", onOrderClick }) {
     if (loading) return <p className="rj-empty">Loading re-journeys…</p>;
     if (!rows.length) return <p className="rj-empty">{emptyText}</p>;
 
@@ -22,8 +23,17 @@ export default function ReJourneyTable({ rows = [], loading, emptyText = "No com
             {rows.map((r) => {
                 const count = Number(r.re_journey_count) || 0;
                 const restartedTo = r.lastFail?.rejourney_to_stage || r.current_stage;
+                const clickable = onOrderClick && r.order_id;
                 return (
-                    <div key={r.id} className={`rj-row ${r.overdue ? "rj-row-overdue" : ""}`}>
+                    <div
+                        key={r.id}
+                        className={`rj-row ${r.overdue ? "rj-row-overdue" : ""} ${clickable ? "rj-row-click" : ""}`}
+                        onClick={clickable ? () => onOrderClick(r.order_id, r.order_no) : undefined}
+                        role={clickable ? "button" : undefined}
+                        tabIndex={clickable ? 0 : undefined}
+                        onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOrderClick(r.order_id, r.order_no); } } : undefined}
+                        title={clickable ? "View this order in All Orders" : undefined}
+                    >
                         <div className="rj-row-head">
                             <span className="rj-barcode">{r.barcode}</span>
                             {r.order_no && <span className="rj-order">{r.order_no}</span>}

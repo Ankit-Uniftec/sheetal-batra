@@ -16,8 +16,9 @@ import "./QcHistoryPanel.css";
  * @param {boolean}  loading
  * @param {boolean}  [showInspectorFilter=true]  hide when it's already one person (My QC History)
  * @param {boolean}  [showOrderNo=true]          show order_no on each row
+ * @param {function} [onOrderClick]              (orderId, orderNo) => void — jump to the order
  */
-export default function QcHistoryPanel({ records = [], loading, showInspectorFilter = true, showOrderNo = true }) {
+export default function QcHistoryPanel({ records = [], loading, showInspectorFilter = true, showOrderNo = true, onOrderClick }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [result, setResult] = useState("");
@@ -70,7 +71,7 @@ export default function QcHistoryPanel({ records = [], loading, showInspectorFil
         <span className="qch-sum-item"><b>{summary.failRatePct}%</b> fail rate</span>
       </div>
 
-      <QcHistoryTable records={filtered} loading={loading} showOrderNo={showOrderNo} emptyText={hasFilters ? "No QC records match these filters." : "No QC records yet."} />
+      <QcHistoryTable records={filtered} loading={loading} showOrderNo={showOrderNo} onOrderClick={onOrderClick} emptyText={hasFilters ? "No QC records match these filters." : "No QC records yet."} />
     </div>
   );
 }

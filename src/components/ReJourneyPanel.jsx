@@ -10,10 +10,11 @@ import "./ReJourneyPanel.css";
  * ReJourneyTable. Self-contained client-side filtering. Used by the
  * Production Manager and both Production Head dashboards.
  *
- * @param {object[]} rows      from fetchReJourneys
+ * @param {object[]} rows           from fetchReJourneys
  * @param {boolean}  loading
+ * @param {function} [onOrderClick] (orderId, orderNo) => void — jump to the order
  */
-export default function ReJourneyPanel({ rows = [], loading }) {
+export default function ReJourneyPanel({ rows = [], loading, onOrderClick }) {
     const [search, setSearch] = useState("");
     const [stage, setStage] = useState("");
     const [overdueOnly, setOverdueOnly] = useState(false);
@@ -48,7 +49,7 @@ export default function ReJourneyPanel({ rows = [], loading }) {
                 <span className="rj-sum-item rj-sum-limit"><b>{summary.atLimit}</b> at/over limit</span>
             </div>
 
-            <ReJourneyTable rows={filtered} loading={loading} emptyText={hasFilters ? "No re-journeys match these filters." : "No components currently in re-journey."} />
+            <ReJourneyTable rows={filtered} loading={loading} onOrderClick={onOrderClick} emptyText={hasFilters ? "No re-journeys match these filters." : "No components currently in re-journey."} />
         </div>
     );
 }

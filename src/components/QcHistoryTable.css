@@ -5,6 +5,9 @@
 .qch-row { border: 1px solid #eee; border-radius: 8px; padding: 10px 12px; background: #fff; }
 .qch-row-pass { border-left: 4px solid #4caf50; background: #f6fbf6; }
 .qch-row-fail { border-left: 4px solid #e53935; background: #fdf4f4; }
+.qch-row-click { cursor: pointer; transition: box-shadow 0.15s; }
+.qch-row-click:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.1); }
+.qch-row-click:focus-visible { outline: 2px solid #d5b85a; outline-offset: 2px; }
 .qch-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .qch-barcode { font-family: "Courier New", monospace; font-size: 13px; font-weight: 700; color: #333; }
 .qch-order { font-size: 11px; color: #555; background: #eef2f7; padding: 2px 8px; border-radius: 10px; }

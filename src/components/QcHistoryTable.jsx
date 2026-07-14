@@ -16,15 +16,26 @@ import "./QcHistoryTable.css";
  * @param {boolean}  loading
  * @param {string}   [emptyText]
  * @param {boolean}  [showOrderNo]  show the order_no on each row
+ * @param {function} [onOrderClick] (orderId, orderNo) => void — jump to the order
  */
-export default function QcHistoryTable({ records = [], loading, emptyText = "No QC checks recorded.", showOrderNo = false }) {
+export default function QcHistoryTable({ records = [], loading, emptyText = "No QC checks recorded.", showOrderNo = false, onOrderClick }) {
   if (loading) return <p className="qch-empty">Loading QC records…</p>;
   if (!records.length) return <p className="qch-empty">{emptyText}</p>;
 
   return (
     <div className="qch-list">
-      {records.map((q) => (
-        <div key={q.id} className={`qch-row ${q.result === "fail" ? "qch-row-fail" : "qch-row-pass"}`}>
+      {records.map((q) => {
+        const clickable = onOrderClick && q.order_id;
+        return (
+        <div
+          key={q.id}
+          className={`qch-row ${q.result === "fail" ? "qch-row-fail" : "qch-row-pass"} ${clickable ? "qch-row-click" : ""}`}
+          onClick={clickable ? () => onOrderClick(q.order_id, q.order_no) : undefined}
+          role={clickable ? "button" : undefined}
+          tabIndex={clickable ? 0 : undefined}
+          onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOrderClick(q.order_id, q.order_no); } } : undefined}
+          title={clickable ? "View this order in All Orders" : undefined}
+        >
           <div className="qch-row-head">
             <span className="qch-barcode">{q.barcode}</span>
             {showOrderNo && q.order_no && <span className="qch-order">{q.order_no}</span>}
@@ -46,7 +57,8 @@ export default function QcHistoryTable({ records = [], loading, emptyText = "No 
             {q.created_at ? ` · ${new Date(q.created_at).toLocaleString("en-GB")}` : ""}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

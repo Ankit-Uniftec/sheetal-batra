@@ -9,6 +9,9 @@
     background: #fffaf4;
 }
 .rj-row-overdue { border-left-color: #c62828; background: #fdf4f4; }
+.rj-row-click { cursor: pointer; transition: box-shadow 0.15s; }
+.rj-row-click:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.1); }
+.rj-row-click:focus-visible { outline: 2px solid #d5b85a; outline-offset: 2px; }
 
 .rj-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rj-barcode { font-family: "Courier New", monospace; font-size: 13px; font-weight: 700; color: #333; }
