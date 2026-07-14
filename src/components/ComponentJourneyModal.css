@@ -55,6 +55,14 @@
 }
 .cjm-overdue { color: #c62828 !important; background: #ffebee !important; font-weight: 700; }
 
+.cjm-disposed-line {
+  margin: -6px 0 16px; padding: 8px 12px; font-size: 12.5px; line-height: 1.4;
+  color: #b71c1c; background: #ffebee; border: 1px solid #f5c6c6;
+  border-radius: 8px;
+}
+.cjm-disposed-line strong { color: #8e0000; }
+.cjm-disposed-reason { color: #7a4a4a; }
+
 .cjm-section-title {
   font-size: 12px; font-weight: 700; color: #8a6d2f; text-transform: uppercase;
   letter-spacing: 0.5px; margin: 4px 0 12px;

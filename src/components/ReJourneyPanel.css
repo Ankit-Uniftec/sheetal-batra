@@ -1,0 +1,55 @@
+.rj-panel { display: flex; flex-direction: column; gap: 14px; }
+
+.rj-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.rj-input {
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #333;
+    background: #fff;
+    height: 38px;
+    box-sizing: border-box;
+}
+.rj-input:focus { outline: none; border-color: #d5b85a; }
+.rj-filters > input[type="text"] { flex: 1 1 180px; min-width: 160px; }
+.rj-filters > select.rj-input { flex: 0 0 auto; width: auto; min-width: 130px; }
+
+.rj-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #555;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.rj-check input { width: 15px; height: 15px; cursor: pointer; }
+
+.rj-clear {
+    border: 1px solid #e0d8c6;
+    background: #fff;
+    color: #8b7355;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.rj-clear:hover { background: #faf6e8; }
+
+.rj-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    padding: 10px 14px;
+    background: #faf7f0;
+    border: 1px solid #eee4cf;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #555;
+}
+.rj-sum-item b { color: #333; font-size: 16px; }
+.rj-sum-overdue b { color: #c62828; }
+.rj-sum-limit b { color: #b26a00; }

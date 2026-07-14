@@ -25,6 +25,7 @@ import {
     getConfiguredMovement,
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
+import { fetchQcRecords } from "../utils/qcHistory";
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
 // labels (e.g. "Embroidery In-Progress") so RPC error messages read
@@ -209,6 +210,26 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
 
     // Stats
     const [todayStats, setTodayStats] = useState({ scanned: 0, passed: 0, failed: 0 });
+
+    // Seed today's pass/fail counts from qc_records when the QC station is
+    // active, so the pills reflect the real day total (not just this session)
+    // and survive a reload.
+    useEffect(() => {
+        if (selectedStation !== "qc" && selectedStation !== "final_qc") return;
+        if (!currentUserEmail) return;
+        let cancelled = false;
+        (async () => {
+            const recs = await fetchQcRecords({ inspectedBy: currentUserEmail });
+            if (cancelled) return;
+            const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+            const today = recs.filter(r => new Date(r.created_at) >= startOfDay);
+            const passed = today.filter(r => r.result !== "fail").length;
+            const failed = today.filter(r => r.result === "fail").length;
+            setTodayStats(prev => ({ ...prev, passed, failed, scanned: Math.max(prev.scanned, passed + failed) }));
+        })();
+        return () => { cancelled = true; };
+    }, [selectedStation, currentUserEmail]);
+
 
     // Manual barcode input — hidden by default. Workers should be scanning;
     // the manual field is only for the occasional damaged-barcode case.
@@ -582,6 +603,21 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         enabled: !!selectedStation,
     });
 
+    // Prepend a QC pass/fail entry to the session's Recent Scans list so the
+    // QC person sees a running log of what she just processed.
+    const pushQcHistory = (qc, result) => {
+        setScanHistory(prev => [{
+            kind: "qc",
+            result,                 // 'pass' | 'fail'
+            barcode: qc.barcode,
+            label: selectedComponent?.component_label || selectedComponent?.component_type || "",
+            orderNo: selectedComponent?.order_no || "",
+            whichQc: qc.qcStage || "qc1",
+            timestamp: new Date().toLocaleTimeString(),
+            id: Date.now(),
+        }, ...prev].slice(0, 50));
+    };
+
     // ============================================================
     // QC SUBMIT
     // ============================================================
@@ -607,6 +643,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         data: result,
                     });
                     setTodayStats(prev => ({ ...prev, scanned: prev.scanned + 1, passed: prev.passed + 1 }));
+                    pushQcHistory(qcPopup, "pass");
                 } else {
                     setScanResult({ success: false, error: result.error, message: result.message });
                 }
@@ -724,6 +761,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 }
 
                 setTodayStats(prev => ({ ...prev, scanned: prev.scanned + 1, failed: prev.failed + 1 }));
+                pushQcHistory(qcPopup, "fail");
             } else {
                 setScanResult({ success: false, error: result.error, message: result.message });
             }
@@ -986,7 +1024,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         </div>
                         <div className="wd-scan-stats">
                             <span className="wd-stat-pill">Scanned: {todayStats.scanned}</span>
-                            {selectedStation === "qc" && (
+                            {(selectedStation === "qc" || selectedStation === "final_qc") && (
                                 <>
                                     <span className="wd-stat-pill wd-stat-pass">Passed: {todayStats.passed}</span>
                                     <span className="wd-stat-pill wd-stat-fail">Failed: {todayStats.failed}</span>
@@ -1108,12 +1146,21 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                             </span>
                                         </div>
                                         <div className="wd-scan-history-right">
-                                            <span
-                                                className="wd-scan-history-stage"
-                                                style={{ backgroundColor: getStageColor(scan.toStage), color: getStageTextColor(scan.toStage) }}
-                                            >
-                                                {getStageLabel(scan.toStage)}
-                                            </span>
+                                            {scan.kind === "qc" ? (
+                                                <span
+                                                    className="wd-scan-history-stage"
+                                                    style={{ backgroundColor: scan.result === "fail" ? "#ffebee" : "#e8f5e9", color: scan.result === "fail" ? "#c62828" : "#2e7d32" }}
+                                                >
+                                                    {(scan.whichQc === "final" ? "Final QC" : "QC 1")} · {scan.result === "fail" ? "FAIL" : "PASS"}
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    className="wd-scan-history-stage"
+                                                    style={{ backgroundColor: getStageColor(scan.toStage), color: getStageTextColor(scan.toStage) }}
+                                                >
+                                                    {getStageLabel(scan.toStage)}
+                                                </span>
+                                            )}
                                             <span className="wd-scan-history-time">{scan.timestamp}</span>
                                         </div>
                                     </div>

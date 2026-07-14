@@ -172,6 +172,21 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                       )}
                     </div>
 
+                    {/* Disposed / scrapped: show the stage it was removed at and why */}
+                    {(c.current_stage === "disposed" || c.current_stage === "scrapped") && (
+                      <div className="cjm-disposed-line">
+                        <strong>
+                          {c.disposition === "scrap" || c.current_stage === "scrapped" ? "Scrapped" : "Disposed"}
+                          {c.previous_stage
+                            ? ` at ${getStageLabel(c.previous_stage).replace(/ In-Progress$/, "")}`
+                            : ""}
+                        </strong>
+                        {c.disposition_reason ? (
+                          <span className="cjm-disposed-reason"> · Reason: {c.disposition_reason}</span>
+                        ) : null}
+                      </div>
+                    )}
+
                     {/* Vendor history — every external trip for this component */}
                     {movements.length > 0 && (
                       <div className="cjm-vendor-hist">
