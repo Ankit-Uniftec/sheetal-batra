@@ -9,9 +9,10 @@
 -- EVERY barcode to be scanned. So one product stuck at Embroidery holds
 -- finished products hostage — they cannot be packed or shipped.
 --
--- Real example (prod, SB-DLC-0726-003136): product 1's bottom+dupatta are at
--- dyeing_completed while product 2's are still at order_received. Product 1 can
--- never ship first.
+-- Real example (PROD order SB-DLC-0726-003136 — does not exist on uat): product
+-- 1's bottom+dupatta are at dyeing_completed while product 2's are still at
+-- order_received. Product 1 can never ship first.
+-- For testing on UAT use SB-DLC-0526-000048 (6 products) instead.
 --
 -- WHAT: both functions take an OPTIONAL p_item_index.
 --     NULL (default) -> today's exact behaviour, whole order. Unchanged.
@@ -261,13 +262,23 @@ END;
 $function$;
 
 -- ------------------------------------------------------------
--- VERIFY — a multi-product order's pieces, grouped by product.
+-- VERIFY — every open multi-product order, its pieces grouped by product.
+-- Environment-agnostic (the order numbers differ between uat and prod), so
+-- this works as-is wherever you run it. Test candidates as of writing:
+--   uat  — SB-DLC-0526-000048 (6 products), SB-DLC-0426-000015 (2 products)
+--   prod — SB-DLC-0726-003136 (2 products, one ahead of the other)
 -- ------------------------------------------------------------
--- SELECT o.order_no, oc.item_index AS product,
+-- SELECT o.order_no,
+--        jsonb_array_length(o.items) AS products,
+--        oc.item_index AS product,
 --        string_agg(oc.barcode || ' [' || oc.current_stage || ']', ', '
 --                   ORDER BY oc.component_type::text) AS pieces
--- FROM orders o JOIN order_components oc ON oc.order_id = o.id
--- WHERE o.order_no = 'SB-DLC-0726-003136'
--- GROUP BY o.order_no, oc.item_index ORDER BY oc.item_index;
+-- FROM orders o
+-- JOIN order_components oc ON oc.order_id = o.id
+-- WHERE jsonb_typeof(o.items) = 'array'
+--   AND jsonb_array_length(o.items) > 1
+--   AND o.status NOT IN ('delivered','completed','cancelled')
+-- GROUP BY o.order_no, o.items, oc.item_index
+-- ORDER BY o.order_no, oc.item_index;
 
 NOTIFY pgrst, 'reload schema';
