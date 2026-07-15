@@ -206,6 +206,13 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         orderNo: "",
         expectedCount: 0,
         scannedBarcodes: [],
+        // Per-product dispatch: itemIndex null = whole order (single-product
+        // orders always stay null, so their flow is unchanged).
+        itemIndex: null,
+        isMultiProduct: false,
+        productCount: 1,
+        orderCount: 0,
+        allComponents: [],
     });
 
     // Stats
@@ -395,17 +402,55 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             if (selectedStation === "packaging") {
                 const component = await fetchComponentByBarcode(barcode);
 
+                // A dispatched/disposed piece is finished — it must never be
+                // re-packaged. The DB blocks it too (advance_component_stage's
+                // terminal guard), but that only fires after the whole order is
+                // scanned; catching it on the scan itself tells the packer
+                // immediately and keeps the piece out of the scanned list.
+                // Reachable in normal use since per-product dispatch: an order
+                // stays open with some pieces already dispatched.
+                if (["dispatched", "disposed", "scrapped"].includes(component.current_stage)) {
+                    setScanResult({
+                        success: false,
+                        error: "COMPONENT_TERMINATED",
+                        message: `${barcode} (${component.component_label || component.component_type}) is already ${getStageLabel(component.current_stage)} and cannot be packaged again.`,
+                    });
+                    setIsProcessing(false);
+                    return;
+                }
+
                 if (!packagingPopup.isOpen) {
                     // First scan — open packaging popup
                     const allComponents = await fetchOrderComponents(component.order_id);
-                    const activeCount = allComponents.filter(c => c.is_active && !["disposed", "scrapped"].includes(c.current_stage)).length;
+                    // Already-dispatched pieces are done — exclude them, or a
+                    // partially-dispatched order would demand re-scanning pieces
+                    // that already shipped.
+                    const isPackable = (c) => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage);
+                    const activeCount = allComponents.filter(isPackable).length;
+
+                    // An order can hold several products, each with its own
+                    // pieces (item_index). A finished product shouldn't wait for
+                    // one still in production, so default the scope to the
+                    // product that was just scanned; the popup lets the packer
+                    // switch to the whole order. Single-product orders behave
+                    // exactly as before (itemIndex stays null → whole order).
+                    const productCount = new Set(allComponents.filter(isPackable).map(c => c.item_index ?? 0)).size;
+                    const scannedItem = component.item_index ?? 0;
+                    const isMultiProduct = productCount > 1;
+                    const itemCount = allComponents.filter(c => isPackable(c) && (c.item_index ?? 0) === scannedItem).length;
 
                     setPackagingPopup({
                         isOpen: true,
                         orderId: component.order_id,
                         orderNo: component.order_no,
-                        expectedCount: activeCount,
+                        expectedCount: isMultiProduct ? itemCount : activeCount,
                         scannedBarcodes: [barcode],
+                        // null = whole order; a number scopes to that product
+                        itemIndex: isMultiProduct ? scannedItem : null,
+                        isMultiProduct,
+                        productCount,
+                        orderCount: activeCount,
+                        allComponents,
                     });
                 } else {
                     // Add to existing
@@ -852,6 +897,27 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         setIsProcessing(false);
     };
 
+    // Switch the packaging scope between one product and the whole order.
+    // Recomputes the expected count and drops any already-scanned barcode that
+    // falls outside the new scope, so the progress count can't lie (an
+    // out-of-scope barcode would be rejected as "extra" by the RPC anyway).
+    const setPackagingScope = (itemIndex) => {
+        setPackagingPopup(prev => {
+            const inScope = (c) =>
+                c.is_active &&
+                !["disposed", "scrapped", "dispatched"].includes(c.current_stage) &&
+                (itemIndex === null || (c.item_index ?? 0) === itemIndex);
+            const scoped = (prev.allComponents || []).filter(inScope);
+            const allowed = new Set(scoped.map(c => c.barcode));
+            return {
+                ...prev,
+                itemIndex,
+                expectedCount: scoped.length,
+                scannedBarcodes: prev.scannedBarcodes.filter(bc => allowed.has(bc)),
+            };
+        });
+    };
+
     // ============================================================
     // PACKAGING VERIFICATION
     // ============================================================
@@ -860,7 +926,8 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         try {
             const result = await verifyPackagingComponents(
                 packagingPopup.orderId,
-                packagingPopup.scannedBarcodes
+                packagingPopup.scannedBarcodes,
+                packagingPopup.itemIndex ?? null
             );
 
             if (result.success) {
@@ -889,9 +956,14 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     );
                 }
 
+                // Only claim the ORDER is complete when the whole order went out —
+                // a per-product dispatch leaves the other products in production.
+                const partial = packagingPopup.itemIndex !== null && packagingPopup.itemIndex !== undefined;
                 setScanResult({
                     success: true,
-                    message: `All ${result.verified_count} components dispatched — order complete!`,
+                    message: partial
+                        ? `Product ${packagingPopup.itemIndex + 1} dispatched (${result.verified_count} pieces) — other products still in production.`
+                        : `All ${result.verified_count} components dispatched — order complete!`,
                     data: result,
                 });
             } else {
@@ -1542,6 +1614,48 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         <p style={{ textAlign: "center", color: "#666", marginBottom: 20 }}>
                             Order: <strong>{packagingPopup.orderNo}</strong>
                         </p>
+
+                        {/* Multi-product order: dispatch just the scanned product, or
+                            the whole order. Defaults to the product that was scanned so
+                            a finished piece never waits on one still in production. */}
+                        {packagingPopup.isMultiProduct && (
+                            <div className="wd-pack-scope">
+                                <p className="wd-pack-scope-title">
+                                    This order has {packagingPopup.productCount} products — what are you dispatching?
+                                </p>
+                                <div className="wd-pack-scope-opts">
+                                    {/* Only products with pieces still to pack. Derived from the
+                                        real item_index values, not 0..n — once a product ships,
+                                        the remaining indexes no longer start at 0. */}
+                                    {[...new Set((packagingPopup.allComponents || [])
+                                        .filter(c => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage))
+                                        .map(c => c.item_index ?? 0))]
+                                        .sort((a, b) => a - b)
+                                        .map((idx) => {
+                                            const count = (packagingPopup.allComponents || []).filter(
+                                                c => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage) && (c.item_index ?? 0) === idx
+                                            ).length;
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    className={`wd-pack-scope-btn ${packagingPopup.itemIndex === idx ? "active" : ""}`}
+                                                    onClick={() => setPackagingScope(idx)}
+                                                >
+                                                    Product {idx + 1} <span className="wd-pack-scope-sub">{count} pcs</span>
+                                                </button>
+                                            );
+                                        })}
+                                    <button
+                                        type="button"
+                                        className={`wd-pack-scope-btn ${packagingPopup.itemIndex === null ? "active" : ""}`}
+                                        onClick={() => setPackagingScope(null)}
+                                    >
+                                        Whole order <span className="wd-pack-scope-sub">{packagingPopup.orderCount} pcs</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="wd-packaging-progress">
                             <div className="wd-packaging-bar">
