@@ -402,10 +402,30 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             if (selectedStation === "packaging") {
                 const component = await fetchComponentByBarcode(barcode);
 
+                // A dispatched/disposed piece is finished — it must never be
+                // re-packaged. The DB blocks it too (advance_component_stage's
+                // terminal guard), but that only fires after the whole order is
+                // scanned; catching it on the scan itself tells the packer
+                // immediately and keeps the piece out of the scanned list.
+                // Reachable in normal use since per-product dispatch: an order
+                // stays open with some pieces already dispatched.
+                if (["dispatched", "disposed", "scrapped"].includes(component.current_stage)) {
+                    setScanResult({
+                        success: false,
+                        error: "COMPONENT_TERMINATED",
+                        message: `${barcode} (${component.component_label || component.component_type}) is already ${getStageLabel(component.current_stage)} and cannot be packaged again.`,
+                    });
+                    setIsProcessing(false);
+                    return;
+                }
+
                 if (!packagingPopup.isOpen) {
                     // First scan — open packaging popup
                     const allComponents = await fetchOrderComponents(component.order_id);
-                    const isPackable = (c) => c.is_active && !["disposed", "scrapped"].includes(c.current_stage);
+                    // Already-dispatched pieces are done — exclude them, or a
+                    // partially-dispatched order would demand re-scanning pieces
+                    // that already shipped.
+                    const isPackable = (c) => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage);
                     const activeCount = allComponents.filter(isPackable).length;
 
                     // An order can hold several products, each with its own
@@ -885,7 +905,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         setPackagingPopup(prev => {
             const inScope = (c) =>
                 c.is_active &&
-                !["disposed", "scrapped"].includes(c.current_stage) &&
+                !["disposed", "scrapped", "dispatched"].includes(c.current_stage) &&
                 (itemIndex === null || (c.item_index ?? 0) === itemIndex);
             const scoped = (prev.allComponents || []).filter(inScope);
             const allowed = new Set(scoped.map(c => c.barcode));
@@ -1604,21 +1624,28 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                     This order has {packagingPopup.productCount} products — what are you dispatching?
                                 </p>
                                 <div className="wd-pack-scope-opts">
-                                    {Array.from({ length: packagingPopup.productCount }, (_, i) => i).map((idx) => {
-                                        const count = (packagingPopup.allComponents || []).filter(
-                                            c => c.is_active && !["disposed", "scrapped"].includes(c.current_stage) && (c.item_index ?? 0) === idx
-                                        ).length;
-                                        return (
-                                            <button
-                                                key={idx}
-                                                type="button"
-                                                className={`wd-pack-scope-btn ${packagingPopup.itemIndex === idx ? "active" : ""}`}
-                                                onClick={() => setPackagingScope(idx)}
-                                            >
-                                                Product {idx + 1} <span className="wd-pack-scope-sub">{count} pcs</span>
-                                            </button>
-                                        );
-                                    })}
+                                    {/* Only products with pieces still to pack. Derived from the
+                                        real item_index values, not 0..n — once a product ships,
+                                        the remaining indexes no longer start at 0. */}
+                                    {[...new Set((packagingPopup.allComponents || [])
+                                        .filter(c => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage))
+                                        .map(c => c.item_index ?? 0))]
+                                        .sort((a, b) => a - b)
+                                        .map((idx) => {
+                                            const count = (packagingPopup.allComponents || []).filter(
+                                                c => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage) && (c.item_index ?? 0) === idx
+                                            ).length;
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    className={`wd-pack-scope-btn ${packagingPopup.itemIndex === idx ? "active" : ""}`}
+                                                    onClick={() => setPackagingScope(idx)}
+                                                >
+                                                    Product {idx + 1} <span className="wd-pack-scope-sub">{count} pcs</span>
+                                                </button>
+                                            );
+                                        })}
                                     <button
                                         type="button"
                                         className={`wd-pack-scope-btn ${packagingPopup.itemIndex === null ? "active" : ""}`}
