@@ -112,17 +112,20 @@ const StatCard = ({ title, value, subtitle, highlight, icon, onClick }) => (
 );
 
 // ==================== STORE / CHANNEL FILTER OPTIONS ====================
-// The "Store" order filter lists every channel the client operates. Delhi,
-// Ludhiana and Exhibitions all resolve to the "offline" channel key, so they're
-// disambiguated by salesperson_store; the rest match on getOrderChannelKey.
+// Every channel the client operates — the single source of truth for both the
+// "Store" order filter and the channel breakdowns. Delhi, Ludhiana and
+// Exhibitions all resolve to the "offline" channel key, so they're disambiguated
+// by salesperson_store; the rest match on getOrderChannelKey. The set is
+// exhaustive (website included) so a breakdown's parts always sum to the total.
 const STORE_FILTER_OPTIONS = [
-    { value: "Delhi Store", label: "Delhi Store", match: (o) => (o.salesperson_store || "").trim() === "Delhi Store" },
-    { value: "Ludhiana Store", label: "Ludhiana Store", match: (o) => (o.salesperson_store || "").trim() === "Ludhiana Store" },
-    { value: "B2B", label: "B2B", match: (o) => getOrderChannelKey(o) === "b2b" },
-    { value: "Private", label: "Private", match: (o) => getOrderChannelKey(o) === "private" },
-    { value: "Comms", label: "Comms", match: (o) => getOrderChannelKey(o) === "comms" },
+    { value: "Delhi Store", label: "Delhi Store", color: "#2e7d32", match: (o) => (o.salesperson_store || "").trim() === "Delhi Store" },
+    { value: "Ludhiana Store", label: "Ludhiana Store", color: "#00897b", match: (o) => (o.salesperson_store || "").trim() === "Ludhiana Store" },
+    { value: "B2B", label: "B2B", color: "#d5b85a", match: (o) => getOrderChannelKey(o) === "b2b" },
+    { value: "Private", label: "Private", color: "#8e24aa", match: (o) => getOrderChannelKey(o) === "private" },
+    { value: "Comms", label: "Comms", color: "#1565c0", match: (o) => getOrderChannelKey(o) === "comms" },
+    { value: "Website", label: "Website (LXRTS)", color: "#ef6c00", match: (o) => getOrderChannelKey(o) === "website" },
     // Exhibitions = offline orders that aren't the two physical stores.
-    { value: "Exhibitions", label: "Exhibitions", match: (o) => {
+    { value: "Exhibitions", label: "Exhibitions", color: "#6d4c41", match: (o) => {
         const s = (o.salesperson_store || "").trim();
         return getOrderChannelKey(o) === "offline" && s !== "Delhi Store" && s !== "Ludhiana Store";
     } },
@@ -131,8 +134,15 @@ const matchesStoreFilter = (order, selected) =>
     STORE_FILTER_OPTIONS.some((opt) => selected.includes(opt.value) && opt.match(order));
 
 // ==================== CHANNEL BREAKDOWN ROW ====================
-const ChannelRow = ({ label, count, percentage, color }) => (
-    <div className="pm-channel-row">
+const ChannelRow = ({ label, count, percentage, color, onClick }) => (
+    <div
+        className={`pm-channel-row ${onClick ? "pm-channel-row-click" : ""}`}
+        onClick={onClick}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(e); } } : undefined}
+        title={onClick ? `View ${label} delayed orders` : undefined}
+    >
         <div className="pm-channel-label">
             <span className="pm-channel-dot" style={{ background: color }}></span>
             <span>{label}</span>
@@ -487,6 +497,15 @@ export default function ProductionManagerDashboard() {
     const handlePendingDelayedClick = () => {
         const hasDelayed = (salesMetrics?.delayedCount || 0) > 0;
         setFilters(prev => ({ ...prev, delayedOnly: hasDelayed }));
+        setStatusTab("unfulfilled");
+        setChannelFilter("all");
+        setActiveTab("orders");
+    };
+
+    // Drill from a "Delayed by Channel" row into that channel's delayed orders:
+    // the delayed filter plus the store filter for just that channel.
+    const handleDelayedChannelClick = (storeValue) => {
+        setFilters(prev => ({ ...prev, delayedOnly: true, store: [storeValue] }));
         setStatusTab("unfulfilled");
         setChannelFilter("all");
         setActiveTab("orders");
@@ -932,6 +951,32 @@ export default function ProductionManagerDashboard() {
             refundedAmount,
             topProduct,
         };
+    }, [overviewOrders]);
+
+    // Which channel the delayed orders are coming from — same period + same
+    // "delayed" rule as the In-Progress/Delayed card (open order past its
+    // delivery date), bucketed by the shared channel definitions so the parts
+    // sum to the card's delayed count. Sorted worst-first.
+    const delayedByChannel = useMemo(() => {
+        const now = new Date();
+        const delayed = overviewOrders.filter(o => {
+            const s = (o.status || "").toLowerCase();
+            if (s === "delivered" || s === "completed" || s === "cancelled") return false;
+            return o.delivery_date && new Date(o.delivery_date) < now;
+        });
+        const total = delayed.length;
+        const rows = STORE_FILTER_OPTIONS.map(opt => {
+            const count = delayed.filter(opt.match).length;
+            return {
+                key: opt.value,
+                label: opt.label,
+                color: opt.color,
+                count,
+                percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+            };
+        }).filter(r => r.count > 0);
+        rows.sort((a, b) => b.count - a.count);
+        return { total, rows };
     }, [overviewOrders]);
 
     // Overview-scoped copies of the SHARED memos, computed over the period set.
@@ -1600,6 +1645,25 @@ export default function ProductionManagerDashboard() {
                                         onClick={disposedCount > 0 ? handleDisposedClick : undefined}
                                     />
                                 </div>
+
+                                {/* Which channel the delayed orders are coming from */}
+                                {delayedByChannel.total > 0 && (
+                                    <div className="pm-channel-card" style={{ marginTop: 18, borderLeft: "4px solid #c62828" }}>
+                                        <p className="pm-card-title">Delayed Orders by Channel <span className="pm-muted" style={{ fontSize: 12, fontWeight: 400 }}>({delayedByChannel.total} past delivery date)</span></p>
+                                        <div className="pm-channel-body">
+                                            {delayedByChannel.rows.map(r => (
+                                                <ChannelRow
+                                                    key={r.key}
+                                                    label={r.label}
+                                                    count={r.count}
+                                                    percentage={r.percentage}
+                                                    color={r.color}
+                                                    onClick={() => handleDelayedChannelClick(r.key)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* ===== TOP SELLING CHARTS BY STORE ===== */}
                                 <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Top Sellers by Store</p>
