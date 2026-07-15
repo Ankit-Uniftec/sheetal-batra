@@ -577,14 +577,61 @@ export default function ProductionManagerDashboard() {
         URL.revokeObjectURL(url);
     };
 
-    // Mark an order as complete (delivered) — triggered from production tab
-    const handleMarkComplete = async (order, e) => {
+    // The picker hands back an array of item indexes; null means "whole order".
+    // An empty array is treated as null so a stray call can't silently no-op.
+    const normaliseItemPick = (pick) => {
+        if (pick === null || pick === undefined) return null;
+        const arr = Array.isArray(pick) ? pick : [pick];
+        return arr.length ? arr : null;
+    };
+
+    // "product 2 of SB-…" / "Kurta Set + Dupatta of SB-…" / "order SB-…"
+    const describeItemPick = (order, picked) => {
+        if (picked === null) return `order ${order.order_no}`;
+        const items = Array.isArray(order.items) ? order.items : [];
+        const names = picked.map(i => items[i]?.product_name || `product ${i + 1}`);
+        return `${names.join(" + ")} of ${order.order_no}`;
+    };
+
+    // manual_complete_order takes ONE item index, so a multi-product pick loops.
+    // Returns the LAST result — order_completed is only true on the call that
+    // leaves nothing active, which is what the caller keys the order stamp off.
+    const runManualComplete = async (order, picked) => {
+        const scopes = picked === null ? [null] : picked;
+        let last = null;
+        for (const idx of scopes) {
+            const { data, error } = await supabase.rpc("manual_complete_order", {
+                p_order_id: order.id, p_by: currentUserEmail, p_item_index: idx,
+            });
+            if (error || data?.success === false) throw new Error(error?.message || data?.message || "Could not update order");
+            last = data;
+        }
+        return last;
+    };
+
+    // Mark an order as complete (delivered) — triggered from production tab.
+    // itemIndex dispatches just one product of a multi-product order (null = the
+    // whole order). "Delivered" is an ORDER-level fact, so the delivered stamp is
+    // only applied once every product is out — dispatching one product leaves the
+    // order open. For a multi-product order we ask which one first.
+    const handleMarkComplete = async (order, e, itemIndexes = null) => {
         if (e) e.stopPropagation();
+
+        const products = distinctItemIndexes(componentsByOrder[order.id]);
+        if (itemIndexes === null && products.length > 1) {
+            setCompletePicker({ order, products, mode: "deliver", selected: [] });
+            return;
+        }
+
+        const picked = normaliseItemPick(itemIndexes);
+        const scopeLabel = describeItemPick(order, picked);
         const confirmed = await new Promise((resolve) => {
             showPopup({
                 type: "confirm",
                 title: "Mark as Complete",
-                message: `Mark order ${order.order_no} as delivered? This will finalise the order.`,
+                message: picked === null
+                    ? `Mark ${scopeLabel} as delivered? This will finalise the order.`
+                    : `Dispatch ${scopeLabel}? The order stays open until every product is out.`,
                 confirmText: "Yes, Mark Complete",
                 cancelText: "Cancel",
                 onConfirm: () => resolve(true),
@@ -594,13 +641,17 @@ export default function ProductionManagerDashboard() {
         if (!confirmed) return;
         try {
             setActionLoading(order.id);
-            // Dispatch every active component (badge -> Dispatched, non-scannable),
+            // Dispatch the scoped components (badge -> Dispatched, non-scannable),
             // then stamp the order as delivered with the dispatch metadata (the
             // "Mark as Delivered" semantics + Recently-Dispatched fields).
-            const { data: rpcData, error: rpcErr } = await supabase.rpc("manual_complete_order", {
-                p_order_id: order.id, p_by: currentUserEmail,
-            });
-            if (rpcErr || rpcData?.success === false) throw new Error(rpcErr?.message || rpcData?.message || "Could not update order");
+            const rpcData = await runManualComplete(order, picked);
+
+            // Only stamp the order delivered once nothing is left in production.
+            if (!rpcData?.order_completed) {
+                loadAllData();
+                showPopup({ type: "success", title: "Dispatched", message: rpcData?.message || `${scopeLabel} dispatched.` });
+                return;
+            }
             const { error } = await supabase
                 .from("orders")
                 .update({
@@ -628,20 +679,21 @@ export default function ProductionManagerDashboard() {
     // production flow (bypass), behind a confirm. Sets status='completed' (same
     // as the Production Head dashboards), separate from 'Mark as Delivered'.
     //
-    // An order can hold several products; itemIndex force-completes just one of
-    // them (null = the whole order, the original behaviour). For a multi-product
-    // order we ask which one first, via the product picker modal.
-    const markManualComplete = async (order, e, itemIndex = null) => {
+    // An order can hold several products; itemIndexes force-completes just those
+    // (null = the whole order, the original behaviour). For a multi-product order
+    // we ask which ones first, via the product picker modal.
+    const markManualComplete = async (order, e, itemIndexes = null) => {
         if (e) e.stopPropagation();
 
-        // Multi-product order and no product chosen yet → ask first.
+        // Multi-product order and nothing chosen yet → ask first.
         const products = distinctItemIndexes(componentsByOrder[order.id]);
-        if (itemIndex === null && products.length > 1) {
-            setCompletePicker({ order, products });
+        if (itemIndexes === null && products.length > 1) {
+            setCompletePicker({ order, products, mode: "complete", selected: [] });
             return;
         }
 
-        const scopeLabel = itemIndex === null ? `order ${order.order_no}` : `product ${itemIndex + 1} of ${order.order_no}`;
+        const picked = normaliseItemPick(itemIndexes);
+        const scopeLabel = describeItemPick(order, picked);
         const ok = await new Promise((resolve) => {
             showPopup({
                 type: "confirm",
@@ -659,10 +711,7 @@ export default function ProductionManagerDashboard() {
             // Force-complete: dispatch the scoped components (badge -> Dispatched,
             // pieces non-scannable). The RPC completes the ORDER only when nothing
             // active is left undispatched, so a per-product run leaves it open.
-            const { data, error } = await supabase.rpc("manual_complete_order", {
-                p_order_id: order.id, p_by: currentUserEmail, p_item_index: itemIndex,
-            });
-            if (error || data?.success === false) throw new Error(error?.message || data?.message || "Could not update order");
+            const data = await runManualComplete(order, picked);
             if (data?.order_completed) {
                 setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed", warehouse_stage: "dispatched" } : o));
             }
@@ -1393,46 +1442,114 @@ export default function ProductionManagerDashboard() {
             {PopupComponent}
 
             {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
-            {/* Which product to force-complete — only for multi-product orders. */}
-            {completePicker && (
-                <div className="pm-stage-modal-overlay" onClick={() => setCompletePicker(null)}>
-                    <div className="pm-stage-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, padding: 20 }}>
-                        <p className="pm-card-title" style={{ marginBottom: 6 }}>Manual Completion — {completePicker.order.order_no}</p>
-                        <p className="pm-muted" style={{ marginBottom: 16, fontSize: 13 }}>
-                            This order has {completePicker.products.length} products. Complete one product, or the whole order?
-                        </p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            {completePicker.products.map((idx) => {
-                                const pieces = (componentsByOrder[completePicker.order.id] || [])
-                                    .filter(c => (c.item_index ?? 0) === idx && !["disposed", "scrapped"].includes(c.current_stage));
-                                const done = pieces.filter(c => c.current_stage === "dispatched").length;
-                                return (
-                                    <button
-                                        key={idx}
-                                        className="pm-action-btn pm-journey-btn"
-                                        style={{ textAlign: "left" }}
-                                        disabled={pieces.length > 0 && done === pieces.length}
-                                        onClick={() => { const o = completePicker.order; setCompletePicker(null); markManualComplete(o, null, idx); }}
+            {/* Which product to dispatch — only shown for multi-product orders.
+                Serves both "Mark as Delivered" (mode: deliver) and "Temporary
+                Manual Completion" (mode: complete). */}
+            {completePicker && (() => {
+                const isDeliver = completePicker.mode === "deliver";
+                const order = completePicker.order;
+                const comps = componentsByOrder[order.id] || [];
+                const items = Array.isArray(order.items) ? order.items : [];
+
+                // Per-product detail, named from the order's own items[].
+                const rows = completePicker.products.map((idx) => {
+                    const pieces = comps.filter(c => (c.item_index ?? 0) === idx && !["disposed", "scrapped"].includes(c.current_stage));
+                    const done = pieces.filter(c => c.current_stage === "dispatched").length;
+                    const it = items[idx] || {};
+                    return {
+                        idx,
+                        pieces,
+                        allOut: pieces.length > 0 && done === pieces.length,
+                        name: it.product_name || pieces[0]?.component_label || `Product ${idx + 1}`,
+                        // Duplicate product names are common (two of the same
+                        // dupatta); size/colour is what tells them apart.
+                        meta: [it.size, it.color?.name || it.top_color?.name].filter(Boolean).join(" · "),
+                    };
+                });
+                const selectable = rows.filter(r => !r.allOut);
+                const sel = completePicker.selected || [];
+                const toggle = (idx) => setCompletePicker(prev => ({
+                    ...prev,
+                    selected: prev.selected?.includes(idx)
+                        ? prev.selected.filter(i => i !== idx)
+                        : [...(prev.selected || []), idx],
+                }));
+                const allSelected = selectable.length > 0 && sel.length === selectable.length;
+                // Selecting every remaining product IS the whole order — send null
+                // so the order completes/delivers rather than looping per product.
+                const runSelected = () => {
+                    const picked = [...sel].sort((a, b) => a - b);
+                    setCompletePicker(null);
+                    (isDeliver ? handleMarkComplete : markManualComplete)(order, null, allSelected ? null : picked);
+                };
+                return (
+                    <div className="pm-pick-overlay" onClick={() => setCompletePicker(null)}>
+                        <div className="pm-pick-modal" onClick={(e) => e.stopPropagation()}>
+                            <div className="pm-pick-head">
+                                <p className="pm-pick-title">{isDeliver ? "Mark as Delivered" : "Manual Completion"}</p>
+                                <span className="pm-pick-order">{order.order_no}</span>
+                                <button className="pm-pick-close" onClick={() => setCompletePicker(null)}>{"✕"}</button>
+                            </div>
+                            <p className="pm-pick-hint">
+                                This order has {rows.length} products. Select which to
+                                {isDeliver ? " dispatch" : " complete"} — the order stays open until every product is out.
+                            </p>
+
+                            <div className="pm-pick-list">
+                                {rows.map((r) => (
+                                    <label
+                                        key={r.idx}
+                                        className={`pm-pick-item ${r.allOut ? "pm-pick-done" : ""} ${sel.includes(r.idx) ? "pm-pick-sel" : ""}`}
                                     >
-                                        Product {idx + 1} — {pieces.length} piece{pieces.length === 1 ? "" : "s"}
-                                        {done === pieces.length && pieces.length > 0 ? " (already dispatched)" : ""}
-                                        <span style={{ display: "block", fontSize: 11, opacity: 0.85, fontWeight: 400 }}>
-                                            {pieces.map(p => p.component_label || p.component_type).join(", ")}
+                                        <input
+                                            type="checkbox"
+                                            className="pm-pick-check"
+                                            checked={sel.includes(r.idx)}
+                                            disabled={r.allOut}
+                                            onChange={() => toggle(r.idx)}
+                                        />
+                                        <span className="pm-pick-item-body">
+                                            <span className="pm-pick-item-top">
+                                                <span className="pm-pick-item-name">{r.name}</span>
+                                                <span className="pm-pick-item-count">
+                                                    {r.allOut ? "dispatched" : `${r.pieces.length} pc${r.pieces.length === 1 ? "" : "s"}`}
+                                                </span>
+                                            </span>
+                                            {r.meta && <span className="pm-pick-item-meta">{r.meta}</span>}
+                                            <span className="pm-pick-item-pieces">
+                                                {r.pieces.map(p => p.component_label || p.component_type).join(" · ")}
+                                            </span>
                                         </span>
-                                    </button>
-                                );
-                            })}
-                            <button
-                                className="pm-action-btn pm-complete-btn"
-                                onClick={() => { const o = completePicker.order; setCompletePicker(null); markManualComplete(o, null, null); }}
-                            >
-                                Complete the whole order
-                            </button>
-                            <button className="pm-action-btn" onClick={() => setCompletePicker(null)} style={{ background: "#eee" }}>Cancel</button>
+                                    </label>
+                                ))}
+                            </div>
+
+                            <div className="pm-pick-actions">
+                                <button
+                                    className="pm-pick-all"
+                                    disabled={sel.length === 0}
+                                    onClick={runSelected}
+                                >
+                                    {sel.length === 0
+                                        ? "Select at least one product"
+                                        : allSelected
+                                            ? (isDeliver ? "Deliver the whole order" : "Complete the whole order")
+                                            : `${isDeliver ? "Dispatch" : "Complete"} ${sel.length} product${sel.length === 1 ? "" : "s"}`}
+                                </button>
+                                <button
+                                    className="pm-pick-cancel"
+                                    onClick={() => setCompletePicker(prev => ({
+                                        ...prev,
+                                        selected: allSelected ? [] : selectable.map(r => r.idx),
+                                    }))}
+                                >
+                                    {allSelected ? "Clear selection" : "Select all remaining"}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {journeyOrder && (
                 <ComponentJourneyModal
