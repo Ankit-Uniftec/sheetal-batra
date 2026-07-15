@@ -398,10 +398,13 @@ export async function securityGuardScan({
 // ============================================================
 // 5. VERIFY PACKAGING — Step 13
 // ============================================================
-export async function verifyPackagingComponents(orderId, scannedBarcodes) {
+// itemIndex scopes verification to ONE product of a multi-product order, so a
+// finished product can ship without waiting for the rest. null = whole order.
+export async function verifyPackagingComponents(orderId, scannedBarcodes, itemIndex = null) {
   const { data, error } = await supabase.rpc("verify_packaging_components", {
     p_order_id: orderId,
     p_scanned_barcodes: scannedBarcodes,
+    p_item_index: itemIndex,
   });
 
   if (error) throw error;
@@ -481,6 +484,17 @@ export async function fetchQcHistory(componentId) {
 // 10. GENERATE COMPONENTS FOR ORDER — Called when order is created
 // Derives components from order items (top, bottom, dupatta, extras)
 // ============================================================
+// A garment option is "absent" when it's blank or an explicit not-applicable
+// marker. Staff type "NA"/"N/A" for line items that genuinely have no top or
+// bottom — a standalone dupatta, for example. Those strings are truthy, so a
+// plain `if (item.top)` check used to mint a component for a garment that does
+// not physically exist: an unscannable phantom barcode that blocks the order
+// (packaging requires every active component to clear Final QC).
+const hasGarmentOption = (v) => {
+  const s = (v ?? "").toString().trim();
+  return s !== "" && !["na", "n/a", "n.a.", "none", "-"].includes(s.toLowerCase());
+};
+
 export async function generateOrderComponents(order) {
   const components = [];
   const orderNo = order.order_no;
@@ -493,21 +507,31 @@ export async function generateOrderComponents(order) {
   const items = Array.isArray(order.items) ? order.items : [order.items];
 
   items.forEach((item, itemIndex) => {
+    // Does this item name any real garment piece at all? If a line item has an
+    // explicit "NA" top AND "NA" bottom (e.g. a standalone dupatta), we must not
+    // fall back to product_name for the TOP — that's what created the phantoms.
+    // But an item that names no top/bottom at ALL still needs one piece to track,
+    // so the product_name fallback stays for that case.
+    const namesNoPiece =
+      !hasGarmentOption(item?.top) &&
+      !hasGarmentOption(item?.bottom) &&
+      !item?.includes_dupatta;
+
     // TOP component — if item has a top option selected
-    if (item?.top || item?.product_name) {
+    if (hasGarmentOption(item?.top) || (namesNoPiece && item?.product_name)) {
       components.push({
         order_id: order.id,
         order_no: orderNo,
         barcode: `${storeCode}-${seqPart}-TOP${itemIndex > 0 ? itemIndex + 1 : ""}`,
         component_type: "top",
-        component_label: item.top || item.product_name || "Top",
+        component_label: hasGarmentOption(item?.top) ? item.top : (item.product_name || "Top"),
         item_index: itemIndex,
         extra_index: null,
       });
     }
 
     // BOTTOM component — if item has a bottom option selected
-    if (item?.bottom) {
+    if (hasGarmentOption(item?.bottom)) {
       components.push({
         order_id: order.id,
         order_no: orderNo,
