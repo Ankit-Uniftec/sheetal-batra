@@ -889,6 +889,28 @@
   color: #fff;
 }
 
+/* Production journey — an action rather than a document, so it reads
+   distinctly from the two PDF buttons beside it. */
+.comms-journey-btn {
+  padding: 6px 12px;
+  background: #eef4ff;
+  color: #1565c0;
+  border: 1px solid #90b4e8;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.comms-journey-btn:hover {
+  background: #1565c0;
+  color: #fff;
+  border-color: #1565c0;
+}
+
 .comms-pdf-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
