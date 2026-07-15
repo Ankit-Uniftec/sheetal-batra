@@ -9,6 +9,9 @@ import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
+import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import ComponentStageBadge from "../../components/ComponentStageBadge";
+import { enrichComponentsWithMovements } from "../../utils/barcodeService";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import CommsSourcingReturns from "./CommsSourcingReturns";
 import CommsReports from "./CommsReports";
@@ -67,6 +70,18 @@ export default function CommsDashboard() {
   const [pdfLoading, setPdfLoading] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
+  // Production journey (shared ComponentJourneyModal). Comms orders run the
+  // SAME 14-stage flow as every other channel — nothing in component
+  // creation/activation/scanning branches on channel — so the same modal works
+  // here unchanged. componentsByOrder gates the button: orders placed before
+  // comms barcode generation existed have no components and get no button.
+  const [componentsByOrder, setComponentsByOrder] = useState({});
+  const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+  const openJourney = (e, order) => {
+    e?.stopPropagation?.();
+    setJourneyOrder({ order_no: order.order_no, components: componentsByOrder[order.id] || [] });
+  };
+
   // Auth guard
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +116,35 @@ export default function CommsDashboard() {
         .eq("is_comms", true)
         .order("created_at", { ascending: false });
       if (!cancelled && ordersData) setOrders(ordersData);
+
+      // Components for those orders — powers the per-order "View Journey"
+      // button. Chunked .in() because a single huge id list can silently 400
+      // on URL length (same reason the other dashboards chunk).
+      if (!cancelled && ordersData?.length) {
+        const ids = ordersData.map((o) => o.id);
+        let comps = [];
+        for (let i = 0; i < ids.length; i += 100) {
+          const { data, error } = await supabase
+            .from("order_components")
+            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason")
+            .in("order_id", ids.slice(i, i + 100));
+          if (error) { console.error("Comms component fetch failed:", error); break; }
+          comps = comps.concat(data || []);
+        }
+        // Attach stages_outside so the journey badge reads "Out to Vendor (…)"
+        // — the one shared helper every dashboard uses for that.
+        const enriched = await enrichComponentsWithMovements(comps);
+        if (!cancelled) {
+          const TYPE_ORDER = { top: 0, bottom: 1, dupatta: 2, extra: 3 };
+          const map = {};
+          enriched.forEach((c) => { (map[c.order_id] || (map[c.order_id] = [])).push(c); });
+          Object.values(map).forEach((arr) => arr.sort((a, b) =>
+            (a.item_index ?? 0) - (b.item_index ?? 0) ||
+            (TYPE_ORDER[a.component_type] ?? 9) - (TYPE_ORDER[b.component_type] ?? 9)
+          ));
+          setComponentsByOrder(map);
+        }
+      }
 
       setLoading(false);
     };
@@ -250,6 +294,14 @@ export default function CommsDashboard() {
   return (
     <div className="comms-page">
       {PopupComponent}
+
+      {journeyOrder && (
+        <ComponentJourneyModal
+          orderNo={journeyOrder.order_no}
+          components={journeyOrder.components}
+          onClose={() => setJourneyOrder(null)}
+        />
+      )}
 
       {/* HEADER */}
       <header className="comms-header">
@@ -696,6 +748,30 @@ export default function CommsDashboard() {
                               )}
                             </div>
                           </div>
+
+                          {/* Component journey — one chip per piece (TOP/BTM/DUP/extra)
+                              with its current production stage, mirroring the PM view. */}
+                          {componentsByOrder[o.id]?.length > 0 && (
+                            <div className="comms-comp-journey">
+                              {componentsByOrder[o.id].map((comp) => (
+                                <div key={comp.id} className="comms-comp-card">
+                                  <div className="comms-comp-info">
+                                    <span className="comms-comp-barcode">{comp.barcode}</span>
+                                    <span className="comms-comp-label">{comp.component_label || comp.component_type}</span>
+                                  </div>
+                                  <ComponentStageBadge comp={comp} />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {componentsByOrder[o.id]?.length > 0 && (
+                            <div className="comms-order-actions">
+                              <button className="comms-journey-btn" onClick={(e) => openJourney(e, o)}>
+                                View Journey
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
