@@ -889,27 +889,58 @@
   color: #fff;
 }
 
-/* Production journey — an action rather than a document, so it reads
-   distinctly from the two PDF buttons beside it. */
+/* Component journey chips + actions row — mirrors the Production Manager
+   order card (pm-comp-journey / pm-order-actions) so a comms order reads the
+   same as it does on the PM's screen. */
+.comms-comp-journey {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.comms-comp-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.comms-comp-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; overflow: hidden; }
+.comms-comp-barcode { font-family: "Courier New", monospace; font-size: 12px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.comms-comp-label { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.comms-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f0f0;
+  align-items: center;
+}
+
 .comms-journey-btn {
-  padding: 6px 12px;
-  background: #eef4ff;
-  color: #1565c0;
-  border: 1px solid #90b4e8;
+  padding: 8px 16px;
+  background: #3f51b5;
+  color: #fff !important;
+  border: none;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   white-space: nowrap;
 }
 
-.comms-journey-btn:hover {
-  background: #1565c0;
-  color: #fff;
-  border-color: #1565c0;
-}
+.comms-journey-btn:hover { background: #354497; }
 
 .comms-pdf-btn:disabled {
   opacity: 0.5;

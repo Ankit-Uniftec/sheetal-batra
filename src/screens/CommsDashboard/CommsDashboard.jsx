@@ -10,6 +10,7 @@ import NotificationBell from "../../components/NotificationBell";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import ComponentStageBadge from "../../components/ComponentStageBadge";
 import { enrichComponentsWithMovements } from "../../utils/barcodeService";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import CommsSourcingReturns from "./CommsSourcingReturns";
@@ -622,11 +623,6 @@ export default function CommsDashboard() {
                               >
                                 {warehousePdfLoading === o.id ? "..." : "📄 Warehouse PDF"}
                               </button>
-                              {componentsByOrder[o.id]?.length > 0 && (
-                                <button className="comms-journey-btn" onClick={(e) => openJourney(e, o)}>
-                                  🧵 View Journey
-                                </button>
-                              )}
                             </div>
                           </div>
 
@@ -752,6 +748,30 @@ export default function CommsDashboard() {
                               )}
                             </div>
                           </div>
+
+                          {/* Component journey — one chip per piece (TOP/BTM/DUP/extra)
+                              with its current production stage, mirroring the PM view. */}
+                          {componentsByOrder[o.id]?.length > 0 && (
+                            <div className="comms-comp-journey">
+                              {componentsByOrder[o.id].map((comp) => (
+                                <div key={comp.id} className="comms-comp-card">
+                                  <div className="comms-comp-info">
+                                    <span className="comms-comp-barcode">{comp.barcode}</span>
+                                    <span className="comms-comp-label">{comp.component_label || comp.component_type}</span>
+                                  </div>
+                                  <ComponentStageBadge comp={comp} />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {componentsByOrder[o.id]?.length > 0 && (
+                            <div className="comms-order-actions">
+                              <button className="comms-journey-btn" onClick={(e) => openJourney(e, o)}>
+                                View Journey
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
