@@ -133,6 +133,16 @@ const STORE_FILTER_OPTIONS = [
 const matchesStoreFilter = (order, selected) =>
     STORE_FILTER_OPTIONS.some((opt) => selected.includes(opt.value) && opt.match(order));
 
+// The distinct products (item_index) still dispatchable in an order's component
+// list. An order can hold several products, each with its own pieces; >1 here
+// means the PM must pick which product to force-complete.
+const distinctItemIndexes = (comps = []) =>
+    [...new Set(
+        (comps || [])
+            .filter(c => !["disposed", "scrapped"].includes(c.current_stage))
+            .map(c => c.item_index ?? 0)
+    )].sort((a, b) => a - b);
+
 // ==================== CHANNEL BREAKDOWN ROW ====================
 const ChannelRow = ({ label, count, percentage, color, onClick }) => (
     <div
@@ -171,6 +181,9 @@ export default function ProductionManagerDashboard() {
     const [reJourneysLoading, setReJourneysLoading] = useState(false);
     const [extMovements, setExtMovements] = useState([]);
     const [extMovementsLoading, setExtMovementsLoading] = useState(false);
+    // Which product to force-complete, for multi-product orders.
+    // { order, products:[itemIndex] } — null when closed.
+    const [completePicker, setCompletePicker] = useState(null);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -614,13 +627,26 @@ export default function ProductionManagerDashboard() {
     // Temporary Manual Completion — force the order completed WITHOUT the normal
     // production flow (bypass), behind a confirm. Sets status='completed' (same
     // as the Production Head dashboards), separate from 'Mark as Delivered'.
-    const markManualComplete = async (order, e) => {
+    //
+    // An order can hold several products; itemIndex force-completes just one of
+    // them (null = the whole order, the original behaviour). For a multi-product
+    // order we ask which one first, via the product picker modal.
+    const markManualComplete = async (order, e, itemIndex = null) => {
         if (e) e.stopPropagation();
+
+        // Multi-product order and no product chosen yet → ask first.
+        const products = distinctItemIndexes(componentsByOrder[order.id]);
+        if (itemIndex === null && products.length > 1) {
+            setCompletePicker({ order, products });
+            return;
+        }
+
+        const scopeLabel = itemIndex === null ? `order ${order.order_no}` : `product ${itemIndex + 1} of ${order.order_no}`;
         const ok = await new Promise((resolve) => {
             showPopup({
                 type: "confirm",
                 title: "Temporary Manual Completion",
-                message: `Mark order ${order.order_no} as completed WITHOUT the production checks? This bypasses the normal flow.`,
+                message: `Mark ${scopeLabel} as completed WITHOUT the production checks? This bypasses the normal flow.`,
                 confirmText: "Yes, complete it",
                 cancelText: "Cancel",
                 onConfirm: () => resolve(true),
@@ -630,16 +656,19 @@ export default function ProductionManagerDashboard() {
         if (!ok) return;
         try {
             setActionLoading(order.id);
-            // Force-complete: dispatch every active component (badge -> Dispatched,
-            // pieces non-scannable) + mark the order completed, via one RPC.
+            // Force-complete: dispatch the scoped components (badge -> Dispatched,
+            // pieces non-scannable). The RPC completes the ORDER only when nothing
+            // active is left undispatched, so a per-product run leaves it open.
             const { data, error } = await supabase.rpc("manual_complete_order", {
-                p_order_id: order.id, p_by: currentUserEmail,
+                p_order_id: order.id, p_by: currentUserEmail, p_item_index: itemIndex,
             });
             if (error || data?.success === false) throw new Error(error?.message || data?.message || "Could not update order");
-            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed", warehouse_stage: "dispatched" } : o));
+            if (data?.order_completed) {
+                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed", warehouse_stage: "dispatched" } : o));
+            }
             // Re-fetch components so the piece badges reflect "Dispatched" live.
             loadAllData();
-            showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as completed.` });
+            showPopup({ type: "success", title: "Done", message: data?.message || `${scopeLabel} marked as completed.` });
         } catch (err) {
             console.error("Manual complete error:", err);
             showPopup({ type: "error", title: "Failed", message: err.message || "Could not update order" });
@@ -1364,6 +1393,47 @@ export default function ProductionManagerDashboard() {
             {PopupComponent}
 
             {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
+            {/* Which product to force-complete — only for multi-product orders. */}
+            {completePicker && (
+                <div className="pm-stage-modal-overlay" onClick={() => setCompletePicker(null)}>
+                    <div className="pm-stage-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, padding: 20 }}>
+                        <p className="pm-card-title" style={{ marginBottom: 6 }}>Manual Completion — {completePicker.order.order_no}</p>
+                        <p className="pm-muted" style={{ marginBottom: 16, fontSize: 13 }}>
+                            This order has {completePicker.products.length} products. Complete one product, or the whole order?
+                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {completePicker.products.map((idx) => {
+                                const pieces = (componentsByOrder[completePicker.order.id] || [])
+                                    .filter(c => (c.item_index ?? 0) === idx && !["disposed", "scrapped"].includes(c.current_stage));
+                                const done = pieces.filter(c => c.current_stage === "dispatched").length;
+                                return (
+                                    <button
+                                        key={idx}
+                                        className="pm-action-btn pm-journey-btn"
+                                        style={{ textAlign: "left" }}
+                                        disabled={pieces.length > 0 && done === pieces.length}
+                                        onClick={() => { const o = completePicker.order; setCompletePicker(null); markManualComplete(o, null, idx); }}
+                                    >
+                                        Product {idx + 1} — {pieces.length} piece{pieces.length === 1 ? "" : "s"}
+                                        {done === pieces.length && pieces.length > 0 ? " (already dispatched)" : ""}
+                                        <span style={{ display: "block", fontSize: 11, opacity: 0.85, fontWeight: 400 }}>
+                                            {pieces.map(p => p.component_label || p.component_type).join(", ")}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                            <button
+                                className="pm-action-btn pm-complete-btn"
+                                onClick={() => { const o = completePicker.order; setCompletePicker(null); markManualComplete(o, null, null); }}
+                            >
+                                Complete the whole order
+                            </button>
+                            <button className="pm-action-btn" onClick={() => setCompletePicker(null)} style={{ background: "#eee" }}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {journeyOrder && (
                 <ComponentJourneyModal
                     orderNo={journeyOrder.order_no}

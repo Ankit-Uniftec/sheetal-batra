@@ -892,6 +892,57 @@
 }
 
 /* ========== PACKAGING ========== */
+/* Per-product dispatch scope — only rendered for multi-product orders. */
+.wd-pack-scope {
+  margin-bottom: 18px;
+  padding: 12px;
+  background: #faf7f0;
+  border: 1px solid #eee4cf;
+  border-radius: 8px;
+}
+
+.wd-pack-scope-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #8b7355;
+  font-weight: 600;
+  text-align: center;
+}
+
+.wd-pack-scope-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.wd-pack-scope-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.wd-pack-scope-btn:hover { border-color: #d5b85a; }
+
+.wd-pack-scope-btn.active {
+  background: #d5b85a;
+  border-color: #d5b85a;
+  color: #fff;
+}
+
+.wd-pack-scope-sub { font-size: 11px; font-weight: 400; opacity: 0.8; }
+
 .wd-packaging-progress {
   margin-bottom: 20px;
 }
