@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "../utils/fetchAllRows";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
+import { getWarehouseDate as sharedWarehouseDate, getWarehouseDateObj } from "../utils/warehouseDate";
 import { downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
 import NotificationBell from "../components/NotificationBell";
@@ -248,36 +249,14 @@ const WarehouseDashboard = () => {
     navigate("/login");
   };
 
-  const getWarehouseDate = (dateStr, orderDateStr) => {
-    if (!dateStr) return "-";
-    const deliveryDate = new Date(dateStr);
-    if (isNaN(deliveryDate)) return "-";
-    if (orderDateStr) {
-      const orderDate = new Date(orderDateStr);
-      const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
-      if (daysDiff >= 2) {
-        deliveryDate.setDate(deliveryDate.getDate() - 2);
-      }
-    }
-    return deliveryDate.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).replace(/\//g, "-");
-  };
-
+  // The T-2 rule lives in src/utils/warehouseDate.js — one definition shared by
+  // this dashboard, the warehouse PDF and the Production Manager, so every
+  // warehouse-facing surface shows the same deadline for an order.
+  const getWarehouseDate = (dateStr, orderDateStr) => sharedWarehouseDate(dateStr, orderDateStr, "-");
+  // Calendar keys off a real formatted date or null — never a placeholder.
   const getWarehouseDateForCalendar = (dateStr, orderDateStr) => {
-    if (!dateStr) return null;
-    const deliveryDate = new Date(dateStr);
-    if (isNaN(deliveryDate)) return null;
-    if (orderDateStr) {
-      const orderDate = new Date(orderDateStr);
-      const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
-      if (daysDiff >= 2) {
-        deliveryDate.setDate(deliveryDate.getDate() - 2);
-      }
-    }
-    return formatDate(deliveryDate);
+    const d = getWarehouseDateObj(dateStr, orderDateStr);
+    return d ? formatDate(d) : null;
   };
 
   const renderMeasurements = (m) => {

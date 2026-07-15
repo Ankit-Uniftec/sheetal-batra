@@ -1,4 +1,5 @@
 import React from "react";
+import { getWarehouseDateObj } from "../utils/warehouseDate";
 import {
   Document,
   Page,
@@ -41,25 +42,13 @@ const formatDate = (dateStr) => {
   }).replace(/\//g, ".");
 };
 
-// Helper to calculate T-2 date (delivery date - 2 days)
+// The T-2 warehouse date. The rule itself lives in src/utils/warehouseDate.js —
+// one definition shared with the warehouse dashboard and the Production Manager.
+// Only the formatting differs here: the printed sheet uses dots (15.07.2026).
 const getWarehouseDate = (dateStr, orderDateStr) => {
-  if (!dateStr) return "—";
-  const deliveryDate = new Date(dateStr);
-  if (isNaN(deliveryDate)) return "—";
-
-  // If order date provided, check the gap
-  if (orderDateStr) {
-    const orderDate = new Date(orderDateStr);
-    const daysDiff = Math.floor((deliveryDate - orderDate) / (1000 * 60 * 60 * 24));
-
-    // Only subtract 2 days if there's enough gap
-    if (daysDiff >= 2) {
-      deliveryDate.setDate(deliveryDate.getDate() - 2);
-    }
-    // If gap < 2 days, show delivery date as-is (no subtraction)
-  }
-
-  return deliveryDate.toLocaleDateString("en-GB", {
+  const d = getWarehouseDateObj(dateStr, orderDateStr);
+  if (!d) return "—";
+  return d.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

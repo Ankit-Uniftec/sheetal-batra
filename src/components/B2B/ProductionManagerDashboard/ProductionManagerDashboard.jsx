@@ -19,6 +19,9 @@ import ReJourneyPanel from "../../../components/ReJourneyPanel";
 import { fetchReJourneys } from "../../../utils/reJourneys";
 import ExternalVendorsPanel from "../../../components/ExternalVendorsPanel";
 import { fetchExternalMovements } from "../../../utils/externalMovements";
+// The PM works to the WAREHOUSE deadline (T-2), the same date the warehouse
+// dashboard and the warehouse PDF show — not the customer's delivery date.
+import { getWarehouseDate, getWarehouseDateObj } from "../../../utils/warehouseDate";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
@@ -547,7 +550,7 @@ export default function ProductionManagerDashboard() {
 
     const handleExportCSV = () => {
         if (filteredOrders.length === 0) return;
-        const headers = ["Order No", "Product Name", "Customer Name", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Priority", "Notes", "Order Date", "Delivery Date"];
+        const headers = ["Order No", "Product Name", "Customer Name", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Priority", "Notes", "Order Date", "Warehouse Date (T-2)"];
         const rows = filteredOrders.map(order => {
             const item = order.items?.[0] || {};
             return [
@@ -564,7 +567,7 @@ export default function ProductionManagerDashboard() {
                 order.priority || "normal",
                 order.notes || "",
                 order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
-                order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
+                getWarehouseDate(order.delivery_date, order.created_at, ""),
             ].map(v => `"${String(v).replace(/"/g, '""')}"`);
         });
         const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
@@ -2177,7 +2180,7 @@ export default function ProductionManagerDashboard() {
                                                     <div className="pm-oheader-info">
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">ORDER NO</span><span className="pm-oheader-value">{order.order_no || "—"}</span></div>
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">ORDER DATE</span><span className="pm-oheader-value">{formatDate(order.created_at) || "—"}</span></div>
-                                                        <div className="pm-oheader-item"><span className="pm-oheader-label">DELIVERY</span><span className="pm-oheader-value">{formatDate(order.delivery_date) || "—"}</span></div>
+                                                        <div className="pm-oheader-item"><span className="pm-oheader-label">DELIVERY</span><span className="pm-oheader-value" title={`Warehouse deadline (T-2). Customer date: ${formatDate(order.delivery_date)}`}>{getWarehouseDate(order.delivery_date, order.created_at)}</span></div>
                                                     </div>
                                                     <div className="pm-oheader-actions">
                                                         <span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span>
@@ -2377,7 +2380,7 @@ export default function ProductionManagerDashboard() {
                                                     return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
                                                         <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                         <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
-                                                        <td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td>
+                                                        <td style={{ padding: "8px 10px" }} title={`Customer date: ${formatDate(o.delivery_date)}`}>{getWarehouseDate(o.delivery_date, o.created_at)}</td>
                                                         <td style={{ padding: "8px 10px", color: "#c62828", fontWeight: 600 }}>{overdue}d</td>
                                                         <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
                                                         <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
@@ -2532,7 +2535,10 @@ export default function ProductionManagerDashboard() {
                                 if (fromDate && actualDate < fromDate) return;
                                 if (toDate && actualDate > toDate) return;
 
-                                const promisedDate = new Date(o.delivery_date);
+                                // Measured against the WAREHOUSE deadline (T-2), not the customer
+                                // date — production is late when it misses its own deadline.
+                                const promisedDate = getWarehouseDateObj(o.delivery_date, o.created_at);
+                                if (!promisedDate) return;
                                 // normalize to midnight for day diff
                                 const promisedMid = new Date(promisedDate.getFullYear(), promisedDate.getMonth(), promisedDate.getDate());
                                 const actualMid = new Date(actualDate.getFullYear(), actualDate.getMonth(), actualDate.getDate());
@@ -2553,10 +2559,19 @@ export default function ProductionManagerDashboard() {
                             const openRows = [];
                             orders.forEach(o => {
                                 if (o.status === "delivered" || o.status === "completed" || o.status === "cancelled") return;
+                                // Dispatched = production complete, so there's no late work to chase.
+                                // status and warehouse_stage track different things: an order that
+                                // shipped and was then returned reads status='exchange_return' with
+                                // warehouse_stage='dispatched'. Filtering on status alone let that
+                                // through, listing an already-delivered order as 13 days late against
+                                // a date it had actually met.
+                                if (o.warehouse_stage === "dispatched") return;
                                 if (!o.delivery_date) return;
                                 if (!channelMatch(o)) return;
 
-                                const promisedDate = new Date(o.delivery_date);
+                                // The warehouse deadline (T-2), so "late" means late for production.
+                                const promisedDate = getWarehouseDateObj(o.delivery_date, o.created_at);
+                                if (!promisedDate) return;
                                 const promisedMid = new Date(promisedDate.getFullYear(), promisedDate.getMonth(), promisedDate.getDate());
                                 const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                                 const daysLate = Math.round((todayMid - promisedMid) / (1000 * 60 * 60 * 24));
@@ -2624,7 +2639,7 @@ export default function ProductionManagerDashboard() {
                                     showPopup({ type: "info", title: "Nothing to export", message: "No orders match the current filters." });
                                     return;
                                 }
-                                const headers = ["Order No", "Type", "Customer", "SA Name", "Store", "Channel", "Product", "Size", "Amount", "Order Date", "Promised Delivery", "Actual Delivery", "Days Late", "Bucket", "Status"];
+                                const headers = ["Order No", "Type", "Customer", "SA Name", "Store", "Channel", "Product", "Size", "Amount", "Order Date", "Warehouse Date (T-2)", "Actual Delivery", "Days Late", "Bucket", "Status"];
                                 const csvRows = rows.map(r => {
                                     const o = r.order;
                                     const item = o.items?.[0] || {};
@@ -2639,7 +2654,7 @@ export default function ProductionManagerDashboard() {
                                         item.size || "",
                                         o.grand_total || 0,
                                         o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
-                                        o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
+                                        getWarehouseDate(o.delivery_date, o.created_at, ""),
                                         r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "Not yet delivered",
                                         r.daysLate <= 0 ? "On-time" : r.daysLate,
                                         bucketStyle(r.bucket).label,
@@ -2883,7 +2898,7 @@ export default function ProductionManagerDashboard() {
                                     showPopup({ type: "info", title: "Nothing to export", message: "No deliveries in the selected range." });
                                     return;
                                 }
-                                const headers = ["Order No", "Customer Name", "Product", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Stage", "Priority", "Notes", "Order Date", "Delivery Date"];
+                                const headers = ["Order No", "Customer Name", "Product", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Stage", "Priority", "Notes", "Order Date", "Warehouse Date (T-2)"];
                                 const rows = scope.map(o => {
                                     const it = o.items?.[0] || {};
                                     return [
@@ -2901,7 +2916,7 @@ export default function ProductionManagerDashboard() {
                                         o.priority || "normal",
                                         o.notes || "",
                                         o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
-                                        o.delivery_date ? new Date(o.delivery_date).toLocaleDateString("en-GB") : "",
+                                        getWarehouseDate(o.delivery_date, o.created_at, ""),
                                     ].map(v => `"${String(v).replace(/"/g, '""')}"`);
                                 });
                                 const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
@@ -3022,7 +3037,7 @@ export default function ProductionManagerDashboard() {
                                                             <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                             <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
                                                             <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
-                                                            <td style={{ padding: "8px 10px" }}>{formatDate(o.delivery_date)}</td>
+                                                            <td style={{ padding: "8px 10px" }} title={`Customer date: ${formatDate(o.delivery_date)}`}>{getWarehouseDate(o.delivery_date, o.created_at)}</td>
                                                             <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
                                                         </tr>
                                                     ))}</tbody>
