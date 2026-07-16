@@ -400,10 +400,17 @@ const CATEGORY_KEY_MAP = {
   "Short Kurta": "KurtaChogaKaftan",
   "Kurta": "KurtaChogaKaftan",
   "Long Kurta": "KurtaChogaKaftan",
+  "Short A-Line Kurta": "KurtaChogaKaftan",
   "Short Choga": "KurtaChogaKaftan",
   "Choga": "KurtaChogaKaftan",
+  "Chauga": "KurtaChogaKaftan", // spelling variant present in product data
   "Long Choga": "KurtaChogaKaftan",
   "Kaftan": "KurtaChogaKaftan",
+  // A jacket takes the same upper-body measurements, so it shares the
+  // Kurta/Choga/Kaftan tab (client-confirmed). Unmapped tops open NO
+  // measurement tab at all — 716 products carry "Jacket".
+  "Jacket": "KurtaChogaKaftan",
+  "Suit": "KurtaChogaKaftan",
 
   // Tops - Others
   "Blouse": "Blouse",
