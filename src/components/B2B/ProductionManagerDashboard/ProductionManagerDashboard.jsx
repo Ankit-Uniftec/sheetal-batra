@@ -22,6 +22,7 @@ import { fetchExternalMovements } from "../../../utils/externalMovements";
 // The PM works to the WAREHOUSE deadline (T-2), the same date the warehouse
 // dashboard and the warehouse PDF show — not the customer's delivery date.
 import { getWarehouseDate, getWarehouseDateObj } from "../../../utils/warehouseDate";
+import { fetchScanReport, scanReportCsv } from "../../../utils/scanReport";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
@@ -187,6 +188,11 @@ export default function ProductionManagerDashboard() {
     // Which product to force-complete, for multi-product orders.
     // { order, products:[itemIndex] } — null when closed.
     const [completePicker, setCompletePicker] = useState(null);
+    // Scan report export — every scan in [from, to], straight to CSV.
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [scanReportFrom, setScanReportFrom] = useState(todayStr);
+    const [scanReportTo, setScanReportTo] = useState(todayStr);
+    const [scanReportBusy, setScanReportBusy] = useState(false);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -578,6 +584,49 @@ export default function ProductionManagerDashboard() {
         a.download = `production_orders_${new Date().toISOString().slice(0, 10)}.csv`;
         a.click();
         URL.revokeObjectURL(url);
+    };
+
+    // Export every scan in [scanReportFrom, scanReportTo] as a CSV — the
+    // "what moved today / this week" report. One row per stage_transitions row
+    // (station scans, overrides, vendor gate, re-journeys — labelled by Type).
+    const handleScanReportExport = async () => {
+        if (!scanReportFrom || !scanReportTo) return;
+        if (scanReportFrom > scanReportTo) {
+            showPopup({ type: "warning", title: "Check the dates", message: "The From date is after the To date.", confirmText: "OK" });
+            return;
+        }
+        setScanReportBusy(true);
+        try {
+            const rows = await fetchScanReport({ from: scanReportFrom, to: scanReportTo });
+            if (rows.length === 0) {
+                showPopup({ type: "info", title: "No scans", message: `No components were scanned between ${scanReportFrom} and ${scanReportTo}.`, confirmText: "OK" });
+                return;
+            }
+            const csv = scanReportCsv(rows);
+            const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = scanReportFrom === scanReportTo
+                ? `scan_report_${scanReportFrom}.csv`
+                : `scan_report_${scanReportFrom}_to_${scanReportTo}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("Scan report export failed:", err);
+            showPopup({ type: "error", title: "Export failed", message: err.message || "Could not fetch the scan report.", confirmText: "OK" });
+        } finally {
+            setScanReportBusy(false);
+        }
+    };
+
+    // Quick picks for the scan report range.
+    const setScanReportRange = (days) => {
+        const to = new Date();
+        const from = new Date();
+        from.setDate(from.getDate() - (days - 1)); // 1 = today only
+        setScanReportFrom(from.toISOString().slice(0, 10));
+        setScanReportTo(to.toISOString().slice(0, 10));
     };
 
     // The picker hands back an array of item indexes; null means "whole order".
@@ -3052,6 +3101,36 @@ export default function ProductionManagerDashboard() {
 
                         {activeTab === "overrides" && (
                             <div className="pm-orders-tab">
+                                {/* Scan report — every scan in a date range, one CSV row per scan. */}
+                                <div className="pm-channel-card" style={{ marginBottom: 20 }}>
+                                    <p className="pm-card-title">Scan Report</p>
+                                    <p className="pm-muted" style={{ fontSize: 13, margin: "0 0 12px" }}>
+                                        Export every component scan in the selected dates — station scans, overrides,
+                                        vendor gate and re-journeys, each labelled by type.
+                                    </p>
+                                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#555" }}>
+                                            From
+                                            <input type="date" value={scanReportFrom} max={scanReportTo || undefined} onChange={(e) => setScanReportFrom(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "7px 10px", fontSize: 13 }} />
+                                        </label>
+                                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#555" }}>
+                                            To
+                                            <input type="date" value={scanReportTo} min={scanReportFrom || undefined} onChange={(e) => setScanReportTo(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "7px 10px", fontSize: 13 }} />
+                                        </label>
+                                        <div style={{ display: "flex", gap: 6 }}>
+                                            <button className="pm-view-all-btn" onClick={() => setScanReportRange(1)}>Today</button>
+                                            <button className="pm-view-all-btn" onClick={() => setScanReportRange(7)}>Last 7 days</button>
+                                            <button className="pm-view-all-btn" onClick={() => setScanReportRange(30)}>Last 30 days</button>
+                                        </div>
+                                        <button
+                                            onClick={handleScanReportExport}
+                                            disabled={scanReportBusy}
+                                            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: "#d5b85a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: scanReportBusy ? "wait" : "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", opacity: scanReportBusy ? 0.7 : 1 }}
+                                        >
+                                            {scanReportBusy ? "Exporting…" : "⬇ Export CSV"}
+                                        </button>
+                                    </div>
+                                </div>
                                 <ProductionOverrides currentUserEmail={currentUserEmail} />
                             </div>
                         )}
