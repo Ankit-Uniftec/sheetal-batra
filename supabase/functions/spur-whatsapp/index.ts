@@ -62,6 +62,14 @@ serve(async (req) => {
       customerCountry = "India",
       pdfUrl,
       template = "store_orderplaced_dev",
+      // Document-header templates (e.g. daily_scan_report): the file WhatsApp
+      // fetches and shows IN the chat as an attachment. documentUrl must be a
+      // publicly fetchable URL; documentFilename is what the recipient sees.
+      documentUrl,
+      documentFilename,
+      // Body variables beyond {{1}} (which stays customerName for backwards
+      // compatibility). bodyParams: ["42"] fills {{2}}, and so on.
+      bodyParams = [],
     } = body;
 
     // Validate required fields
@@ -89,17 +97,33 @@ serve(async (req) => {
     console.log(`Sending WhatsApp to: ${formattedPhone} (${customerName}) | Template: ${template}`);
 
     // Build template components
-    const components: any[] = [
-      {
-        type: "body",
+    const components: any[] = [];
+
+    // Document header — only for templates built with a Document header
+    // (daily_scan_report). The file appears in the chat as an attachment.
+    if (documentUrl) {
+      components.push({
+        type: "header",
         parameters: [
           {
-            type: "text",
-            text: customerName,
+            type: "document",
+            document: {
+              link: documentUrl,
+              filename: documentFilename || "report.csv",
+            },
           },
         ],
-      },
-    ];
+      });
+    }
+
+    components.push({
+      type: "body",
+      parameters: [
+        { type: "text", text: customerName },
+        // Extra body variables ({{2}}, {{3}}, …) in order.
+        ...bodyParams.map((p: unknown) => ({ type: "text", text: String(p) })),
+      ],
+    });
 
     // Add PDF button only if pdfUrl is provided
     if (pdfUrl) {
