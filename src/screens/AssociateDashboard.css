@@ -14,7 +14,7 @@
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  padding: 40px 60px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -33,24 +33,25 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 40px;
-  /* background: rgba(255, 255, 255, 0.95); */
-  /* border-bottom: 1px solid #eee; */
-  /* position: sticky; */
+  padding: 16px 24px;
+  background: #FFFFFFB0;
+  border-bottom: 1px solid #D4D4D4;
+  position: sticky;
   top: 0;
   z-index: 100;
+  backdrop-filter: blur(10px);
   width: 100%;
   margin-bottom: 20px;
 }
 
 .ad-header-logo {
-  height: 70px;
+  height: 50px;
   cursor: pointer;
 }
 
 .ad-header-title {
   font-family: "Athleas", serif !important;
-  font-size: 24px;
+  font-size: 22px;
   color: #d5b85a !important;
   margin: 0;
   font-weight: 600;
@@ -101,13 +102,15 @@
 /* ---------------- MAIN GRID (3 ROW × 4 COLUMN) ---------------- */
 
 .ad-grid-table {
-  margin-top: 30px;
+  margin-top: 20px;
   width: 100%;
   display: grid;
+  padding: 0 20px 20px;
+  box-sizing: border-box;
 
-  grid-template-columns: 180px 1fr 1fr 260px;
+  grid-template-columns: 200px 1fr 1fr 260px;
   grid-template-rows: auto auto auto;
-  gap: 25px;
+  gap: 20px;
 }
 
 /* ---------------- SIDEBAR (spans 3 rows) ---------------- */
@@ -117,7 +120,12 @@
   grid-column: 1;
   background: #FFFFFFB0;
   border: 1px solid #D4D4D4;
-  border-radius: 8px;
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  padding: 16px 0;
+  height: fit-content;
+  position: sticky;
+  top: 102px;
   overflow: visible;
   transition: transform 0.3s ease-in-out;
   /* For smooth slide-in/out */
@@ -125,6 +133,7 @@
 
 .ad-hello-box {
   background: #d5b85a;
+  margin: 0 12px 8px;
   padding: 10px;
   color: white !important;
   border-radius: 8px;
@@ -138,42 +147,12 @@
 }
 
 
-.ad-menu {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.ad-menu-item {
-  padding: 8px 12px;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.ad-menu-item-logout {
-  display: none;
-}
-
-.ad-menu-item.active {
-  font-weight: bold;
-  color: #d5b85a;
-  position: relative;
-  /* Needed for pseudo-element positioning */
-}
-
-.ad-menu-item.active::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  /* Align with padding */
-  bottom: 4px;
-  width: 95px;
-
-  height: 3px;
-  background-color: #d5b85a;
-  border-radius: 2px;
-}
+.ad-menu { margin-top: 0; display: flex; flex-direction: column; gap: 2px; }
+.ad-menu-item { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; font-weight: 500; color: #333; cursor: pointer; position: relative; transition: all 0.2s; }
+.ad-menu-item:hover { background: rgba(213, 184, 90, 0.1); color: #d5b85a; }
+.ad-menu-item.active { background: rgba(213, 184, 90, 0.15); color: #d5b85a; font-weight: 600; }
+.ad-menu-item.active::after { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 60%; background-color: #d5b85a; border-radius: 0 4px 4px 0; }
+.ad-menu-item-logout { display: none; }
 
 
 .ad-profile-wrapper {
@@ -1030,7 +1009,7 @@
 /* ---------- MOBILE VIEW (max-width: 767px) ---------- */
 @media (max-width: 767px) {
   .ad-dashboard-wrapper {
-    padding: 20px;
+    padding: 0;
     /* Adjust padding for smaller screens */
   }
 
@@ -1076,6 +1055,7 @@
     grid-template-rows: auto;
     /* Auto rows */
     gap: 15px;
+    padding: 0 20px 20px;
   }
 
   .ad-sidebar {

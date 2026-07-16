@@ -254,6 +254,7 @@ export default function B2bExecutiveDashboard() {
             {/* ===== HEADER ===== */}
             <header className="b2b-header">
                 <img src={Logo} alt="logo" className="b2b-header-logo" onClick={handleLogout} />
+                <h1 className="b2b-header-title">B2B Executive</h1>
                 <div className="b2b-header-right">
                     <NotificationBell
                         userEmail={user?.email}

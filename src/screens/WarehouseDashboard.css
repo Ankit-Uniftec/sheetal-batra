@@ -16,7 +16,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 24px;
-  background: rgb(255, 255, 255);
+  background: #FFFFFFB0;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #D4D4D4;
   position: fixed;
   top: 0;
   left: 0;
@@ -101,7 +103,8 @@
 /* ========== SIDEBAR ========== */
 .wd-sidebar {
   width: 220px;
-  background: white;
+  background: #FFFFFFB0;
+  backdrop-filter: blur(10px);
   border-right: 1px solid #e5e5e5;
   padding: 20px 0;
   flex-shrink: 0;

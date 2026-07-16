@@ -1316,7 +1316,7 @@ export default function Dashboard() {
       <div className={`ad-dashboard-wrapper ${showPasswordModal || editingOrder ? "ad-blurred" : ""}`}>
         <header className="ad-header">
           <img src={Logo} alt="logo" className="ad-header-logo" onClick={handleLogout} />
-          {/* <h1 className="ad-header-title">Associate Dashboard</h1> */}
+          <h1 className="ad-header-title">Associate Dashboard</h1>
           <div className="ad-header-right">
             <NotificationBell
               userEmail={salesperson?.email || ""}

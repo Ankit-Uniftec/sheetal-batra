@@ -705,6 +705,7 @@ export default function B2bMerchandiserDashboard() {
             {/* ===== HEADER ===== */}
             <header className="merch-header">
                 <img src={Logo} alt="logo" className="merch-header-logo" onClick={() => setActiveTab("dashboard")} />
+                <h1 className="merch-header-title">B2B Merchandiser</h1>
                 <div className="merch-header-right">
                     <NotificationBell
                         userEmail={user?.email}

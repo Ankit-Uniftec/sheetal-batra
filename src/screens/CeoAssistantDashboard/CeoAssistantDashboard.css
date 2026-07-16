@@ -39,9 +39,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 28px;
-    background: rgba(255, 255, 255, 0.95);
+    background: #FFFFFFB0;
     backdrop-filter: blur(10px);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid #D4D4D4;
     position: sticky;
     top: 0;
     z-index: 100;
@@ -60,7 +60,7 @@
 .ca-title {
     font-size: 22px;
     font-weight: 600;
-    color: #8B7355;
+    color: #d5b85a;
     margin: 0;
     font-family: "Athleas", serif !important;
 }

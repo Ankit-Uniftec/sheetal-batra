@@ -4,13 +4,13 @@
   min-height: 100vh; width: 100%;
   background-image: url("../../images/Screen1bg.png");
   background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;
-  padding: 40px 60px; display: flex; flex-direction: column; align-items: center;
+  padding: 0; display: flex; flex-direction: column; align-items: center;
 }
 
 /* ---------------- HEADER ---------------- */
-.prod-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; top: 0; z-index: 100; width: 100%; margin-bottom: 20px; }
-.prod-header-logo { height: 70px; cursor: pointer; }
-.prod-header-title { flex: 1; text-align: center; margin: 0; font-family: "Athleas", serif; font-size: 26px; font-weight: 600; color: #d5b85a; letter-spacing: 0.02em; }
+.prod-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #FFFFFFB0; border-bottom: 1px solid #D4D4D4; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); width: 100%; margin-bottom: 20px; }
+.prod-header-logo { height: 50px; cursor: pointer; }
+.prod-header-title { flex: 1; text-align: center; margin: 0; font-family: "Athleas", serif; font-size: 22px; font-weight: 600; color: #d5b85a; letter-spacing: 0.02em; }
 .prod-header-right { display: flex; align-items: center; gap: 15px; }
 .prod-header-btn { background: #d5b85a; color: white !important; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
 .prod-header-btn:hover { background: #c9a94e; }
@@ -18,17 +18,17 @@
 .prod-hamburger-icon .prod-bar { width: 100%; height: 3px; background-color: #d5b85a; border-radius: 5px; transition: all 0.3s ease; }
 
 /* ---------------- MAIN GRID (4 ROW x 4 COLUMN) ---------------- */
-.prod-grid-table { margin-top: 30px; width: 100%; display: grid; grid-template-columns: 180px 1fr 1fr 260px; grid-template-rows: auto auto auto auto; gap: 25px; }
+.prod-grid-table { margin-top: 20px; width: 100%; padding: 0 20px 20px; display: grid; grid-template-columns: 200px 1fr 1fr 260px; grid-template-rows: auto auto auto auto; gap: 20px; }
 
 /* ---------------- SIDEBAR (spans all rows) ---------------- */
-.prod-sidebar { grid-row: 1 / 5; grid-column: 1; background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 8px; overflow: visible; transition: transform 0.3s ease-in-out; }
-.prod-menu { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
-.prod-menu-item { padding: 8px 12px; font-size: 15px; cursor: pointer; position: relative; }
-/* Sidebar logout — always visible now (the top-bar logout button was removed),
-   styled as a red action at the end of the menu. */
-.prod-menu-item-logout { color: #c62828; font-weight: 600; margin-top: 8px; }
-.prod-menu-item.active { font-weight: bold; color: #d5b85a; }
-.prod-menu-item.active::after { content: ""; position: absolute; left: 12px; bottom: 4px; width: 95px; height: 3px; background-color: #d5b85a; border-radius: 2px; }
+.prod-sidebar { grid-row: 1 / 5; grid-column: 1; background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 12px; padding: 16px 0; height: fit-content; position: sticky; top: 102px; backdrop-filter: blur(10px); overflow: visible; transition: transform 0.3s ease-in-out; }
+.prod-menu { margin-top: 0; display: flex; flex-direction: column; gap: 2px; }
+.prod-menu-item { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; font-weight: 500; color: #333; cursor: pointer; position: relative; transition: all 0.2s; }
+.prod-menu-item:hover { background: rgba(213, 184, 90, 0.1); color: #d5b85a; }
+.prod-menu-item.active { background: rgba(213, 184, 90, 0.15); color: #d5b85a; font-weight: 600; }
+.prod-menu-item.active::after { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 60%; background-color: #d5b85a; border-radius: 0 4px 4px 0; }
+.prod-menu-item-logout { color: #c62828; font-weight: 600; margin-top: 20px; border-top: 1px solid #e0e0e0; padding-top: 16px; }
+.prod-menu-item-logout:hover { background: rgba(198, 40, 40, 0.1); color: #b71c1c; }
 .prod-badge-count { background: #c62828; color: white !important; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
 
 /* ---------------- GRID CELLS ---------------- */
@@ -276,13 +276,13 @@
 
 /* ==================== MOBILE ==================== */
 @media (max-width: 768px) {
-  .prod-dashboard-wrapper { padding: 10px 10px; }
+  .prod-dashboard-wrapper { padding: 0; }
   .prod-header { padding: 10px 16px; }
   .prod-header-title { font-size: 17px; }
   .prod-header-logo { height: 35px; }
   .prod-header-btn { display: none; }
   .prod-hamburger-icon { display: flex; }
-  .prod-grid-table { display: flex; flex-direction: column; gap: 15px; }
+  .prod-grid-table { display: flex; flex-direction: column; gap: 15px; padding: 0 10px 10px; }
   .prod-sidebar { display: none; position: fixed; top: 0; left: 0; width: 220px; height: 100vh; z-index: 1000; background: #FFFFFFEE; border-right: 1px solid #D4D4D4; padding: 20px 10px; }
   .prod-sidebar.prod-open { display: block; }
   .prod-menu-item-logout { display: block; padding: 8px 12px; font-size: 15px; cursor: pointer; color: #c62828; }
