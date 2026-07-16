@@ -1278,8 +1278,12 @@ export default function OrderHistory() {
     sessionStorage.removeItem("oh_saEmail");
     sessionStorage.removeItem("oh_readOnly");
     sessionStorage.removeItem("oh_isServices");
-    if (fromAssociate) navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard");
-    else navigate(-1);
+    // Walk history so the user lands back on the dashboard TAB they left
+    // (?tab= is in the URL of the previous entry). Pushing the bare dashboard
+    // route dumped them on the default tab. Hardcoded route only remains as
+    // the deep-link fallback (no in-app history behind us: idx === 0).
+    if (window.history.state?.idx > 0) navigate(-1);
+    else navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard");
   };
 
   const handleLogout = async () => {

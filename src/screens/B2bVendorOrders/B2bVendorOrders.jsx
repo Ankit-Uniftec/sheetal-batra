@@ -116,7 +116,10 @@ export default function B2bVendorOrders() {
     };
 
     const handleBack = () => {
-        navigate("/b2b-order-history");
+        // Walk history (vendor orders is reached from several dashboards/tabs);
+        // hardcoded route only as deep-link fallback.
+        if (window.history.state?.idx > 0) navigate(-1);
+        else navigate("/b2b-order-history");
     };
 
     const getStatusBadge = (status) => {

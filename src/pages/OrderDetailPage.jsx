@@ -409,18 +409,29 @@ export default function OrderDetailPage() {
     }
   };
 
-  // Navigation
+  // Navigation. Back should WALK history, not push a fresh route — pushing
+  // "/orderHistory" created a new entry, so the user's subsequent Back from
+  // there could never reach the dashboard tab they started on. history already
+  // holds the exact previous URL (customer state included); react-router v6
+  // tracks the position in history.state.idx, so idx > 0 means "there is a
+  // previous in-app entry to return to". The hardcoded route stays only as the
+  // deep-link fallback (opened directly, nothing behind us).
+  const canGoBack = window.history.state?.idx > 0;
   const handleBack = () => {
     if (fromProductionManager) {
+      // Keep the PM special-case: it restores the orders tab AND highlights
+      // the order card on arrival (state the plain history entry can't carry).
       navigate("/production-manager-dashboard", {
         state: { activeTab: "orders", highlightOrderId: order?.id || null }
       });
+    } else if (canGoBack) {
+      navigate(-1);
     } else if (fromAssociate) {
       navigate("/orderHistory", {
         state: { fromAssociate: true, customer: customerFromState }
       });
     } else {
-      navigate(-1);
+      navigate("/AssociateDashboard");
     }
   };
 

@@ -148,7 +148,12 @@ export default function B2bOrderHistory() {
     const recent = useMemo(() => orders.slice(0, 3), [orders]);
 
     // ==================== HELPERS ====================
-    const handleBack = () => navigate("/b2b-executive-dashboard");
+    const handleBack = () => {
+        // Walk history so Back lands on the tab the user left (?tab= is in the
+        // previous entry's URL); bare route only as deep-link fallback.
+        if (window.history.state?.idx > 0) navigate(-1);
+        else navigate("/b2b-executive-dashboard");
+    };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
 
     const getStatusClass = (status) => {
