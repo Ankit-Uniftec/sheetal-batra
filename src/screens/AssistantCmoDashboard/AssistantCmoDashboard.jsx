@@ -11,6 +11,8 @@ import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import WalkInsView from "../../components/WalkInsView/WalkInsView";
+import Paginator from "../../components/Paginator";
+import useTabParam from "../../hooks/useTabParam";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
@@ -100,7 +102,7 @@ export default function AssistantCmoDashboard() {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useTabParam("overview");
   // Date-wise filter for overview / brand performance / client insights tabs.
   // Defaults to "all" — viewing the full dataset is the most useful starting
   // point on this dashboard (CMO ops, not daily SA-style monitoring).
@@ -1612,21 +1614,7 @@ export default function AssistantCmoDashboard() {
                   </table>
                 </div>
 
-                {totalPages > 1 && (
-                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 16 }}>
-                    <button
-                      onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
-                      disabled={ordersPage === 1}
-                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: ordersPage === 1 ? "not-allowed" : "pointer", opacity: ordersPage === 1 ? 0.5 : 1 }}
-                    >Prev</button>
-                    <span style={{ fontSize: 13, color: "#666" }}>Page {ordersPage} of {totalPages}</span>
-                    <button
-                      onClick={() => setOrdersPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={ordersPage === totalPages}
-                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: ordersPage === totalPages ? "not-allowed" : "pointer", opacity: ordersPage === totalPages ? 0.5 : 1 }}
-                    >Next</button>
-                  </div>
-                )}
+                <Paginator page={ordersPage} totalPages={totalPages} onChange={setOrdersPage} />
               </>
             );
           })()}
@@ -1775,21 +1763,7 @@ export default function AssistantCmoDashboard() {
                   </table>
                 </div>
 
-                {clientBook.totalPages > 1 && (
-                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 16 }}>
-                    <button
-                      onClick={() => setClientsPage((p) => Math.max(1, p - 1))}
-                      disabled={clientBook.safePage === 1}
-                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: clientBook.safePage === 1 ? "not-allowed" : "pointer", opacity: clientBook.safePage === 1 ? 0.5 : 1 }}
-                    >Prev</button>
-                    <span style={{ fontSize: 13, color: "#666" }}>Page {clientBook.safePage} of {clientBook.totalPages}</span>
-                    <button
-                      onClick={() => setClientsPage((p) => Math.min(clientBook.totalPages, p + 1))}
-                      disabled={clientBook.safePage === clientBook.totalPages}
-                      style={{ padding: "6px 14px", border: "1px solid #e0d5c5", borderRadius: 6, background: "#fff", cursor: clientBook.safePage === clientBook.totalPages ? "not-allowed" : "pointer", opacity: clientBook.safePage === clientBook.totalPages ? 0.5 : 1 }}
-                    >Next</button>
-                  </div>
-                )}
+                <Paginator page={clientBook.safePage} totalPages={clientBook.totalPages} onChange={setClientsPage} />
               </>
             );
           })()}

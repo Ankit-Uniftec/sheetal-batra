@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { isRevenueOrder } from "../../utils/revenue";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import useTabParam from "../../hooks/useTabParam";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -53,7 +54,7 @@ export default function CeoAssistantDashboard() {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState("store_performance");
+  const [activeTab, setActiveTab] = useTabParam("store_performance");
   const [orders, setOrders] = useState([]);
   const [salespersonTable, setSalespersonTable] = useState([]);
   const [loading, setLoading] = useState(true);

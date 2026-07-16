@@ -20,6 +20,8 @@ import WalkInTab from "./WalkInTab";
 import ExhibitionPanel from "../components/ExhibitionPanel";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
+import useTabParam from "../hooks/useTabParam";
+import Paginator from "../components/Paginator";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -40,7 +42,7 @@ export default function Dashboard() {
   // Popup hook
   const { showPopup, PopupComponent } = usePopup();
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useTabParam("dashboard");
   const [salesperson, setSalesperson] = useState(null);
   // Exhibition SA: store/designation = "Exhibition". Drives the Exhibitions
   // menu + gating of the regular "+" order journey (points 1 & 2).
@@ -1807,27 +1809,11 @@ export default function Dashboard() {
                 })}
 
                 {/* Pagination Controls */}
-                {filteredOrders.length > ORDERS_PER_PAGE && (
-                  <div className="ad-pagination">
-                    <button
-                      disabled={currentPage === 1}
-                      onClick={() => setCurrentPage(p => p - 1)}
-                      className="ad-pagination-btn"
-                    >
-                      ← Previous
-                    </button>
-                    <span className="ad-pagination-info">
-                      Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
-                    </span>
-                    <button
-                      disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
-                      onClick={() => setCurrentPage(p => p + 1)}
-                      className="ad-pagination-btn"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                )}
+                <Paginator
+                  page={currentPage}
+                  totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
+                  onChange={setCurrentPage}
+                />
               </div>
             </div>
           )}

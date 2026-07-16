@@ -19,6 +19,7 @@ import CommsPRPerformance from "./CommsPRPerformance";
 import CommsInventory from "./CommsInventory";
 import CommsCalendar from "./CommsCalendar";
 import CommsOrderCalendar from "./CommsOrderCalendar";
+import useTabParam from "../../hooks/useTabParam";
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
@@ -50,7 +51,7 @@ export default function CommsDashboard() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useTabParam("overview");
   const [showSidebar, setShowSidebar] = useState(false);
 
   // Comms orders loaded once after auth. Used by Overview cards + recent list.

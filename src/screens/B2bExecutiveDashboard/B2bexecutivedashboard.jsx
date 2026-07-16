@@ -7,11 +7,13 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import NotificationBell from "../../components/NotificationBell";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
 
-    const [activeTab, setActiveTab] = useState("dashboard");
+    const [activeTab, setActiveTab] = useTabParam("dashboard");
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -532,13 +534,12 @@ export default function B2bExecutiveDashboard() {
                             })}
 
                             {/* Pagination */}
-                            {filteredOrders.length > ORDERS_PER_PAGE && (
-                                <div className="b2b-pagination">
-                                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="b2b-pagination-btn">← Previous</button>
-                                    <span className="b2b-pagination-info">Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}</span>
-                                    <button disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)} className="b2b-pagination-btn">Next →</button>
-                                </div>
-                            )}
+                            <Paginator
+                                page={currentPage}
+                                totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
+                                onChange={setCurrentPage}
+                            />
+
                         </div>
                     </div>
                 )}

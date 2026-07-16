@@ -5,6 +5,7 @@ import "./B2bVendorOrders.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import Paginator from "../../components/Paginator";
 
 const ORDERS_PER_PAGE = 6;
 
@@ -273,35 +274,7 @@ export default function B2bVendorOrders() {
                         </div>
 
                         {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="pagination">
-                                <button
-                                    className="page-btn"
-                                    disabled={currentPage === 1}
-                                    onClick={() => setCurrentPage(p => p - 1)}
-                                >
-                                    ← Previous
-                                </button>
-                                <div className="page-numbers">
-                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                        <button
-                                            key={page}
-                                            className={`page-num ${currentPage === page ? "active" : ""}`}
-                                            onClick={() => setCurrentPage(page)}
-                                        >
-                                            {page}
-                                        </button>
-                                    ))}
-                                </div>
-                                <button
-                                    className="page-btn"
-                                    disabled={currentPage === totalPages}
-                                    onClick={() => setCurrentPage(p => p + 1)}
-                                >
-                                    Next →
-                                </button>
-                            </div>
-                        )}
+                        <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
                     </>
                 )}
             </div>

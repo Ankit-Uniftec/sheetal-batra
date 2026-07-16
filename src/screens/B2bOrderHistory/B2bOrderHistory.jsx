@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import Paginator from "../../components/Paginator";
 
 // Color display component (same as OrderHistory)
 function ColorDot({ color }) {
@@ -140,8 +141,6 @@ export default function B2bOrderHistory() {
     const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
     const startIndex = (currentPage - 1) * ordersPerPage;
     const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
-    const goToPrevious = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
-    const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
 
     // Reset page on search change
     useEffect(() => { setCurrentPage(1); }, [searchQuery]);
@@ -427,13 +426,7 @@ export default function B2bOrderHistory() {
                         })}
 
                         {/* Pagination */}
-                        {filteredOrders.length > ordersPerPage && (
-                            <div className="b2boh-pagination">
-                                <button onClick={goToPrevious} disabled={currentPage === 1}>← Prev</button>
-                                <span className="b2boh-page-info">Page {currentPage} of {totalPages}</span>
-                                <button onClick={goToNext} disabled={currentPage === totalPages}>Next →</button>
-                            </div>
-                        )}
+                        <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
                     </div>
                 </section>
             </div>

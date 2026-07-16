@@ -13,6 +13,8 @@ import config from "../config/config";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import { restoreOrderInventory } from "../utils/restoreOrderInventory";
+import useTabParam from "../hooks/useTabParam";
+import Paginator from "../components/Paginator";
 
 // Measurement categories and fields (same as Screen4)
 const CATEGORY_KEY_MAP = {
@@ -212,7 +214,7 @@ export default function OrderHistory() {
   const [profile, setProfile] = useState(null);
   const [measurementsHistory, setMeasurementsHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("orders");
+  const [tab, setTab] = useTabParam("orders");
   const [actionLoading, setActionLoading] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [userDesignation, setUserDesignation] = useState("Sales Associate");
@@ -311,9 +313,6 @@ export default function OrderHistory() {
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
   const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
-  const goToPrevious = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
-  const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
-
   const recent = useMemo(() => orders.slice(0, 2), [orders]);
 
   // Fetch colors
@@ -2147,13 +2146,7 @@ export default function OrderHistory() {
               })}
 
               {/* Pagination */}
-              {filteredOrders.length > ordersPerPage && (
-                <div className="oh-pagination">
-                  <button onClick={goToPrevious} disabled={currentPage === 1}>← Prev</button>
-                  <span className="oh-page-info">Page {currentPage} of {totalPages}</span>
-                  <button onClick={goToNext} disabled={currentPage === totalPages}>Next →</button>
-                </div>
-              )}
+              <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
             </div>
           )}
 

@@ -1,0 +1,75 @@
+/* Paginator — shared pagination control, themed to the app standard
+   (gold #d5b85a accent, soft cards). */
+
+.pgn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.pgn-btn {
+    padding: 7px 14px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #555;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.pgn-btn:hover:not(:disabled) { border-color: #d5b85a; color: #8b7355; }
+.pgn-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.pgn-pages { display: flex; align-items: center; gap: 4px; }
+
+.pgn-num {
+    min-width: 34px;
+    height: 34px;
+    padding: 0 6px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+.pgn-num:hover:not(.active) { border-color: #d5b85a; color: #8b7355; }
+.pgn-num.active {
+    background: #d5b85a;
+    border-color: #d5b85a;
+    color: #fff;
+    cursor: default;
+}
+
+.pgn-ellipsis { color: #999; padding: 0 2px; user-select: none; }
+
+.pgn-jump { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
+.pgn-jump-input {
+    width: 56px;
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: center;
+    font-family: inherit;
+}
+.pgn-jump-input:focus { outline: none; border-color: #d5b85a; }
+/* hide number-input spinners — the field is tiny */
+.pgn-jump-input::-webkit-outer-spin-button,
+.pgn-jump-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pgn-jump-input[type="number"] { -moz-appearance: textfield; }
+
+@media (max-width: 600px) {
+    .pgn { gap: 6px; }
+    .pgn-num { min-width: 30px; height: 30px; }
+}

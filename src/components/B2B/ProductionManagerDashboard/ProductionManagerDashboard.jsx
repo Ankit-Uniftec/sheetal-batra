@@ -23,6 +23,8 @@ import { fetchExternalMovements } from "../../../utils/externalMovements";
 // dashboard and the warehouse PDF show — not the customer's delivery date.
 import { getWarehouseDate, getWarehouseDateObj } from "../../../utils/warehouseDate";
 import { fetchScanReport, scanReportCsv } from "../../../utils/scanReport";
+import useTabParam from "../../../hooks/useTabParam";
+import Paginator from "../../../components/Paginator";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
@@ -176,8 +178,10 @@ export default function ProductionManagerDashboard() {
     const location = useLocation();
     const { showPopup, PopupComponent } = usePopup();
 
-    // Restore tab from navigation state (e.g. when returning from order detail)
-    const [activeTab, setActiveTab] = useState(location.state?.activeTab || "overview");
+    // Tab lives in the URL (?tab=orders) — Back from a detail page returns to
+    // the tab the user was on, and browser Back moves between tabs. The hook
+    // still honours location.state?.activeTab for the flows that push it.
+    const [activeTab, setActiveTab] = useTabParam("overview");
     const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
@@ -2320,13 +2324,7 @@ export default function ProductionManagerDashboard() {
                                         );
                                     })}
 
-                                    {filteredOrders.length > ORDERS_PER_PAGE && (
-                                        <div className="pm-pagination">
-                                            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="pm-pagination-btn">← Previous</button>
-                                            <span className="pm-pagination-info">Page {currentPage} of {totalPages}</span>
-                                            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} className="pm-pagination-btn">Next →</button>
-                                        </div>
-                                    )}
+                                    <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
                                 </div>
                             </div>
                         )}

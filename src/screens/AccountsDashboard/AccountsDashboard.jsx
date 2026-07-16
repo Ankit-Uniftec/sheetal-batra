@@ -6,6 +6,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import Paginator from "../../components/Paginator";
 
 export default function AccountsDashboard() {
   const navigate = useNavigate();
@@ -212,41 +213,10 @@ export default function AccountsDashboard() {
   const endIndex = startIndex + itemsPerPage;
   const currentItems = filteredItems.slice(startIndex, endIndex);
 
-  const goToPage = (page) => setCurrentPage(page);
-  const goToPrevious = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
-  const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
-
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, searchField, dateFrom, dateTo, statusFilter]);
-
-  // Page numbers for pagination
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-
-    if (totalPages <= maxVisible) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      if (currentPage <= 3) {
-        for (let i = 1; i <= 4; i++) pages.push(i);
-        pages.push("...");
-        pages.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1);
-        pages.push("...");
-        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
-      } else {
-        pages.push(1);
-        pages.push("...");
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
-        pages.push("...");
-        pages.push(totalPages);
-      }
-    }
-    return pages;
-  };
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -603,43 +573,7 @@ export default function AccountsDashboard() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="acc-pagination">
-            <button
-              className="acc-page-btn nav"
-              onClick={goToPrevious}
-              disabled={currentPage === 1}
-            >
-              ← Prev
-            </button>
-
-            <div className="acc-page-numbers">
-              {getPageNumbers().map((page, index) =>
-                page === "..." ? (
-                  <span key={`dots-${index}`} className="acc-page-dots">
-                    ...
-                  </span>
-                ) : (
-                  <button
-                    key={page}
-                    className={`acc-page-btn ${currentPage === page ? "active" : ""}`}
-                    onClick={() => goToPage(page)}
-                  >
-                    {page}
-                  </button>
-                )
-              )}
-            </div>
-
-            <button
-              className="acc-page-btn nav"
-              onClick={goToNext}
-              disabled={currentPage === totalPages}
-            >
-              Next →
-            </button>
-          </div>
-        )}
+        <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
       </div>
 
       {/* Back Button */}

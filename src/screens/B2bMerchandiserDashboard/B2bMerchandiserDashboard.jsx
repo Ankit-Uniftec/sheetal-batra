@@ -14,12 +14,14 @@ import { enrichComponentsWithMovements, getOrderChannelKey } from "../../utils/b
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
     const { showPopup, PopupComponent } = usePopup();
 
-    const [activeTab, setActiveTab] = useState("dashboard");
+    const [activeTab, setActiveTab] = useTabParam("dashboard");
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -980,13 +982,11 @@ export default function B2bMerchandiserDashboard() {
                                     </div>
                                 );
                             })}
-                            {filteredOrders.length > ORDERS_PER_PAGE && (
-                                <div className="merch-pagination">
-                                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="merch-pagination-btn">{"\u2190"} Previous</button>
-                                    <span className="merch-pagination-info">Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}</span>
-                                    <button disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)} className="merch-pagination-btn">Next {"\u2192"}</button>
-                                </div>
-                            )}
+                            <Paginator
+                                page={currentPage}
+                                totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
+                                onChange={setCurrentPage}
+                            />
                         </div>
                     </div>
                 )}
@@ -1072,13 +1072,7 @@ export default function B2bMerchandiserDashboard() {
                                     );
                                 })
                             )}
-                            {totalVendorPages > 1 && (
-                                <div className="merch-pagination">
-                                    <button disabled={vendorPage === 1} onClick={() => setVendorPage(p => p - 1)} className="merch-pagination-btn">{"\u2190"} Previous</button>
-                                    <span className="merch-pagination-info">Page {vendorPage} of {totalVendorPages} ({filteredVendors.length} vendors)</span>
-                                    <button disabled={vendorPage >= totalVendorPages} onClick={() => setVendorPage(p => p + 1)} className="merch-pagination-btn">Next {"\u2192"}</button>
-                                </div>
-                            )}
+                            <Paginator page={vendorPage} totalPages={totalVendorPages} onChange={setVendorPage} />
                         </div>
                     </div>
                 )}
@@ -1272,13 +1266,11 @@ export default function B2bMerchandiserDashboard() {
                                         </tbody>
                                     </table>
                                 </div>
-                                {vendorGrowthStats.length > 15 && (
-                                    <div className="merch-pagination">
-                                        <button disabled={analyticsPage === 1} onClick={() => setAnalyticsPage(p => p - 1)} className="merch-pagination-btn">← Previous</button>
-                                        <span className="merch-pagination-info">Page {analyticsPage} of {Math.ceil(vendorGrowthStats.length / 15)}</span>
-                                        <button disabled={analyticsPage >= Math.ceil(vendorGrowthStats.length / 15)} onClick={() => setAnalyticsPage(p => p + 1)} className="merch-pagination-btn">Next →</button>
-                                    </div>
-                                )}
+                                <Paginator
+                                    page={analyticsPage}
+                                    totalPages={Math.ceil(vendorGrowthStats.length / 15)}
+                                    onChange={setAnalyticsPage}
+                                />
                             </>
                         )}
                     </div>

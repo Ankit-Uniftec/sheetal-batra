@@ -24,6 +24,8 @@ import { fetchReJourneys } from "../utils/reJourneys";
 import StageCountCards from "../components/StageCountCards";
 import ProductionOverview from "../components/ProductionOverview";
 import SearchByDropdown from "../components/SearchByDropdown";
+import useTabParam from "../hooks/useTabParam";
+import Paginator from "../components/Paginator";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -109,7 +111,7 @@ const WarehouseDashboard = () => {
   // operations-facing analogue, same convention as PM dashboard + PDFs).
   const [vendorMap, setVendorMap] = useState({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("orders");
+  const [activeTab, setActiveTab] = useTabParam("orders");
   const [showSidebar, setShowSidebar] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(null);
@@ -1211,29 +1213,6 @@ const WarehouseDashboard = () => {
     setCurrentPage(1);
   }, [searchQuery, statusTab, filters, sortBy]);
 
-  const goToPage = (page) => setCurrentPage(page);
-  const goToPrevious = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
-  const goToNext = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
-
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-    if (totalPages <= maxVisible + 2) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      let start = Math.max(2, currentPage - 1);
-      let end = Math.min(totalPages - 1, currentPage + 1);
-      if (currentPage <= 3) end = Math.min(totalPages - 1, 4);
-      if (currentPage >= totalPages - 2) start = Math.max(2, totalPages - 3);
-      if (start > 2) pages.push('...');
-      for (let i = start; i <= end; i++) pages.push(i);
-      if (end < totalPages - 1) pages.push('...');
-      pages.push(totalPages);
-    }
-    return pages;
-  };
-
   const getAlterationTypeLabel = (type) => {
     const types = {
       fitting_tightening: "Fitting Issue (Tightening)",
@@ -2015,30 +1994,8 @@ const WarehouseDashboard = () => {
               </div>
 
               {/* Pagination */}
-              {!loading && filteredOrders.length > ordersPerPage && (
-                <div className="wd-pagination">
-                  <button className="wd-pagination-btn" onClick={goToPrevious} disabled={currentPage === 1}>
-                    Prev
-                  </button>
-                  <div className="wd-pagination-pages">
-                    {getPageNumbers().map((page, idx) => (
-                      page === '...' ? (
-                        <span key={`ellipsis-${idx}`} className="wd-pagination-ellipsis">...</span>
-                      ) : (
-                        <button
-                          key={page}
-                          className={`wd-pagination-page ${currentPage === page ? "active" : ""}`}
-                          onClick={() => goToPage(page)}
-                        >
-                          {page}
-                        </button>
-                      )
-                    ))}
-                  </div>
-                  <button className="wd-pagination-btn" onClick={goToNext} disabled={currentPage === totalPages}>
-                    Next
-                  </button>
-                </div>
+              {!loading && (
+                <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
               )}
             </div>
           )}

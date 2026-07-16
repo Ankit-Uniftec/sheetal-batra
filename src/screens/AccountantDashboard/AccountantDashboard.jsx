@@ -13,6 +13,8 @@ import {
 } from "recharts";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 
 // Accountant Dashboard — for the "ACCOUNTANT — DISPATCH & LOGISTICS" role.
 // Sidebar with 4 tabs (Overview + the 3 spec items).
@@ -101,8 +103,8 @@ export default function AccountantDashboard() {
   const [orders, setOrders] = useState([]);
   const [currentUserName, setCurrentUserName] = useState("");
 
-  // Tabs
-  const [activeTab, setActiveTab] = useState("overview");
+  // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
+  const [activeTab, setActiveTab] = useTabParam("overview");
   const [showSidebar, setShowSidebar] = useState(false);
 
   // Filter state
@@ -645,13 +647,7 @@ export default function AccountantDashboard() {
                   </table>
                 </div>
 
-                {ordersTotalPages > 1 && (
-                  <div className="acct-pagination">
-                    <button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button>
-                    <span>Page {ordersPage} of {ordersTotalPages}</span>
-                    <button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button>
-                  </div>
-                )}
+                <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
               </div>
             </div>
           )}
@@ -769,13 +765,7 @@ export default function AccountantDashboard() {
                     </table>
                   </div>
 
-                  {issuesTotalPages > 1 && (
-                    <div className="acct-pagination">
-                      <button onClick={() => setIssuePage(p => Math.max(1, p - 1))} disabled={issuePage === 1}>Prev</button>
-                      <span>Page {issuePage} of {issuesTotalPages}</span>
-                      <button onClick={() => setIssuePage(p => Math.min(issuesTotalPages, p + 1))} disabled={issuePage === issuesTotalPages}>Next</button>
-                    </div>
-                  )}
+                  <Paginator page={issuePage} totalPages={issuesTotalPages} onChange={setIssuePage} />
                 </div>
               )}
             </div>

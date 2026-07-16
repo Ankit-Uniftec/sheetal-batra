@@ -11,6 +11,8 @@ import StockCalendarTab from "./StockCalendarTab";
 import WarehouseTab from "./WarehouseTab";
 import StockExchangeTab from "./StockExchangeTab";
 import AddProduct from "../../components/AddProduct/AddProduct";
+import Paginator from "../../components/Paginator";
+import useTabParam from "../../hooks/useTabParam";
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
@@ -62,7 +64,7 @@ export default function InventoryDashboard() {
   const navigate = useNavigate();
 
   // ==================== SIDEBAR & TABS ====================
-  const [activeTab, setActiveTab] = useState("inventory");
+  const [activeTab, setActiveTab] = useTabParam("inventory");
   const [showSidebar, setShowSidebar] = useState(false);
 
   // Lightbox state — holds the URL of the image being viewed, or null when closed.
@@ -531,45 +533,6 @@ export default function InventoryDashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login", { replace: true });
-  };
-
-  const goToPage = (page) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const goToPrevious = () => {
-    if (currentPage > 1) goToPage(currentPage - 1);
-  };
-
-  const goToNext = () => {
-    if (currentPage < totalPages) goToPage(currentPage + 1);
-  };
-
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-
-    if (totalPages <= maxVisible) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      if (currentPage <= 3) {
-        for (let i = 1; i <= 4; i++) pages.push(i);
-        pages.push("...");
-        pages.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1);
-        pages.push("...");
-        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
-      } else {
-        pages.push(1);
-        pages.push("...");
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
-        pages.push("...");
-        pages.push(totalPages);
-      }
-    }
-    return pages;
   };
 
   const getInventoryClass = (count) => {
@@ -1116,44 +1079,7 @@ export default function InventoryDashboard() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="inv-pagination">
-            <button
-              className="inv-page-btn nav"
-              onClick={goToPrevious}
-              disabled={currentPage === 1}
-            >
-              ← Prev
-            </button>
-
-            <div className="inv-page-numbers">
-              {getPageNumbers().map((page, index) =>
-                page === "..." ? (
-                  <span key={`dots-${index}`} className="inv-page-dots">
-                    ...
-                  </span>
-                ) : (
-                  <button
-                    key={page}
-                    className={`inv-page-btn ${currentPage === page ? "active" : ""
-                      }`}
-                    onClick={() => goToPage(page)}
-                  >
-                    {page}
-                  </button>
-                )
-              )}
-            </div>
-
-            <button
-              className="inv-page-btn nav"
-              onClick={goToNext}
-              disabled={currentPage === totalPages}
-            >
-              Next →
-            </button>
-          </div>
-        )}
+        <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
         </>)}
 
         {/* ==================== STOCK ORDERS TAB ==================== */}

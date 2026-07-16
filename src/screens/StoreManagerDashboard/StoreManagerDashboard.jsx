@@ -9,6 +9,8 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import Paginator from "../../components/Paginator";
+import useTabParam from "../../hooks/useTabParam";
 import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
 import {
@@ -75,7 +77,7 @@ export default function StoreManagerDashboard() {
     const [userStore, setUserStore] = useState("");
 
     // UI
-    const [activeTab, setActiveTab] = useState("sales");
+    const [activeTab, setActiveTab] = useTabParam("sales");
     const [showSidebar, setShowSidebar] = useState(false);
     const [timeline, setTimeline] = useState("monthly");
     const [customDateFrom, setCustomDateFrom] = useState("");
@@ -1255,13 +1257,7 @@ export default function StoreManagerDashboard() {
                                     </tbody>
                                 </table>
                             </div>
-                            {ordersTotalPages > 1 && (
-                                <div className="sm-pagination">
-                                    <button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button>
-                                    <span>Page {ordersPage} of {ordersTotalPages}</span>
-                                    <button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
                         </div>
                     )}
 
@@ -1715,13 +1711,7 @@ export default function StoreManagerDashboard() {
                                     </tbody>
                                 </table>
                             </div>
-                            {clientBook.totalPages > 1 && (
-                                <div className="sm-pagination">
-                                    <button onClick={() => setClientPage(p => Math.max(1, p - 1))} disabled={clientPage === 1}>Prev</button>
-                                    <span>Page {clientPage} of {clientBook.totalPages}</span>
-                                    <button onClick={() => setClientPage(p => Math.min(clientBook.totalPages, p + 1))} disabled={clientPage === clientBook.totalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={clientPage} totalPages={clientBook.totalPages} onChange={setClientPage} />
                         </div>
                     )}
 
