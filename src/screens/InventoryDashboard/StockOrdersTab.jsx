@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 import { downloadWarehousePdf } from "../../utils/pdfUtils";
+import Paginator from "../../components/Paginator";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import "../AssociateDashboard.css";
 import "./StockOrdersTab.css";
@@ -132,6 +133,12 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
     });
   }, [orders, search, saFilter]);
 
+  // Page within the filtered set; filter changes reset to page 1.
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [search, saFilter]);
+  const totalPages = Math.ceil(filtered.length / 15);
+  const paged = useMemo(() => filtered.slice((page - 1) * 15, page * 15), [filtered, page]);
+
   const canEdit = (o) => hoursSince(o.created_at) <= STOCK_WINDOW_HOURS && isOpenStatus(o.status);
   const canCancel = (o) => hoursSince(o.created_at) <= STOCK_WINDOW_HOURS && isOpenStatus(o.status);
 
@@ -260,7 +267,7 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
         <div className="stock-empty">No stock orders yet.</div>
       ) : (
         <div className="ad-orders-grid">
-          {filtered.map((order) => {
+          {paged.map((order) => {
             const item = (order.items && order.items[0]) || {};
             const imgSrc = item.image_url || "/placeholder.png";
             const editable = canEdit(order);
@@ -421,6 +428,7 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
           })}
         </div>
       )}
+      <Paginator page={page} totalPages={totalPages} onChange={setPage} />
 
       {/* ─── Edit Modal ─── */}
       {editing && (

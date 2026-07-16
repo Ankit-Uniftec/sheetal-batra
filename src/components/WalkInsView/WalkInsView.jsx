@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { normalizeStore } from "../../utils/storeCategory";
+import Paginator from "../Paginator";
 import {
   buildOrderPhoneSet,
   isAutoConverted,
@@ -116,6 +117,12 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
       );
     });
   }, [walkins, search, saFilter, convFilter, locFilter, orderPhoneSet, saLocationByEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Page within the filtered set; filter changes reset to page 1.
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [search, saFilter, convFilter, locFilter]);
+  const totalPages = Math.ceil(filtered.length / 15);
+  const paged = useMemo(() => filtered.slice((page - 1) * 15, page * 15), [filtered, page]);
 
   const convertedCount = useMemo(
     () => walkins.filter((w) => effectiveConverted(w, orderPhoneSet)).length,
@@ -267,7 +274,7 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
                 </td>
               </tr>
             ) : (
-              filtered.map((w) => {
+              paged.map((w) => {
                 const converted = effectiveConverted(w, orderPhoneSet);
                 const src = conversionSource(w);
                 return (
@@ -301,6 +308,7 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
             )}
           </tbody>
         </table>
+        <Paginator page={page} totalPages={totalPages} onChange={setPage} />
       </div>
     </div>
   );

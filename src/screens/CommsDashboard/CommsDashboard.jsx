@@ -20,6 +20,11 @@ import CommsInventory from "./CommsInventory";
 import CommsCalendar from "./CommsCalendar";
 import CommsOrderCalendar from "./CommsOrderCalendar";
 import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
+
+// Comms order cards are heavy (image, colour swatches, component chips) —
+// rendering the whole filtered list lags once orders grow. Paginate.
+const ORDERS_PER_PAGE = 10;
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
@@ -237,6 +242,15 @@ export default function CommsDashboard() {
       return true;
     });
   }, [orders, ordersSearch, engagementFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
+
+  // Page within the filtered orders; any filter change resets to page 1.
+  const [ordersPage, setOrdersPage] = useState(1);
+  useEffect(() => { setOrdersPage(1); }, [ordersSearch, engagementFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
+  const ordersTotalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+  const pagedOrders = useMemo(
+    () => filteredOrders.slice((ordersPage - 1) * ORDERS_PER_PAGE, ordersPage * ORDERS_PER_PAGE),
+    [filteredOrders, ordersPage]
+  );
 
   // Upcoming sourcing returns — sourcing orders whose return date is in the
   // next 14 days. Helps Nazreen flag follow-ups before the alerts wire up.
@@ -563,7 +577,7 @@ export default function CommsDashboard() {
                   <p className="comms-muted">No orders match the current filters.</p>
                 ) : (
                   <div className="comms-order-cards">
-                    {filteredOrders.map((o) => {
+                    {pagedOrders.map((o) => {
                       const item = o.items?.[0] || {};
                       const imgSrc = item.image_url || "/placeholder.png";
                       const notional = (o.items || []).reduce((sum, it) => {
@@ -778,6 +792,7 @@ export default function CommsDashboard() {
                     })}
                   </div>
                 )}
+                <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
               </div>
             </>
           )}

@@ -380,3 +380,15 @@
   .vendor-hero-info h1 { font-size: 18px; }
   .hero-stat .stat-value { font-size: 18px; }
 }
+/* Search + status filter in the Order History header */
+.b2bvo-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.b2bvo-search {
+    padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 13px; min-width: 220px; font-family: inherit;
+}
+.b2bvo-search:focus { outline: none; border-color: #d5b85a; }
+.b2bvo-status {
+    padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 13px; background: #fff; font-family: inherit; cursor: pointer;
+}
+.b2bvo-status:focus { outline: none; border-color: #d5b85a; }
