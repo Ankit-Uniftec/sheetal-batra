@@ -3,6 +3,16 @@
 .rpa-hint { margin: 0 0 18px; color: #888; font-size: 13px; }
 .rpa-section { margin: 18px 0 10px; font-size: 15px; color: #555; }
 .rpa-empty { color: #999; font-size: 14px; padding: 14px; background: #fafafa; border-radius: 8px; }
+.rpa-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.rpa-filter-search {
+  flex: 1; min-width: 220px; padding: 8px 12px;
+  border: 1px solid #ddd; border-radius: 8px; font-size: 13px; outline: none;
+}
+.rpa-filter-select {
+  padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 13px; background: #fff; cursor: pointer; outline: none;
+}
+.rpa-filter-search:focus, .rpa-filter-select:focus { border-color: #d5b85a; }
 .rpa-list { display: flex; flex-direction: column; gap: 10px; }
 .rpa-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px; background: #fff; border: 1px solid #eee; border-radius: 10px; }
 .rpa-line { display: flex; align-items: center; gap: 8px; }

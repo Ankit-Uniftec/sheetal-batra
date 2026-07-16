@@ -21,6 +21,7 @@ import CommsCalendar from "./CommsCalendar";
 import CommsOrderCalendar from "./CommsOrderCalendar";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 // Comms order cards are heavy (image, colour swatches, component chips) —
 // rendering the whole filtered list lags once orders grow. Paginate.
@@ -190,18 +191,25 @@ export default function CommsDashboard() {
     }
   };
 
+  // Period filter for the Overview stats (Orders tab keeps its own date range).
+  const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "pills" });
+  const periodOrders = useMemo(
+    () => orders.filter((o) => inPeriod(o.created_at)),
+    [orders, inPeriod]
+  );
+
   // Counts per engagement type — drives the Overview cards.
   const engagementCounts = useMemo(() => {
     const counts = { Barter: 0, Gifting: 0, Sourcing: 0, "Personal order": 0 };
-    orders.forEach((o) => {
+    periodOrders.forEach((o) => {
       const t = o.comms_engagement_type;
       if (t && counts.hasOwnProperty(t)) counts[t] += 1;
     });
     return counts;
-  }, [orders]);
+  }, [periodOrders]);
 
   // Recent orders for the overview list.
-  const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
+  const recentOrders = useMemo(() => periodOrders.slice(0, 10), [periodOrders]);
 
   // Full filtered list for the Orders tab.
   const filteredOrders = useMemo(() => {
@@ -369,6 +377,8 @@ export default function CommsDashboard() {
                   + New Comms Order
                 </button>
               </div>
+
+              {periodControl}
 
               {/* Engagement-type cards */}
               <div className="comms-cards-row">

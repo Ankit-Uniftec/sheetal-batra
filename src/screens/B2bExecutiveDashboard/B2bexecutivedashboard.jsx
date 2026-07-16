@@ -9,6 +9,7 @@ import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils"
 import NotificationBell from "../../components/NotificationBell";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
@@ -90,22 +91,30 @@ export default function B2bExecutiveDashboard() {
         loadAllData();
     }, []);
 
+    // ==================== PERIOD FILTER ====================
+    const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "pills" });
+    const periodOrders = useMemo(
+        () => orders.filter(o => inPeriod(o.created_at)),
+        [orders, inPeriod]
+    );
+
     // ==================== STATS ====================
     const stats = useMemo(() => {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-        const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
-        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
+        const salesOrders = periodOrders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = periodOrders.filter(o => o.b2b_order_type === "Consignment");
         const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const totalOrders = orders.length;
-        const pendingOrders = orders.filter(o => o.approval_status === "pending");
+        const totalOrders = periodOrders.length;
+        const pendingOrders = periodOrders.filter(o => o.approval_status === "pending");
+        // Explicitly-named windows stay absolute — they say what they are.
         const thisMonthOrders = orders.filter(o => o.created_at >= monthStart);
         const todayOrders = orders.filter(o => formatDate(o.created_at) === formatDate(new Date()));
 
         return { salesRevenue, consignmentValue, consignmentCount: consignmentOrders.length, totalOrders, pendingOrders, thisMonthOrders, todayOrders };
-    }, [orders]);
+    }, [orders, periodOrders]);
 
     const ordersByDate = useMemo(() => {
         return orders.reduce((acc, order) => {
@@ -270,6 +279,12 @@ export default function B2bExecutiveDashboard() {
                     </div>
                 </div>
             </header>
+
+            {/* Period filter — dashboard tab stat cards only (grid cells below are
+                explicitly placed, so the control sits above the grid). */}
+            {activeTab === "dashboard" && (
+                <div className="pfx-bar">{periodControl}</div>
+            )}
 
             {/* ===== GRID LAYOUT ===== */}
             <div className={`b2b-grid-table ${showSidebar ? "b2b-sidebar-open" : ""}`}>

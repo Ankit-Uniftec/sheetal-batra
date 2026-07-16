@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { usePopup } from "./Popup";
 import Badge from "./Badge";
 import {
@@ -19,6 +19,26 @@ const ReplacementApprovals = ({ currentUserEmail }) => {
   const { showPopup, PopupComponent } = usePopup();
   const [pending, setPending] = useState([]);
   const [busyId, setBusyId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [failureFilter, setFailureFilter] = useState("all");
+
+  const failureTypes = useMemo(
+    () => [...new Set(pending.map((r) => r.failure_type).filter(Boolean))],
+    [pending]
+  );
+
+  const filteredPending = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return pending.filter((r) => {
+      if (failureFilter !== "all" && r.failure_type !== failureFilter) return false;
+      if (q && !(
+        r.barcode?.toLowerCase().includes(q) ||
+        r.order_no?.toLowerCase().includes(q) ||
+        r.vendor_name?.toLowerCase().includes(q)
+      )) return false;
+      return true;
+    });
+  }, [pending, search, failureFilter]);
 
   const load = useCallback(async () => {
     try { setPending((await fetchPendingReplacements()) || []); }
@@ -75,8 +95,27 @@ const ReplacementApprovals = ({ currentUserEmail }) => {
       {pending.length === 0 ? (
         <p className="rpa-empty">No replacement requests awaiting approval.</p>
       ) : (
+        <>
+          <div className="rpa-filters">
+            <input
+              type="text"
+              className="rpa-filter-search"
+              placeholder="Search by barcode, order no, or vendor..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select className="rpa-filter-select" value={failureFilter} onChange={(e) => setFailureFilter(e.target.value)}>
+              <option value="all">All Failure Types</option>
+              {failureTypes.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          {filteredPending.length === 0 ? (
+            <p className="rpa-empty">No replacement requests match your search.</p>
+          ) : (
         <div className="rpa-list">
-          {pending.map((r) => (
+          {filteredPending.map((r) => (
             <div key={r.id} className="rpa-row">
               <div className="rpa-info">
                 <div className="rpa-line"><span className="rpa-bc">{r.barcode}</span><Badge variant="warning">{r.failure_type}</Badge></div>
@@ -91,6 +130,8 @@ const ReplacementApprovals = ({ currentUserEmail }) => {
             </div>
           ))}
         </div>
+          )}
+        </>
       )}
     </div>
   );

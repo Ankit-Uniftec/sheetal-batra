@@ -66,6 +66,22 @@ export default function CommsSourcingReturns({ orders, onOrderUpdated, showPopup
     return { pending, overdue, returned };
   }, [sourcingOrders, now]);
 
+  // Search across all three buckets (order no / client). The bucket split
+  // itself already acts as the status filter.
+  const [search, setSearch] = useState("");
+  const filteredBuckets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return buckets;
+    const match = (o) =>
+      (o.order_no || "").toLowerCase().includes(q) ||
+      (o.delivery_name || "").toLowerCase().includes(q);
+    return {
+      pending: buckets.pending.filter(match),
+      overdue: buckets.overdue.filter(match),
+      returned: buckets.returned.filter(match),
+    };
+  }, [buckets, search]);
+
   // Modal state
   const [returnModal, setReturnModal] = useState(null); // { order }
   const [returnCondition, setReturnCondition] = useState("Perfect");
@@ -244,33 +260,54 @@ export default function CommsSourcingReturns({ orders, onOrderUpdated, showPopup
         </div>
       )}
 
-      {buckets.overdue.length > 0 && (
+      {sourcingOrders.length > 0 && (
+        <div className="comms-card">
+          <input
+            type="text"
+            className="comms-search"
+            placeholder="Search order no or client..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+
+      {sourcingOrders.length > 0 &&
+        filteredBuckets.overdue.length === 0 &&
+        filteredBuckets.pending.length === 0 &&
+        filteredBuckets.returned.length === 0 && (
+        <div className="comms-card">
+          <p className="comms-muted">No sourcing orders match your search.</p>
+        </div>
+      )}
+
+      {filteredBuckets.overdue.length > 0 && (
         <div className="comms-card">
           <h3 className="comms-card-title">
             Overdue
-            <span style={{ color: "#c62828", marginLeft: 8 }}>({buckets.overdue.length})</span>
+            <span style={{ color: "#c62828", marginLeft: 8 }}>({filteredBuckets.overdue.length})</span>
           </h3>
-          {renderTable(buckets.overdue, "overdue")}
+          {renderTable(filteredBuckets.overdue, "overdue")}
         </div>
       )}
 
-      {buckets.pending.length > 0 && (
+      {filteredBuckets.pending.length > 0 && (
         <div className="comms-card">
           <h3 className="comms-card-title">
             Pending Return
-            <span style={{ color: "#ef6c00", marginLeft: 8 }}>({buckets.pending.length})</span>
+            <span style={{ color: "#ef6c00", marginLeft: 8 }}>({filteredBuckets.pending.length})</span>
           </h3>
-          {renderTable(buckets.pending, "pending")}
+          {renderTable(filteredBuckets.pending, "pending")}
         </div>
       )}
 
-      {buckets.returned.length > 0 && (
+      {filteredBuckets.returned.length > 0 && (
         <div className="comms-card">
           <h3 className="comms-card-title">
             Returned
-            <span style={{ color: "#2e7d32", marginLeft: 8 }}>({buckets.returned.length})</span>
+            <span style={{ color: "#2e7d32", marginLeft: 8 }}>({filteredBuckets.returned.length})</span>
           </h3>
-          {renderTable(buckets.returned, "returned")}
+          {renderTable(filteredBuckets.returned, "returned")}
         </div>
       )}
 

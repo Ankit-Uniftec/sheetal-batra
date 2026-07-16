@@ -1319,6 +1319,22 @@
   font-size: 14px;
 }
 
+.inv-stock-search {
+  width: 100%;
+  max-width: 320px;
+  margin: 12px 0 8px;
+  padding: 7px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.inv-stock-search:focus {
+  border-color: #d5b85a;
+}
+
 .inv-stock-table {
   width: 100%;
   border-collapse: collapse;
@@ -1847,6 +1863,33 @@
 }
 
 /* ──────────────────── Stock Exchange table ──────────────────── */
+.inv-exchange-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.inv-exchange-filter {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  font-family: inherit;
+  outline: none;
+}
+
+.inv-exchange-filter:focus {
+  border-color: #d5b85a;
+}
+
+.inv-exchange-filter-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+}
+
 .inv-exchange-table-wrapper {
   background: #fff;
   border: 1px solid #e0e0e0;

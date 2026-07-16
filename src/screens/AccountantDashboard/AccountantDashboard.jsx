@@ -96,6 +96,19 @@ const getOrderStatus = (order) => {
   return "order_received";
 };
 
+// Classify a returns/refunds issue order → { type, color, reason }.
+// Same precedence as returnsRefunds bucketing.
+const getIssueInfo = (o) => {
+  if (o.refund_reason || o.refund_status || o.status === "refund_requested")
+    return { type: "Refund", color: "#7b1fa2", reason: o.refund_reason || "—" };
+  if (o.return_reason) return { type: "Return", color: "#ef6c00", reason: o.return_reason };
+  if (o.exchange_reason) return { type: "Exchange", color: "#1565c0", reason: o.exchange_reason };
+  if (o.status?.toLowerCase() === "cancelled")
+    return { type: "Cancelled", color: "#c62828", reason: o.cancellation_reason || "—" };
+  if (o.revoked_at) return { type: "Revoked", color: "#6d4c41", reason: o.revoke_reason || "—" };
+  return { type: "—", color: "#999", reason: "—" };
+};
+
 export default function AccountantDashboard() {
   const navigate = useNavigate();
 
@@ -119,8 +132,10 @@ export default function AccountantDashboard() {
   const [orderSearchField, setOrderSearchField] = useState("order_no");
   const [ordersPage, setOrdersPage] = useState(1);
 
-  // Returns & Refunds tab — issue list pagination
+  // Returns & Refunds tab — issue list search/filter + pagination
   const [issuePage, setIssuePage] = useState(1);
+  const [issueSearch, setIssueSearch] = useState("");
+  const [issueTypeFilter, setIssueTypeFilter] = useState("all");
 
   // ─── Auth + fetch ─────────────────────────────────────────────
   useEffect(() => {
@@ -285,12 +300,33 @@ export default function AccountantDashboard() {
     };
   }, [periodOrders]);
 
-  const issuesTotalPages = Math.max(1, Math.ceil(returnsRefunds.issues.length / ITEMS_PER_PAGE));
-  const currentIssuesPage = useMemo(
-    () => returnsRefunds.issues.slice((issuePage - 1) * ITEMS_PER_PAGE, issuePage * ITEMS_PER_PAGE),
-    [returnsRefunds.issues, issuePage]
+  // Distinct issue types present in the data (for the dropdown).
+  const issueTypeOptions = useMemo(
+    () => [...new Set(returnsRefunds.issues.map((o) => getIssueInfo(o).type))],
+    [returnsRefunds.issues]
   );
-  useEffect(() => { setIssuePage(1); }, [timeline, customDateFrom, customDateTo]);
+
+  const filteredIssues = useMemo(() => {
+    let list = returnsRefunds.issues;
+    if (issueTypeFilter !== "all") {
+      list = list.filter(o => getIssueInfo(o).type === issueTypeFilter);
+    }
+    if (issueSearch.trim()) {
+      const q = issueSearch.trim().toLowerCase();
+      list = list.filter(o =>
+        (o.order_no || "").toLowerCase().includes(q) ||
+        (o.delivery_name || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [returnsRefunds.issues, issueSearch, issueTypeFilter]);
+
+  const issuesTotalPages = Math.max(1, Math.ceil(filteredIssues.length / ITEMS_PER_PAGE));
+  const currentIssuesPage = useMemo(
+    () => filteredIssues.slice((issuePage - 1) * ITEMS_PER_PAGE, issuePage * ITEMS_PER_PAGE),
+    [filteredIssues, issuePage]
+  );
+  useEffect(() => { setIssuePage(1); }, [timeline, customDateFrom, customDateTo, issueSearch, issueTypeFilter]);
 
   if (loading) {
     return (
@@ -716,7 +752,27 @@ export default function AccountantDashboard() {
 
               {returnsRefunds.issues.length > 0 && (
                 <div className="acct-card">
-                  <h3 className="acct-card-title">Issue Orders <span className="acct-count">({returnsRefunds.issues.length})</span></h3>
+                  <div className="acct-card-toolbar">
+                    <h3 className="acct-card-title">Issue Orders <span className="acct-count">({filteredIssues.length})</span></h3>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <input
+                        type="text"
+                        className="acct-search"
+                        placeholder="Search order # or customer..."
+                        value={issueSearch}
+                        onChange={(e) => setIssueSearch(e.target.value)}
+                      />
+                      <select
+                        className="acct-search"
+                        style={{ minWidth: 140 }}
+                        value={issueTypeFilter}
+                        onChange={(e) => setIssueTypeFilter(e.target.value)}
+                      >
+                        <option value="all">All Types</option>
+                        {issueTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
                   <div className="acct-table-wrapper">
                     <table className="acct-table">
                       <thead>
@@ -731,20 +787,11 @@ export default function AccountantDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {currentIssuesPage.map(o => {
+                        {currentIssuesPage.length === 0 ? (
+                          <tr><td colSpan="7" className="acct-no-data">No issues match your search</td></tr>
+                        ) : currentIssuesPage.map(o => {
                           const ch = getOrderChannel(o);
-                          let type = "—", color = "#999", reason = "—";
-                          if (o.refund_reason || o.refund_status || o.status === "refund_requested") {
-                            type = "Refund"; color = "#7b1fa2"; reason = o.refund_reason || "—";
-                          } else if (o.return_reason) {
-                            type = "Return"; color = "#ef6c00"; reason = o.return_reason;
-                          } else if (o.exchange_reason) {
-                            type = "Exchange"; color = "#1565c0"; reason = o.exchange_reason;
-                          } else if (o.status?.toLowerCase() === "cancelled") {
-                            type = "Cancelled"; color = "#c62828"; reason = o.cancellation_reason || "—";
-                          } else if (o.revoked_at) {
-                            type = "Revoked"; color = "#6d4c41"; reason = o.revoke_reason || "—";
-                          }
+                          const { type, color, reason } = getIssueInfo(o);
                           return (
                             <tr key={o.id}>
                               <td><span className="acct-order-id">{o.order_no || "-"}</span></td>

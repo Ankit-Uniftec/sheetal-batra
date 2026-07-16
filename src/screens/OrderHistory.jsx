@@ -59,6 +59,23 @@ const measurementFields = {
   Lehenga: ["Waist", "Hip", "Length"],
 };
 
+// Status filter helpers — mirror getStatusText/getStatusClass normalization.
+const STATUS_FILTER_LABELS = {
+  active: "Active",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+  revoked: "Revoked",
+  exchange_return: "Exchange/Return",
+  return_store_credit: "Return (Store Credit)",
+  partial_return: "Partial Return",
+  refund_requested: "Refund Requested",
+};
+
+const normalizeOrderStatus = (status) => {
+  const s = status?.toLowerCase();
+  return STATUS_FILTER_LABELS[s] ? s : "active";
+};
+
 // Size options
 const WOMEN_SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
 
@@ -256,6 +273,11 @@ export default function OrderHistory() {
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Filter state
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
   const [attachmentLoading, setAttachmentLoading] = useState(null);
 
   // Popup hook
@@ -263,10 +285,10 @@ export default function OrderHistory() {
 
   const isSM = userRole === "SM";
 
-  // Reset to page 1 when search changes
+  // Reset to page 1 when search or filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, statusFilter, dateFrom, dateTo]);
 
   // Customer info
   const customerName = customerFromState?.name || profile?.full_name || "Customer";
@@ -292,11 +314,19 @@ export default function OrderHistory() {
       return true;
     });
 
+    // Status + created_at date-range filters
+    const filteredByControls = baseOrders.filter((order) => {
+      if (statusFilter && normalizeOrderStatus(order.status) !== statusFilter) return false;
+      if (dateFrom && new Date(order.created_at) < new Date(`${dateFrom}T00:00:00`)) return false;
+      if (dateTo && new Date(order.created_at) > new Date(`${dateTo}T23:59:59.999`)) return false;
+      return true;
+    });
+
     // Then apply search filter
-    if (!searchQuery.trim()) return baseOrders;
+    if (!searchQuery.trim()) return filteredByControls;
 
     const query = searchQuery.toLowerCase().trim();
-    return baseOrders.filter((order) => {
+    return filteredByControls.filter((order) => {
       const item = order.items?.[0] || {};
       return (
         order.order_no?.toLowerCase().includes(query) ||
@@ -307,7 +337,13 @@ export default function OrderHistory() {
         order.salesperson?.toLowerCase().includes(query)
       );
     });
-  }, [orders, searchQuery]);
+  }, [orders, searchQuery, statusFilter, dateFrom, dateTo]);
+
+  // Distinct normalized statuses present in the data (for the filter dropdown)
+  const statusOptions = useMemo(() => {
+    const present = new Set(orders.map((o) => normalizeOrderStatus(o.status)));
+    return Object.keys(STATUS_FILTER_LABELS).filter((k) => present.has(k));
+  }, [orders]);
 
   // Pagination - use filteredOrders instead of orders
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
@@ -1905,8 +1941,9 @@ export default function OrderHistory() {
 
           {tab === "orders" && (
             <div className="oh-orders-list">
-              {/* Search Bar */}
-              <div className="oh-search-bar">
+              {/* Search + filters — one line (wraps only on narrow screens) */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 20 }}>
+              <div className="oh-search-bar" style={{ flex: "1 1 300px", minWidth: 260, marginBottom: 0 }}>
                 <input
                   type="text"
                   placeholder="Search by Order No, Product, SKU, Status..."
@@ -1920,10 +1957,48 @@ export default function OrderHistory() {
                   </button>
                 )}
               </div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{ padding: "8px 10px", border: "1px solid #d5b85a", borderRadius: 8, fontSize: 13, background: "#fff", color: "#444", outline: "none" }}
+                >
+                  <option value="">All Statuses</option>
+                  {statusOptions.map((s) => (
+                    <option key={s} value={s}>{STATUS_FILTER_LABELS[s]}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  title="Order date from"
+                  style={{ padding: "7px 10px", border: "1px solid #d5b85a", borderRadius: 8, fontSize: 13, outline: "none" }}
+                />
+                <span style={{ fontSize: 13, color: "#888" }}>to</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  title="Order date to"
+                  style={{ padding: "7px 10px", border: "1px solid #d5b85a", borderRadius: 8, fontSize: 13, outline: "none" }}
+                />
+                {(statusFilter || dateFrom || dateTo) && (
+                  <button
+                    onClick={() => { setStatusFilter(""); setDateFrom(""); setDateTo(""); }}
+                    style={{ border: "none", background: "none", color: "#c0392b", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
 
               {filteredOrders.length === 0 && (
                 <p className="oh-empty">
-                  {searchQuery ? `No orders found for "${searchQuery}"` : "No orders found."}
+                  {searchQuery
+                    ? `No orders found for "${searchQuery}"`
+                    : (statusFilter || dateFrom || dateTo)
+                      ? "No orders match the selected filters."
+                      : "No orders found."}
                 </p>
               )}
 

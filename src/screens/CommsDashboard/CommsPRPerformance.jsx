@@ -40,6 +40,11 @@ export default function CommsPRPerformance({ orders, showPopup }) {
   const [editing, setEditing] = useState(null); // { order, record }
   const [saving, setSaving] = useState(false);
 
+  // List filters
+  const [search, setSearch] = useState("");
+  const [engagementFilter, setEngagementFilter] = useState("all");
+  const [capturedFilter, setCapturedFilter] = useState("all");
+
   // Form state
   const [outfitUsed, setOutfitUsed] = useState("");
   const [deliverablesReceived, setDeliverablesReceived] = useState("");
@@ -81,6 +86,27 @@ export default function CommsPRPerformance({ orders, showPopup }) {
     loadPr();
     return () => { cancelled = true; };
   }, [eligibleOrders]);
+
+  // Distinct engagement types present in the data (for the dropdown).
+  const engagementOptions = useMemo(
+    () => [...new Set(eligibleOrders.map((o) => o.comms_engagement_type).filter(Boolean))],
+    [eligibleOrders]
+  );
+
+  const visibleOrders = useMemo(() => {
+    let list = eligibleOrders;
+    if (engagementFilter !== "all") list = list.filter((o) => o.comms_engagement_type === engagementFilter);
+    if (capturedFilter === "captured") list = list.filter((o) => prRecords[o.id]);
+    else if (capturedFilter === "not_captured") list = list.filter((o) => !prRecords[o.id]);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((o) =>
+        (o.order_no || "").toLowerCase().includes(q) ||
+        (o.delivery_name || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [eligibleOrders, prRecords, search, engagementFilter, capturedFilter]);
 
   const openEdit = (order) => {
     const record = prRecords[order.id] || null;
@@ -182,6 +208,33 @@ export default function CommsPRPerformance({ orders, showPopup }) {
         <p className="comms-muted">
           One PR record per order. Click <strong>Edit</strong> to capture coverage details after the celebrity/influencer/agency uses the outfit.
         </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+          <input
+            type="text"
+            className="comms-search"
+            style={{ maxWidth: 280 }}
+            placeholder="Search order no or client..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            value={engagementFilter}
+            onChange={(e) => setEngagementFilter(e.target.value)}
+            style={filterSelectStyle}
+          >
+            <option value="all">All Engagements</option>
+            {engagementOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select
+            value={capturedFilter}
+            onChange={(e) => setCapturedFilter(e.target.value)}
+            style={filterSelectStyle}
+          >
+            <option value="all">All PR Statuses</option>
+            <option value="captured">Captured</option>
+            <option value="not_captured">Not captured</option>
+          </select>
+        </div>
         <table className="comms-table" style={{ marginTop: 10 }}>
           <thead>
             <tr>
@@ -196,7 +249,14 @@ export default function CommsPRPerformance({ orders, showPopup }) {
             </tr>
           </thead>
           <tbody>
-            {eligibleOrders.map((o) => {
+            {visibleOrders.length === 0 && (
+              <tr>
+                <td colSpan="8" className="comms-muted" style={{ textAlign: "center", padding: 18 }}>
+                  No orders match your search / filters.
+                </td>
+              </tr>
+            )}
+            {visibleOrders.map((o) => {
               const r = prRecords[o.id];
               const outfitUsedLabel = r?.outfit_used === true ? "Yes"
                 : r?.outfit_used === false ? "No"
@@ -385,6 +445,16 @@ function PrField({ label, children, style }) {
     </div>
   );
 }
+
+const filterSelectStyle = {
+  padding: "8px 12px",
+  border: "1px solid #d4d4d4",
+  borderRadius: 8,
+  fontSize: 13,
+  fontFamily: "inherit",
+  background: "#fff",
+  color: "#333",
+};
 
 const modalInputStyle = {
   width: "100%",

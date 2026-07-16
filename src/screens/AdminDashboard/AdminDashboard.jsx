@@ -290,6 +290,8 @@ export default function AdminDashboard() {
     const [commsApprovalModal, setCommsApprovalModal] = useState(null); // { order, action: 'approve' | 'reject' }
     const [commsApprovalReason, setCommsApprovalReason] = useState("");
     const [commsApprovalProcessing, setCommsApprovalProcessing] = useState(false);
+    const [commsSearch, setCommsSearch] = useState("");
+    const [commsEngagementFilter, setCommsEngagementFilter] = useState("all");
     // Fetch data on mount
     useEffect(() => {
         const checkAuthAndFetch = async () => {
@@ -994,6 +996,25 @@ export default function AdminDashboard() {
         const start = (inventoryPage - 1) * ITEMS_PER_PAGE;
         return filteredProducts.slice(start, start + ITEMS_PER_PAGE);
     }, [filteredProducts, inventoryPage]);
+
+    // Comms Approvals — pending list search + engagement filter
+    const commsPendingOrders = useMemo(
+        () => orders.filter(o => o.is_comms && o.approval_status === "pending_approval"),
+        [orders]
+    );
+    const commsEngagementOptions = useMemo(
+        () => [...new Set(commsPendingOrders.map(o => o.comms_engagement_type).filter(Boolean))],
+        [commsPendingOrders]
+    );
+    const filteredCommsPending = useMemo(() => {
+        let result = commsPendingOrders;
+        if (commsSearch.trim()) {
+            const q = commsSearch.trim().toLowerCase();
+            result = result.filter(o => o.order_no?.toLowerCase().includes(q) || o.delivery_name?.toLowerCase().includes(q));
+        }
+        if (commsEngagementFilter !== "all") result = result.filter(o => o.comms_engagement_type === commsEngagementFilter);
+        return result;
+    }, [commsPendingOrders, commsSearch, commsEngagementFilter]);
 
     const handleInventoryUpdate = async (productId) => {
         if (editInventoryValue === "" || isNaN(Number(editInventoryValue))) {
@@ -3955,7 +3976,7 @@ export default function AdminDashboard() {
                         // approval_status='pending_approval'. "Reviewed" covers approved + rejected
                         // so admin has visibility into recent decisions.
                         const commsOrders = orders.filter(o => o.is_comms);
-                        const pending = commsOrders.filter(o => o.approval_status === "pending_approval");
+                        const pending = commsPendingOrders; // memoized above (search/filter applied in filteredCommsPending)
                         const reviewed = commsOrders
                             .filter(o => o.approval_status === "approved" || o.approval_status === "rejected")
                             .sort((a, b) => new Date(b.approved_at || b.created_at) - new Date(a.approved_at || a.created_at))
@@ -3987,6 +4008,23 @@ export default function AdminDashboard() {
                                         No comms orders are waiting on your approval.
                                     </p>
                                 ) : (
+                                    <>
+                                    <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
+                                        <div className="admin-search-wrapper">
+                                            <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+                                            <input type="text" placeholder="Search by order no or client..." value={commsSearch} onChange={(e) => setCommsSearch(e.target.value)} className="admin-search-input" />
+                                            {commsSearch && <button className="search-clear" onClick={() => setCommsSearch("")}>×</button>}
+                                        </div>
+                                        <select className="cmo-compare-select" value={commsEngagementFilter} onChange={(e) => setCommsEngagementFilter(e.target.value)}>
+                                            <option value="all">All Engagements</option>
+                                            {commsEngagementOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    {filteredCommsPending.length === 0 ? (
+                                        <p style={{ color: "#888", fontSize: 14, padding: "12px 0 20px" }}>
+                                            No pending comms orders match your search.
+                                        </p>
+                                    ) : (
                                     <div className="admin-table-wrapper" style={{ marginBottom: 24 }}>
                                         <div className="admin-table-container">
                                             <table className="admin-table">
@@ -4002,7 +4040,7 @@ export default function AdminDashboard() {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {pending.map(o => (
+                                                    {filteredCommsPending.map(o => (
                                                         <tr key={o.id}>
                                                             <td><strong>{o.order_no || "—"}</strong></td>
                                                             <td>{o.delivery_name || "—"}</td>
@@ -4034,6 +4072,8 @@ export default function AdminDashboard() {
                                             </table>
                                         </div>
                                     </div>
+                                    )}
+                                    </>
                                 )}
 
                                 {/* ── Recent reviewed section ── */}

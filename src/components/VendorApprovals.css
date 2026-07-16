@@ -28,6 +28,37 @@
   border-radius: 8px;
 }
 
+.va-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+
+.va-filter-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+}
+
+.va-filter-select {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+}
+
+.va-filter-search:focus, .va-filter-select:focus {
+  border-color: #d5b85a;
+}
+
 .va-list {
   display: flex;
   flex-direction: column;

@@ -50,6 +50,12 @@ const statusLabel = (status) => {
   return status;
 };
 
+// Normalize a raw status to the key used by the status filter — mirrors statusLabel's grouping.
+const normalizeStatus = (status) => {
+  const s = (status || "").toLowerCase();
+  return !s || s === "pending" ? "order_received" : s;
+};
+
 export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
   const { showPopup, PopupComponent } = usePopup();
 
@@ -57,6 +63,7 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [saFilter, setSaFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [saDropdownOpen, setSaDropdownOpen] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
@@ -119,10 +126,21 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
     return Array.from(set).sort();
   }, [orders]);
 
+  // Distinct normalized statuses present in the data (for the status dropdown)
+  const statusOptions = useMemo(() => {
+    const map = new Map();
+    orders.forEach((o) => {
+      const key = normalizeStatus(o.status);
+      if (!map.has(key)) map.set(key, statusLabel(o.status));
+    });
+    return Array.from(map, ([value, label]) => ({ value, label }));
+  }, [orders]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return orders.filter((o) => {
       if (saFilter && o.salesperson !== saFilter) return false;
+      if (statusFilter && normalizeStatus(o.status) !== statusFilter) return false;
       if (q) {
         const hit = [o.order_no, o.salesperson, o.salesperson_email, o.delivery_date]
           .filter(Boolean)
@@ -131,11 +149,11 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
       }
       return true;
     });
-  }, [orders, search, saFilter]);
+  }, [orders, search, saFilter, statusFilter]);
 
   // Page within the filtered set; filter changes reset to page 1.
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [search, saFilter]);
+  useEffect(() => { setPage(1); }, [search, saFilter, statusFilter]);
   const totalPages = Math.ceil(filtered.length / 15);
   const paged = useMemo(() => filtered.slice((page - 1) * 15, page * 15), [filtered, page]);
 
@@ -249,22 +267,42 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
             </div>
           )}
         </div>
+        <select
+          className="stock-status-select"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="">All Statuses</option>
+          {statusOptions.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
         <button className="stock-refresh" onClick={fetchStockOrders}>Refresh</button>
       </div>
 
-      {saFilter && (
+      {(saFilter || statusFilter) && (
         <div className="stock-applied-filters">
           <span className="stock-applied-label">Applied:</span>
-          <span className="stock-filter-chip">
-            {saFilter}
-            <button onClick={() => setSaFilter("")}>×</button>
-          </span>
-          <button className="stock-clear-all" onClick={() => setSaFilter("")}>Clear All</button>
+          {saFilter && (
+            <span className="stock-filter-chip">
+              {saFilter}
+              <button onClick={() => setSaFilter("")}>×</button>
+            </span>
+          )}
+          {statusFilter && (
+            <span className="stock-filter-chip">
+              {statusOptions.find((s) => s.value === statusFilter)?.label || statusFilter}
+              <button onClick={() => setStatusFilter("")}>×</button>
+            </span>
+          )}
+          <button className="stock-clear-all" onClick={() => { setSaFilter(""); setStatusFilter(""); }}>Clear All</button>
         </div>
       )}
 
       {filtered.length === 0 ? (
-        <div className="stock-empty">No stock orders yet.</div>
+        <div className="stock-empty">
+          {orders.length === 0 ? "No stock orders yet." : "No stock orders match the filters."}
+        </div>
       ) : (
         <div className="ad-orders-grid">
           {paged.map((order) => {

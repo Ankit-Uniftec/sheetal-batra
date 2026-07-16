@@ -16,6 +16,7 @@ import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
@@ -47,6 +48,11 @@ export default function B2bMerchandiserDashboard() {
     const [dateTo, setDateTo] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
+
+    // Consignment tab filters
+    const [consignSearch, setConsignSearch] = useState("");
+    const [consignStatusFilter, setConsignStatusFilter] = useState("all");
+    const [consignPage, setConsignPage] = useState(1);
 
     // Vendor tab
     const [vendorSearch, setVendorSearch] = useState("");
@@ -170,19 +176,28 @@ export default function B2bMerchandiserDashboard() {
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
 
+    // ==================== PERIOD FILTER ====================
+    const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "pills" });
+    const periodOrders = useMemo(
+        () => orders.filter(o => inPeriod(o.created_at)),
+        [orders, inPeriod]
+    );
+
     // ==================== STATS ====================
     const stats = useMemo(() => {
+        // pending stays absolute — it drives the Approvals queue + sidebar badge
+        // (an action list, not an overview stat); everything else is period-scoped.
         const pending = orders.filter(o => o.approval_status === "pending");
-        const approved = orders.filter(o => o.approval_status === "approved");
-        const rejected = orders.filter(o => o.approval_status === "rejected");
-        const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
-        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
+        const approved = periodOrders.filter(o => o.approval_status === "approved");
+        const rejected = periodOrders.filter(o => o.approval_status === "rejected");
+        const salesOrders = periodOrders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = periodOrders.filter(o => o.b2b_order_type === "Consignment");
         const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const buyoutValue = orders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const clientOrderValue = orders.filter(o => o.b2b_order_type === "Client Order").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const buyoutValue = periodOrders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const clientOrderValue = periodOrders.filter(o => o.b2b_order_type === "Client Order").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        return { salesRevenue, totalOrders: orders.length, salesCount: salesOrders.length, pending, approved, rejected, buyoutValue, clientOrderValue, consignmentValue, consignmentCount: consignmentOrders.length };
-    }, [orders]);
+        return { salesRevenue, totalOrders: periodOrders.length, salesCount: salesOrders.length, pending, approved, rejected, buyoutValue, clientOrderValue, consignmentValue, consignmentCount: consignmentOrders.length };
+    }, [orders, periodOrders]);
 
     const ordersByDate = useMemo(() => {
         return orders.reduce((acc, order) => {
@@ -298,6 +313,40 @@ export default function B2bMerchandiserDashboard() {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
         return filteredOrders.slice(start, start + ORDERS_PER_PAGE);
     }, [filteredOrders, currentPage]);
+
+    // ==================== CONSIGNMENT ORDERS ====================
+    const consignmentOrders = useMemo(
+        () => orders.filter(o => o.b2b_order_type === "Consignment"),
+        [orders]
+    );
+
+    const consignmentStats = useMemo(() => ({
+        total: consignmentOrders.length,
+        value: consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
+        pending: consignmentOrders.filter(o => o.approval_status === "pending").length,
+        approved: consignmentOrders.filter(o => o.approval_status === "approved").length,
+    }), [consignmentOrders]);
+
+    const filteredConsignments = useMemo(() => {
+        let list = consignmentOrders;
+        if (consignStatusFilter === "cancelled") list = list.filter(o => (o.status || "").toLowerCase() === "cancelled");
+        else if (consignStatusFilter !== "all") list = list.filter(o => o.approval_status === consignStatusFilter && (o.status || "").toLowerCase() !== "cancelled");
+        if (consignSearch.trim()) {
+            const q = consignSearch.toLowerCase();
+            list = list.filter(o =>
+                o.order_no?.toLowerCase().includes(q) || o.po_number?.toLowerCase().includes(q) ||
+                vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q)
+            );
+        }
+        return list;
+    }, [consignmentOrders, consignStatusFilter, consignSearch, vendorMap]);
+
+    const paginatedConsignments = useMemo(() => {
+        const start = (consignPage - 1) * ORDERS_PER_PAGE;
+        return filteredConsignments.slice(start, start + ORDERS_PER_PAGE);
+    }, [filteredConsignments, consignPage]);
+
+    useEffect(() => { setConsignPage(1); }, [consignSearch, consignStatusFilter]);
 
     const filteredVendors = useMemo(() => {
         const myName = profile?.saleperson || "";
@@ -719,6 +768,12 @@ export default function B2bMerchandiserDashboard() {
                     </div>
                 </div>
             </header>
+
+            {/* Period filter — dashboard tab stat cards only (grid cells below are
+                explicitly placed, so the control sits above the grid). */}
+            {activeTab === "dashboard" && (
+                <div className="pfx-bar">{periodControl}</div>
+            )}
 
             {/* ===== GRID LAYOUT ===== */}
             <div className={`merch-grid-table ${showSidebar ? "merch-sidebar-open" : ""}`}>
@@ -1181,22 +1236,35 @@ export default function B2bMerchandiserDashboard() {
                     <div className="merch-tab-wrapper">
                         <h2 className="merch-tab-title">Consignment Orders</h2>
                         <div className="merch-consignment-stats">
-                            <div className="merch-cstat"><span className="merch-cstat-val">{orders.filter(o => o.b2b_order_type === "Consignment").length}</span><span className="merch-cstat-label">Total</span></div>
-                            <div className="merch-cstat"><span className="merch-cstat-val">{`\u20B9${formatIndianNumber(orders.filter(o => o.b2b_order_type === "Consignment").reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0))}`}</span><span className="merch-cstat-label">Value</span></div>
-                            <div className="merch-cstat"><span className="merch-cstat-val">{orders.filter(o => o.b2b_order_type === "Consignment" && o.approval_status === "pending").length}</span><span className="merch-cstat-label">Pending</span></div>
-                            <div className="merch-cstat"><span className="merch-cstat-val">{orders.filter(o => o.b2b_order_type === "Consignment" && o.approval_status === "approved").length}</span><span className="merch-cstat-label">Approved</span></div>
+                            <div className="merch-cstat"><span className="merch-cstat-val">{consignmentStats.total}</span><span className="merch-cstat-label">Total</span></div>
+                            <div className="merch-cstat"><span className="merch-cstat-val">{`\u20B9${formatIndianNumber(consignmentStats.value)}`}</span><span className="merch-cstat-label">Value</span></div>
+                            <div className="merch-cstat"><span className="merch-cstat-val">{consignmentStats.pending}</span><span className="merch-cstat-label">Pending</span></div>
+                            <div className="merch-cstat"><span className="merch-cstat-val">{consignmentStats.approved}</span><span className="merch-cstat-label">Approved</span></div>
+                        </div>
+                        <div className="merch-filters-row" style={{ flexWrap: "wrap" }}>
+                            <input type="text" placeholder="Search order #, PO, vendor..." value={consignSearch} onChange={(e) => setConsignSearch(e.target.value)} className="merch-search-input" />
+                            <select value={consignStatusFilter} onChange={(e) => setConsignStatusFilter(e.target.value)} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>
                         </div>
                         <div className="merch-order-list-scroll">
-                            {orders.filter(o => o.b2b_order_type === "Consignment").length === 0 ? (
+                            {consignmentOrders.length === 0 ? (
                                 <p className="merch-muted" style={{ textAlign: "center", padding: 40 }}>No consignment orders yet</p>
+                            ) : filteredConsignments.length === 0 ? (
+                                <p className="merch-muted" style={{ textAlign: "center", padding: 40 }}>No consignment orders match your filters.</p>
                             ) : (
-                                orders.filter(o => o.b2b_order_type === "Consignment").map(order => (
-                                    <div key={order.id} className="merch-order-item" onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
-                                        <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
-                                        <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={orderBadgeClass(order)}>{orderBadgeLabel(order)}</span></p>
-                                        <p><b>Total:</b> {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`} &nbsp;|&nbsp; <b>Qty:</b> {order.total_quantity || 0} &nbsp;|&nbsp; <b>Date:</b> {formatDate(order.created_at)}</p>
-                                    </div>
-                                ))
+                                <>
+                                    {paginatedConsignments.map(order => (
+                                        <div key={order.id} className="merch-order-item" onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
+                                            <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
+                                            <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={orderBadgeClass(order)}>{orderBadgeLabel(order)}</span></p>
+                                            <p><b>Total:</b> {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`} &nbsp;|&nbsp; <b>Qty:</b> {order.total_quantity || 0} &nbsp;|&nbsp; <b>Date:</b> {formatDate(order.created_at)}</p>
+                                        </div>
+                                    ))}
+                                    <Paginator
+                                        page={consignPage}
+                                        totalPages={Math.ceil(filteredConsignments.length / ORDERS_PER_PAGE)}
+                                        onChange={setConsignPage}
+                                    />
+                                </>
                             )}
                         </div>
                     </div>

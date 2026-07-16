@@ -58,6 +58,12 @@
   flex-wrap: wrap;
 }
 
+/* The shared period filter sits inline in the toolbar — drop its own
+   bottom margin so it centers with the other controls. */
+.wiv-toolbar .pfx {
+  margin-bottom: 0;
+}
+
 .wiv-search-wrapper {
   display: flex;
   align-items: center;
