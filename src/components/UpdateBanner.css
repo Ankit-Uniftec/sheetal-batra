@@ -1,0 +1,29 @@
+/* UpdateBanner — fixed toast, app-standard gold theme. */
+.upd-banner {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fffdf8;
+    border: 1px solid #d5b85a;
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    font-size: 13px;
+    color: #4a4030;
+}
+.upd-btn {
+    background: #d5b85a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+.upd-btn:hover { background: #c9a94e; }

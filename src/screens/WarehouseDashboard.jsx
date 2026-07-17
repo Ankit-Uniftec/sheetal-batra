@@ -13,7 +13,7 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, classifyComponentForStageCard } from "../utils/barcodeService";
+import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import ComponentStageBadge from "../components/ComponentStageBadge";
 import QcHistoryTable from "../components/QcHistoryTable";
@@ -307,8 +307,8 @@ const WarehouseDashboard = () => {
       const filtered = (data || []).filter(o => {
         // Private orders are not visible in warehouse — handled outside warehouse flow
         if (o.is_private_order) return false;
-        // Comms orders never enter the warehouse pipeline (shipped from COMMS store directly)
-        if (o.is_comms) return false;
+        // Comms orders DO run the warehouse pipeline now (they get barcodes and
+        // scan through all stages since 2026-07-10), so they are visible here.
         // B2B orders only visible after merchandiser approval
         if (o.is_b2b) return o.approval_status === "approved";
         return true;
@@ -390,10 +390,18 @@ const WarehouseDashboard = () => {
   // Orders scoped to THIS Production Head's channel (Offline → retail/store,
   // Online → website). Used ONLY for the overview analytics; the order list
   // stays global so heads can still look up any order.
-  const scopedOrders = useMemo(
-    () => scopeOrdersToDesignation(orders, userDesignation),
-    [orders, userDesignation]
-  );
+  const scopedOrders = useMemo(() => {
+    const scoped = scopeOrdersToDesignation(orders, userDesignation);
+    // Comms orders are produced in THIS warehouse, so the Offline head's
+    // overview includes them alongside the store/exhibition channel.
+    if (getChannelKeyForDesignation(userDesignation) === "offline") {
+      const have = new Set(scoped.map((o) => o.id));
+      orders.forEach((o) => {
+        if (!have.has(o.id) && getOrderChannelKey(o) === "comms") scoped.push(o);
+      });
+    }
+    return scoped;
+  }, [orders, userDesignation]);
 
   // Load QC records for this PH's channel when the QC History tab opens.
   useEffect(() => {
@@ -1331,7 +1339,7 @@ const WarehouseDashboard = () => {
           {activeTab === "overview" && isWarehouseProdHead && (
             <div className="wd-orders-section">
               <div className="wd-orders-header">
-                <h2 className="wd-section-title">Orders by Production Stage</h2>
+                <h2 className="wd-section-title">Production Stages (Components)</h2>
                 <span className="wd-orders-count">{periodScopedOrders.length} orders in your channel</span>
               </div>
 

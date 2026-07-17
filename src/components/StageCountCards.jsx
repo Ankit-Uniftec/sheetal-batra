@@ -67,6 +67,11 @@ const StageCountCards = ({
 
   const visible = hideEmpty ? STAGE_GROUPS.filter((g) => totalFor(g.key) > 0) : STAGE_GROUPS;
 
+  // Grand total across every stage card — the client's reference number for
+  // "how many pieces are in the system right now": the stage cards must sum
+  // to this, so it uses the exact same counts they do.
+  const grandTotal = STAGE_GROUPS.reduce((sum, g) => sum + totalFor(g.key), 0);
+
   const clickable = typeof onStageClick === "function";
   // Clicking a card / a sub-count filters to that stage; kind narrows it to
   // 'internal' (in-house) or 'external' (vendor). Big number / label = 'both'.
@@ -80,6 +85,12 @@ const StageCountCards = ({
     <div className="scc-wrap">
       {title && <h3 className="scc-title">{title}</h3>}
       <div className="scc-grid">
+        {/* Total first, so every stage count reads against it. */}
+        <div className="scc-card scc-total">
+          <span className="scc-accent-bar" />
+          <span className="scc-count">{grandTotal}</span>
+          <span className="scc-label">{pieceMode ? "Total Components" : "Total Orders"}</span>
+        </div>
         {visible.map((g) => {
           const total = totalFor(g.key);
           const split = pieceMode ? pieceCounts[g.key] : null;

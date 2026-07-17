@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import UpdateBanner from "./components/UpdateBanner";
 import OtpVerification from "./screens/OtpVerification";
 import OtpDialogBox from "./screens/OtpDialogBox";
 import CustomerDetailForm from "./screens/CustomerDetailForm";
@@ -46,6 +47,8 @@ import PrivateRoute from "./components/PrivateRoute";
 function App() {
   return (
     <BrowserRouter>
+      {/* Long-running tabs get a refresh prompt when a new build is deployed. */}
+      <UpdateBanner />
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<Navigate to="/login" replace />} />

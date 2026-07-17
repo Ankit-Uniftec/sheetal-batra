@@ -15,14 +15,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 24px;
+  padding: 16px 24px;
   background: #FFFFFFB0;
   backdrop-filter: blur(10px);
   border-bottom: 1px solid #D4D4D4;
-  position: fixed;
+  /* Sticky (in document flow) — the app-standard header. Was position:fixed,
+     which forced every sibling to carry manual top offsets. */
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
   z-index: 100;
   box-sizing: border-box;
 }
@@ -32,9 +32,18 @@
   align-items: center;
 }
 
+/* The header logo only inherited the login screen's global .logo rule —
+   pin it to the app-standard 50px. */
+.wd-top-header .logo {
+  height: 50px;
+  width: auto;
+  cursor: pointer;
+}
+
 .wd-title {
   font-family: "Athleas", serif !important;
-  font-size: 24px;
+  font-size: 22px;
+  font-weight: 600;
   color: #d5b85a !important;
   margin: 0;
 }
@@ -96,7 +105,8 @@
 /* ========== MAIN LAYOUT ========== */
 .wd-main-layout {
   display: flex;
-  margin-top: 83px;
+  gap: 20px;
+  padding: 20px;
   min-height: calc(100vh - 83px);
 }
 
@@ -105,14 +115,15 @@
   width: 220px;
   background: #FFFFFFB0;
   backdrop-filter: blur(10px);
-  border-right: 1px solid #e5e5e5;
-  padding: 20px 0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 16px 0;
   flex-shrink: 0;
-  position: fixed;
-  left: 0;
-  top: 80px;
-  height: calc(100vh - 83px);
+  height: fit-content;
+  max-height: calc(100vh - 122px);
   overflow-y: auto;
+  position: sticky;
+  top: 102px;
   z-index: 50;
 }
 
@@ -123,22 +134,23 @@
 }
 
 .wd-menu-item {
-  padding: 14px 24px;
-  font-size: 15px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 500;
   color: #333;
   cursor: pointer;
   transition: all 0.2s;
-  border-left: 3px solid transparent;
+  border-left: 4px solid transparent;
   text-decoration: none;
 }
 
 .wd-menu-item:hover {
-  background: #f9f7f0;
+  background: rgba(213, 184, 90, 0.1);
   color: #d5b85a;
 }
 
 .wd-menu-item.active {
-  background: linear-gradient(90deg, #fdfcf8 0%, #f9f7f0 100%);
+  background: rgba(213, 184, 90, 0.15);
   border-left-color: #d5b85a;
   color: #d5b85a;
   font-weight: 600;
@@ -162,10 +174,7 @@
 /* ========== CONTENT AREA ========== */
 .wd-content-area {
   flex: 1;
-  margin-top: 50px;
-  padding: 24px;
-  margin-left: 230px;
-  min-height: calc(100vh - 83px);
+  min-width: 0;
 }
 
 /* ========== ORDERS SECTION ========== */
@@ -1865,6 +1874,13 @@
 @media (max-width: 1024px) {
   /* Sidebar: slide-in like mobile */
   .wd-sidebar {
+    position: fixed;
+    top: 0;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid #e5e5e5;
     left: -260px;
     transition: left 0.3s ease;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
@@ -1992,15 +2008,16 @@
     text-overflow: ellipsis;
   }
 
-  /* Main layout */
+  /* Main layout — header is sticky (in flow), no offset needed */
   .wd-main-layout {
-    margin-top: 70px;
+    padding: 12px;
+    gap: 12px;
     min-height: calc(100vh - 70px);
   }
 
   .wd-sidebar {
-    top: 60px;
-    height: calc(100vh - 60px);
+    top: 0;
+    height: 100vh;
   }
 
   /* Content */
