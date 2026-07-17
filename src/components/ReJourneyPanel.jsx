@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReJourneyTable from "./ReJourneyTable";
 import Paginator from "./Paginator";
-import { reJourneySummary, filterReJourneys, reJourneyStages } from "../utils/reJourneys";
+import { reJourneySummary, filterReJourneys, reJourneyStageCounts } from "../utils/reJourneys";
 import { getStageLabel } from "../utils/barcodeService";
 import "./ReJourneyPanel.css";
 
@@ -23,7 +23,10 @@ export default function ReJourneyPanel({ rows = [], loading, onOrderClick }) {
     const [overdueOnly, setOverdueOnly] = useState(false);
     const [atLimitOnly, setAtLimitOnly] = useState(false);
 
-    const stages = useMemo(() => reJourneyStages(rows), [rows]);
+    // Per-stage counts (busiest first) — powers "most re-journeys" and the
+    // count-labelled dropdown. Computed over ALL rows so it's a stable overview.
+    const stageCounts = useMemo(() => reJourneyStageCounts(rows), [rows]);
+    const topStage = stageCounts[0] || null;
     const filtered = useMemo(
         () => filterReJourneys(rows, { search, stage, overdueOnly, atLimitOnly }),
         [rows, search, stage, overdueOnly, atLimitOnly]
@@ -48,7 +51,9 @@ export default function ReJourneyPanel({ rows = [], loading, onOrderClick }) {
                 <input className="rj-input" type="text" placeholder="Search order # or barcode…" value={search} onChange={(e) => setSearch(e.target.value)} />
                 <select className="rj-input" value={stage} onChange={(e) => setStage(e.target.value)}>
                     <option value="">All stages</option>
-                    {stages.map((s) => <option key={s} value={s}>{getStageLabel(s) || s}</option>)}
+                    {stageCounts.map(({ stage: s, count }) => (
+                        <option key={s} value={s}>{(getStageLabel(s) || s)} ({count})</option>
+                    ))}
                 </select>
                 <label className="rj-check"><input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} /> Overdue only</label>
                 <label className="rj-check"><input type="checkbox" checked={atLimitOnly} onChange={(e) => setAtLimitOnly(e.target.checked)} /> At limit (2+)</label>
@@ -59,6 +64,16 @@ export default function ReJourneyPanel({ rows = [], loading, onOrderClick }) {
                 <span className="rj-sum-item"><b>{summary.total}</b> in re-journey</span>
                 <span className="rj-sum-item rj-sum-overdue"><b>{summary.overdue}</b> overdue</span>
                 <span className="rj-sum-item rj-sum-limit"><b>{summary.atLimit}</b> at/over limit</span>
+                {topStage && (
+                    <button
+                        type="button"
+                        className={`rj-sum-item rj-sum-top ${stage === topStage.stage ? "active" : ""}`}
+                        title="The stage with the most re-journeys — click to filter"
+                        onClick={() => setStage(stage === topStage.stage ? "" : topStage.stage)}
+                    >
+                        Most re-journeys: <b>{getStageLabel(topStage.stage) || topStage.stage}</b> ({topStage.count})
+                    </button>
+                )}
             </div>
 
             <ReJourneyTable rows={pageRows} loading={loading} onOrderClick={onOrderClick} emptyText={hasFilters ? "No re-journeys match these filters." : "No components currently in re-journey."} />

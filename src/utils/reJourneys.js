@@ -122,6 +122,16 @@ export function reJourneyStages(rows = []) {
     return [...new Set(rows.map(r => r.current_stage).filter(Boolean))];
 }
 
+// Per-stage counts, busiest first — { stage, count }[]. Lets the panel show
+// which stage has the most re-journeys and label the dropdown with counts.
+export function reJourneyStageCounts(rows = []) {
+    const counts = {};
+    rows.forEach(r => { if (r.current_stage) counts[r.current_stage] = (counts[r.current_stage] || 0) + 1; });
+    return Object.entries(counts)
+        .map(([stage, count]) => ({ stage, count }))
+        .sort((a, b) => b.count - a.count);
+}
+
 // Client-side filtering for the panel controls.
 //   search      : order_no / barcode substring
 //   stage       : current_stage exact

@@ -1,6 +1,16 @@
 .rj-panel { display: flex; flex-direction: column; gap: 14px; }
 
-.rj-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* Filters + summary sit together in one frosted toolbar card, so the controls
+   read as a designed bar rather than loose elements on the wallpaper. */
+.rj-filters,
+.rj-summary {
+    background: #FFFFFFB0;
+    backdrop-filter: blur(10px);
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 12px 16px;
+}
+.rj-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: -4px; }
 
 .rj-input {
     padding: 8px 10px;
@@ -42,14 +52,29 @@
 .rj-summary {
     display: flex;
     flex-wrap: wrap;
-    gap: 18px;
-    padding: 10px 14px;
-    background: #faf7f0;
-    border: 1px solid #eee4cf;
-    border-radius: 8px;
+    align-items: center;
+    gap: 10px 20px;
     font-size: 14px;
     color: #555;
 }
+.rj-sum-item { display: inline-flex; align-items: baseline; gap: 5px; }
 .rj-sum-item b { color: #333; font-size: 16px; }
 .rj-sum-overdue b { color: #c62828; }
 .rj-sum-limit b { color: #b26a00; }
+
+/* "Most re-journeys" chip — clickable button, gold accent. */
+.rj-sum-top {
+    font-family: inherit;
+    font-size: 13px;
+    margin-left: auto;
+    padding: 6px 12px;
+    border: 1px solid #e8dcc0;
+    border-radius: 20px;
+    background: #fffaea;
+    color: #8b7355;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.rj-sum-top:hover { border-color: #d5b85a; }
+.rj-sum-top.active { background: #d5b85a; color: #fff; border-color: #d5b85a; }
+.rj-sum-top.active b { color: #fff; }

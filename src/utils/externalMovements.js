@@ -68,6 +68,15 @@ export function externalMovementSummary(rows = []) {
     };
 }
 
+// Per-stage counts (by the stage a piece went OUT for), busiest first.
+export function externalMovementStages(rows = []) {
+    const counts = {};
+    rows.forEach(r => { const k = r.stageLabel || "—"; counts[k] = (counts[k] || 0) + 1; });
+    return Object.entries(counts)
+        .map(([stage, count]) => ({ stage, count }))
+        .sort((a, b) => b.count - a.count);
+}
+
 // Distinct vendor names present (for the vendor dropdown).
 export function externalMovementVendors(rows = []) {
     return [...new Set(rows.map((r) => r.vendor_name).filter(Boolean))].sort();
@@ -79,10 +88,11 @@ export function externalMovementVendors(rows = []) {
 //   componentType : top / bottom / dupatta / extra
 //   status        : "" (all) | 'exited' (out) | 'returned' | 'configured'
 //   overdueOnly   : only overdue rows
-export function filterExternalMovements(rows = [], { search, vendor, componentType, status, overdueOnly } = {}) {
+export function filterExternalMovements(rows = [], { search, vendor, componentType, status, overdueOnly, stage } = {}) {
     const q = (search || "").trim().toLowerCase();
     return rows.filter((r) => {
         if (vendor && r.vendor_name !== vendor) return false;
+        if (stage && (r.stageLabel || "—") !== stage) return false;
         if (componentType && r.component_type !== componentType) return false;
         if (status && r.status !== status) return false;
         if (overdueOnly && !r.overdue) return false;
