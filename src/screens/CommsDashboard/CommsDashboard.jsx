@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./CommsDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -117,11 +118,11 @@ export default function CommsDashboard() {
 
       // Load all comms orders for the dashboard. Filtered to is_comms=true so
       // the comms team only ever sees comms-channel orders.
-      const { data: ordersData } = await supabase
-        .from("orders")
+      // Paged past Supabase's 1000-row cap
+      const { data: ordersData } = await fetchAllRows("orders", (q) => q
         .select("*")
         .eq("is_comms", true)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }));
       if (!cancelled && ordersData) setOrders(ordersData);
 
       // Components for those orders — powers the per-order "View Journey"
@@ -183,7 +184,18 @@ export default function CommsDashboard() {
     e.stopPropagation();
     setWarehousePdfLoading(order.id);
     try {
-      await downloadWarehousePdf(order, null, true);
+      // Open the cached PDF; regenerate only on a cache miss — regenerating on
+      // EVERY click (the old forceRegenerate=true) re-rendered and re-uploaded
+      // the PDFs each view, and silently masked stale caches elsewhere: the PM
+      // opened the same order's cached file without barcodes while this button
+      // rebuilt it. Migration 39 clears the caches that predate the order's
+      // components, so the cache is trustworthy now.
+      const result = await downloadWarehousePdf(order, null, false);
+      // Reflect freshly generated URLs in state so the next click uses the cache.
+      if (result) {
+        const urls = Array.isArray(result) ? result : [result];
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, warehouse_urls: urls, warehouse_url: urls[0] } : o)));
+      }
     } catch (err) {
       console.error("Warehouse PDF open failed:", err);
     } finally {

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { fetchAllRows } from "./fetchAllRows";
 
 /**
  * BarcodeService
@@ -850,10 +851,10 @@ export async function enrichComponentsWithMovements(components) {
 // "Movement History" tab on the Vendor/External page where the PH can review,
 // filter and (while still 'configured') edit them.
 export async function fetchAllMovements() {
-  const { data, error } = await supabase
-    .from("external_movements")
+  // Paged past Supabase's 1000-row cap — full movements table grows without bound.
+  const { data, error } = await fetchAllRows("external_movements", (q) => q
     .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, order_components ( barcode, order_no, component_type, order_id )")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }));
   if (error) { console.error("fetchAllMovements failed:", error); return []; }
 
   const rows = (data || []).map((m) => ({
@@ -967,10 +968,10 @@ export function getSAStageColor(stageValue) {
 // 12. FETCH DASHBOARD STATS — Component-level stats for dashboards
 // ============================================================
 export async function fetchComponentStats() {
-  const { data, error } = await supabase
-    .from("order_components")
+  // Paged past Supabase's 1000-row cap — active pieces can exceed 1000.
+  const { data, error } = await fetchAllRows("order_components", (q) => q
     .select("current_stage, is_active, is_delayed, is_outside_wh, is_rework, qc_status, re_journey_count")
-    .eq("is_active", true);
+    .eq("is_active", true));
 
   if (error) throw error;
 

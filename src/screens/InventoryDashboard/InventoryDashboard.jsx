@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import config from "../../config/config";
 import "./InventoryDashboard.css";
 import Logo from "../../images/logo.png";
@@ -116,10 +117,10 @@ export default function InventoryDashboard() {
 
   const fetchProducts = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("products")
+    // Paged past Supabase's 1000-row cap — products exceed 1000.
+    const { data, error } = await fetchAllRows("products", (q) => q
       .select("*")
-      .order("name", { ascending: true });
+      .order("name", { ascending: true }));
 
     if (error) {
       console.error("Error fetching products:", error);

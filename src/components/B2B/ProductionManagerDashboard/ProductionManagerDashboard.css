@@ -742,3 +742,9 @@
   padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;
 }
 .pm-period-custom span { color: #999; }
+
+/* Channel badges beyond B2B/Store — same palette as the Store filter. */
+.pm-channel-comms { background: #e3f2fd; color: #1565c0; }
+.pm-channel-private { background: #f3e5f5; color: #8e24aa; }
+.pm-channel-website { background: #fff3e0; color: #ef6c00; }
+.pm-channel-exhibition { background: #efebe9; color: #6d4c41; }

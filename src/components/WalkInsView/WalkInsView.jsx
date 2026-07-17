@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { normalizeStore } from "../../utils/storeCategory";
 import Paginator from "../Paginator";
 import { usePeriodFilter } from "../PeriodFilter";
@@ -58,10 +59,10 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
     (async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("walkins")
+        // Paged past Supabase's 1000-row cap
+        const { data, error } = await fetchAllRows("walkins", (q) => q
           .select("id, created_at, sa_email, name, country_code, phone, email, source, converted, converted_manual, converted_at")
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false }));
         if (error) throw error;
         const phoneSet = buildOrderPhoneSet(orders);
         const reconciled = await reconcileConversions(data || [], phoneSet);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import "./AccountsDashboard.css";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { useNavigate } from "react-router-dom";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -27,10 +28,10 @@ export default function AccountsDashboard() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("orders")
+      // Paged past Supabase's 1000-row cap — 4,754 orders on prod.
+      const { data, error } = await fetchAllRows("orders", (q) => q
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }));
 
       if (error) throw error;
       const getOrderNum = (no) => {

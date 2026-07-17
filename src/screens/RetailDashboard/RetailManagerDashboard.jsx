@@ -181,7 +181,7 @@ export default function RetailManagerDashboard() {
         try {
             const [ordersRes, productsRes, vendorsRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("products").select("*").order("name", { ascending: true }),
+                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("vendors").select("id, store_brand_name, vendor_code, location"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));

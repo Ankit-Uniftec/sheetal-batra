@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bVendorOrders.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -69,12 +70,12 @@ export default function B2bVendorOrders() {
                 setVendor(vendorData);
 
                 // Fetch orders for this vendor
-                const { data: ordersData, error: ordersError } = await supabase
-                    .from("orders")
+                // Paged past Supabase's 1000-row cap (large vendors can exceed it).
+                const { data: ordersData, error: ordersError } = await fetchAllRows("orders", (q) => q
                     .select("*")
                     .eq("vendor_id", vendorId)
                     .eq("is_b2b", true)
-                    .order("created_at", { ascending: false });
+                    .order("created_at", { ascending: false }));
 
                 if (ordersError) throw ordersError;
 

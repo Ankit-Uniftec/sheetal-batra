@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bMerchandiserDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -118,7 +119,8 @@ export default function B2bMerchandiserDashboard() {
 
             const [profileResult, ordersResult, vendorsResult, sizeChartsResult] = await Promise.all([
                 supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
-                supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false }),
+                // Paged past the 1000-row cap — see B2bProductionDashboard note.
+                fetchAllRows("orders", (q) => q.select("*").eq("is_b2b", true).order("created_at", { ascending: false })),
                 supabase.from("vendors").select("*").eq("is_active", true).order("store_brand_name", { ascending: true }),
                 supabase.from("size_charts").select("*").eq("is_active", true).order("name", { ascending: true })
             ]);
@@ -301,9 +303,12 @@ export default function B2bMerchandiserDashboard() {
         }
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
+            // Client + product included so legacy SA-placed B2B orders (no PO,
+            // vendor or merchandiser recorded) are still findable by what they DO have.
             filtered = filtered.filter(o =>
                 o.order_no?.toLowerCase().includes(q) || o.po_number?.toLowerCase().includes(q) ||
-                o.merchandiser_name?.toLowerCase().includes(q) || vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q)
+                o.merchandiser_name?.toLowerCase().includes(q) || vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q) ||
+                o.delivery_name?.toLowerCase().includes(q) || (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
             );
         }
         return filtered;

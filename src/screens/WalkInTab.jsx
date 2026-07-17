@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { fetchAllRows } from "../utils/fetchAllRows";
 import { COUNTRY_CODES, SOURCE_OPTIONS } from "../utils/countryCodes";
 import {
   buildOrderPhoneSet,
@@ -62,14 +63,13 @@ export default function WalkInTab({ saEmail, showPopup }) {
       // Conversion counts an order from any SA (the client may return on a
       // different SA's shift), so the order query is NOT scoped to saEmail.
       const [walkinsRes, ordersRes] = await Promise.all([
-        supabase
-          .from("walkins")
+        // Paged past Supabase's 1000-row cap
+        fetchAllRows("walkins", (q) => q
           .select("*")
           .eq("sa_email", saEmail.toLowerCase())
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("orders")
-          .select("delivery_phone"),
+          .order("created_at", { ascending: false })),
+        // Paged past Supabase's 1000-row cap — conversion matching saw only the newest 1000 phones.
+        fetchAllRows("orders", (q) => q.select("delivery_phone")),
       ]);
       if (cancelled) return;
 

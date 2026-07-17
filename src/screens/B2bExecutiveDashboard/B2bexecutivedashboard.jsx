@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bExecutiveDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -64,7 +65,9 @@ export default function B2bExecutiveDashboard() {
 
                 const [profileResult, ordersResult] = await Promise.all([
                     supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
-                    supabase.from("orders").select("*").eq("is_b2b", true).eq("salesperson_email", user.email?.toLowerCase()).order("created_at", { ascending: false })
+                    // Paged past Supabase's 1000-row cap (an unpaged newest-first fetch
+                    // silently drops the oldest orders once the total crosses 1000).
+                    fetchAllRows("orders", (q) => q.select("*").eq("is_b2b", true).eq("salesperson_email", user.email?.toLowerCase()).order("created_at", { ascending: false }))
                 ]);
 
                 if (profileResult.data) setProfile(profileResult.data);

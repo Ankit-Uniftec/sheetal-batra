@@ -361,7 +361,7 @@ export default function AdminDashboard() {
         try {
             const [ordersRes, productsRes, spRes, vendorsRes, profilesRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("products").select("*").order("name", { ascending: true }),
+                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders, assigned_stations"),
                 supabase.from("vendors").select("*"),
                 // Paginate past Supabase's 1000-row cap — the client book is

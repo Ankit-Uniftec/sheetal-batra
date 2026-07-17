@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import "./B2bOrderHistory.css";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { useNavigate } from "react-router-dom";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -66,20 +67,17 @@ export default function B2bOrderHistory() {
                     return;
                 }
 
-                let query = supabase
-                    .from("orders")
-                    .select("*")
-                    .eq("is_b2b", true)
-                    .order("created_at", { ascending: false });
-
-                if (statusFilter !== "all") {
-                    query = query.eq("approval_status", statusFilter);
-                }
-                if (typeFilter !== "all") {
-                    query = query.eq("b2b_order_type", typeFilter);
-                }
-
-                const { data: ordersData, error } = await query;
+                // Paged past Supabase's 1000-row cap — an unpaged newest-first fetch
+                // silently drops the oldest orders once the total crosses 1000.
+                const { data: ordersData, error } = await fetchAllRows("orders", (q) => {
+                    let query = q
+                        .select("*")
+                        .eq("is_b2b", true)
+                        .order("created_at", { ascending: false });
+                    if (statusFilter !== "all") query = query.eq("approval_status", statusFilter);
+                    if (typeFilter !== "all") query = query.eq("b2b_order_type", typeFilter);
+                    return query;
+                });
                 if (error) throw error;
 
                 setOrders(ordersData || []);

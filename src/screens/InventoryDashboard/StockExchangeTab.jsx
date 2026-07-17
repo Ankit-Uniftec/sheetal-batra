@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 
 export default function StockExchangeTab() {
@@ -32,10 +33,10 @@ export default function StockExchangeTab() {
 
   const fetchExchanges = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("stock_exchanges")
+    // Paged past Supabase's 1000-row cap
+    const { data, error } = await fetchAllRows("stock_exchanges", (q) => q
       .select("*, from_wh:warehouses!from_warehouse_id(name), to_wh:warehouses!to_warehouse_id(name)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }));
 
     if (!error) {
       setExchanges(data || []);
@@ -47,7 +48,7 @@ export default function StockExchangeTab() {
     // Fetch warehouses and products for the form
     const [whRes, prodRes] = await Promise.all([
       supabase.from("warehouses").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("products").select("id, name, sku_id").order("name"),
+      fetchAllRows("products", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
     ]);
 
     setWarehouses(whRes.data || []);

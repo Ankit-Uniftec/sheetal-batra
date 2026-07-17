@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 
 export default function WarehouseTab() {
@@ -28,7 +29,7 @@ export default function WarehouseTab() {
     setLoading(true);
     const [whRes, prodRes] = await Promise.all([
       supabase.from("warehouses").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-      supabase.from("products").select("id, name, sku_id").order("name"),
+      fetchAllRows("products", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
     ]);
 
     if (whRes.error) console.error("Error fetching warehouses:", whRes.error);

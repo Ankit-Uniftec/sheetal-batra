@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 
@@ -76,8 +77,8 @@ export default function CommsInventory({ profile, showPopup }) {
     (async () => {
       setLoading(true);
       const [{ data: prods }, { data: vars }, { data: blks }] = await Promise.all([
-        supabase.from("products").select("id, name, sku_id, image_url, inventory, default_top, default_bottom, default_color, base_price, sync_enabled").order("name", { ascending: true }),
-        supabase.from("product_variants").select("id, product_id, size, color, inventory"),
+        fetchAllRows("products", (q) => q.select("id, name, sku_id, image_url, inventory, default_top, default_bottom, default_color, base_price, sync_enabled").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
+        fetchAllRows("product_variants", (q) => q.select("id, product_id, size, color, inventory")), // Paged past Supabase's 1000-row cap — full variants table
         supabase.from("comms_inventory_blocks").select("*").eq("status", "active"),
       ]);
       if (cancelled) return;

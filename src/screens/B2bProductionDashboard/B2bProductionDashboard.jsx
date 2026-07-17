@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bProductionDashboard.css";
 import Logo from "../../images/logo.png";
 import formatDate from "../../utils/formatDate";
@@ -113,7 +114,10 @@ export default function B2bProductionDashboard() {
 
             const [profileResult, ordersResult] = await Promise.all([
                 supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
-                supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false })
+                // Paged: Supabase caps unpaged queries at 1000 rows — with newest-first
+                // ordering that silently dropped the OLDEST B2B orders once the total
+                // crossed 1000 (the legacy Jan-Feb orders vanished from page 50 onward).
+                fetchAllRows("orders", (q) => q.select("*").eq("is_b2b", true).order("created_at", { ascending: false }))
             ]);
 
             if (profileResult.data) setProfile(profileResult.data);
@@ -340,9 +344,12 @@ export default function B2bProductionDashboard() {
         }
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
+            // Client + product included so legacy SA-placed B2B orders (no PO or
+            // vendor recorded) are still findable by what they DO have.
             filtered = filtered.filter(o =>
                 o.order_no?.toLowerCase().includes(q) || o.po_number?.toLowerCase().includes(q) ||
-                vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q)
+                vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q) ||
+                o.delivery_name?.toLowerCase().includes(q) || (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
             );
         }
         // Stage-card drill-through: any-piece-at-stage, narrowed by kind.
@@ -514,7 +521,7 @@ export default function B2bProductionDashboard() {
                         <div className="prod-cell prod-stage-cards">
                             <div className="prod-orders-card">
                                 <div className="prod-card-header">
-                                    <span className="prod-card-title">Orders by Production Stage</span>
+                                    <span className="prod-card-title">Production Stages (Components)</span>
                                 </div>
                                 <div className="prod-overview-period">
                                     {[

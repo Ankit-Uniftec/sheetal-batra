@@ -4,6 +4,7 @@ import { usePopup } from "./Popup";
 import Badge from "./Badge";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import { supabase } from "../lib/supabaseClient";
+import { fetchAllRows } from "../utils/fetchAllRows";
 import {
   EXHIBITION_STATUS,
   netSbRevenue,
@@ -53,10 +54,10 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
       // Orders linked to these exhibitions (for the summary cards).
       const ids = (exbs || []).map((e) => e.id);
       if (ids.length > 0) {
-        const { data: ords, error: ordErr } = await supabase
-          .from("orders")
+        // Paged past Supabase's 1000-row cap
+        const { data: ords, error: ordErr } = await fetchAllRows("orders", (q) => q
           .select("id, exhibition_id, created_at, net_total, grand_total_after_discount, grand_total, user_id, delivery_phone")
-          .in("exhibition_id", ids);
+          .in("exhibition_id", ids));
         // Surface (don't swallow) a failed orders fetch — otherwise the summary
         // cards silently read as 0 when the query errors.
         if (ordErr) {

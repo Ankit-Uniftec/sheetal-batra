@@ -1316,8 +1316,25 @@ export default function ProductionManagerDashboard() {
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
 
-    const getChannelLabel = (order) => { if (order.is_b2b) return "B2B"; return "Store"; };
-    const getChannelClass = (order) => { if (order.is_b2b) return "pm-channel-b2b"; return "pm-channel-store"; };
+    // Channel badge — the full channel model, not the old binary B2B/Store
+    // (Comms, Private and Website orders all read as "Store" before).
+    const getChannelLabel = (order) => {
+        const key = getOrderChannelKey(order);
+        if (key === "b2b") return "B2B";
+        if (key === "comms") return "Comms";
+        if (key === "private") return "Private";
+        if (key === "website") return "Website";
+        const st = (order.salesperson_store || "").trim();
+        return (st && st !== "Delhi Store" && st !== "Ludhiana Store") ? "Exhibition" : "Store";
+    };
+    const getChannelClass = (order) => {
+        const key = getOrderChannelKey(order);
+        if (key === "offline") {
+            const st = (order.salesperson_store || "").trim();
+            return (st && st !== "Delhi Store" && st !== "Ludhiana Store") ? "pm-channel-exhibition" : "pm-channel-store";
+        }
+        return `pm-channel-${key}`;
+    };
 
     const getStatusLabel = (order) => {
         if (order.production_status === "dispatched" || order.status === "delivered") return "Dispatched";
@@ -1814,7 +1831,7 @@ export default function ProductionManagerDashboard() {
                             <>
                                 {/* ===== ORDERS BY PRODUCTION STAGE (click a card to drill into the orders list) ===== */}
                                 <div className="pm-overview-head">
-                                    <p className="pm-card-title" style={{ margin: 0, color: "#8B7355" }}>Orders by Production Stage</p>
+                                    <p className="pm-card-title" style={{ margin: 0, color: "#8B7355" }}>Production Stages (Components)</p>
                                     <div className="pm-period-pills">
                                         {[
                                             { key: "all", label: "All Time" },
@@ -2493,8 +2510,11 @@ export default function ProductionManagerDashboard() {
                             const DONE = new Set(["delivered", "completed", "dispatched"]);
                             const isDispatched = (o) =>
                                 DONE.has((o.status || "").toLowerCase()) || o.warehouse_stage === "dispatched";
-                            // Best available "dispatched on" timestamp, newest signal first.
-                            const dispatchedDate = (o) => o.dispatched_at || o.delivered_at || o.updated_at || null;
+                            // Best available "dispatched on" timestamp. NEVER updated_at: any edit
+                            // (payment change, exchange, a migration) rewrites it, so it reads as a
+                            // recent dispatch for orders finished months ago.
+                            const dispatchedDate = (o) => o.dispatched_at || o.delivered_at ||
+                                (o.warehouse_stage === "dispatched" ? o.warehouse_stage_updated_at : null) || null;
                             const recentlyDispatched = orders
                                 .filter(isDispatched)
                                 .sort((a, b) => new Date(dispatchedDate(b) || 0) - new Date(dispatchedDate(a) || 0))
@@ -2568,24 +2588,49 @@ export default function ProductionManagerDashboard() {
                             };
 
                             // ==================== COMPLETED ORDERS (historical) ====================
-                            // Delivered/Completed orders — compare delivered_at (or updated_at fallback) vs delivery_date
+                            // Delivered/Completed orders — how late was the order actually
+                            // finished, vs the warehouse deadline. The "when was it finished"
+                            // timestamp must be a REAL one: delivered_at, else dispatched_at,
+                            // else the stage-sync timestamp from the moment the last component
+                            // dispatched. NEVER updated_at — any edit (payment change, exchange,
+                            // a migration) rewrites it, which had completed orders showing
+                            // 60-107 days "late" against what was really the row's last touch.
+                            const orderDoneDate = (o) =>
+                                o.delivered_at || o.dispatched_at ||
+                                (o.warehouse_stage === "dispatched" ? o.warehouse_stage_updated_at : null) || null;
+
                             const completedRows = [];
                             orders.forEach(o => {
                                 if (o.status !== "delivered" && o.status !== "completed") return;
                                 if (!o.delivery_date) return;
                                 if (!channelMatch(o)) return;
 
-                                const actualDeliveryStr = o.delivered_at || o.updated_at;
-                                if (!actualDeliveryStr) return;
+                                // Measured against the WAREHOUSE deadline (T-2), not the customer
+                                // date — production is late when it misses its own deadline.
+                                const promisedDate = getWarehouseDateObj(o.delivery_date, o.created_at);
+                                if (!promisedDate) return;
+
+                                const actualDeliveryStr = orderDoneDate(o);
+                                if (!actualDeliveryStr) {
+                                    // No trustworthy completion date — show the order without
+                                    // inventing one (no days-late, its own "no date" bucket).
+                                    // A date-bounded view cannot place it, so skip it there.
+                                    if (fromDate || toDate) return;
+                                    completedRows.push({
+                                        order: o,
+                                        actualDelivery: null,
+                                        promisedDate,
+                                        daysLate: null,
+                                        bucket: "no_date",
+                                        isOpen: false,
+                                    });
+                                    return;
+                                }
                                 const actualDate = new Date(actualDeliveryStr);
                                 // Apply date range against actual delivery date
                                 if (fromDate && actualDate < fromDate) return;
                                 if (toDate && actualDate > toDate) return;
 
-                                // Measured against the WAREHOUSE deadline (T-2), not the customer
-                                // date — production is late when it misses its own deadline.
-                                const promisedDate = getWarehouseDateObj(o.delivery_date, o.created_at);
-                                if (!promisedDate) return;
                                 // normalize to midnight for day diff
                                 const promisedMid = new Date(promisedDate.getFullYear(), promisedDate.getMonth(), promisedDate.getDate());
                                 const actualMid = new Date(actualDate.getFullYear(), actualDate.getMonth(), actualDate.getDate());
@@ -2675,6 +2720,7 @@ export default function ProductionManagerDashboard() {
                                     case "2_7": return { bg: "#fff3e0", fg: "#e65100", label: "2\u20137d late" };
                                     case "7_14": return { bg: "#ffebee", fg: "#c62828", label: "7\u201314d late" };
                                     case "14_plus": return { bg: "#b71c1c", fg: "#fff", label: "14+d critical" };
+                                    case "no_date": return { bg: "#eceff1", fg: "#546e7a", label: "no completion date" };
                                     default: return { bg: "#f5f5f5", fg: "#333", label: b };
                                 }
                             };
@@ -2696,14 +2742,14 @@ export default function ProductionManagerDashboard() {
                                         getClientName(o) || "",
                                         o.salesperson || "",
                                         o.salesperson_store || "",
-                                        o.is_b2b ? "B2B" : "Store",
+                                        getChannelLabel(o),
                                         item.product_name || "",
                                         item.size || "",
                                         o.grand_total || 0,
                                         o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
                                         getWarehouseDate(o.delivery_date, o.created_at, ""),
-                                        r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "Not yet delivered",
-                                        r.daysLate <= 0 ? "On-time" : r.daysLate,
+                                        r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : (r.isOpen ? "Not yet delivered" : "No completion date recorded"),
+                                        r.daysLate == null ? "-" : (r.daysLate <= 0 ? "On-time" : r.daysLate),
                                         bucketStyle(r.bucket).label,
                                         o.status || "",
                                     ].map(v => `"${String(v).replace(/"/g, '""')}"`);
@@ -2874,7 +2920,7 @@ export default function ProductionManagerDashboard() {
                                                                 <td style={{ padding: "8px 12px" }}>{formatDate(o.created_at)}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{formatDate(o.delivery_date)}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "-"}</td>
-                                                                <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: r.daysLate <= 0 ? "#2e7d32" : "#c62828" }}>{r.daysLate <= 0 ? "\u2713" : `${r.daysLate}d`}</td>
+                                                                <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: r.daysLate == null ? "#90a4ae" : r.daysLate <= 0 ? "#2e7d32" : "#c62828" }}>{r.daysLate == null ? "\u2014" : r.daysLate <= 0 ? "\u2713" : `${r.daysLate}d`}</td>
                                                                 <td style={{ padding: "8px 12px", textAlign: "center" }}>
                                                                     <span style={{ background: style.bg, color: style.fg, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{style.label}</span>
                                                                 </td>
