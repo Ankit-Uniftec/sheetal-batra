@@ -4,12 +4,13 @@
   min-height: 100vh; width: 100%;
   background-image: url("../../images/Screen1bg.png");
   background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;
-  padding: 40px 60px; display: flex; flex-direction: column; align-items: center;
+  padding: 0; display: flex; flex-direction: column; align-items: center;
 }
 
 /* ---------------- HEADER ---------------- */
-.merch-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 40px; top: 0; z-index: 100; width: 100%; margin-bottom: 20px; }
-.merch-header-logo { height: 70px; cursor: pointer; }
+.merch-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #FFFFFFB0; border-bottom: 1px solid #D4D4D4; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); width: 100%; margin-bottom: 20px; }
+.merch-header-logo { height: 50px; cursor: pointer; }
+.merch-header-title { flex: 1; text-align: center; font-family: "Athleas", serif !important; font-size: 22px; color: #d5b85a !important; font-weight: 600; margin: 0; }
 .merch-header-right { display: flex; align-items: center; gap: 15px; }
 .merch-header-btn { background: #d5b85a; color: white !important; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
 .merch-header-btn:hover { background: #c9a94e; }
@@ -17,15 +18,16 @@
 .merch-hamburger-icon .merch-bar { width: 100%; height: 3px; background-color: #d5b85a; border-radius: 5px; transition: all 0.3s ease; }
 
 /* ---------------- MAIN GRID (3 ROW x 4 COLUMN) ---------------- */
-.merch-grid-table { margin-top: 30px; width: 100%; display: grid; grid-template-columns: 180px 1fr 1fr 260px; grid-template-rows: auto auto auto; gap: 25px; }
+.merch-grid-table { margin-top: 20px; width: 100%; padding: 0 20px 20px; display: grid; grid-template-columns: 200px 1fr 1fr 260px; grid-template-rows: auto auto auto; gap: 20px; }
 
 /* ---------------- SIDEBAR (spans 3 rows) ---------------- */
-.merch-sidebar { grid-row: 1 / 4; grid-column: 1; background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 8px; overflow: visible; transition: transform 0.3s ease-in-out; }
-.merch-menu { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
-.merch-menu-item { padding: 8px 12px; font-size: 15px; cursor: pointer; position: relative; }
+.merch-sidebar { grid-row: 1 / 4; grid-column: 1; background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 12px; padding: 16px 0; height: fit-content; position: sticky; top: 102px; backdrop-filter: blur(10px); overflow: visible; transition: transform 0.3s ease-in-out; }
+.merch-menu { margin-top: 0; display: flex; flex-direction: column; gap: 2px; }
+.merch-menu-item { display: flex; align-items: center; gap: 10px; padding: 14px 20px; font-size: 14px; font-weight: 500; color: #333; cursor: pointer; position: relative; transition: all 0.2s; }
+.merch-menu-item:hover { background: rgba(213, 184, 90, 0.1); color: #d5b85a; }
+.merch-menu-item.active { background: rgba(213, 184, 90, 0.15); color: #d5b85a; font-weight: 600; }
+.merch-menu-item.active::after { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 60%; background-color: #d5b85a; border-radius: 0 4px 4px 0; }
 .merch-menu-item-logout { display: none; }
-.merch-menu-item.active { font-weight: bold; color: #d5b85a; }
-.merch-menu-item.active::after { content: ""; position: absolute; left: 12px; bottom: 4px; width: 95px; height: 3px; background-color: #d5b85a; border-radius: 2px; }
 
 .merch-badge-count { background: #c62828; color: white !important; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
 
@@ -156,7 +158,7 @@
    share a single wrapping line below (collapses to more lines only on very
    narrow screens) instead of each filter stacking full-width. */
 .merch-filters-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 18px; align-items: center; }
-.merch-search-input { flex: 1 1 100%; padding: 9px 14px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 14px; outline: none; }
+.merch-search-input { flex: 1 1 300px; min-width: 240px; max-width: 460px; padding: 9px 14px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 14px; outline: none; }
 .merch-search-input:focus { border-color: #b79b3d; }
 .merch-filter-select { flex: 1 1 150px; min-width: 130px; max-width: 220px; padding: 9px 12px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 13px; outline: none; background: white; cursor: pointer; }
 .merch-filter-select:focus { border-color: #b79b3d; }
@@ -285,12 +287,13 @@
 
 /* ==================== MOBILE ==================== */
 @media (max-width: 768px) {
-  .merch-dashboard-wrapper { padding: 10px 10px; }
+  .merch-dashboard-wrapper { padding: 0; }
   .merch-header { padding: 10px 16px; }
+  .merch-header-title { font-size: 17px; }
   .merch-header-logo { height: 35px; }
   .merch-header-btn { display: none; }
   .merch-hamburger-icon { display: flex; }
-  .merch-grid-table { display: flex; flex-direction: column; gap: 15px; }
+  .merch-grid-table { display: flex; flex-direction: column; gap: 15px; padding: 0 10px 10px; }
   .merch-sidebar { display: none; position: fixed; top: 0; left: 0; width: 220px; height: 100vh; z-index: 1000; background: #FFFFFFEE; border-right: 1px solid #D4D4D4; padding: 20px 10px; }
   .merch-sidebar.merch-open { display: block; }
   .merch-menu-item-logout { display: block; padding: 8px 12px; font-size: 15px; cursor: pointer; color: #c62828; }

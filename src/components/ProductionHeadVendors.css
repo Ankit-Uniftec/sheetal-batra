@@ -216,6 +216,11 @@
   padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
   font-size: 13px; background: #fff; color: #444; min-width: 150px;
 }
+.phv-filter-search {
+  padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 13px; color: #444; min-width: 190px; outline: none;
+}
+.phv-filter-search:focus { border-color: #d5b85a; }
 .phv-filter-date {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; font-weight: 600; color: #777;

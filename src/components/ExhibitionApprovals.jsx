@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { usePopup } from "./Popup";
 import Badge from "./Badge";
 import {
@@ -27,6 +27,26 @@ const ExhibitionApprovals = ({ currentUserEmail }) => {
   const [pending, setPending] = useState([]);
   const [all, setAll] = useState([]);
   const [busyId, setBusyId] = useState(null);
+  const [allSearch, setAllSearch] = useState("");
+  const [allStatusFilter, setAllStatusFilter] = useState("all");
+
+  const statusOptions = useMemo(
+    () => [...new Set(all.map((e) => e.status).filter(Boolean))],
+    [all]
+  );
+
+  const filteredAll = useMemo(() => {
+    const q = allSearch.trim().toLowerCase();
+    return all.filter((e) => {
+      if (allStatusFilter !== "all" && e.status !== allStatusFilter) return false;
+      if (q && !(
+        e.name?.toLowerCase().includes(q) ||
+        e.company_name?.toLowerCase().includes(q) ||
+        e.sb_representative?.toLowerCase().includes(q)
+      )) return false;
+      return true;
+    });
+  }, [all, allSearch, allStatusFilter]);
 
   const load = useCallback(async () => {
     try {
@@ -103,7 +123,32 @@ const ExhibitionApprovals = ({ currentUserEmail }) => {
       )}
 
       <h3 className="exa-section">All Exhibitions ({all.length})</h3>
-      <div className="exa-list">{all.map((e) => <Row key={e.id} exb={e} showActions={false} />)}</div>
+      {all.length === 0 ? (
+        <p className="exa-empty">No exhibitions yet.</p>
+      ) : (
+        <>
+          <div className="exa-filters">
+            <input
+              type="text"
+              className="exa-filter-search"
+              placeholder="Search by name, company, or rep..."
+              value={allSearch}
+              onChange={(e) => setAllSearch(e.target.value)}
+            />
+            <select className="exa-filter-select" value={allStatusFilter} onChange={(e) => setAllStatusFilter(e.target.value)}>
+              <option value="all">All Statuses</option>
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>{STATUS_BADGE[s]?.label || s}</option>
+              ))}
+            </select>
+          </div>
+          {filteredAll.length === 0 ? (
+            <p className="exa-empty">No exhibitions match your search.</p>
+          ) : (
+            <div className="exa-list">{filteredAll.map((e) => <Row key={e.id} exb={e} showActions={false} />)}</div>
+          )}
+        </>
+      )}
     </div>
   );
 };

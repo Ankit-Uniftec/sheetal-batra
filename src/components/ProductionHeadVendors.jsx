@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { usePopup } from "./Popup";
+import Paginator from "./Paginator";
 import { SearchableSelect } from "./SearchableSelect";
 import formatDate from "../utils/formatDate";
 import {
@@ -72,19 +73,6 @@ const MOVEMENT_ERROR_MESSAGES = {
 const friendlyMovementError = (res) =>
   MOVEMENT_ERROR_MESSAGES[res?.error] || res?.message || "Could not complete the request. Please try again.";
 
-// Simple Prev/Next pager. Renders nothing when there's a single page.
-const Pager = ({ page, total, onChange }) => {
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (pages <= 1) return null;
-  return (
-    <div className="phv-pager">
-      <button disabled={page === 1} onClick={() => onChange(page - 1)}>Prev</button>
-      <span>Page {page} of {pages}</span>
-      <button disabled={page === pages} onClick={() => onChange(page + 1)}>Next</button>
-    </div>
-  );
-};
-
 /**
  * ProductionHeadVendors
  *
@@ -126,6 +114,7 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   const [movTypeFilter, setMovTypeFilter] = useState("");      // component category
   const [movReturnFilter, setMovReturnFilter] = useState("");  // exact return date
   // Vendors tab filters
+  const [vendorSearch, setVendorSearch] = useState("");
   const [vendorStageFilter, setVendorStageFilter] = useState("");
   const [vendorStatusFilter, setVendorStatusFilter] = useState("");
   const [editMov, setEditMov] = useState(null); // the movement being edited
@@ -169,13 +158,17 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   }), [movements, movVendorFilter, movTypeFilter, movReturnFilter]);
   useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter]);
 
-  // Vendors tab after stage / status filters.
-  const filteredVendors = useMemo(() => allVendors.filter((v) => {
-    if (vendorStageFilter && String(v.stage_number) !== vendorStageFilter) return false;
-    if (vendorStatusFilter && v.status !== vendorStatusFilter) return false;
-    return true;
-  }), [allVendors, vendorStageFilter, vendorStatusFilter]);
-  useEffect(() => { setVendorPage(1); }, [vendorStageFilter, vendorStatusFilter]);
+  // Vendors tab after search / stage / status filters.
+  const filteredVendors = useMemo(() => {
+    const q = vendorSearch.trim().toLowerCase();
+    return allVendors.filter((v) => {
+      if (vendorStageFilter && String(v.stage_number) !== vendorStageFilter) return false;
+      if (vendorStatusFilter && v.status !== vendorStatusFilter) return false;
+      if (q && !`${v.vendor_name || ""} ${v.vendor_location || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allVendors, vendorSearch, vendorStageFilter, vendorStatusFilter]);
+  useEffect(() => { setVendorPage(1); }, [vendorSearch, vendorStageFilter, vendorStatusFilter]);
 
   // Open the edit modal for a still-'configured' movement.
   const openEdit = (m) => {
@@ -403,6 +396,13 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
           <h3 className="phv-title">Vendors</h3>
           <p className="phv-hint">New vendors are requested by the Production Manager and approved by Manish. You can select any <strong>approved</strong> vendor when configuring a movement.</p>
           <div className="phv-filter-bar">
+            <input
+              type="text"
+              className="phv-filter-search"
+              placeholder="Search name or location…"
+              value={vendorSearch}
+              onChange={(e) => setVendorSearch(e.target.value)}
+            />
             <select value={vendorStageFilter} onChange={(e) => setVendorStageFilter(e.target.value)} className="phv-filter-select">
               <option value="">All stages</option>
               {EXTERNAL_ELIGIBLE_STEPS.map((s) => <option key={s.step} value={String(s.step)}>{s.label}</option>)}
@@ -413,8 +413,8 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
               <option value="pending">Pending</option>
               <option value="rejected">Rejected</option>
             </select>
-            {(vendorStageFilter || vendorStatusFilter) && (
-              <button className="phv-filter-clear" onClick={() => { setVendorStageFilter(""); setVendorStatusFilter(""); }}>Clear</button>
+            {(vendorSearch || vendorStageFilter || vendorStatusFilter) && (
+              <button className="phv-filter-clear" onClick={() => { setVendorSearch(""); setVendorStageFilter(""); setVendorStatusFilter(""); }}>Clear</button>
             )}
           </div>
 
@@ -433,7 +433,7 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
                   </div>
                 ))}
               </div>
-              <Pager page={vendorPage} total={filteredVendors.length} onChange={setVendorPage} />
+              <Paginator page={vendorPage} totalPages={Math.ceil(filteredVendors.length / PAGE_SIZE)} onChange={setVendorPage} />
             </>
           )}
         </div>
@@ -494,7 +494,7 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
                   </div>
                 ))}
               </div>
-              <Pager page={movPage} total={filteredMovements.length} onChange={setMovPage} />
+              <Paginator page={movPage} totalPages={Math.ceil(filteredMovements.length / PAGE_SIZE)} onChange={setMovPage} />
             </>
           )}
         </div>

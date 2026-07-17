@@ -20,6 +20,9 @@ import WalkInTab from "./WalkInTab";
 import ExhibitionPanel from "../components/ExhibitionPanel";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
+import useTabParam from "../hooks/useTabParam";
+import Paginator from "../components/Paginator";
+import { usePeriodFilter } from "../components/PeriodFilter";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -33,6 +36,20 @@ const isAfterDeliveryDate = (deliveryDate) => {
   return new Date() > new Date(deliveryDate);
 };
 
+// Status filter helpers — mirror the badge label logic in the Order History cards.
+const ORDER_STATUS_LABELS = {
+  order_received: "Order Received",
+  completed: "Completed & Dispatched",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+  exchange_return: "Exchange/Return",
+};
+
+const normalizeOrderStatus = (status) => {
+  const s = status?.toLowerCase();
+  return !s || s === "pending" ? "order_received" : s;
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,7 +57,7 @@ export default function Dashboard() {
   // Popup hook
   const { showPopup, PopupComponent } = usePopup();
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useTabParam("dashboard");
   const [salesperson, setSalesperson] = useState(null);
   // Exhibition SA: store/designation = "Exhibition". Drives the Exhibitions
   // menu + gating of the regular "+" order journey (points 1 & 2).
@@ -65,6 +82,10 @@ export default function Dashboard() {
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderSearchField, setOrderSearchField] = useState("order_no");
+  // Order History filters
+  const [orderStatusFilter, setOrderStatusFilter] = useState("");
+  const [orderDateFrom, setOrderDateFrom] = useState("");
+  const [orderDateTo, setOrderDateTo] = useState("");
   const [clientSearch, setClientSearch] = useState("");
 
   const ASSOCIATE_SEARCH_FIELDS = [
@@ -114,31 +135,38 @@ export default function Dashboard() {
     return order.salesperson_email?.toLowerCase() === salesperson.email.toLowerCase();
   };
 
+  // Period filter for the dashboard stat cards. Defaults to "This month" so
+  // the headline revenue keeps its old "resets at 00:00 on the 1st" semantics.
+  const { control: periodControl, inPeriod } = usePeriodFilter("month", { variant: "pills" });
+  const periodOrders = useMemo(
+    () => orders.filter((o) => inPeriod(o.created_at)),
+    [orders, inPeriod]
+  );
+
   // ✅ OPTIMIZED: Memoize heavy calculations
   const stats = useMemo(() => {
-    // For sa_services, only count own orders in stats
-    const ownOrders = isServices
-      ? orders.filter(o => o.salesperson_email?.toLowerCase() === salesperson?.email?.toLowerCase())
-      : orders;
+    // For sa_services, only count own orders in stats; filter out Warehouse
+    // alterations for all stats.
+    const displayable = (list) => {
+      const ownOrders = isServices
+        ? list.filter(o => o.salesperson_email?.toLowerCase() === salesperson?.email?.toLowerCase())
+        : list;
+      return ownOrders.filter((o) => {
+        if (o.is_alteration) {
+          return o.alteration_location === "In-Store";
+        }
+        return true;
+      });
+    };
 
-    // Filter out Warehouse alterations for all stats
-    const displayOrders = ownOrders.filter((o) => {
-      if (o.is_alteration) {
-        return o.alteration_location === "In-Store";
-      }
-      return true;
-    });
+    // Period-scoped orders drive the headline stats (revenue, order/client
+    // counts) — default period is the current calendar month.
+    const displayOrders = displayable(periodOrders);
 
-    // Current calendar month revenue — resets at 00:00 on the 1st.
-    // Used by the sales-target progress bar AND the headline revenue card.
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const totalRevenue = displayOrders.reduce((sum, o) => {
       if (!o.created_at) return sum;
       if (!isRevenueOrder(o)) return sum;
-      return new Date(o.created_at) >= monthStart
-        ? sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)
-        : sum;
+      return sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
     }, 0);
     const totalOrders = displayOrders.length;
     // Split: stock orders (internal inventory) vs client orders. Helps the SA
@@ -146,13 +174,14 @@ export default function Dashboard() {
     const stockOrders = displayOrders.filter((o) => o.is_stock_order).length;
     const clientOrders = totalOrders - stockOrders;
     const totalClients = new Set(displayOrders.map((o) => o.user_id)).size;
-    const activeOrders = displayOrders.filter(
+    // "Today's Orders" is explicitly today — stays absolute, whatever the period.
+    const activeOrders = displayable(orders).filter(
       (o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "delivered" &&
         formatDate(o.created_at) === formatDate(new Date())
     );
 
     return { totalRevenue, totalOrders, clientOrders, stockOrders, totalClients, activeOrders };
-  }, [orders, isServices, salesperson]);
+  }, [orders, periodOrders, isServices, salesperson]);
 
   // Sales Target — prefer the current month's row from sa_monthly_targets
   // (with carry-forward from the most recent prior month). Falls back to the
@@ -197,11 +226,19 @@ export default function Dashboard() {
       return true; // Show all regular orders
     });
 
+    // Status + created_at date-range filters
+    const filteredByControls = baseOrders.filter((order) => {
+      if (orderStatusFilter && normalizeOrderStatus(order.status) !== orderStatusFilter) return false;
+      if (orderDateFrom && new Date(order.created_at) < new Date(`${orderDateFrom}T00:00:00`)) return false;
+      if (orderDateTo && new Date(order.created_at) > new Date(`${orderDateTo}T23:59:59.999`)) return false;
+      return true;
+    });
+
     // Then apply search filter — user picks the field via the dropdown
-    if (!orderSearch.trim()) return baseOrders;
+    if (!orderSearch.trim()) return filteredByControls;
 
     const q = orderSearch.trim().toLowerCase();
-    return baseOrders.filter((order) => {
+    return filteredByControls.filter((order) => {
       switch (orderSearchField) {
         case "product_name":
           return (order.items || []).some(
@@ -216,7 +253,17 @@ export default function Dashboard() {
           return order.order_no?.toLowerCase().includes(q);
       }
     });
-  }, [orders, orderSearch, orderSearchField]);
+  }, [orders, orderSearch, orderSearchField, orderStatusFilter, orderDateFrom, orderDateTo]);
+
+  // Distinct normalized statuses present in the data (for the filter dropdown)
+  const orderStatusOptions = useMemo(() => {
+    const seen = new Map();
+    orders.forEach((o) => {
+      const key = normalizeOrderStatus(o.status);
+      if (!seen.has(key)) seen.set(key, ORDER_STATUS_LABELS[key] || o.status);
+    });
+    return Array.from(seen, ([value, label]) => ({ value, label }));
+  }, [orders]);
 
   // ✅ OPTIMIZED: Paginated orders
   const paginatedOrders = useMemo(() => {
@@ -1314,7 +1361,7 @@ export default function Dashboard() {
       <div className={`ad-dashboard-wrapper ${showPasswordModal || editingOrder ? "ad-blurred" : ""}`}>
         <header className="ad-header">
           <img src={Logo} alt="logo" className="ad-header-logo" onClick={handleLogout} />
-          {/* <h1 className="ad-header-title">Associate Dashboard</h1> */}
+          <h1 className="ad-header-title">Associate Dashboard</h1>
           <div className="ad-header-right">
             <NotificationBell
               userEmail={salesperson?.email || ""}
@@ -1341,6 +1388,12 @@ export default function Dashboard() {
             </div>
           </div>
         </header>
+
+        {/* Period filter — dashboard tab stat cards only (grid cells below are
+            explicitly placed, so the control sits above the grid). */}
+        {activeTab === "dashboard" && (
+          <div className="pfx-bar">{periodControl}</div>
+        )}
 
         <div className={`ad-grid-table ${showSidebar ? "ad-sidebar-open" : ""}`}>
           <aside className={`ad-sidebar ${showSidebar ? "ad-open" : ""}`}>
@@ -1386,7 +1439,7 @@ export default function Dashboard() {
             <>
               <div className="ad-cell ad-total-revenue">
                 <div className="ad-stat-card">
-                  <p className="ad-stat-title">This Month's Revenue</p>
+                  <p className="ad-stat-title">Revenue</p>
                   <div className="ad-stat-content">
                     <span className="ad-stat-value">
                       {showRevenue ? `₹${formatIndianNumber(stats.totalRevenue)}` : "₹ ••••••"}
@@ -1482,7 +1535,11 @@ export default function Dashboard() {
           {activeTab === "orders" && (
             <div className="ad-order-details-wrapper">
               <h2 className="ad-order-title">Order History</h2>
-              <div className="ad-order-search-bar">
+              <div className="ad-order-search-bar" style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                {/* SearchByDropdown's own CSS is width:100%, which as a flex
+                    child claims the whole line and stacks the filters below it —
+                    the wrapper caps it so everything shares one row. */}
+                <div style={{ flex: "1 1 300px", minWidth: 260, maxWidth: 560 }}>
                 <SearchByDropdown
                   fields={ASSOCIATE_SEARCH_FIELDS}
                   selectedField={orderSearchField}
@@ -1491,10 +1548,50 @@ export default function Dashboard() {
                   onQueryChange={(v) => { setOrderSearch(v); setCurrentPage(1); }}
                   placeholder="Type to search..."
                 />
+                </div>
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => { setOrderStatusFilter(e.target.value); setCurrentPage(1); }}
+                  style={{ width: "auto", flex: "0 0 auto", padding: "9px 12px", border: "1px solid #d5b85a", borderRadius: 8, fontSize: 13, background: "#fff", color: "#444", outline: "none" }}
+                >
+                  <option value="">All Statuses</option>
+                  {orderStatusOptions.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={orderDateFrom}
+                  onChange={(e) => { setOrderDateFrom(e.target.value); setCurrentPage(1); }}
+                  title="Order date from"
+                  style={{ width: "auto", padding: "8px 10px", fontSize: 13 }}
+                />
+                <span style={{ fontSize: 13, color: "#8B7355" }}>to</span>
+                <input
+                  type="date"
+                  value={orderDateTo}
+                  onChange={(e) => { setOrderDateTo(e.target.value); setCurrentPage(1); }}
+                  title="Order date to"
+                  style={{ width: "auto", padding: "8px 10px", fontSize: 13 }}
+                />
+                {(orderStatusFilter || orderDateFrom || orderDateTo) && (
+                  <button
+                    onClick={() => { setOrderStatusFilter(""); setOrderDateFrom(""); setOrderDateTo(""); setCurrentPage(1); }}
+                    style={{ border: "none", background: "none", color: "#c0392b", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
 
               <div className="ad-order-list-scroll">
-                {filteredOrders.length === 0 && <p className="ad-muted">No orders found for this associate.</p>}
+                {filteredOrders.length === 0 && (
+                  <p className="ad-muted">
+                    {orderSearch.trim() || orderStatusFilter || orderDateFrom || orderDateTo
+                      ? "No orders match the current search/filters."
+                      : "No orders found for this associate."}
+                  </p>
+                )}
 
                 {paginatedOrders.map((order) => {
                   const item = order.items?.[0] || {};
@@ -1807,27 +1904,11 @@ export default function Dashboard() {
                 })}
 
                 {/* Pagination Controls */}
-                {filteredOrders.length > ORDERS_PER_PAGE && (
-                  <div className="ad-pagination">
-                    <button
-                      disabled={currentPage === 1}
-                      onClick={() => setCurrentPage(p => p - 1)}
-                      className="ad-pagination-btn"
-                    >
-                      ← Previous
-                    </button>
-                    <span className="ad-pagination-info">
-                      Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
-                    </span>
-                    <button
-                      disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
-                      onClick={() => setCurrentPage(p => p + 1)}
-                      className="ad-pagination-btn"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                )}
+                <Paginator
+                  page={currentPage}
+                  totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
+                  onChange={setCurrentPage}
+                />
               </div>
             </div>
           )}

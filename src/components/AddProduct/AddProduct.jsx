@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../Popup";
 import {
   CSV_COLUMNS,
@@ -26,10 +27,11 @@ const SIZE_OPTIONS = [
 const fetchNextSku = async () => {
   // Pull all SKUs matching the SKU-NNNN pattern, find the max, +1.
   // Done in JS because Supabase JS client doesn't expose RAW expressions.
-  const { data, error } = await supabase
-    .from("products")
+  // Paged past Supabase's 1000-row cap — a capped scan under-counts the max
+  // and would mint DUPLICATE SKUs once products exceed 1000 (they do).
+  const { data, error } = await fetchAllRows("products", (q) => q
     .select("sku_id")
-    .like("sku_id", "SKU-%");
+    .like("sku_id", "SKU-%"));
   if (error) throw error;
   let max = 0;
   (data || []).forEach((r) => {
@@ -200,9 +202,9 @@ export default function AddProduct({ onProductAdded }) {
       // Pull existing top/bottom options used across products — these stay
       // as freeform chip suggestions since every product can have its own
       // bespoke list. We unnest client-side (Supabase JS doesn't expose it).
-      const { data: prodData } = await supabase
-        .from("products")
-        .select("top_options, bottom_options");
+      // Paged past Supabase's 1000-row cap
+      const { data: prodData } = await fetchAllRows("products", (q) => q
+        .select("top_options, bottom_options"));
       if (!alive) return;
       const t = new Set(), b = new Set();
       (prodData || []).forEach((p) => {
@@ -402,11 +404,11 @@ export default function AddProduct({ onProductAdded }) {
   const handleExportAll = async () => {
     setCsvExporting(true);
     try {
-      const { data: prods, error: pErr } = await supabase
-        .from("products")
+      // Paged past Supabase's 1000-row cap
+      const { data: prods, error: pErr } = await fetchAllRows("products", (q) => q
         .select("*")
         .eq("sync_enabled", false)
-        .order("sku_id", { ascending: true });
+        .order("sku_id", { ascending: true }));
       if (pErr) throw pErr;
 
       const rows = (prods || []).map((p) => {
@@ -485,10 +487,10 @@ export default function AddProduct({ onProductAdded }) {
     // Resolve a starting SKU number for blank sku_ids — fetch once, then increment locally.
     let nextSkuNum = 0;
     try {
-      const { data: skuData } = await supabase
-        .from("products")
+      // Paged past Supabase's 1000-row cap — duplicate-SKU risk, see above.
+      const { data: skuData } = await fetchAllRows("products", (q) => q
         .select("sku_id")
-        .like("sku_id", "SKU-%");
+        .like("sku_id", "SKU-%"));
       let max = 0;
       (skuData || []).forEach((r) => {
         const m = (r.sku_id || "").match(/^SKU-(\d+)$/);

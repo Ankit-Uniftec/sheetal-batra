@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 
 export default function StockExchangeTab() {
@@ -9,6 +10,12 @@ export default function StockExchangeTab() {
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [itemsData, setItemsData] = useState({});
+
+  // List filters
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   // Form state
   const [warehouses, setWarehouses] = useState([]);
@@ -26,10 +33,10 @@ export default function StockExchangeTab() {
 
   const fetchExchanges = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("stock_exchanges")
+    // Paged past Supabase's 1000-row cap
+    const { data, error } = await fetchAllRows("stock_exchanges", (q) => q
       .select("*, from_wh:warehouses!from_warehouse_id(name), to_wh:warehouses!to_warehouse_id(name)")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }));
 
     if (!error) {
       setExchanges(data || []);
@@ -41,7 +48,7 @@ export default function StockExchangeTab() {
     // Fetch warehouses and products for the form
     const [whRes, prodRes] = await Promise.all([
       supabase.from("warehouses").select("id, name").eq("is_active", true).order("name"),
-      supabase.from("products").select("id, name, sku_id").order("name"),
+      fetchAllRows("products", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
     ]);
 
     setWarehouses(whRes.data || []);
@@ -223,6 +230,35 @@ export default function StockExchangeTab() {
     setExpandedId(exchangeId);
   };
 
+  // Distinct statuses present in the data (for the dropdown).
+  const statusOptions = useMemo(
+    () => [...new Set(exchanges.map((ex) => ex.status).filter(Boolean))],
+    [exchanges]
+  );
+
+  const filteredExchanges = useMemo(() => {
+    let list = exchanges;
+    if (statusFilter !== "all") list = list.filter((ex) => ex.status === statusFilter);
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      list = list.filter((ex) => new Date(ex.created_at) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + "T23:59:59.999");
+      list = list.filter((ex) => new Date(ex.created_at) <= to);
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((ex) =>
+        (ex.from_wh?.name || "").toLowerCase().includes(q) ||
+        (ex.to_wh?.name || "").toLowerCase().includes(q) ||
+        (ex.created_by || "").toLowerCase().includes(q) ||
+        (ex.notes || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [exchanges, search, statusFilter, dateFrom, dateTo]);
+
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -249,6 +285,43 @@ export default function StockExchangeTab() {
         </button>
       </div>
 
+      {/* Filters */}
+      {exchanges.length > 0 && (
+        <div className="inv-exchange-filters">
+          <input
+            type="text"
+            className="inv-exchange-filter inv-exchange-filter-search"
+            placeholder="Search warehouse, created by, notes..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className="inv-exchange-filter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Statuses</option>
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <input
+            type="date"
+            className="inv-exchange-filter"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            title="From date"
+          />
+          <input
+            type="date"
+            className="inv-exchange-filter"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            title="To date"
+          />
+        </div>
+      )}
+
       {/* Exchange Table */}
       {exchanges.length === 0 ? (
         <div className="inv-empty-state">
@@ -256,6 +329,10 @@ export default function StockExchangeTab() {
           <button className="inv-create-btn" onClick={openForm}>
             + Create First Transfer
           </button>
+        </div>
+      ) : filteredExchanges.length === 0 ? (
+        <div className="inv-empty-state">
+          <p>No exchanges match your filters.</p>
         </div>
       ) : (
         <div className="inv-exchange-table-wrapper">
@@ -272,7 +349,7 @@ export default function StockExchangeTab() {
               </tr>
             </thead>
             <tbody>
-              {exchanges.map((ex) => {
+              {filteredExchanges.map((ex) => {
                 const isExpanded = expandedId === ex.id;
                 return (
                   <React.Fragment key={ex.id}>

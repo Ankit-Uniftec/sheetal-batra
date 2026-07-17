@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 
 export default function WarehouseTab() {
@@ -10,6 +11,8 @@ export default function WarehouseTab() {
   const [expandedId, setExpandedId] = useState(null);
   const [stockData, setStockData] = useState({});
   const [stockLoading, setStockLoading] = useState(null);
+  const [warehouseSearch, setWarehouseSearch] = useState("");
+  const [stockSearch, setStockSearch] = useState(""); // search inside the expanded stock table
 
   // Form state (shared between create and edit)
   const [showForm, setShowForm] = useState(false);
@@ -26,7 +29,7 @@ export default function WarehouseTab() {
     setLoading(true);
     const [whRes, prodRes] = await Promise.all([
       supabase.from("warehouses").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-      supabase.from("products").select("id, name, sku_id").order("name"),
+      fetchAllRows("products", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
     ]);
 
     if (whRes.error) console.error("Error fetching warehouses:", whRes.error);
@@ -183,6 +186,7 @@ export default function WarehouseTab() {
   };
 
   const fetchStockForWarehouse = async (warehouseId) => {
+    setStockSearch(""); // fresh search per expanded warehouse
     if (expandedId === warehouseId) {
       setExpandedId(null);
       return;
@@ -216,6 +220,26 @@ export default function WarehouseTab() {
     return products.filter((p) => !selectedIds.includes(p.id));
   };
 
+  // Warehouse card search (name / location)
+  const filteredWarehouses = useMemo(() => {
+    const q = warehouseSearch.trim().toLowerCase();
+    if (!q) return warehouses;
+    return warehouses.filter(
+      (w) => w.name?.toLowerCase().includes(q) || w.location?.toLowerCase().includes(q)
+    );
+  }, [warehouses, warehouseSearch]);
+
+  // Expanded stock table search (SKU / product name) — only one warehouse expands at a time
+  const expandedStock = expandedId ? stockData[expandedId] : null;
+  const filteredExpandedStock = useMemo(() => {
+    if (!expandedStock) return [];
+    const q = stockSearch.trim().toLowerCase();
+    if (!q) return expandedStock;
+    return expandedStock.filter(
+      (item) => item.products?.sku_id?.toLowerCase().includes(q) || item.products?.name?.toLowerCase().includes(q)
+    );
+  }, [expandedStock, stockSearch]);
+
   if (loading) {
     return (
       <div className="inv-tab-loading">
@@ -246,8 +270,27 @@ export default function WarehouseTab() {
           </button>
         </div>
       ) : (
+        <>
+        <div className="inv-search-wrapper" style={{ marginBottom: 16 }}>
+          <span className="inv-search-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
+          </span>
+          <input
+            type="text"
+            className="inv-search-input"
+            placeholder="Search warehouses by name or location..."
+            value={warehouseSearch}
+            onChange={(e) => setWarehouseSearch(e.target.value)}
+          />
+          {warehouseSearch && <button className="inv-search-clear" onClick={() => setWarehouseSearch("")}>✕</button>}
+        </div>
+        {filteredWarehouses.length === 0 ? (
+        <div className="inv-empty-state">
+          <p>No warehouses match your search.</p>
+        </div>
+        ) : (
         <div className="inv-warehouse-list">
-          {warehouses.map((wh) => (
+          {filteredWarehouses.map((wh) => (
             <div key={wh.id} className={`inv-warehouse-card ${expandedId === wh.id ? "expanded" : ""}`}>
               <div className="inv-warehouse-card-header">
                 <div className="inv-warehouse-info" onClick={() => fetchStockForWarehouse(wh.id)}>
@@ -275,30 +318,45 @@ export default function WarehouseTab() {
                   {stockData[wh.id].length === 0 ? (
                     <p className="inv-stock-empty">No stock in this warehouse yet. Click Edit to add products.</p>
                   ) : (
-                    <table className="inv-stock-table">
-                      <thead>
-                        <tr>
-                          <th>SKU</th>
-                          <th>Product</th>
-                          <th>Quantity</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {stockData[wh.id].map((item) => (
-                          <tr key={item.id}>
-                            <td><span className="inv-sku">{item.products?.sku_id || "—"}</span></td>
-                            <td>{item.products?.name || "Unknown"}</td>
-                            <td><strong>{item.quantity}</strong></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <>
+                      <input
+                        type="text"
+                        className="inv-stock-search"
+                        placeholder="Search by SKU or product name..."
+                        value={stockSearch}
+                        onChange={(e) => setStockSearch(e.target.value)}
+                      />
+                      {filteredExpandedStock.length === 0 ? (
+                        <p className="inv-stock-empty">No products match your search.</p>
+                      ) : (
+                        <table className="inv-stock-table">
+                          <thead>
+                            <tr>
+                              <th>SKU</th>
+                              <th>Product</th>
+                              <th>Quantity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredExpandedStock.map((item) => (
+                              <tr key={item.id}>
+                                <td><span className="inv-sku">{item.products?.sku_id || "—"}</span></td>
+                                <td>{item.products?.name || "Unknown"}</td>
+                                <td><strong>{item.quantity}</strong></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </>
                   )}
                 </div>
               )}
             </div>
           ))}
         </div>
+        )}
+        </>
       )}
 
       {/* Create/Edit Modal */}

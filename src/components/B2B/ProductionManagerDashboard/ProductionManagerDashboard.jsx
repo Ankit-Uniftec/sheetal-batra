@@ -22,6 +22,9 @@ import { fetchExternalMovements } from "../../../utils/externalMovements";
 // The PM works to the WAREHOUSE deadline (T-2), the same date the warehouse
 // dashboard and the warehouse PDF show — not the customer's delivery date.
 import { getWarehouseDate, getWarehouseDateObj } from "../../../utils/warehouseDate";
+import { fetchScanReport, scanReportCsv } from "../../../utils/scanReport";
+import useTabParam from "../../../hooks/useTabParam";
+import Paginator from "../../../components/Paginator";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
@@ -175,8 +178,10 @@ export default function ProductionManagerDashboard() {
     const location = useLocation();
     const { showPopup, PopupComponent } = usePopup();
 
-    // Restore tab from navigation state (e.g. when returning from order detail)
-    const [activeTab, setActiveTab] = useState(location.state?.activeTab || "overview");
+    // Tab lives in the URL (?tab=orders) — Back from a detail page returns to
+    // the tab the user was on, and browser Back moves between tabs. The hook
+    // still honours location.state?.activeTab for the flows that push it.
+    const [activeTab, setActiveTab] = useTabParam("overview");
     const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
@@ -187,6 +192,11 @@ export default function ProductionManagerDashboard() {
     // Which product to force-complete, for multi-product orders.
     // { order, products:[itemIndex] } — null when closed.
     const [completePicker, setCompletePicker] = useState(null);
+    // Scan report export — every scan in [from, to], straight to CSV.
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [scanReportFrom, setScanReportFrom] = useState(todayStr);
+    const [scanReportTo, setScanReportTo] = useState(todayStr);
+    const [scanReportBusy, setScanReportBusy] = useState(false);
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -578,6 +588,49 @@ export default function ProductionManagerDashboard() {
         a.download = `production_orders_${new Date().toISOString().slice(0, 10)}.csv`;
         a.click();
         URL.revokeObjectURL(url);
+    };
+
+    // Export every scan in [scanReportFrom, scanReportTo] as a CSV — the
+    // "what moved today / this week" report. One row per stage_transitions row
+    // (station scans, overrides, vendor gate, re-journeys — labelled by Type).
+    const handleScanReportExport = async () => {
+        if (!scanReportFrom || !scanReportTo) return;
+        if (scanReportFrom > scanReportTo) {
+            showPopup({ type: "warning", title: "Check the dates", message: "The From date is after the To date.", confirmText: "OK" });
+            return;
+        }
+        setScanReportBusy(true);
+        try {
+            const rows = await fetchScanReport({ from: scanReportFrom, to: scanReportTo });
+            if (rows.length === 0) {
+                showPopup({ type: "info", title: "No scans", message: `No components were scanned between ${scanReportFrom} and ${scanReportTo}.`, confirmText: "OK" });
+                return;
+            }
+            const csv = scanReportCsv(rows);
+            const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = scanReportFrom === scanReportTo
+                ? `scan_report_${scanReportFrom}.csv`
+                : `scan_report_${scanReportFrom}_to_${scanReportTo}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("Scan report export failed:", err);
+            showPopup({ type: "error", title: "Export failed", message: err.message || "Could not fetch the scan report.", confirmText: "OK" });
+        } finally {
+            setScanReportBusy(false);
+        }
+    };
+
+    // Quick picks for the scan report range.
+    const setScanReportRange = (days) => {
+        const to = new Date();
+        const from = new Date();
+        from.setDate(from.getDate() - (days - 1)); // 1 = today only
+        setScanReportFrom(from.toISOString().slice(0, 10));
+        setScanReportTo(to.toISOString().slice(0, 10));
     };
 
     // The picker hands back an array of item indexes; null means "whole order".
@@ -1263,8 +1316,25 @@ export default function ProductionManagerDashboard() {
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
 
-    const getChannelLabel = (order) => { if (order.is_b2b) return "B2B"; return "Store"; };
-    const getChannelClass = (order) => { if (order.is_b2b) return "pm-channel-b2b"; return "pm-channel-store"; };
+    // Channel badge — the full channel model, not the old binary B2B/Store
+    // (Comms, Private and Website orders all read as "Store" before).
+    const getChannelLabel = (order) => {
+        const key = getOrderChannelKey(order);
+        if (key === "b2b") return "B2B";
+        if (key === "comms") return "Comms";
+        if (key === "private") return "Private";
+        if (key === "website") return "Website";
+        const st = (order.salesperson_store || "").trim();
+        return (st && st !== "Delhi Store" && st !== "Ludhiana Store") ? "Exhibition" : "Store";
+    };
+    const getChannelClass = (order) => {
+        const key = getOrderChannelKey(order);
+        if (key === "offline") {
+            const st = (order.salesperson_store || "").trim();
+            return (st && st !== "Delhi Store" && st !== "Ludhiana Store") ? "pm-channel-exhibition" : "pm-channel-store";
+        }
+        return `pm-channel-${key}`;
+    };
 
     const getStatusLabel = (order) => {
         if (order.production_status === "dispatched" || order.status === "delivered") return "Dispatched";
@@ -1761,7 +1831,7 @@ export default function ProductionManagerDashboard() {
                             <>
                                 {/* ===== ORDERS BY PRODUCTION STAGE (click a card to drill into the orders list) ===== */}
                                 <div className="pm-overview-head">
-                                    <p className="pm-card-title" style={{ margin: 0, color: "#8B7355" }}>Orders by Production Stage</p>
+                                    <p className="pm-card-title" style={{ margin: 0, color: "#8B7355" }}>Production Stages (Components)</p>
                                     <div className="pm-period-pills">
                                         {[
                                             { key: "all", label: "All Time" },
@@ -2271,13 +2341,7 @@ export default function ProductionManagerDashboard() {
                                         );
                                     })}
 
-                                    {filteredOrders.length > ORDERS_PER_PAGE && (
-                                        <div className="pm-pagination">
-                                            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="pm-pagination-btn">← Previous</button>
-                                            <span className="pm-pagination-info">Page {currentPage} of {totalPages}</span>
-                                            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} className="pm-pagination-btn">Next →</button>
-                                        </div>
-                                    )}
+                                    <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
                                 </div>
                             </div>
                         )}
@@ -2446,8 +2510,11 @@ export default function ProductionManagerDashboard() {
                             const DONE = new Set(["delivered", "completed", "dispatched"]);
                             const isDispatched = (o) =>
                                 DONE.has((o.status || "").toLowerCase()) || o.warehouse_stage === "dispatched";
-                            // Best available "dispatched on" timestamp, newest signal first.
-                            const dispatchedDate = (o) => o.dispatched_at || o.delivered_at || o.updated_at || null;
+                            // Best available "dispatched on" timestamp. NEVER updated_at: any edit
+                            // (payment change, exchange, a migration) rewrites it, so it reads as a
+                            // recent dispatch for orders finished months ago.
+                            const dispatchedDate = (o) => o.dispatched_at || o.delivered_at ||
+                                (o.warehouse_stage === "dispatched" ? o.warehouse_stage_updated_at : null) || null;
                             const recentlyDispatched = orders
                                 .filter(isDispatched)
                                 .sort((a, b) => new Date(dispatchedDate(b) || 0) - new Date(dispatchedDate(a) || 0))
@@ -2521,24 +2588,49 @@ export default function ProductionManagerDashboard() {
                             };
 
                             // ==================== COMPLETED ORDERS (historical) ====================
-                            // Delivered/Completed orders — compare delivered_at (or updated_at fallback) vs delivery_date
+                            // Delivered/Completed orders — how late was the order actually
+                            // finished, vs the warehouse deadline. The "when was it finished"
+                            // timestamp must be a REAL one: delivered_at, else dispatched_at,
+                            // else the stage-sync timestamp from the moment the last component
+                            // dispatched. NEVER updated_at — any edit (payment change, exchange,
+                            // a migration) rewrites it, which had completed orders showing
+                            // 60-107 days "late" against what was really the row's last touch.
+                            const orderDoneDate = (o) =>
+                                o.delivered_at || o.dispatched_at ||
+                                (o.warehouse_stage === "dispatched" ? o.warehouse_stage_updated_at : null) || null;
+
                             const completedRows = [];
                             orders.forEach(o => {
                                 if (o.status !== "delivered" && o.status !== "completed") return;
                                 if (!o.delivery_date) return;
                                 if (!channelMatch(o)) return;
 
-                                const actualDeliveryStr = o.delivered_at || o.updated_at;
-                                if (!actualDeliveryStr) return;
+                                // Measured against the WAREHOUSE deadline (T-2), not the customer
+                                // date — production is late when it misses its own deadline.
+                                const promisedDate = getWarehouseDateObj(o.delivery_date, o.created_at);
+                                if (!promisedDate) return;
+
+                                const actualDeliveryStr = orderDoneDate(o);
+                                if (!actualDeliveryStr) {
+                                    // No trustworthy completion date — show the order without
+                                    // inventing one (no days-late, its own "no date" bucket).
+                                    // A date-bounded view cannot place it, so skip it there.
+                                    if (fromDate || toDate) return;
+                                    completedRows.push({
+                                        order: o,
+                                        actualDelivery: null,
+                                        promisedDate,
+                                        daysLate: null,
+                                        bucket: "no_date",
+                                        isOpen: false,
+                                    });
+                                    return;
+                                }
                                 const actualDate = new Date(actualDeliveryStr);
                                 // Apply date range against actual delivery date
                                 if (fromDate && actualDate < fromDate) return;
                                 if (toDate && actualDate > toDate) return;
 
-                                // Measured against the WAREHOUSE deadline (T-2), not the customer
-                                // date — production is late when it misses its own deadline.
-                                const promisedDate = getWarehouseDateObj(o.delivery_date, o.created_at);
-                                if (!promisedDate) return;
                                 // normalize to midnight for day diff
                                 const promisedMid = new Date(promisedDate.getFullYear(), promisedDate.getMonth(), promisedDate.getDate());
                                 const actualMid = new Date(actualDate.getFullYear(), actualDate.getMonth(), actualDate.getDate());
@@ -2628,6 +2720,7 @@ export default function ProductionManagerDashboard() {
                                     case "2_7": return { bg: "#fff3e0", fg: "#e65100", label: "2\u20137d late" };
                                     case "7_14": return { bg: "#ffebee", fg: "#c62828", label: "7\u201314d late" };
                                     case "14_plus": return { bg: "#b71c1c", fg: "#fff", label: "14+d critical" };
+                                    case "no_date": return { bg: "#eceff1", fg: "#546e7a", label: "no completion date" };
                                     default: return { bg: "#f5f5f5", fg: "#333", label: b };
                                 }
                             };
@@ -2649,14 +2742,14 @@ export default function ProductionManagerDashboard() {
                                         getClientName(o) || "",
                                         o.salesperson || "",
                                         o.salesperson_store || "",
-                                        o.is_b2b ? "B2B" : "Store",
+                                        getChannelLabel(o),
                                         item.product_name || "",
                                         item.size || "",
                                         o.grand_total || 0,
                                         o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
                                         getWarehouseDate(o.delivery_date, o.created_at, ""),
-                                        r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "Not yet delivered",
-                                        r.daysLate <= 0 ? "On-time" : r.daysLate,
+                                        r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : (r.isOpen ? "Not yet delivered" : "No completion date recorded"),
+                                        r.daysLate == null ? "-" : (r.daysLate <= 0 ? "On-time" : r.daysLate),
                                         bucketStyle(r.bucket).label,
                                         o.status || "",
                                     ].map(v => `"${String(v).replace(/"/g, '""')}"`);
@@ -2827,7 +2920,7 @@ export default function ProductionManagerDashboard() {
                                                                 <td style={{ padding: "8px 12px" }}>{formatDate(o.created_at)}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{formatDate(o.delivery_date)}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "-"}</td>
-                                                                <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: r.daysLate <= 0 ? "#2e7d32" : "#c62828" }}>{r.daysLate <= 0 ? "\u2713" : `${r.daysLate}d`}</td>
+                                                                <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: r.daysLate == null ? "#90a4ae" : r.daysLate <= 0 ? "#2e7d32" : "#c62828" }}>{r.daysLate == null ? "\u2014" : r.daysLate <= 0 ? "\u2713" : `${r.daysLate}d`}</td>
                                                                 <td style={{ padding: "8px 12px", textAlign: "center" }}>
                                                                     <span style={{ background: style.bg, color: style.fg, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{style.label}</span>
                                                                 </td>
@@ -3052,6 +3145,36 @@ export default function ProductionManagerDashboard() {
 
                         {activeTab === "overrides" && (
                             <div className="pm-orders-tab">
+                                {/* Scan report — every scan in a date range, one CSV row per scan. */}
+                                <div className="pm-channel-card" style={{ marginBottom: 20 }}>
+                                    <p className="pm-card-title">Scan Report</p>
+                                    <p className="pm-muted" style={{ fontSize: 13, margin: "0 0 12px" }}>
+                                        Export every component scan in the selected dates — station scans, overrides,
+                                        vendor gate and re-journeys, each labelled by type.
+                                    </p>
+                                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+                                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#555" }}>
+                                            From
+                                            <input type="date" value={scanReportFrom} max={scanReportTo || undefined} onChange={(e) => setScanReportFrom(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "7px 10px", fontSize: 13 }} />
+                                        </label>
+                                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#555" }}>
+                                            To
+                                            <input type="date" value={scanReportTo} min={scanReportFrom || undefined} onChange={(e) => setScanReportTo(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "7px 10px", fontSize: 13 }} />
+                                        </label>
+                                        <div style={{ display: "flex", gap: 6 }}>
+                                            <button className="pm-view-all-btn" onClick={() => setScanReportRange(1)}>Today</button>
+                                            <button className="pm-view-all-btn" onClick={() => setScanReportRange(7)}>Last 7 days</button>
+                                            <button className="pm-view-all-btn" onClick={() => setScanReportRange(30)}>Last 30 days</button>
+                                        </div>
+                                        <button
+                                            onClick={handleScanReportExport}
+                                            disabled={scanReportBusy}
+                                            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: "#d5b85a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: scanReportBusy ? "wait" : "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", opacity: scanReportBusy ? 0.7 : 1 }}
+                                        >
+                                            {scanReportBusy ? "Exporting…" : "⬇ Export CSV"}
+                                        </button>
+                                    </div>
+                                </div>
                                 <ProductionOverrides currentUserEmail={currentUserEmail} />
                             </div>
                         )}

@@ -155,6 +155,39 @@
   color: #555;
 }
 
+/* Search + priority filter controls */
+.notif-controls {
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+.notif-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+}
+.notif-search-input:focus {
+  border-color: #d5b85a;
+}
+.notif-priority-select {
+  padding: 7px 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  color: #444;
+  outline: none;
+}
+.notif-priority-select:focus {
+  border-color: #d5b85a;
+}
+
 /* Notification List */
 .notif-list {
   flex: 1;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../lib/supabaseClient";
 import {
@@ -62,7 +62,21 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState("all"); // 'all' | 'unread'
+    const [notifSearch, setNotifSearch] = useState("");
+    const [priorityFilter, setPriorityFilter] = useState("all"); // 'all' | 'normal' | 'urgent' | 'escalation'
     const drawerRef = useRef(null);
+
+    // Text search (title/message) + priority filter over the fetched list
+    const visibleNotifications = useMemo(() => {
+        const q = notifSearch.trim().toLowerCase();
+        return notifications.filter((notif) => {
+            const n = notif.notification;
+            if (!n) return false;
+            if (priorityFilter !== "all" && (n.priority || "normal") !== priorityFilter) return false;
+            if (q && !`${n.title || ""} ${n.message || ""}`.toLowerCase().includes(q)) return false;
+            return true;
+        });
+    }, [notifications, notifSearch, priorityFilter]);
 
     // Fetch notifications
     const fetchNotifications = useCallback(async () => {
@@ -245,21 +259,44 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
                             </button>
                         </div>
 
+                        {/* Search + priority filter */}
+                        <div className="notif-controls">
+                            <input
+                                type="text"
+                                className="notif-search-input"
+                                placeholder="Search notifications..."
+                                value={notifSearch}
+                                onChange={(e) => setNotifSearch(e.target.value)}
+                            />
+                            <select
+                                className="notif-priority-select"
+                                value={priorityFilter}
+                                onChange={(e) => setPriorityFilter(e.target.value)}
+                            >
+                                <option value="all">All priorities</option>
+                                <option value="normal">Normal</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="escalation">Escalation</option>
+                            </select>
+                        </div>
+
                         {/* Notification List */}
                         <div className="notif-list">
                             {loading ? (
                                 <div className="notif-loading">Loading...</div>
-                            ) : notifications.length === 0 ? (
+                            ) : visibleNotifications.length === 0 ? (
                                 <div className="notif-empty">
                                     <span className="notif-empty-icon">🔔</span>
                                     <p>
-                                        {activeFilter === "unread"
-                                            ? "No unread notifications"
-                                            : "No notifications yet"}
+                                        {notifications.length > 0
+                                            ? "No notifications match your search"
+                                            : activeFilter === "unread"
+                                                ? "No unread notifications"
+                                                : "No notifications yet"}
                                     </p>
                                 </div>
                             ) : (
-                                notifications.map((notif) => {
+                                visibleNotifications.map((notif) => {
                                     const n = notif.notification;
                                     if (!n) return null;
                                     const icon = TYPE_ICONS[n.type] || "📌";

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bVendorOrders.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import Paginator from "../../components/Paginator";
 
 const ORDERS_PER_PAGE = 6;
 
@@ -25,9 +27,15 @@ export default function B2bVendorOrders() {
         avgOrderValue: 0,
     });
 
-    // Pagination
+    // Search + status filter — this list previously had neither.
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("all");
+
+    // Pagination (totalPages derived from the filtered list below)
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
+
+    // Any search/filter change starts back at page 1.
+    useEffect(() => { setCurrentPage(1); }, [search, statusFilter]);
 
     // ==================== FETCH DATA ====================
     useEffect(() => {
@@ -62,18 +70,17 @@ export default function B2bVendorOrders() {
                 setVendor(vendorData);
 
                 // Fetch orders for this vendor
-                const { data: ordersData, error: ordersError } = await supabase
-                    .from("orders")
+                // Paged past Supabase's 1000-row cap (large vendors can exceed it).
+                const { data: ordersData, error: ordersError } = await fetchAllRows("orders", (q) => q
                     .select("*")
                     .eq("vendor_id", vendorId)
                     .eq("is_b2b", true)
-                    .order("created_at", { ascending: false });
+                    .order("created_at", { ascending: false }));
 
                 if (ordersError) throw ordersError;
 
                 const allOrders = ordersData || [];
                 setOrders(allOrders);
-                setTotalPages(Math.ceil(allOrders.length / ORDERS_PER_PAGE));
 
                 // Calculate stats
                 const totalRevenue = allOrders.reduce((sum, o) => sum + (o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
@@ -110,7 +117,10 @@ export default function B2bVendorOrders() {
     };
 
     const handleBack = () => {
-        navigate("/b2b-order-history");
+        // Walk history (vendor orders is reached from several dashboards/tabs);
+        // hardcoded route only as deep-link fallback.
+        if (window.history.state?.idx > 0) navigate(-1);
+        else navigate("/b2b-order-history");
     };
 
     const getStatusBadge = (status) => {
@@ -124,7 +134,20 @@ export default function B2bVendorOrders() {
     };
 
     // Get paginated orders
-    const paginatedOrders = orders.slice(
+    // Search across order no / PO number / product names; status narrows.
+    const q = search.trim().toLowerCase();
+    const filteredOrders = orders.filter((o) => {
+        if (statusFilter !== "all" && (o.approval_status || "pending").toLowerCase() !== statusFilter) return false;
+        if (!q) return true;
+        const hay = [
+            o.order_no,
+            o.po_number,
+            ...(Array.isArray(o.items) ? o.items.map((it) => it.product_name) : []),
+        ].filter(Boolean).join(" ").toLowerCase();
+        return hay.includes(q);
+    });
+    const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+    const paginatedOrders = filteredOrders.slice(
         (currentPage - 1) * ORDERS_PER_PAGE,
         currentPage * ORDERS_PER_PAGE
     );
@@ -210,14 +233,29 @@ export default function B2bVendorOrders() {
             <div className="b2b-vo-content">
                 <div className="section-header">
                     <h2>Order History</h2>
-                    <span className="order-count">{orders.length} orders</span>
+                    <div className="b2bvo-controls">
+                        <input
+                            type="text"
+                            className="b2bvo-search"
+                            placeholder="Search order #, PO or product…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                        <select className="b2bvo-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                            <option value="all">All statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                        <span className="order-count">{filteredOrders.length} of {orders.length} orders</span>
+                    </div>
                 </div>
 
-                {orders.length === 0 ? (
+                {filteredOrders.length === 0 ? (
                     <div className="empty-state">
                         <span className="empty-icon">📭</span>
-                        <h3>No orders yet</h3>
-                        <p>Create the first order for this vendor</p>
+                        <h3>{orders.length === 0 ? "No orders yet" : "No orders match your search"}</h3>
+                        <p>{orders.length === 0 ? "Create the first order for this vendor" : "Try clearing the search or status filter"}</p>
                         <button className="create-btn" onClick={handleNewOrder}>
                             Create New Order
                         </button>
@@ -273,35 +311,7 @@ export default function B2bVendorOrders() {
                         </div>
 
                         {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="pagination">
-                                <button
-                                    className="page-btn"
-                                    disabled={currentPage === 1}
-                                    onClick={() => setCurrentPage(p => p - 1)}
-                                >
-                                    ← Previous
-                                </button>
-                                <div className="page-numbers">
-                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                        <button
-                                            key={page}
-                                            className={`page-num ${currentPage === page ? "active" : ""}`}
-                                            onClick={() => setCurrentPage(page)}
-                                        >
-                                            {page}
-                                        </button>
-                                    ))}
-                                </div>
-                                <button
-                                    className="page-btn"
-                                    disabled={currentPage === totalPages}
-                                    onClick={() => setCurrentPage(p => p + 1)}
-                                >
-                                    Next →
-                                </button>
-                            </div>
-                        )}
+                        <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
                     </>
                 )}
             </div>

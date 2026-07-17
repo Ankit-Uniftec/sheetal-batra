@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useMemo } from "react";
 import "./B2bOrderHistory.css";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { useNavigate } from "react-router-dom";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import Paginator from "../../components/Paginator";
 
 // Color display component (same as OrderHistory)
 function ColorDot({ color }) {
@@ -65,20 +67,17 @@ export default function B2bOrderHistory() {
                     return;
                 }
 
-                let query = supabase
-                    .from("orders")
-                    .select("*")
-                    .eq("is_b2b", true)
-                    .order("created_at", { ascending: false });
-
-                if (statusFilter !== "all") {
-                    query = query.eq("approval_status", statusFilter);
-                }
-                if (typeFilter !== "all") {
-                    query = query.eq("b2b_order_type", typeFilter);
-                }
-
-                const { data: ordersData, error } = await query;
+                // Paged past Supabase's 1000-row cap — an unpaged newest-first fetch
+                // silently drops the oldest orders once the total crosses 1000.
+                const { data: ordersData, error } = await fetchAllRows("orders", (q) => {
+                    let query = q
+                        .select("*")
+                        .eq("is_b2b", true)
+                        .order("created_at", { ascending: false });
+                    if (statusFilter !== "all") query = query.eq("approval_status", statusFilter);
+                    if (typeFilter !== "all") query = query.eq("b2b_order_type", typeFilter);
+                    return query;
+                });
                 if (error) throw error;
 
                 setOrders(ordersData || []);
@@ -140,8 +139,6 @@ export default function B2bOrderHistory() {
     const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
     const startIndex = (currentPage - 1) * ordersPerPage;
     const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
-    const goToPrevious = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
-    const goToNext = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
 
     // Reset page on search change
     useEffect(() => { setCurrentPage(1); }, [searchQuery]);
@@ -149,7 +146,12 @@ export default function B2bOrderHistory() {
     const recent = useMemo(() => orders.slice(0, 3), [orders]);
 
     // ==================== HELPERS ====================
-    const handleBack = () => navigate("/b2b-executive-dashboard");
+    const handleBack = () => {
+        // Walk history so Back lands on the tab the user left (?tab= is in the
+        // previous entry's URL); bare route only as deep-link fallback.
+        if (window.history.state?.idx > 0) navigate(-1);
+        else navigate("/b2b-executive-dashboard");
+    };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
 
     const getStatusClass = (status) => {
@@ -427,13 +429,7 @@ export default function B2bOrderHistory() {
                         })}
 
                         {/* Pagination */}
-                        {filteredOrders.length > ordersPerPage && (
-                            <div className="b2boh-pagination">
-                                <button onClick={goToPrevious} disabled={currentPage === 1}>← Prev</button>
-                                <span className="b2boh-page-info">Page {currentPage} of {totalPages}</span>
-                                <button onClick={goToNext} disabled={currentPage === totalPages}>Next →</button>
-                            </div>
-                        )}
+                        <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
                     </div>
                 </section>
             </div>

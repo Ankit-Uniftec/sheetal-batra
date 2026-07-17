@@ -1,11 +1,14 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import formatDate from "../utils/formatDate";
+import Paginator from "./Paginator";
 import {
     externalMovementSummary,
     externalMovementVendors,
     filterExternalMovements,
 } from "../utils/externalMovements";
 import "./ExternalVendorsPanel.css";
+
+const PAGE_SIZE = 20;
 
 const STATUS_LABEL = { configured: "Awaiting scan-out", exited: "Out at vendor", returned: "Returned" };
 const TYPE_LABEL = { top: "Top", bottom: "Bottom", dupatta: "Dupatta", extra: "Extra" };
@@ -37,6 +40,15 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
     // Summary reflects the whole dataset (so the counts don't collapse to the
     // filtered subset) — same intent as the other panels' summary strips.
     const summary = useMemo(() => externalMovementSummary(rows), [rows]);
+
+    // Page within the filtered set; filter changes reset to page 1.
+    const [page, setPage] = useState(1);
+    useEffect(() => { setPage(1); }, [rows, search, vendor, componentType, status, overdueOnly]);
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const pageRows = useMemo(
+        () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+        [filtered, page]
+    );
 
     const hasFilters = search || vendor || componentType || status || overdueOnly;
     const clear = () => { setSearch(""); setVendor(""); setComponentType(""); setStatus(""); setOverdueOnly(false); };
@@ -78,11 +90,12 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
             </div>
 
             <ExternalVendorsList
-                rows={filtered}
+                rows={pageRows}
                 loading={loading}
                 onOrderClick={onOrderClick}
                 emptyText={hasFilters ? "No movements match these filters." : "No external vendor movements yet."}
             />
+            <Paginator page={page} totalPages={totalPages} onChange={setPage} />
         </div>
     );
 }

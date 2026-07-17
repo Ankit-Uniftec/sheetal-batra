@@ -142,3 +142,11 @@
   .scc-title { color: #6b5842; }
   .scc-split { border-top-color: #f1ebe0; }
 }
+
+/* Total card — the reference number the stage counts sum to. */
+.scc-card.scc-total {
+    --scc-accent: #d5b85a;
+    border: 2px solid #d5b85a;
+    background: #fffaea;
+}
+.scc-card.scc-total .scc-count { color: #b5982e; }

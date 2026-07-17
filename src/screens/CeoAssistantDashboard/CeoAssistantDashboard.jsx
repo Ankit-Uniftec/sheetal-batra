@@ -9,6 +9,8 @@ import formatDate from "../../utils/formatDate";
 import { isRevenueOrder } from "../../utils/revenue";
 import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
+import { usePeriodFilter } from "../../components/PeriodFilter";
+import useTabParam from "../../hooks/useTabParam";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -53,7 +55,7 @@ export default function CeoAssistantDashboard() {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState("store_performance");
+  const [activeTab, setActiveTab] = useTabParam("store_performance");
   const [orders, setOrders] = useState([]);
   const [salespersonTable, setSalespersonTable] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,10 +121,17 @@ export default function CeoAssistantDashboard() {
   };
 
 
+  // ==================== PERIOD FILTER ====================
+  const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "pills" });
+  const periodOrders = useMemo(
+    () => orders.filter((o) => inPeriod(o.created_at)),
+    [orders, inPeriod]
+  );
+
   // ==================== STORE PERFORMANCE ====================
   const storePerformance = useMemo(() => {
     const stores = {};
-    orders.forEach((o) => {
+    periodOrders.forEach((o) => {
       const store = getOrderStore(o);
       if (!stores[store]) {
         stores[store] = {
@@ -163,7 +172,7 @@ export default function CeoAssistantDashboard() {
       }
     });
     return Object.values(stores);
-  }, [orders]);
+  }, [periodOrders]);
 
   // SA-wise impact (who has the most returns/refunds/cancellations)
   const saImpact = useMemo(() => {
@@ -173,7 +182,7 @@ export default function CeoAssistantDashboard() {
       return sp?.saleperson || email;
     };
     const saMap = {};
-    orders.forEach((o) => {
+    periodOrders.forEach((o) => {
       const email = o.salesperson_email;
       if (!email) return;
       if (!saMap[email]) {
@@ -194,12 +203,12 @@ export default function CeoAssistantDashboard() {
       topCancel: topBy("cancel"),
       topRevoke: topBy("revoke"),
     };
-  }, [orders, salespersonTable]);
+  }, [periodOrders, salespersonTable]);
 
   // Top performing days
   const topDays = useMemo(() => {
     const dayMap = {};
-    orders.forEach((o) => {
+    periodOrders.forEach((o) => {
       if (o.status === "cancelled") return;
       const d = new Date(o.created_at);
       if (isNaN(d.getTime())) return;
@@ -212,7 +221,7 @@ export default function CeoAssistantDashboard() {
     return Object.values(dayMap)
       .sort((a, b) => b.total - a.total)
       .slice(0, 10);
-  }, [orders]);
+  }, [periodOrders]);
 
   // ==================== PRODUCT / STYLE / DESIGN ====================
   const productPerformance = useMemo(() => {
@@ -225,7 +234,7 @@ export default function CeoAssistantDashboard() {
     let totalAlterations = 0;
     let alterationItemCount = 0;
 
-    orders.forEach((o) => {
+    periodOrders.forEach((o) => {
       (o.items || []).forEach((item) => {
         const name = item.product_name;
         const color = getItemColor(item);
@@ -280,23 +289,23 @@ export default function CeoAssistantDashboard() {
       highAlterationStyles, repetitiveAlterations, avgAlterationsPerOutfit,
       highReturnStyles,
     };
-  }, [orders]);
+  }, [periodOrders]);
 
   // ==================== OPERATIONAL FLAGS ====================
   const operationalFlags = useMemo(() => {
     const now = new Date();
-    const delayed = orders.filter((o) => {
+    const delayed = periodOrders.filter((o) => {
       if (o.status === "delivered" || o.status === "completed" || o.status === "cancelled") return false;
       if (!o.delivery_date) return false;
       return new Date(o.delivery_date) < now;
     }).length;
 
-    const productionBacklog = orders.filter(
+    const productionBacklog = periodOrders.filter(
       (o) => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled"
     ).length;
 
     return { delayed, productionBacklog };
-  }, [orders]);
+  }, [periodOrders]);
 
   // ==================== LOADING ====================
   if (loading) {
@@ -338,6 +347,8 @@ export default function CeoAssistantDashboard() {
         </aside>
 
         <main className="ca-main">
+          {periodControl}
+
           {/* ==================== STORE PERFORMANCE ==================== */}
           {activeTab === "store_performance" && (
             <>

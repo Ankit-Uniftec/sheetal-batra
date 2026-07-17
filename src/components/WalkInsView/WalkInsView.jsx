@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import { normalizeStore } from "../../utils/storeCategory";
+import Paginator from "../Paginator";
+import { usePeriodFilter } from "../PeriodFilter";
 import {
   buildOrderPhoneSet,
   isAutoConverted,
@@ -56,10 +59,10 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
     (async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("walkins")
+        // Paged past Supabase's 1000-row cap
+        const { data, error } = await fetchAllRows("walkins", (q) => q
           .select("id, created_at, sa_email, name, country_code, phone, email, source, converted, converted_manual, converted_at")
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false }));
         if (error) throw error;
         const phoneSet = buildOrderPhoneSet(orders);
         const reconciled = await reconcileConversions(data || [], phoneSet);
@@ -96,10 +99,17 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
   const walkinLocation = (w) =>
     saLocationByEmail[(w.sa_email || "").toLowerCase()] || "Other";
 
-  // Walk-ins after SA + conversion + location filters + free-text search.
+  // Period filter — narrows both the summary stats and the list below.
+  const { control: periodControl, inPeriod, range } = usePeriodFilter("all");
+  const periodWalkins = useMemo(
+    () => walkins.filter((w) => inPeriod(w.created_at)),
+    [walkins, inPeriod]
+  );
+
+  // Walk-ins after period + SA + conversion + location filters + free-text search.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return walkins.filter((w) => {
+    return periodWalkins.filter((w) => {
       if (saFilter && w.sa_email !== saFilter) return false;
       if (locFilter !== "all" && walkinLocation(w) !== locFilter) return false;
       if (convFilter !== "all") {
@@ -115,18 +125,24 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
         (w.source || "").toLowerCase().includes(q)
       );
     });
-  }, [walkins, search, saFilter, convFilter, locFilter, orderPhoneSet, saLocationByEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [periodWalkins, search, saFilter, convFilter, locFilter, orderPhoneSet, saLocationByEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Page within the filtered set; filter changes reset to page 1.
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [search, saFilter, convFilter, locFilter, range]);
+  const totalPages = Math.ceil(filtered.length / 15);
+  const paged = useMemo(() => filtered.slice((page - 1) * 15, page * 15), [filtered, page]);
 
   const convertedCount = useMemo(
-    () => walkins.filter((w) => effectiveConverted(w, orderPhoneSet)).length,
-    [walkins, orderPhoneSet]
+    () => periodWalkins.filter((w) => effectiveConverted(w, orderPhoneSet)).length,
+    [periodWalkins, orderPhoneSet]
   );
 
   // Location-wise { total, converted } stats for the summary cards.
   const stats = useMemo(() => {
     const blank = () => ({ total: 0, converted: 0 });
     const s = { Total: blank(), Delhi: blank(), Ludhiana: blank(), Other: blank() };
-    walkins.forEach((w) => {
+    periodWalkins.forEach((w) => {
       const loc = walkinLocation(w);
       const isConv = effectiveConverted(w, orderPhoneSet);
       s.Total.total += 1;
@@ -136,7 +152,7 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
       if (isConv) bucket.converted += 1;
     });
     return s;
-  }, [walkins, orderPhoneSet, saLocationByEmail]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [periodWalkins, orderPhoneSet, saLocationByEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 
@@ -230,8 +246,9 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
           <option value="Delhi">Delhi</option>
           <option value="Ludhiana">Ludhiana</option>
         </select>
+        {periodControl}
         <div style={{ flex: 1 }} />
-        <span className="wiv-count">{filtered.length} of {walkins.length} · {convertedCount} converted</span>
+        <span className="wiv-count">{filtered.length} of {periodWalkins.length} · {convertedCount} converted</span>
         <button
           className="wiv-export-btn"
           onClick={handleExport}
@@ -267,7 +284,7 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
                 </td>
               </tr>
             ) : (
-              filtered.map((w) => {
+              paged.map((w) => {
                 const converted = effectiveConverted(w, orderPhoneSet);
                 const src = conversionSource(w);
                 return (
@@ -301,6 +318,7 @@ export default function WalkInsView({ orders = [], salespersonTable = null, show
             )}
           </tbody>
         </table>
+        <Paginator page={page} totalPages={totalPages} onChange={setPage} />
       </div>
     </div>
   );

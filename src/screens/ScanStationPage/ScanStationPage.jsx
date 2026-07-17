@@ -7,6 +7,7 @@ import "../../components/ScanStation.css";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import "./ScanStationPage.css";
+import useTabParam from "../../hooks/useTabParam";
 
 // Standalone Scan Station page — for workers whose only role is
 // `scan_station`. They land here on login. A small sidebar switches between
@@ -19,7 +20,7 @@ export default function ScanStationPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [userName, setUserName] = useState("");
   const [assignedStations, setAssignedStations] = useState(null);
-  const [activeTab, setActiveTab] = useState("scan");
+  const [activeTab, setActiveTab] = useTabParam("scan");
   const [showSidebar, setShowSidebar] = useState(false);
 
   // QC History tab (this worker's own qc_records). Only workers who actually

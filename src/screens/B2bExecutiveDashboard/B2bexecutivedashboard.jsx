@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bExecutiveDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import NotificationBell from "../../components/NotificationBell";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
 
-    const [activeTab, setActiveTab] = useState("dashboard");
+    const [activeTab, setActiveTab] = useTabParam("dashboard");
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -61,7 +65,9 @@ export default function B2bExecutiveDashboard() {
 
                 const [profileResult, ordersResult] = await Promise.all([
                     supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
-                    supabase.from("orders").select("*").eq("is_b2b", true).eq("salesperson_email", user.email?.toLowerCase()).order("created_at", { ascending: false })
+                    // Paged past Supabase's 1000-row cap (an unpaged newest-first fetch
+                    // silently drops the oldest orders once the total crosses 1000).
+                    fetchAllRows("orders", (q) => q.select("*").eq("is_b2b", true).eq("salesperson_email", user.email?.toLowerCase()).order("created_at", { ascending: false }))
                 ]);
 
                 if (profileResult.data) setProfile(profileResult.data);
@@ -88,22 +94,30 @@ export default function B2bExecutiveDashboard() {
         loadAllData();
     }, []);
 
+    // ==================== PERIOD FILTER ====================
+    const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "pills" });
+    const periodOrders = useMemo(
+        () => orders.filter(o => inPeriod(o.created_at)),
+        [orders, inPeriod]
+    );
+
     // ==================== STATS ====================
     const stats = useMemo(() => {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-        const salesOrders = orders.filter(o => o.b2b_order_type !== "Consignment");
-        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment");
+        const salesOrders = periodOrders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = periodOrders.filter(o => o.b2b_order_type === "Consignment");
         const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const totalOrders = orders.length;
-        const pendingOrders = orders.filter(o => o.approval_status === "pending");
+        const totalOrders = periodOrders.length;
+        const pendingOrders = periodOrders.filter(o => o.approval_status === "pending");
+        // Explicitly-named windows stay absolute — they say what they are.
         const thisMonthOrders = orders.filter(o => o.created_at >= monthStart);
         const todayOrders = orders.filter(o => formatDate(o.created_at) === formatDate(new Date()));
 
         return { salesRevenue, consignmentValue, consignmentCount: consignmentOrders.length, totalOrders, pendingOrders, thisMonthOrders, todayOrders };
-    }, [orders]);
+    }, [orders, periodOrders]);
 
     const ordersByDate = useMemo(() => {
         return orders.reduce((acc, order) => {
@@ -252,6 +266,7 @@ export default function B2bExecutiveDashboard() {
             {/* ===== HEADER ===== */}
             <header className="b2b-header">
                 <img src={Logo} alt="logo" className="b2b-header-logo" onClick={handleLogout} />
+                <h1 className="b2b-header-title">B2B Executive</h1>
                 <div className="b2b-header-right">
                     <NotificationBell
                         userEmail={user?.email}
@@ -267,6 +282,12 @@ export default function B2bExecutiveDashboard() {
                     </div>
                 </div>
             </header>
+
+            {/* Period filter — dashboard tab stat cards only (grid cells below are
+                explicitly placed, so the control sits above the grid). */}
+            {activeTab === "dashboard" && (
+                <div className="pfx-bar">{periodControl}</div>
+            )}
 
             {/* ===== GRID LAYOUT ===== */}
             <div className={`b2b-grid-table ${showSidebar ? "b2b-sidebar-open" : ""}`}>
@@ -532,13 +553,12 @@ export default function B2bExecutiveDashboard() {
                             })}
 
                             {/* Pagination */}
-                            {filteredOrders.length > ORDERS_PER_PAGE && (
-                                <div className="b2b-pagination">
-                                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="b2b-pagination-btn">← Previous</button>
-                                    <span className="b2b-pagination-info">Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}</span>
-                                    <button disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)} className="b2b-pagination-btn">Next →</button>
-                                </div>
-                            )}
+                            <Paginator
+                                page={currentPage}
+                                totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}
+                                onChange={setCurrentPage}
+                            />
+
                         </div>
                     </div>
                 )}

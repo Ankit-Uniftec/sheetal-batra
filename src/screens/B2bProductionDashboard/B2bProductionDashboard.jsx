@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bProductionDashboard.css";
 import Logo from "../../images/logo.png";
 import formatDate from "../../utils/formatDate";
@@ -10,6 +11,8 @@ import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 import StageCountCards from "../../components/StageCountCards";
 import ProductionOverview from "../../components/ProductionOverview";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
@@ -21,7 +24,9 @@ import { fetchReJourneys } from "../../utils/reJourneys";
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
 
-    const [activeTab, setActiveTab] = useState("dashboard");
+    // Tab in the URL (?tab=...) so Back from /b2b-order-view returns to the tab
+    // the user left, instead of resetting to "dashboard".
+    const [activeTab, setActiveTab] = useTabParam("dashboard");
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
     const [reJourneys, setReJourneys] = useState([]);
@@ -109,7 +114,10 @@ export default function B2bProductionDashboard() {
 
             const [profileResult, ordersResult] = await Promise.all([
                 supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
-                supabase.from("orders").select("*").eq("is_b2b", true).order("created_at", { ascending: false })
+                // Paged: Supabase caps unpaged queries at 1000 rows — with newest-first
+                // ordering that silently dropped the OLDEST B2B orders once the total
+                // crossed 1000 (the legacy Jan-Feb orders vanished from page 50 onward).
+                fetchAllRows("orders", (q) => q.select("*").eq("is_b2b", true).order("created_at", { ascending: false }))
             ]);
 
             if (profileResult.data) setProfile(profileResult.data);
@@ -336,9 +344,12 @@ export default function B2bProductionDashboard() {
         }
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
+            // Client + product included so legacy SA-placed B2B orders (no PO or
+            // vendor recorded) are still findable by what they DO have.
             filtered = filtered.filter(o =>
                 o.order_no?.toLowerCase().includes(q) || o.po_number?.toLowerCase().includes(q) ||
-                vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q)
+                vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q) ||
+                o.delivery_name?.toLowerCase().includes(q) || (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
             );
         }
         // Stage-card drill-through: any-piece-at-stage, narrowed by kind.
@@ -510,7 +521,7 @@ export default function B2bProductionDashboard() {
                         <div className="prod-cell prod-stage-cards">
                             <div className="prod-orders-card">
                                 <div className="prod-card-header">
-                                    <span className="prod-card-title">Orders by Production Stage</span>
+                                    <span className="prod-card-title">Production Stages (Components)</span>
                                 </div>
                                 <div className="prod-overview-period">
                                     {[
@@ -623,13 +634,7 @@ export default function B2bProductionDashboard() {
                         ) : (
                             <div className="prod-list-scroll">
                                 {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
-                                {filteredQueue.length > ORDERS_PER_PAGE && (
-                                    <div className="prod-pagination">
-                                        <button disabled={queuePage === 1} onClick={() => setQueuePage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
-                                        <span className="prod-pagination-info">Page {queuePage} of {Math.ceil(filteredQueue.length / ORDERS_PER_PAGE)}</span>
-                                        <button disabled={queuePage >= Math.ceil(filteredQueue.length / ORDERS_PER_PAGE)} onClick={() => setQueuePage(p => p + 1)} className="prod-pagination-btn">Next {"\u2192"}</button>
-                                    </div>
-                                )}
+                                <Paginator page={queuePage} totalPages={Math.ceil(filteredQueue.length / ORDERS_PER_PAGE)} onChange={setQueuePage} />
                             </div>
                         )}
                     </div>
@@ -652,13 +657,7 @@ export default function B2bProductionDashboard() {
                         ) : (
                             <div className="prod-list-scroll">
                                 {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
-                                {filteredInprod.length > ORDERS_PER_PAGE && (
-                                    <div className="prod-pagination">
-                                        <button disabled={inprodPage === 1} onClick={() => setInprodPage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
-                                        <span className="prod-pagination-info">Page {inprodPage} of {Math.ceil(filteredInprod.length / ORDERS_PER_PAGE)}</span>
-                                        <button disabled={inprodPage >= Math.ceil(filteredInprod.length / ORDERS_PER_PAGE)} onClick={() => setInprodPage(p => p + 1)} className="prod-pagination-btn">Next {"\u2192"}</button>
-                                    </div>
-                                )}
+                                <Paginator page={inprodPage} totalPages={Math.ceil(filteredInprod.length / ORDERS_PER_PAGE)} onChange={setInprodPage} />
                             </div>
                         )}
                     </div>
@@ -692,13 +691,7 @@ export default function B2bProductionDashboard() {
                                     <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder}
                                         getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
                                 ))}
-                                {dispatchList.length > ORDERS_PER_PAGE && (
-                                    <div className="prod-pagination">
-                                        <button disabled={dispatchPage === 1} onClick={() => setDispatchPage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
-                                        <span className="prod-pagination-info">Page {dispatchPage} of {Math.ceil(dispatchList.length / ORDERS_PER_PAGE)}</span>
-                                        <button disabled={dispatchPage >= Math.ceil(dispatchList.length / ORDERS_PER_PAGE)} onClick={() => setDispatchPage(p => p + 1)} className="prod-pagination-btn">Next {"\u2192"}</button>
-                                    </div>
-                                )}
+                                <Paginator page={dispatchPage} totalPages={Math.ceil(dispatchList.length / ORDERS_PER_PAGE)} onChange={setDispatchPage} />
                             </div>
                         )}
                     </div>
@@ -747,13 +740,7 @@ export default function B2bProductionDashboard() {
                             {paginatedOrders.map(order => {
                                 return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
                             })}
-                            {filteredOrders.length > ORDERS_PER_PAGE && (
-                                <div className="prod-pagination">
-                                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="prod-pagination-btn">{"\u2190"} Previous</button>
-                                    <span className="prod-pagination-info">Page {currentPage} of {Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)}</span>
-                                    <button disabled={currentPage >= Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)} className="prod-pagination-btn">Next {"\u2192"}</button>
-                                </div>
-                            )}
+                            <Paginator page={currentPage} totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onChange={setCurrentPage} />
                         </div>
                     </div>
                 )}

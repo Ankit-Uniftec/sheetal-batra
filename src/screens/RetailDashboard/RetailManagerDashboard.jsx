@@ -12,6 +12,8 @@ import {
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import Paginator from "../../components/Paginator";
+import useTabParam from "../../hooks/useTabParam";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 
 // Timeline options
@@ -117,7 +119,7 @@ export default function RetailManagerDashboard() {
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [vendors, setVendors] = useState([]);
-    const [activeTab, setActiveTab] = useState("store_analytics");
+    const [activeTab, setActiveTab] = useTabParam("store_analytics");
     const [showSidebar, setShowSidebar] = useState(false);
 
     // Timeline
@@ -179,7 +181,7 @@ export default function RetailManagerDashboard() {
         try {
             const [ordersRes, productsRes, vendorsRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("products").select("*").order("name", { ascending: true }),
+                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("vendors").select("id, store_brand_name, vendor_code, location"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
@@ -1540,13 +1542,7 @@ export default function RetailManagerDashboard() {
                                 </div>
                             </div>
 
-                            {ordersTotalPages > 1 && (
-                                <div className="rm-pagination">
-                                    <button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button>
-                                    <span>Page {ordersPage} of {ordersTotalPages}</span>
-                                    <button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
                         </div>
                     )}
 

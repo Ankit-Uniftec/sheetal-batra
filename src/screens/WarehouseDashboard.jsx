@@ -13,7 +13,7 @@ import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
-import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, classifyComponentForStageCard } from "../utils/barcodeService";
+import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import ComponentStageBadge from "../components/ComponentStageBadge";
 import QcHistoryTable from "../components/QcHistoryTable";
@@ -24,6 +24,8 @@ import { fetchReJourneys } from "../utils/reJourneys";
 import StageCountCards from "../components/StageCountCards";
 import ProductionOverview from "../components/ProductionOverview";
 import SearchByDropdown from "../components/SearchByDropdown";
+import useTabParam from "../hooks/useTabParam";
+import Paginator from "../components/Paginator";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -109,7 +111,7 @@ const WarehouseDashboard = () => {
   // operations-facing analogue, same convention as PM dashboard + PDFs).
   const [vendorMap, setVendorMap] = useState({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("orders");
+  const [activeTab, setActiveTab] = useTabParam("orders");
   const [showSidebar, setShowSidebar] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(null);
@@ -305,8 +307,8 @@ const WarehouseDashboard = () => {
       const filtered = (data || []).filter(o => {
         // Private orders are not visible in warehouse — handled outside warehouse flow
         if (o.is_private_order) return false;
-        // Comms orders never enter the warehouse pipeline (shipped from COMMS store directly)
-        if (o.is_comms) return false;
+        // Comms orders DO run the warehouse pipeline now (they get barcodes and
+        // scan through all stages since 2026-07-10), so they are visible here.
         // B2B orders only visible after merchandiser approval
         if (o.is_b2b) return o.approval_status === "approved";
         return true;
@@ -388,10 +390,18 @@ const WarehouseDashboard = () => {
   // Orders scoped to THIS Production Head's channel (Offline → retail/store,
   // Online → website). Used ONLY for the overview analytics; the order list
   // stays global so heads can still look up any order.
-  const scopedOrders = useMemo(
-    () => scopeOrdersToDesignation(orders, userDesignation),
-    [orders, userDesignation]
-  );
+  const scopedOrders = useMemo(() => {
+    const scoped = scopeOrdersToDesignation(orders, userDesignation);
+    // Comms orders are produced in THIS warehouse, so the Offline head's
+    // overview includes them alongside the store/exhibition channel.
+    if (getChannelKeyForDesignation(userDesignation) === "offline") {
+      const have = new Set(scoped.map((o) => o.id));
+      orders.forEach((o) => {
+        if (!have.has(o.id) && getOrderChannelKey(o) === "comms") scoped.push(o);
+      });
+    }
+    return scoped;
+  }, [orders, userDesignation]);
 
   // Load QC records for this PH's channel when the QC History tab opens.
   useEffect(() => {
@@ -1211,29 +1221,6 @@ const WarehouseDashboard = () => {
     setCurrentPage(1);
   }, [searchQuery, statusTab, filters, sortBy]);
 
-  const goToPage = (page) => setCurrentPage(page);
-  const goToPrevious = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
-  const goToNext = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
-
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-    if (totalPages <= maxVisible + 2) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      let start = Math.max(2, currentPage - 1);
-      let end = Math.min(totalPages - 1, currentPage + 1);
-      if (currentPage <= 3) end = Math.min(totalPages - 1, 4);
-      if (currentPage >= totalPages - 2) start = Math.max(2, totalPages - 3);
-      if (start > 2) pages.push('...');
-      for (let i = start; i <= end; i++) pages.push(i);
-      if (end < totalPages - 1) pages.push('...');
-      pages.push(totalPages);
-    }
-    return pages;
-  };
-
   const getAlterationTypeLabel = (type) => {
     const types = {
       fitting_tightening: "Fitting Issue (Tightening)",
@@ -1352,7 +1339,7 @@ const WarehouseDashboard = () => {
           {activeTab === "overview" && isWarehouseProdHead && (
             <div className="wd-orders-section">
               <div className="wd-orders-header">
-                <h2 className="wd-section-title">Orders by Production Stage</h2>
+                <h2 className="wd-section-title">Production Stages (Components)</h2>
                 <span className="wd-orders-count">{periodScopedOrders.length} orders in your channel</span>
               </div>
 
@@ -2015,30 +2002,8 @@ const WarehouseDashboard = () => {
               </div>
 
               {/* Pagination */}
-              {!loading && filteredOrders.length > ordersPerPage && (
-                <div className="wd-pagination">
-                  <button className="wd-pagination-btn" onClick={goToPrevious} disabled={currentPage === 1}>
-                    Prev
-                  </button>
-                  <div className="wd-pagination-pages">
-                    {getPageNumbers().map((page, idx) => (
-                      page === '...' ? (
-                        <span key={`ellipsis-${idx}`} className="wd-pagination-ellipsis">...</span>
-                      ) : (
-                        <button
-                          key={page}
-                          className={`wd-pagination-page ${currentPage === page ? "active" : ""}`}
-                          onClick={() => goToPage(page)}
-                        >
-                          {page}
-                        </button>
-                      )
-                    ))}
-                  </div>
-                  <button className="wd-pagination-btn" onClick={goToNext} disabled={currentPage === totalPages}>
-                    Next
-                  </button>
-                </div>
+              {!loading && (
+                <Paginator page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
               )}
             </div>
           )}

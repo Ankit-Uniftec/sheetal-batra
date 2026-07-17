@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { usePopup } from "./Popup";
 import { fetchPendingVendors, fetchAllVendors, setVendorApproval } from "../utils/barcodeService";
 import "./VendorApprovals.css";
@@ -14,6 +14,17 @@ const VendorApprovals = ({ currentUserEmail }) => {
   const [pending, setPending] = useState([]);
   const [all, setAll] = useState([]);
   const [busyId, setBusyId] = useState(null);
+  const [allSearch, setAllSearch] = useState("");
+  const [allStatusFilter, setAllStatusFilter] = useState("all"); // all | pending | approved | rejected
+
+  const filteredAll = useMemo(() => {
+    const q = allSearch.trim().toLowerCase();
+    return all.filter((v) => {
+      if (allStatusFilter !== "all" && v.status !== allStatusFilter) return false;
+      if (q && !(v.vendor_name?.toLowerCase().includes(q) || v.vendor_location?.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [all, allSearch, allStatusFilter]);
 
   const load = useCallback(async () => {
     try {
@@ -87,17 +98,42 @@ const VendorApprovals = ({ currentUserEmail }) => {
       )}
 
       <h3 className="va-section">All Vendors ({all.length})</h3>
-      <div className="va-list">
-        {all.map((v) => (
-          <div key={v.id} className="va-row">
-            <div className="va-info">
-              <span className="va-name">{v.vendor_name}</span>
-              {v.vendor_location && <span className="va-loc">{v.vendor_location}</span>}
-            </div>
-            <span className={`va-status va-status-${v.status}`}>{v.status}</span>
+      {all.length === 0 ? (
+        <p className="va-empty">No vendors yet.</p>
+      ) : (
+        <>
+          <div className="va-filters">
+            <input
+              type="text"
+              className="va-filter-search"
+              placeholder="Search by name or location..."
+              value={allSearch}
+              onChange={(e) => setAllSearch(e.target.value)}
+            />
+            <select className="va-filter-select" value={allStatusFilter} onChange={(e) => setAllStatusFilter(e.target.value)}>
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
           </div>
-        ))}
-      </div>
+          {filteredAll.length === 0 ? (
+            <p className="va-empty">No vendors match your search.</p>
+          ) : (
+            <div className="va-list">
+              {filteredAll.map((v) => (
+                <div key={v.id} className="va-row">
+                  <div className="va-info">
+                    <span className="va-name">{v.vendor_name}</span>
+                    {v.vendor_location && <span className="va-loc">{v.vendor_location}</span>}
+                  </div>
+                  <span className={`va-status va-status-${v.status}`}>{v.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

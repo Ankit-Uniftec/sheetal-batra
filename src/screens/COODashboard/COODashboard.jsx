@@ -9,6 +9,8 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 import NotificationBell from "../../components/NotificationBell";
 import VendorApprovals from "../../components/VendorApprovals";
 import FactoryPause from "../../components/FactoryPause";
@@ -94,7 +96,8 @@ export default function COODashboard() {
     const [currentUserEmail, setCurrentUserEmail] = useState("");
 
     // UI
-    const [activeTab, setActiveTab] = useState("operations");
+    // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
+    const [activeTab, setActiveTab] = useTabParam("operations");
     const [showSidebar, setShowSidebar] = useState(false);
     const [timeline, setTimeline] = useState("monthly");
     const [comparison, setComparison] = useState("none");
@@ -115,6 +118,8 @@ export default function COODashboard() {
 
     // Inventory
     const [inventorySearch, setInventorySearch] = useState("");
+    const [inventoryStockFilter, setInventoryStockFilter] = useState("all");
+    const [inventoryTypeFilter, setInventoryTypeFilter] = useState("all");
     const [inventoryPage, setInventoryPage] = useState(1);
     const [variantInventory, setVariantInventory] = useState({});
     const [lxrtsSyncLoading, setLxrtsSyncLoading] = useState(false);
@@ -142,7 +147,7 @@ export default function COODashboard() {
         try {
             const [ordersRes, productsRes, spRes, vendorsRes, consRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("products").select("*").order("name", { ascending: true }),
+                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
                 supabase.from("vendors").select("*"),
                 supabase.from("consignment_inventory").select("*"),
@@ -508,13 +513,25 @@ export default function COODashboard() {
 
         let filtered = products;
         if (inventorySearch) { const q = inventorySearch.toLowerCase(); filtered = filtered.filter(p => p.name?.toLowerCase().includes(q) || p.sku_id?.toLowerCase().includes(q)); }
+        // Type filter (mirrors AdminDashboard inventory tab)
+        if (inventoryTypeFilter === "lxrts") filtered = filtered.filter(p => p.sync_enabled);
+        else if (inventoryTypeFilter === "regular") filtered = filtered.filter(p => !p.sync_enabled);
+        // Stock level filter (mirrors AdminDashboard thresholds)
+        if (inventoryStockFilter !== "all") {
+            filtered = filtered.filter(p => {
+                const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+                if (inventoryStockFilter === "out_of_stock") return inv === 0;
+                if (inventoryStockFilter === "low_stock") return inv > 0 && inv < 5;
+                return inv >= 5; // in_stock
+            });
+        }
 
         return {
             total: products.length, totalInventory, lowStock, outOfStock, consignmentValue,
             currentProducts: filtered.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE),
             inventoryTotalPages: Math.ceil(filtered.length / ITEMS_PER_PAGE),
         };
-    }, [products, consignmentInventory, inventorySearch, inventoryPage, variantInventory]);
+    }, [products, consignmentInventory, inventorySearch, inventoryStockFilter, inventoryTypeFilter, inventoryPage, variantInventory]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 8: FINANCIAL
@@ -663,7 +680,7 @@ export default function COODashboard() {
 
     // Resets
     useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
-    useEffect(() => { setInventoryPage(1); }, [inventorySearch]);
+    useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
     useEffect(() => {
         if (activeTab === "inventory") {
             const lxrtsProducts = products.filter(p => p.sync_enabled);
@@ -904,12 +921,25 @@ export default function COODashboard() {
                             </div>
 
                             <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Products</h3>
-                            <div className="admin-search-wrapper" style={{ maxWidth: 300, marginBottom: 12 }}><input type="text" placeholder="Search product or SKU..." value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="admin-search-input" /></div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
+                                <div className="admin-search-wrapper" style={{ maxWidth: 300 }}><input type="text" placeholder="Search product or SKU..." value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="admin-search-input" /></div>
+                                <select className="cmo-compare-select" value={inventoryStockFilter} onChange={(e) => setInventoryStockFilter(e.target.value)}>
+                                    <option value="all">All Stock</option>
+                                    <option value="in_stock">In Stock (5+)</option>
+                                    <option value="low_stock">Low Stock (&lt;5)</option>
+                                    <option value="out_of_stock">Out of Stock</option>
+                                </select>
+                                <select className="cmo-compare-select" value={inventoryTypeFilter} onChange={(e) => setInventoryTypeFilter(e.target.value)}>
+                                    <option value="all">All Types</option>
+                                    <option value="lxrts">LXRTS Only</option>
+                                    <option value="regular">Regular Only</option>
+                                </select>
+                            </div>
                             <div className="admin-table-wrapper"><div className="admin-table-container"><table className="admin-table">
                                 <thead><tr><th>Product</th><th>SKU</th><th>Type</th><th>Stock</th></tr></thead>
-                                <tbody>{inventoryStats.currentProducts.length === 0 ? <tr><td colSpan="4" className="no-data">No products</td></tr> : inventoryStats.currentProducts.map(p => { const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0); return (<tr key={p.id}><td>{p.name || "-"}</td><td>{p.sku_id || "-"}</td><td>{p.sync_enabled ? "LXRTS" : (p.inventory === 9999 ? "MTO" : "Regular")}</td><td><span className={qty === 0 ? "admin-stock-out" : qty < 5 ? "admin-stock-low" : "admin-stock-ok"}>{qty === 9999 ? "MTO" : qty}</span></td></tr>); })}</tbody>
+                                <tbody>{inventoryStats.currentProducts.length === 0 ? <tr><td colSpan="4" className="no-data">{products.length === 0 ? "No products yet" : "No products match the search/filters"}</td></tr> : inventoryStats.currentProducts.map(p => { const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0); return (<tr key={p.id}><td>{p.name || "-"}</td><td>{p.sku_id || "-"}</td><td>{p.sync_enabled ? "LXRTS" : (p.inventory === 9999 ? "MTO" : "Regular")}</td><td><span className={qty === 0 ? "admin-stock-out" : qty < 5 ? "admin-stock-low" : "admin-stock-ok"}>{qty === 9999 ? "MTO" : qty}</span></td></tr>); })}</tbody>
                             </table></div></div>
-                            {inventoryStats.inventoryTotalPages > 1 && (<div className="admin-pagination"><button onClick={() => setInventoryPage(p => Math.max(1, p - 1))} disabled={inventoryPage === 1}>Prev</button><span>Page {inventoryPage} of {inventoryStats.inventoryTotalPages}</span><button onClick={() => setInventoryPage(p => Math.min(inventoryStats.inventoryTotalPages, p + 1))} disabled={inventoryPage === inventoryStats.inventoryTotalPages}>Next</button></div>)}
+                            <Paginator page={inventoryPage} totalPages={inventoryStats.inventoryTotalPages} onChange={setInventoryPage} />
                         </div>
                     )}
 
@@ -987,7 +1017,7 @@ export default function COODashboard() {
                                     );
                                 })}</tbody>
                             </table></div></div>
-                            {ordersTotalPages > 1 && (<div className="admin-pagination"><button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button><span>Page {ordersPage} of {ordersTotalPages}</span><button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button></div>)}
+                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
                         </div>
                     )}
 

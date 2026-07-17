@@ -17,9 +17,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: rgba(255, 255, 255, 0.95);
+  background: #FFFFFFB0;
   backdrop-filter: blur(10px);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid #D4D4D4;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -46,9 +46,10 @@
 }
 
 .wid-title {
-  font-size: 24px;
+  font-family: "Athleas", serif !important;
+  font-size: 22px;
   font-weight: 600;
-  color: #333;
+  color: #d5b85a !important;
   margin: 0;
   text-align: center;
 }

@@ -74,8 +74,11 @@ const SIZE_OPTIONS = B2B_SIZE_OPTIONS;
 const CUSTOM_SIZE = "Custom";
 
 const CATEGORY_KEY_MAP = {
-    "Short Kurta": "KurtaChogaKaftan", "Kurta": "KurtaChogaKaftan", "Long Kurta": "KurtaChogaKaftan",
-    "Short Choga": "KurtaChogaKaftan", "Choga": "KurtaChogaKaftan", "Long Choga": "KurtaChogaKaftan", "Kaftan": "KurtaChogaKaftan",
+    "Short Kurta": "KurtaChogaKaftan", "Kurta": "KurtaChogaKaftan", "Long Kurta": "KurtaChogaKaftan", "Short A-Line Kurta": "KurtaChogaKaftan",
+    "Short Choga": "KurtaChogaKaftan", "Choga": "KurtaChogaKaftan", "Chauga": "KurtaChogaKaftan", "Long Choga": "KurtaChogaKaftan", "Kaftan": "KurtaChogaKaftan",
+    // A jacket takes the same upper-body measurements — shares the Kurta/Choga/
+    // Kaftan tab (client-confirmed). Unmapped tops open NO measurement tab.
+    "Jacket": "KurtaChogaKaftan", "Suit": "KurtaChogaKaftan",
     "Blouse": "Blouse", "Short Anarkali": "Anarkali", "Anarkali": "Anarkali",
     "Salwar": "SalwarDhoti", "Dhoti": "SalwarDhoti",
     "Churidaar": "ChuridaarTrouserPantsPlazo", "Trouser": "ChuridaarTrouserPantsPlazo", "Pants": "ChuridaarTrouserPantsPlazo", "Palazzo": "ChuridaarTrouserPantsPlazo",

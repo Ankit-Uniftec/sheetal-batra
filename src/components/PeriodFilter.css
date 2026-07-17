@@ -1,0 +1,95 @@
+/* PeriodFilter — shared time-wise filter, themed to the app standard. */
+
+.pfx {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.pfx-label { font-size: 13px; color: #666; }
+
+.pfx-select {
+    padding: 8px 12px;
+    border: 1px solid #e0d5c5;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    outline: none;
+    font-family: inherit;
+}
+.pfx-select:focus { border-color: #d5b85a; }
+
+.pfx-date {
+    padding: 7px 10px;
+    border: 1px solid #e0d5c5;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+}
+.pfx-date:focus { outline: none; border-color: #d5b85a; }
+
+.pfx-to { color: #888; font-size: 13px; }
+
+.pfx-label { white-space: nowrap; }
+
+/* ── "pills" variant — the app-standard timeline strip ─────────────────
+   Copied from AdminDashboard's cmo-filters-row / cmo-pill so the period
+   filter reads identically on every dashboard. */
+.pfx-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: #faf8f3;
+    border: 1px solid #e8e2d0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.pfx-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.pfx-pill {
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #777;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.pfx-pill:hover { background: rgba(213, 184, 90, 0.1); color: #b5982e; }
+
+.pfx-pill.active {
+    background: #d5b85a;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(213, 184, 90, 0.35);
+}
+
+.pfx-custom { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Full-width band placement on the legacy grid dashboards: the filled pills
+   strip spans the whole line, so the band reads as a designed toolbar rather
+   than one orphaned control in empty space. */
+.pfx-bar {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px 20px 0;
+}
+
+@media (max-width: 600px) {
+    .pfx-pill { padding: 5px 10px; font-size: 11px; }
+    .pfx-pills { justify-content: center; }
+}

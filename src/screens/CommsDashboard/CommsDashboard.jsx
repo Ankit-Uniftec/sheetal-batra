@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./CommsDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -19,6 +20,13 @@ import CommsPRPerformance from "./CommsPRPerformance";
 import CommsInventory from "./CommsInventory";
 import CommsCalendar from "./CommsCalendar";
 import CommsOrderCalendar from "./CommsOrderCalendar";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
+import { usePeriodFilter } from "../../components/PeriodFilter";
+
+// Comms order cards are heavy (image, colour swatches, component chips) —
+// rendering the whole filtered list lags once orders grow. Paginate.
+const ORDERS_PER_PAGE = 10;
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
@@ -50,7 +58,7 @@ export default function CommsDashboard() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useTabParam("overview");
   const [showSidebar, setShowSidebar] = useState(false);
 
   // Comms orders loaded once after auth. Used by Overview cards + recent list.
@@ -110,11 +118,11 @@ export default function CommsDashboard() {
 
       // Load all comms orders for the dashboard. Filtered to is_comms=true so
       // the comms team only ever sees comms-channel orders.
-      const { data: ordersData } = await supabase
-        .from("orders")
+      // Paged past Supabase's 1000-row cap
+      const { data: ordersData } = await fetchAllRows("orders", (q) => q
         .select("*")
         .eq("is_comms", true)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }));
       if (!cancelled && ordersData) setOrders(ordersData);
 
       // Components for those orders — powers the per-order "View Journey"
@@ -176,7 +184,18 @@ export default function CommsDashboard() {
     e.stopPropagation();
     setWarehousePdfLoading(order.id);
     try {
-      await downloadWarehousePdf(order, null, true);
+      // Open the cached PDF; regenerate only on a cache miss — regenerating on
+      // EVERY click (the old forceRegenerate=true) re-rendered and re-uploaded
+      // the PDFs each view, and silently masked stale caches elsewhere: the PM
+      // opened the same order's cached file without barcodes while this button
+      // rebuilt it. Migration 39 clears the caches that predate the order's
+      // components, so the cache is trustworthy now.
+      const result = await downloadWarehousePdf(order, null, false);
+      // Reflect freshly generated URLs in state so the next click uses the cache.
+      if (result) {
+        const urls = Array.isArray(result) ? result : [result];
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, warehouse_urls: urls, warehouse_url: urls[0] } : o)));
+      }
     } catch (err) {
       console.error("Warehouse PDF open failed:", err);
     } finally {
@@ -184,18 +203,25 @@ export default function CommsDashboard() {
     }
   };
 
+  // Period filter for the Overview stats (Orders tab keeps its own date range).
+  const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "pills" });
+  const periodOrders = useMemo(
+    () => orders.filter((o) => inPeriod(o.created_at)),
+    [orders, inPeriod]
+  );
+
   // Counts per engagement type — drives the Overview cards.
   const engagementCounts = useMemo(() => {
     const counts = { Barter: 0, Gifting: 0, Sourcing: 0, "Personal order": 0 };
-    orders.forEach((o) => {
+    periodOrders.forEach((o) => {
       const t = o.comms_engagement_type;
       if (t && counts.hasOwnProperty(t)) counts[t] += 1;
     });
     return counts;
-  }, [orders]);
+  }, [periodOrders]);
 
   // Recent orders for the overview list.
-  const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
+  const recentOrders = useMemo(() => periodOrders.slice(0, 10), [periodOrders]);
 
   // Full filtered list for the Orders tab.
   const filteredOrders = useMemo(() => {
@@ -236,6 +262,15 @@ export default function CommsDashboard() {
       return true;
     });
   }, [orders, ordersSearch, engagementFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
+
+  // Page within the filtered orders; any filter change resets to page 1.
+  const [ordersPage, setOrdersPage] = useState(1);
+  useEffect(() => { setOrdersPage(1); }, [ordersSearch, engagementFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
+  const ordersTotalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+  const pagedOrders = useMemo(
+    () => filteredOrders.slice((ordersPage - 1) * ORDERS_PER_PAGE, ordersPage * ORDERS_PER_PAGE),
+    [filteredOrders, ordersPage]
+  );
 
   // Upcoming sourcing returns — sourcing orders whose return date is in the
   // next 14 days. Helps Nazreen flag follow-ups before the alerts wire up.
@@ -354,6 +389,8 @@ export default function CommsDashboard() {
                   + New Comms Order
                 </button>
               </div>
+
+              {periodControl}
 
               {/* Engagement-type cards */}
               <div className="comms-cards-row">
@@ -562,7 +599,7 @@ export default function CommsDashboard() {
                   <p className="comms-muted">No orders match the current filters.</p>
                 ) : (
                   <div className="comms-order-cards">
-                    {filteredOrders.map((o) => {
+                    {pagedOrders.map((o) => {
                       const item = o.items?.[0] || {};
                       const imgSrc = item.image_url || "/placeholder.png";
                       const notional = (o.items || []).reduce((sum, it) => {
@@ -777,6 +814,7 @@ export default function CommsDashboard() {
                     })}
                   </div>
                 )}
+                <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
               </div>
             </>
           )}

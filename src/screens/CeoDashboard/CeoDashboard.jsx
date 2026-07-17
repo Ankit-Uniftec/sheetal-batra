@@ -9,6 +9,8 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { usePopup } from "../../components/Popup";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 import NotificationBell from "../../components/NotificationBell";
 import ExhibitionApprovals from "../../components/ExhibitionApprovals";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
@@ -177,7 +179,8 @@ export default function CEODashboard() {
     const { showPopup, PopupComponent } = usePopup();
     const navigate = useNavigate();
 
-    const [activeTab, setActiveTab] = useState("brand_performance");
+    // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
+    const [activeTab, setActiveTab] = useTabParam("brand_performance");
     const [showSidebar, setShowSidebar] = useState(false);
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
@@ -283,7 +286,7 @@ export default function CEODashboard() {
         try {
             const [ordersRes, productsRes, spRes, vendorsRes, consRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("products").select("*").order("name", { ascending: true }),
+                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
                 supabase.from("vendors").select("*"),
                 supabase.from("consignment_inventory").select("*"),
@@ -2525,13 +2528,7 @@ export default function CEODashboard() {
                                     </table>
                                 </div>
                             </div>
-                            {clientAnalytics.clientsTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setClientsPage(p => Math.max(1, p - 1))} disabled={clientsPage === 1}>Prev</button>
-                                    <span>Page {clientsPage} of {clientAnalytics.clientsTotalPages}</span>
-                                    <button onClick={() => setClientsPage(p => Math.min(clientAnalytics.clientsTotalPages, p + 1))} disabled={clientsPage === clientAnalytics.clientsTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={clientsPage} totalPages={clientAnalytics.clientsTotalPages} onChange={setClientsPage} />
 
                             {/* 2-3. Client Purchase History + SB Client Book */}
                             <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
@@ -2708,13 +2705,7 @@ export default function CEODashboard() {
                                     </tbody>
                                 </table>
                             </div></div>
-                            {inventoryTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setInventoryPage(p => Math.max(1, p - 1))} disabled={inventoryPage === 1}>Prev</button>
-                                    <span>Page {inventoryPage} of {inventoryTotalPages}</span>
-                                    <button onClick={() => setInventoryPage(p => Math.min(inventoryTotalPages, p + 1))} disabled={inventoryPage === inventoryTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={inventoryPage} totalPages={inventoryTotalPages} onChange={setInventoryPage} />
                         </div>
                     )}
 
@@ -2960,13 +2951,7 @@ export default function CEODashboard() {
                                     </tbody>
                                 </table>
                             </div></div>
-                            {b2bStats.b2bTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setB2bPage(p => Math.max(1, p - 1))} disabled={b2bPage === 1}>Prev</button>
-                                    <span>Page {b2bPage} of {b2bStats.b2bTotalPages}</span>
-                                    <button onClick={() => setB2bPage(p => Math.min(b2bStats.b2bTotalPages, p + 1))} disabled={b2bPage === b2bStats.b2bTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={b2bPage} totalPages={b2bStats.b2bTotalPages} onChange={setB2bPage} />
 
                             {/* Top B2B Products */}
                             {b2bStats.topB2bProducts.length > 0 && (
@@ -3318,13 +3303,7 @@ export default function CEODashboard() {
                                     </table>
                                 </div>
                             </div>
-                            {ordersTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button>
-                                    <span>Page {ordersPage} of {ordersTotalPages}</span>
-                                    <button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
                         </div>
                     )}
 
@@ -3397,13 +3376,7 @@ export default function CEODashboard() {
                                     </table>
                                 </div>
                             </div>
-                            {accountsTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setAccountsPage(p => Math.max(1, p - 1))} disabled={accountsPage === 1}>Prev</button>
-                                    <span>Page {accountsPage} of {accountsTotalPages}</span>
-                                    <button onClick={() => setAccountsPage(p => Math.min(accountsTotalPages, p + 1))} disabled={accountsPage === accountsTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={accountsPage} totalPages={accountsTotalPages} onChange={setAccountsPage} />
                         </div>
                     )}
 

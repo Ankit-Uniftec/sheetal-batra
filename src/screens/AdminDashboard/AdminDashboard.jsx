@@ -11,6 +11,8 @@ import formatPhoneNumber from "../../utils/formatPhoneNumber";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import { SCAN_STATIONS } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
@@ -180,7 +182,8 @@ export default function AdminDashboard() {
     const { showPopup, PopupComponent } = usePopup();
     const navigate = useNavigate();
 
-    const [activeTab, setActiveTab] = useState("brand_performance");
+    // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
+    const [activeTab, setActiveTab] = useTabParam("brand_performance");
     const [showSidebar, setShowSidebar] = useState(false);
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
@@ -287,6 +290,8 @@ export default function AdminDashboard() {
     const [commsApprovalModal, setCommsApprovalModal] = useState(null); // { order, action: 'approve' | 'reject' }
     const [commsApprovalReason, setCommsApprovalReason] = useState("");
     const [commsApprovalProcessing, setCommsApprovalProcessing] = useState(false);
+    const [commsSearch, setCommsSearch] = useState("");
+    const [commsEngagementFilter, setCommsEngagementFilter] = useState("all");
     // Fetch data on mount
     useEffect(() => {
         const checkAuthAndFetch = async () => {
@@ -356,7 +361,7 @@ export default function AdminDashboard() {
         try {
             const [ordersRes, productsRes, spRes, vendorsRes, profilesRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("products").select("*").order("name", { ascending: true }),
+                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders, assigned_stations"),
                 supabase.from("vendors").select("*"),
                 // Paginate past Supabase's 1000-row cap — the client book is
@@ -991,6 +996,25 @@ export default function AdminDashboard() {
         const start = (inventoryPage - 1) * ITEMS_PER_PAGE;
         return filteredProducts.slice(start, start + ITEMS_PER_PAGE);
     }, [filteredProducts, inventoryPage]);
+
+    // Comms Approvals — pending list search + engagement filter
+    const commsPendingOrders = useMemo(
+        () => orders.filter(o => o.is_comms && o.approval_status === "pending_approval"),
+        [orders]
+    );
+    const commsEngagementOptions = useMemo(
+        () => [...new Set(commsPendingOrders.map(o => o.comms_engagement_type).filter(Boolean))],
+        [commsPendingOrders]
+    );
+    const filteredCommsPending = useMemo(() => {
+        let result = commsPendingOrders;
+        if (commsSearch.trim()) {
+            const q = commsSearch.trim().toLowerCase();
+            result = result.filter(o => o.order_no?.toLowerCase().includes(q) || o.delivery_name?.toLowerCase().includes(q));
+        }
+        if (commsEngagementFilter !== "all") result = result.filter(o => o.comms_engagement_type === commsEngagementFilter);
+        return result;
+    }, [commsPendingOrders, commsSearch, commsEngagementFilter]);
 
     const handleInventoryUpdate = async (productId) => {
         if (editInventoryValue === "" || isNaN(Number(editInventoryValue))) {
@@ -2769,13 +2793,7 @@ export default function AdminDashboard() {
                                     </table>
                                 </div>
                             </div>
-                            {clientAnalytics.clientsTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setClientsPage(p => Math.max(1, p - 1))} disabled={clientsPage === 1}>Prev</button>
-                                    <span>Page {clientsPage} of {clientAnalytics.clientsTotalPages}</span>
-                                    <button onClick={() => setClientsPage(p => Math.min(clientAnalytics.clientsTotalPages, p + 1))} disabled={clientsPage === clientAnalytics.clientsTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={clientsPage} totalPages={clientAnalytics.clientsTotalPages} onChange={setClientsPage} />
 
                             {/* 2-3. Client Purchase History + SB Client Book */}
                             <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
@@ -2951,13 +2969,7 @@ export default function AdminDashboard() {
                                     </tbody>
                                 </table>
                             </div></div>
-                            {inventoryTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setInventoryPage(p => Math.max(1, p - 1))} disabled={inventoryPage === 1}>Prev</button>
-                                    <span>Page {inventoryPage} of {inventoryTotalPages}</span>
-                                    <button onClick={() => setInventoryPage(p => Math.min(inventoryTotalPages, p + 1))} disabled={inventoryPage === inventoryTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={inventoryPage} totalPages={inventoryTotalPages} onChange={setInventoryPage} />
                         </div>
                     )}
 
@@ -3203,13 +3215,7 @@ export default function AdminDashboard() {
                                     </tbody>
                                 </table>
                             </div></div>
-                            {b2bStats.b2bTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setB2bPage(p => Math.max(1, p - 1))} disabled={b2bPage === 1}>Prev</button>
-                                    <span>Page {b2bPage} of {b2bStats.b2bTotalPages}</span>
-                                    <button onClick={() => setB2bPage(p => Math.min(b2bStats.b2bTotalPages, p + 1))} disabled={b2bPage === b2bStats.b2bTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={b2bPage} totalPages={b2bStats.b2bTotalPages} onChange={setB2bPage} />
 
                             {/* Top B2B Products */}
                             {b2bStats.topB2bProducts.length > 0 && (
@@ -3496,13 +3502,7 @@ export default function AdminDashboard() {
                                     </table>
                                 </div>
                             </div>
-                            {ordersTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button>
-                                    <span>Page {ordersPage} of {ordersTotalPages}</span>
-                                    <button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
                         </div>
                     )}
 
@@ -3575,13 +3575,7 @@ export default function AdminDashboard() {
                                     </table>
                                 </div>
                             </div>
-                            {accountsTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button onClick={() => setAccountsPage(p => Math.max(1, p - 1))} disabled={accountsPage === 1}>Prev</button>
-                                    <span>Page {accountsPage} of {accountsTotalPages}</span>
-                                    <button onClick={() => setAccountsPage(p => Math.min(accountsTotalPages, p + 1))} disabled={accountsPage === accountsTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={accountsPage} totalPages={accountsTotalPages} onChange={setAccountsPage} />
                         </div>
                     )}
 
@@ -3693,19 +3687,7 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {clientBook.totalPages > 1 && (
-                                <div className="acc-pagination">
-                                    <button
-                                        onClick={() => setClientBookPage((p) => Math.max(1, p - 1))}
-                                        disabled={clientBook.safePage === 1}
-                                    >Prev</button>
-                                    <span>Page {clientBook.safePage} of {clientBook.totalPages}</span>
-                                    <button
-                                        onClick={() => setClientBookPage((p) => Math.min(clientBook.totalPages, p + 1))}
-                                        disabled={clientBook.safePage === clientBook.totalPages}
-                                    >Next</button>
-                                </div>
-                            )}
+                            <Paginator page={clientBook.safePage} totalPages={clientBook.totalPages} onChange={setClientBookPage} />
                         </div>
                     )}
 
@@ -3994,7 +3976,7 @@ export default function AdminDashboard() {
                         // approval_status='pending_approval'. "Reviewed" covers approved + rejected
                         // so admin has visibility into recent decisions.
                         const commsOrders = orders.filter(o => o.is_comms);
-                        const pending = commsOrders.filter(o => o.approval_status === "pending_approval");
+                        const pending = commsPendingOrders; // memoized above (search/filter applied in filteredCommsPending)
                         const reviewed = commsOrders
                             .filter(o => o.approval_status === "approved" || o.approval_status === "rejected")
                             .sort((a, b) => new Date(b.approved_at || b.created_at) - new Date(a.approved_at || a.created_at))
@@ -4026,6 +4008,23 @@ export default function AdminDashboard() {
                                         No comms orders are waiting on your approval.
                                     </p>
                                 ) : (
+                                    <>
+                                    <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
+                                        <div className="admin-search-wrapper">
+                                            <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
+                                            <input type="text" placeholder="Search by order no or client..." value={commsSearch} onChange={(e) => setCommsSearch(e.target.value)} className="admin-search-input" />
+                                            {commsSearch && <button className="search-clear" onClick={() => setCommsSearch("")}>×</button>}
+                                        </div>
+                                        <select className="cmo-compare-select" value={commsEngagementFilter} onChange={(e) => setCommsEngagementFilter(e.target.value)}>
+                                            <option value="all">All Engagements</option>
+                                            {commsEngagementOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    {filteredCommsPending.length === 0 ? (
+                                        <p style={{ color: "#888", fontSize: 14, padding: "12px 0 20px" }}>
+                                            No pending comms orders match your search.
+                                        </p>
+                                    ) : (
                                     <div className="admin-table-wrapper" style={{ marginBottom: 24 }}>
                                         <div className="admin-table-container">
                                             <table className="admin-table">
@@ -4041,7 +4040,7 @@ export default function AdminDashboard() {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {pending.map(o => (
+                                                    {filteredCommsPending.map(o => (
                                                         <tr key={o.id}>
                                                             <td><strong>{o.order_no || "—"}</strong></td>
                                                             <td>{o.delivery_name || "—"}</td>
@@ -4073,6 +4072,8 @@ export default function AdminDashboard() {
                                             </table>
                                         </div>
                                     </div>
+                                    )}
+                                    </>
                                 )}
 
                                 {/* ── Recent reviewed section ── */}

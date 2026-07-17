@@ -11,6 +11,8 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import useTabParam from "../../hooks/useTabParam";
+import Paginator from "../../components/Paginator";
 
 // Head of Design Dashboard — read-only view for Tanuja Singh.
 // Two focused tabs:
@@ -104,8 +106,8 @@ export default function HeadOfDesignDashboard() {
   const [vendors, setVendors] = useState([]);
   const [currentUserName, setCurrentUserName] = useState("");
 
-  // Tabs
-  const [activeTab, setActiveTab] = useState("status");
+  // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
+  const [activeTab, setActiveTab] = useTabParam("status");
   const [showSidebar, setShowSidebar] = useState(false);
 
   // Filter state
@@ -497,13 +499,7 @@ export default function HeadOfDesignDashboard() {
                   </table>
                 </div>
 
-                {ordersTotalPages > 1 && (
-                  <div className="hod-pagination">
-                    <button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button>
-                    <span>Page {ordersPage} of {ordersTotalPages}</span>
-                    <button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button>
-                  </div>
-                )}
+                <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
               </div>
             </div>
           )}
@@ -690,13 +686,7 @@ export default function HeadOfDesignDashboard() {
                   </table>
                 </div>
 
-                {b2bTotalPages > 1 && (
-                  <div className="hod-pagination">
-                    <button onClick={() => setB2bPage(p => Math.max(1, p - 1))} disabled={b2bPage === 1}>Prev</button>
-                    <span>Page {b2bPage} of {b2bTotalPages}</span>
-                    <button onClick={() => setB2bPage(p => Math.min(b2bTotalPages, p + 1))} disabled={b2bPage === b2bTotalPages}>Next</button>
-                  </div>
-                )}
+                <Paginator page={b2bPage} totalPages={b2bTotalPages} onChange={setB2bPage} />
               </div>
             </div>
           )}

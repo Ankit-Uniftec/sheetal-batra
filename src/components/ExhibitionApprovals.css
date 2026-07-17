@@ -3,6 +3,16 @@
 .exa-hint { margin: 0 0 18px; color: #888; font-size: 13px; }
 .exa-section { margin: 20px 0 10px; font-size: 15px; color: #555; }
 .exa-empty { color: #999; font-size: 14px; padding: 14px; background: #fafafa; border-radius: 8px; }
+.exa-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.exa-filter-search {
+  flex: 1; min-width: 220px; padding: 8px 12px;
+  border: 1px solid #ddd; border-radius: 8px; font-size: 13px; outline: none;
+}
+.exa-filter-select {
+  padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 13px; background: #fff; cursor: pointer; outline: none;
+}
+.exa-filter-search:focus, .exa-filter-select:focus { border-color: #d5b85a; }
 .exa-list { display: flex; flex-direction: column; gap: 10px; }
 .exa-row {
   display: flex; justify-content: space-between; align-items: flex-start;

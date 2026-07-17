@@ -9,6 +9,8 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import Paginator from "../../components/Paginator";
+import useTabParam from "../../hooks/useTabParam";
 import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
 import {
@@ -75,7 +77,7 @@ export default function StoreManagerDashboard() {
     const [userStore, setUserStore] = useState("");
 
     // UI
-    const [activeTab, setActiveTab] = useState("sales");
+    const [activeTab, setActiveTab] = useTabParam("sales");
     const [showSidebar, setShowSidebar] = useState(false);
     const [timeline, setTimeline] = useState("monthly");
     const [customDateFrom, setCustomDateFrom] = useState("");
@@ -109,6 +111,10 @@ export default function StoreManagerDashboard() {
     const [variantInventory, setVariantInventory] = useState({});
     const [expandedProduct, setExpandedProduct] = useState(null);
     const [lxrtsSyncLoading, setLxrtsSyncLoading] = useState(false);
+    const [inventorySearch, setInventorySearch] = useState("");
+    const [inventoryStockFilter, setInventoryStockFilter] = useState("all"); // all, in_stock, low_stock, out_of_stock
+    const [inventoryTypeFilter, setInventoryTypeFilter] = useState("all"); // all, lxrts, regular
+    const [inventoryPage, setInventoryPage] = useState(1);
 
     // ═══════════════════════════════════════════════════════════
     // AUTH & FETCH
@@ -143,7 +149,7 @@ export default function StoreManagerDashboard() {
         try {
             const [ordersRes, productsRes, spRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("products").select("*").order("name", { ascending: true }),
+                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
@@ -614,6 +620,32 @@ export default function StoreManagerDashboard() {
         return { total: products.length, totalInventory, lowStock, outOfStock, slowMovingCount: slowMoving.length, slowMoving: slowMoving.slice(0, 20) };
     }, [products, storeOrders, timeline, customDateFrom, customDateTo, variantInventory]);
 
+    // All Products search + filters (same stock buckets as Admin's inventory tab: 0 / <5 / 5+)
+    const filteredInventoryProducts = useMemo(() => {
+        let result = products;
+        if (inventorySearch.trim()) {
+            const q = inventorySearch.trim().toLowerCase();
+            result = result.filter(p => p.name?.toLowerCase().includes(q) || p.sku_id?.toLowerCase().includes(q));
+        }
+        if (inventoryTypeFilter === "lxrts") result = result.filter(p => p.sync_enabled);
+        else if (inventoryTypeFilter === "regular") result = result.filter(p => !p.sync_enabled);
+        if (inventoryStockFilter !== "all") {
+            result = result.filter(p => {
+                const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
+                if (inventoryStockFilter === "out_of_stock") return inv === 0;
+                if (inventoryStockFilter === "low_stock") return inv > 0 && inv < 5;
+                return inv >= 5; // in_stock
+            });
+        }
+        return result;
+    }, [products, inventorySearch, inventoryTypeFilter, inventoryStockFilter, variantInventory]);
+
+    const inventoryTotalPages = Math.ceil(filteredInventoryProducts.length / ITEMS_PER_PAGE);
+    const currentInventoryProducts = useMemo(
+        () => filteredInventoryProducts.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE),
+        [filteredInventoryProducts, inventoryPage]
+    );
+
     // ═══════════════════════════════════════════════════════════
     // TAB 6: CLIENT BOOK
     // ═══════════════════════════════════════════════════════════
@@ -786,6 +818,7 @@ export default function StoreManagerDashboard() {
         return () => document.removeEventListener("mousedown", onDoc);
     }, []);
     useEffect(() => { setClientPage(1); }, [clientSearch, clientSort]);
+    useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
     useEffect(() => {
         if (activeTab === "inventory") {
             const lxrtsProducts = products.filter(p => p.sync_enabled);
@@ -1255,13 +1288,7 @@ export default function StoreManagerDashboard() {
                                     </tbody>
                                 </table>
                             </div>
-                            {ordersTotalPages > 1 && (
-                                <div className="sm-pagination">
-                                    <button onClick={() => setOrdersPage(p => Math.max(1, p - 1))} disabled={ordersPage === 1}>Prev</button>
-                                    <span>Page {ordersPage} of {ordersTotalPages}</span>
-                                    <button onClick={() => setOrdersPage(p => Math.min(ordersTotalPages, p + 1))} disabled={ordersPage === ordersTotalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
                         </div>
                     )}
 
@@ -1450,12 +1477,25 @@ export default function StoreManagerDashboard() {
                             <h3 className="sm-subsection-title" style={{ marginTop: 24 }}>
                                 All Products {lxrtsSyncLoading && <span style={{ fontSize: 12, color: '#999' }}>(Syncing LXRTS...)</span>}
                             </h3>
+                            <div className="sm-toolbar" style={{ marginTop: 8 }}>
+                                <div className="sm-search-wrapper">
+                                    <input type="text" placeholder="Search by name or SKU..." value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="sm-search-input" />
+                                    {inventorySearch && <button className="sm-search-clear" onClick={() => setInventorySearch("")}>{"×"}</button>}
+                                </div>
+                                <select value={inventoryStockFilter} onChange={(e) => setInventoryStockFilter(e.target.value)} className="sm-sort-select">
+                                    <option value="all">All Stock</option><option value="in_stock">In Stock (5+)</option><option value="low_stock">Low Stock (&lt;5)</option><option value="out_of_stock">Out of Stock</option>
+                                </select>
+                                <select value={inventoryTypeFilter} onChange={(e) => setInventoryTypeFilter(e.target.value)} className="sm-sort-select">
+                                    <option value="all">All Types</option><option value="lxrts">LXRTS Only</option><option value="regular">Regular Only</option>
+                                </select>
+                            </div>
                             <div className="sm-table-wrapper">
                                 <table className="sm-table">
                                     <thead><tr><th>Product</th><th>SKU</th><th>Type</th><th>Stock</th></tr></thead>
                                     <tbody>
                                         {products.length === 0 ? <tr><td colSpan="4" className="sm-no-data">No products found</td></tr> :
-                                            products.map(p => {
+                                            filteredInventoryProducts.length === 0 ? <tr><td colSpan="4" className="sm-no-data">No products match your search / filters</td></tr> :
+                                            currentInventoryProducts.map(p => {
                                                 const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
                                                 return (
                                                     <React.Fragment key={p.id}>
@@ -1494,6 +1534,7 @@ export default function StoreManagerDashboard() {
                                     </tbody>
                                 </table>
                             </div>
+                            <Paginator page={inventoryPage} totalPages={inventoryTotalPages} onChange={setInventoryPage} />
 
                             {/* Slow moving */}
                             {inventoryStats.slowMoving.length > 0 && (
@@ -1715,13 +1756,7 @@ export default function StoreManagerDashboard() {
                                     </tbody>
                                 </table>
                             </div>
-                            {clientBook.totalPages > 1 && (
-                                <div className="sm-pagination">
-                                    <button onClick={() => setClientPage(p => Math.max(1, p - 1))} disabled={clientPage === 1}>Prev</button>
-                                    <span>Page {clientPage} of {clientBook.totalPages}</span>
-                                    <button onClick={() => setClientPage(p => Math.min(clientBook.totalPages, p + 1))} disabled={clientPage === clientBook.totalPages}>Next</button>
-                                </div>
-                            )}
+                            <Paginator page={clientPage} totalPages={clientBook.totalPages} onChange={setClientPage} />
                         </div>
                     )}
 

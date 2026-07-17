@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import ReJourneyTable from "./ReJourneyTable";
+import Paginator from "./Paginator";
 import { reJourneySummary, filterReJourneys, reJourneyStages } from "../utils/reJourneys";
 import { getStageLabel } from "../utils/barcodeService";
 import "./ReJourneyPanel.css";
+
+const PAGE_SIZE = 20;
 
 /**
  * ReJourneyPanel — the full "currently in re-journey" view: a filter bar
@@ -27,6 +30,15 @@ export default function ReJourneyPanel({ rows = [], loading, onOrderClick }) {
     );
     const summary = useMemo(() => reJourneySummary(filtered), [filtered]);
 
+    // Page within the filtered set; filter changes reset to page 1.
+    const [page, setPage] = useState(1);
+    useEffect(() => { setPage(1); }, [rows, search, stage, overdueOnly, atLimitOnly]);
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const pageRows = useMemo(
+        () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+        [filtered, page]
+    );
+
     const hasFilters = search || stage || overdueOnly || atLimitOnly;
     const clear = () => { setSearch(""); setStage(""); setOverdueOnly(false); setAtLimitOnly(false); };
 
@@ -49,7 +61,8 @@ export default function ReJourneyPanel({ rows = [], loading, onOrderClick }) {
                 <span className="rj-sum-item rj-sum-limit"><b>{summary.atLimit}</b> at/over limit</span>
             </div>
 
-            <ReJourneyTable rows={filtered} loading={loading} onOrderClick={onOrderClick} emptyText={hasFilters ? "No re-journeys match these filters." : "No components currently in re-journey."} />
+            <ReJourneyTable rows={pageRows} loading={loading} onOrderClick={onOrderClick} emptyText={hasFilters ? "No re-journeys match these filters." : "No components currently in re-journey."} />
+            <Paginator page={page} totalPages={totalPages} onChange={setPage} />
         </div>
     );
 }

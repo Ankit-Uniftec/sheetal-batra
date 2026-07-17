@@ -22,7 +22,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .env
-supabase
 schema.sql
 docs
 db
+
+# Supabase — track edge function SOURCE (it's deployed code that exists
+# nowhere else), but never secrets, local state or generated temp files.
+# Function secrets live in Supabase's own config and are read at runtime via
+# Deno.env.get(), so the source itself carries no credentials.
+supabase/*
+!supabase/functions/
+supabase/functions/*/.env*
+supabase/.branches
+supabase/.temp
+supabase/.env*

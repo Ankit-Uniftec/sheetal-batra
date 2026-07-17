@@ -1,7 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import QcHistoryTable from "./QcHistoryTable";
+import Paginator from "./Paginator";
 import { qcSummary, filterQcRecords, distinctInspectors } from "../utils/qcHistory";
 import "./QcHistoryPanel.css";
+
+// QC history can be thousands of records (the PM fetch pages the whole table) —
+// rendering them all as cards is the main lag source on this tab. Paginate.
+const PAGE_SIZE = 25;
 
 /**
  * QcHistoryPanel — the full dashboard QC-history view: a filter bar
@@ -32,6 +37,15 @@ export default function QcHistoryPanel({ records = [], loading, showInspectorFil
     [records, from, to, result, whichQc, inspectedBy, search]
   );
   const summary = useMemo(() => qcSummary(filtered), [filtered]);
+
+  // Page within the FILTERED set; any filter change starts back at page 1.
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [records, from, to, result, whichQc, inspectedBy, search]);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageRecords = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
+  );
 
   const clear = () => { setFrom(""); setTo(""); setResult(""); setWhichQc(""); setInspectedBy(""); setSearch(""); };
   const hasFilters = from || to || result || whichQc || inspectedBy || search;
@@ -71,7 +85,8 @@ export default function QcHistoryPanel({ records = [], loading, showInspectorFil
         <span className="qch-sum-item"><b>{summary.failRatePct}%</b> fail rate</span>
       </div>
 
-      <QcHistoryTable records={filtered} loading={loading} showOrderNo={showOrderNo} onOrderClick={onOrderClick} emptyText={hasFilters ? "No QC records match these filters." : "No QC records yet."} />
+      <QcHistoryTable records={pageRecords} loading={loading} showOrderNo={showOrderNo} onOrderClick={onOrderClick} emptyText={hasFilters ? "No QC records match these filters." : "No QC records yet."} />
+      <Paginator page={page} totalPages={totalPages} onChange={setPage} />
     </div>
   );
 }
