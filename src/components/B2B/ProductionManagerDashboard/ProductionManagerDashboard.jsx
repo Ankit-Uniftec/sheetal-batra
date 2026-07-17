@@ -182,6 +182,11 @@ export default function ProductionManagerDashboard() {
     // the tab the user was on, and browser Back moves between tabs. The hook
     // still honours location.state?.activeTab for the flows that push it.
     const [activeTab, setActiveTab] = useTabParam("overview");
+    // Sub-tab within a merged section (Delivery Report → dispatch/report,
+    // Vendors → directory/external). Plain state, NOT a second useTabParam —
+    // two hooks both writing searchParams with functional updaters clobber
+    // each other when a sidebar click sets both tab and subtab at once.
+    const [subTab, setSubTab] = useState("dispatch");
     const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
@@ -401,9 +406,10 @@ export default function ProductionManagerDashboard() {
         return () => { cancelled = true; };
     }, [activeTab]);
 
-    // Load external vendor movements (all channels) when the tab opens.
+    // Load external vendor movements when the Vendors → At External Vendors
+    // sub-tab opens.
     useEffect(() => {
-        if (activeTab !== "external_vendors") return;
+        if (!(activeTab === "vendors" && subTab === "external")) return;
         let cancelled = false;
         (async () => {
             setExtMovementsLoading(true);
@@ -411,7 +417,7 @@ export default function ProductionManagerDashboard() {
             if (!cancelled) { setExtMovements(rows); setExtMovementsLoading(false); }
         })();
         return () => { cancelled = true; };
-    }, [activeTab]);
+    }, [activeTab, subTab]);
 
     // Fetch colors
     useEffect(() => {
@@ -1812,11 +1818,9 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</a>
                             <a className={`pm-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
                             <a className={`pm-menu-item ${activeTab === "rejourneys" ? "active" : ""}`} onClick={() => { setActiveTab("rejourneys"); setShowSidebar(false); }}>Re-journeys</a>
-                            <a className={`pm-menu-item ${activeTab === "external_vendors" ? "active" : ""}`} onClick={() => { setActiveTab("external_vendors"); setShowSidebar(false); }}>At External Vendors</a>
-                            <a className={`pm-menu-item ${activeTab === "dispatch" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch"); setShowSidebar(false); }}>Dispatch</a>
-                            <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setShowSidebar(false); }}>Delivery Report</a>
+                            <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setSubTab("dispatch"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
-                            <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setShowSidebar(false); }}>Vendors</a>
+                            <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setSubTab("directory"); setShowSidebar(false); }}>Vendors</a>
                             <a className={`pm-menu-item ${activeTab === "replacements" ? "active" : ""}`} onClick={() => { setActiveTab("replacements"); setShowSidebar(false); }}>Replacement Approvals</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                             <a className={`pm-menu-item ${activeTab === "staff" ? "active" : ""}`} onClick={() => { setActiveTab("staff"); setShowSidebar(false); }}>Staff</a>
@@ -2213,6 +2217,15 @@ export default function ProductionManagerDashboard() {
                                         )}
                                     </div>
 
+                                    {/* Disposed — orders with a disposed component. Disposed pieces
+                                        are excluded from stage grouping, so the Stage filter can't
+                                        reach them; this toggle is their only filter path. */}
+                                    <button
+                                        className={`pm-filter-select ${filters.disposedOnly ? "pm-filter-active" : ""}`}
+                                        onClick={() => setFilters(prev => ({ ...prev, disposedOnly: !prev.disposedOnly }))}
+                                        style={{ cursor: "pointer" }}
+                                    >Disposed{filters.disposedOnly ? " ✓" : ""}</button>
+
                                     {/* Salesperson */}
                                     <select className="pm-filter-select" value={filters.salesperson || ""} onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}>
                                         <option value="">All Salespersons</option>
@@ -2298,6 +2311,21 @@ export default function ProductionManagerDashboard() {
                                                                     <span className="pm-comp-label">{comp.component_label || comp.component_type}</span>
                                                                 </div>
                                                                 <ComponentStageBadge comp={comp} />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Why-disposed strip — one line per disposed piece with
+                                                    the stage it died at and the QC reason. */}
+                                                {(componentsByOrder[order.id] || []).some((c) => c.current_stage === "disposed") && (
+                                                    <div className="pm-disposed-note">
+                                                        {componentsByOrder[order.id].filter((c) => c.current_stage === "disposed").map((c) => (
+                                                            <div key={c.id} className="pm-disposed-line">
+                                                                <b>{c.component_label || c.component_type || c.barcode}</b>
+                                                                {" disposed"}
+                                                                {c.previous_stage ? ` at ${getStageLabel(c.previous_stage) || c.previous_stage}` : ""}
+                                                                {c.disposition_reason ? <> — <span className="pm-disposed-reason">{c.disposition_reason}</span></> : ""}
                                                             </div>
                                                         ))}
                                                     </div>
@@ -2491,15 +2519,16 @@ export default function ProductionManagerDashboard() {
                         )}
 
                         {/* ===== EXTERNAL VENDORS TAB (all channels) ===== */}
-                        {activeTab === "external_vendors" && (
-                            <>
-                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>At External Vendors — Items Out & History (All Channels)</p>
-                                <ExternalVendorsPanel rows={extMovements} loading={extMovementsLoading} onOrderClick={goToOrder} />
-                            </>
+                        {/* ===== DELIVERY REPORT (Dispatch + Report sub-tabs) ===== */}
+                        {activeTab === "delivery_report" && (
+                            <div className="pm-subtab-bar">
+                                <button className={`pm-subtab ${subTab === "dispatch" ? "active" : ""}`} onClick={() => setSubTab("dispatch")}>Dispatch</button>
+                                <button className={`pm-subtab ${subTab === "report" ? "active" : ""}`} onClick={() => setSubTab("report")}>Delivery Report</button>
+                            </div>
                         )}
 
-                        {/* ===== DISPATCH TAB ===== */}
-                        {activeTab === "dispatch" && (() => {
+                        {/* ===== DISPATCH sub-tab ===== */}
+                        {activeTab === "delivery_report" && subTab === "dispatch" && (() => {
                             const now = new Date();
                             const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
                             // An order is dispatched when it actually reached a finished
@@ -2561,8 +2590,8 @@ export default function ProductionManagerDashboard() {
                             );
                         })()}
 
-                        {/* ===== DELIVERY REPORT TAB ===== */}
-                        {activeTab === "delivery_report" && (() => {
+                        {/* ===== DELIVERY REPORT sub-tab ===== */}
+                        {activeTab === "delivery_report" && subTab === "report" && (() => {
                             const now = new Date();
                             const todayStr = now.toISOString().split("T")[0];
 
@@ -3178,9 +3207,21 @@ export default function ProductionManagerDashboard() {
                                 <ProductionOverrides currentUserEmail={currentUserEmail} />
                             </div>
                         )}
+                        {/* ===== VENDORS (Directory + At External Vendors sub-tabs) ===== */}
                         {activeTab === "vendors" && (
                             <div className="pm-orders-tab">
-                                <VendorRequest currentUserEmail={currentUserEmail} />
+                                <div className="pm-subtab-bar">
+                                    <button className={`pm-subtab ${subTab === "directory" ? "active" : ""}`} onClick={() => setSubTab("directory")}>Vendor Directory</button>
+                                    <button className={`pm-subtab ${subTab === "external" ? "active" : ""}`} onClick={() => setSubTab("external")}>At External Vendors</button>
+                                </div>
+                                {subTab === "external" ? (
+                                    <>
+                                        <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>At External Vendors — Items Out & History (All Channels)</p>
+                                        <ExternalVendorsPanel rows={extMovements} loading={extMovementsLoading} onOrderClick={goToOrder} />
+                                    </>
+                                ) : (
+                                    <VendorRequest currentUserEmail={currentUserEmail} />
+                                )}
                             </div>
                         )}
                         {activeTab === "replacements" && (

@@ -4,6 +4,7 @@ import Paginator from "./Paginator";
 import {
     externalMovementSummary,
     externalMovementVendors,
+    externalMovementStages,
     filterExternalMovements,
 } from "../utils/externalMovements";
 import "./ExternalVendorsPanel.css";
@@ -29,13 +30,18 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
     const [search, setSearch] = useState("");
     const [vendor, setVendor] = useState("");
     const [componentType, setComponentType] = useState("");
+    const [stage, setStage] = useState("");
     const [status, setStatus] = useState(""); // "" = all statuses (full history)
     const [overdueOnly, setOverdueOnly] = useState(false);
 
     const vendors = useMemo(() => externalMovementVendors(rows), [rows]);
+    // Per-stage counts (busiest first) — the count-labelled dropdown + the
+    // "most out for" insight chip.
+    const stageCounts = useMemo(() => externalMovementStages(rows), [rows]);
+    const topStage = stageCounts[0] || null;
     const filtered = useMemo(
-        () => filterExternalMovements(rows, { search, vendor, componentType, status, overdueOnly }),
-        [rows, search, vendor, componentType, status, overdueOnly]
+        () => filterExternalMovements(rows, { search, vendor, componentType, status, overdueOnly, stage }),
+        [rows, search, vendor, componentType, status, overdueOnly, stage]
     );
     // Summary reflects the whole dataset (so the counts don't collapse to the
     // filtered subset) — same intent as the other panels' summary strips.
@@ -43,15 +49,15 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
 
     // Page within the filtered set; filter changes reset to page 1.
     const [page, setPage] = useState(1);
-    useEffect(() => { setPage(1); }, [rows, search, vendor, componentType, status, overdueOnly]);
+    useEffect(() => { setPage(1); }, [rows, search, vendor, componentType, status, overdueOnly, stage]);
     const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
     const pageRows = useMemo(
         () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
         [filtered, page]
     );
 
-    const hasFilters = search || vendor || componentType || status || overdueOnly;
-    const clear = () => { setSearch(""); setVendor(""); setComponentType(""); setStatus(""); setOverdueOnly(false); };
+    const hasFilters = search || vendor || componentType || status || overdueOnly || stage;
+    const clear = () => { setSearch(""); setVendor(""); setComponentType(""); setStatus(""); setOverdueOnly(false); setStage(""); };
 
     // Clicking a summary chip toggles the matching filter (click again to clear).
     const toggleStatus = (s) => { setOverdueOnly(false); setStatus((prev) => (prev === s ? "" : s)); };
@@ -64,6 +70,12 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
                 <select className="ev-input" value={vendor} onChange={(e) => setVendor(e.target.value)}>
                     <option value="">All vendors</option>
                     {vendors.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <select className="ev-input" value={stage} onChange={(e) => setStage(e.target.value)}>
+                    <option value="">All stages</option>
+                    {stageCounts.map(({ stage: st, count }) => (
+                        <option key={st} value={st}>{st} ({count})</option>
+                    ))}
                 </select>
                 <select className="ev-input" value={componentType} onChange={(e) => setComponentType(e.target.value)}>
                     <option value="">All components</option>
@@ -87,6 +99,16 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
                 <button type="button" className={`ev-sum-item ev-sum-overdue ${overdueOnly ? "ev-sum-active" : ""}`} onClick={toggleOverdue}><b>{summary.overdue}</b> overdue</button>
                 <button type="button" className={`ev-sum-item ev-sum-returned ${status === "returned" ? "ev-sum-active" : ""}`} onClick={() => toggleStatus("returned")}><b>{summary.returned}</b> returned</button>
                 <button type="button" className={`ev-sum-item ${!status && !overdueOnly ? "ev-sum-active" : ""}`} onClick={clear}><b>{summary.total}</b> total trips</button>
+                {topStage && (
+                    <button
+                        type="button"
+                        className={`ev-sum-item ev-sum-top ${stage === topStage.stage ? "ev-sum-active" : ""}`}
+                        title="The stage most pieces went out for — click to filter"
+                        onClick={() => setStage(stage === topStage.stage ? "" : topStage.stage)}
+                    >
+                        Most out for: <b>{topStage.stage}</b> ({topStage.count})
+                    </button>
+                )}
             </div>
 
             <ExternalVendorsList

@@ -1,7 +1,15 @@
 .ev-panel { display: flex; flex-direction: column; gap: 14px; }
 
 /* ---- Filter bar (single line, wraps on narrow) ---- */
-.ev-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* Filters in a frosted toolbar card so the controls read as a designed bar. */
+.ev-filters {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    background: #FFFFFFB0;
+    backdrop-filter: blur(10px);
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 12px 16px;
+}
 .ev-input {
     padding: 8px 10px;
     border: 1px solid #ddd;
@@ -91,3 +99,7 @@
 .ev-dates { display: flex; gap: 18px; margin-top: 8px; flex-wrap: wrap; font-size: 12px; color: #777; }
 .ev-dates b { color: #444; font-weight: 600; }
 .ev-date-late { color: #c62828 !important; }
+
+/* "Most out for" chip — distinct gold accent among the summary chips. */
+.ev-sum-top { border-color: #e8dcc0; background: #fffaea; }
+.ev-sum-top:hover { border-color: #d5b85a; }
