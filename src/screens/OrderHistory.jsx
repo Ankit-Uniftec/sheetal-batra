@@ -624,11 +624,17 @@ export default function OrderHistory() {
 
     setActionLoading(order.id);
     try {
-      await supabase.from("orders").update({
+      // MUST check the update error: an unchecked failure here silently left
+      // the order un-cancelled while the success popup + ORDER_CANCELLED
+      // notification still fired (a "cancellation" notification with no actual
+      // cancellation and no audit trail). Throw so the catch surfaces it and
+      // nothing downstream runs.
+      const { error: cancelErr } = await supabase.from("orders").update({
         status: "cancelled",
         cancellation_reason: finalReason,
         cancelled_at: new Date().toISOString(),
       }).eq("id", order.id);
+      if (cancelErr) throw cancelErr;
 
       // Restore the inventory this order reserved at placement (once).
       if (!wasCancelled) await restoreOrderInventory(order);
@@ -675,11 +681,12 @@ export default function OrderHistory() {
 
     setActionLoading(order.id);
     try {
-      await supabase.from("orders").update({
+      const { error: revokeErr } = await supabase.from("orders").update({
         status: "revoked",
         revoked_at: new Date().toISOString(),
         cancellation_reason: "Brand-Initiated (Pre-Delivery) - Unable to fulfil order",
       }).eq("id", order.id);
+      if (revokeErr) throw revokeErr;
 
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "revoked" } : o));
       closeActionModal();
@@ -823,7 +830,8 @@ export default function OrderHistory() {
         updateData.exchange_value_difference = valueDifference;
       }
 
-      await supabase.from("orders").update(updateData).eq("id", order.id);
+      const { error: exchangeErr } = await supabase.from("orders").update(updateData).eq("id", order.id);
+      if (exchangeErr) throw exchangeErr;
 
       // Gifting: Lower value exchange → issue store credit for difference to original purchaser
       let creditMessage = "";
@@ -835,14 +843,16 @@ export default function OrderHistory() {
         const currentCredit = Number(profile?.store_credit) || 0;
         const newCredit = currentCredit + creditAmount;
 
-        await supabase.from("profiles").update({
+        const { error: creditErr } = await supabase.from("profiles").update({
           store_credit: newCredit,
           store_credit_expiry: expiryDate.toISOString().split('T')[0],
         }).eq("id", order.user_id);
+        if (creditErr) throw creditErr;
 
-        await supabase.from("orders").update({
+        const { error: creditFlagErr } = await supabase.from("orders").update({
           exchange_credit_issued: creditAmount,
         }).eq("id", order.id);
+        if (creditFlagErr) throw creditFlagErr;
 
         setProfile(prev => ({
           ...prev,
@@ -910,12 +920,13 @@ export default function OrderHistory() {
       const creditAmount = getSelectedItemsValue(order, selectedReturnItems);
 
       // Update order status
-      await supabase.from("orders").update({
+      const { error: returnErr } = await supabase.from("orders").update({
         status: isPartialReturn ? "partial_return" : "return_store_credit",
         return_reason: finalReason,
         exchange_requested_at: new Date().toISOString(),
         returned_items: isPartialReturn ? selectedReturnItems.map(idx => items[idx]) : null,
       }).eq("id", order.id);
+      if (returnErr) throw returnErr;
 
       // Add store credit to original purchaser's profile
       const expiryDate = new Date();
@@ -924,10 +935,11 @@ export default function OrderHistory() {
       const currentCredit = Number(profile?.store_credit) || 0;
       const newCredit = currentCredit + creditAmount;
 
-      await supabase.from("profiles").update({
+      const { error: returnCreditErr } = await supabase.from("profiles").update({
         store_credit: newCredit,
         store_credit_expiry: expiryDate.toISOString().split('T')[0],
       }).eq("id", order.user_id);
+      if (returnCreditErr) throw returnCreditErr;
 
       // Update local profile state
       setProfile(prev => ({
@@ -985,12 +997,13 @@ export default function OrderHistory() {
 
     setActionLoading(order.id);
     try {
-      await supabase.from("orders").update({
+      const { error: refundErr } = await supabase.from("orders").update({
         status: "refund_requested",
         refund_reason: finalReason,
         refund_status: "pending",
         exchange_requested_at: new Date().toISOString(),
       }).eq("id", order.id);
+      if (refundErr) throw refundErr;
 
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "refund_requested", refund_reason: finalReason } : o));
       closeActionModal();
