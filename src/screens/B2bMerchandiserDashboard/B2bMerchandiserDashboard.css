@@ -350,6 +350,12 @@
 .merch-pdf-btn:hover { background: #fdf6e3; }
 .merch-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Temporary Manual Completion — production-bypass action, so it reads in the
+   warning orange (same palette as the Production Head's button) to set it
+   apart from the neutral PDF actions beside it. */
+.merch-manual-complete-btn { background: #fff; border: 1px solid #e0913f; color: #c4631a; padding: 4px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 600; }
+.merch-manual-complete-btn:hover { background: #fff6ee; }
+
 /* Add Order Button */
 .merch-add-btn { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; border-radius: 50%; border: 3px solid #d5b85a; background: #d5b85a; font-size: 36px; color: white !important; cursor: pointer; z-index: 999; }
 /* ===== CALENDAR TAB ===== */

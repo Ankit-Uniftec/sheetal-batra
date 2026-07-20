@@ -19,6 +19,20 @@ import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 
+// An order that has finished (or was cancelled) is done — nothing about it is
+// still approvable or actionable. Same terminal set the PM/PH dashboards use.
+const TERMINAL_ORDER_STATUSES = ["completed", "delivered", "cancelled"];
+const isTerminalOrder = (order) =>
+    TERMINAL_ORDER_STATUSES.includes((order?.status || "").toLowerCase());
+
+// Temporary Manual Completion bypasses the production checks, so it is gated to
+// the specific merchandisers cleared for it rather than the whole role. Add or
+// remove an email here to grant/revoke (lowercase).
+const MANUAL_COMPLETE_EMAILS = [
+    "merchendiser.sheetalbatra@gmail.com", // Prastuti Kaushik (B2B merchandiser)
+    "merch@sheetalbatra.com",
+];
+
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
     const { showPopup, PopupComponent } = usePopup();
@@ -153,7 +167,7 @@ export default function B2bMerchandiserDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, re_journey_count")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
@@ -189,7 +203,12 @@ export default function B2bMerchandiserDashboard() {
     const stats = useMemo(() => {
         // pending stays absolute — it drives the Approvals queue + sidebar badge
         // (an action list, not an overview stat); everything else is period-scoped.
-        const pending = orders.filter(o => o.approval_status === "pending");
+        //
+        // An order that already finished can never need approval: legacy B2B
+        // orders (Jan-Feb, flagged is_b2b by migration 40) still carry
+        // approval_status='pending' from before the approval flow existed, so
+        // without this guard long-delivered orders sit in the queue forever.
+        const pending = orders.filter(o => o.approval_status === "pending" && !isTerminalOrder(o));
         const approved = periodOrders.filter(o => o.approval_status === "approved");
         const rejected = periodOrders.filter(o => o.approval_status === "rejected");
         const salesOrders = periodOrders.filter(o => o.b2b_order_type !== "Consignment");
@@ -292,7 +311,9 @@ export default function B2bMerchandiserDashboard() {
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
         if (statusFilter === "cancelled") filtered = filtered.filter(o => (o.status || "").toLowerCase() === "cancelled");
-        else if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter && (o.status || "").toLowerCase() !== "cancelled");
+        // "pending" additionally hides finished orders — a delivered order is not
+        // awaiting anything (legacy B2B orders keep approval_status='pending').
+        else if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter && (o.status || "").toLowerCase() !== "cancelled" && !(statusFilter === "pending" && isTerminalOrder(o)));
         if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
@@ -328,14 +349,15 @@ export default function B2bMerchandiserDashboard() {
     const consignmentStats = useMemo(() => ({
         total: consignmentOrders.length,
         value: consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-        pending: consignmentOrders.filter(o => o.approval_status === "pending").length,
+        // Same rule as the main queue: a finished order isn't awaiting approval.
+        pending: consignmentOrders.filter(o => o.approval_status === "pending" && !isTerminalOrder(o)).length,
         approved: consignmentOrders.filter(o => o.approval_status === "approved").length,
     }), [consignmentOrders]);
 
     const filteredConsignments = useMemo(() => {
         let list = consignmentOrders;
         if (consignStatusFilter === "cancelled") list = list.filter(o => (o.status || "").toLowerCase() === "cancelled");
-        else if (consignStatusFilter !== "all") list = list.filter(o => o.approval_status === consignStatusFilter && (o.status || "").toLowerCase() !== "cancelled");
+        else if (consignStatusFilter !== "all") list = list.filter(o => o.approval_status === consignStatusFilter && (o.status || "").toLowerCase() !== "cancelled" && !(consignStatusFilter === "pending" && isTerminalOrder(o)));
         if (consignSearch.trim()) {
             const q = consignSearch.toLowerCase();
             list = list.filter(o =>
@@ -615,7 +637,7 @@ export default function B2bMerchandiserDashboard() {
     };
 
     // ==================== CANCEL ORDER (24h, any channel, no approval) ====================
-    const CHANNEL_LABELS = { website: "Website", comms: "Comms", b2b: "B2B", private: "Private", offline: "Store / Exhibition" };
+    const CHANNEL_LABELS = { comms: "Comms", b2b: "B2B", private: "Private", exhibition: "Exhibition", stock: "Stock", offline: "Store" };
     const hoursSince = (ts) => (ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : Infinity);
     const orderAmount = (o) => Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
 
@@ -698,6 +720,38 @@ export default function B2bMerchandiserDashboard() {
         } finally {
             setCancelProcessing(false);
         }
+    };
+
+    // Temporary Manual Completion — force the order completed WITHOUT the normal
+    // production checks, behind a confirm. Same behaviour (and the same atomic
+    // manual_complete_order RPC) as the Production Head's button on the retail
+    // order dashboard: dispatches every active component and marks the order
+    // completed, rather than just flipping orders.status. Gated to
+    // MANUAL_COMPLETE_EMAILS — see the button below.
+    const markManualComplete = async (order) => {
+        const ok = await new Promise((resolve) => {
+            showPopup({
+                type: "confirm",
+                title: "Temporary Manual Completion",
+                message: `Mark order ${order.order_no} as completed WITHOUT the production checks? This bypasses the normal flow.`,
+                confirmText: "Yes, complete it",
+                cancelText: "Cancel",
+                onConfirm: () => resolve(true),
+                onCancel: () => resolve(false),
+            });
+        });
+        if (!ok) return;
+
+        const { data, error } = await supabase.rpc("manual_complete_order", {
+            p_order_id: order.id,
+            p_by: user?.email || "unknown",
+        });
+        if (error || data?.success === false) {
+            showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
+            return;
+        }
+        loadAllData();
+        showPopup({ type: "success", title: "Done", message: data?.message || `Order ${order.order_no} marked as completed.`, confirmText: "OK" });
     };
 
     // ==================== HELPERS ====================
@@ -1005,6 +1059,18 @@ export default function B2bMerchandiserDashboard() {
                                                 <button className="merch-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
                                                     {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
                                                 </button>
+                                                {/* Bypass for the cleared merchandiser when an order can't
+                                                    finish the normal gated flow. Hidden once the order is
+                                                    already finished/cancelled. */}
+                                                {MANUAL_COMPLETE_EMAILS.includes((user?.email || "").toLowerCase())
+                                                    && !["completed", "delivered", "cancelled"].includes(order.status) && (
+                                                    <button
+                                                        className="merch-manual-complete-btn"
+                                                        onClick={(e) => { e.stopPropagation(); markManualComplete(order); }}
+                                                    >
+                                                        Temporary Manual Completion
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="merch-ocard-content">

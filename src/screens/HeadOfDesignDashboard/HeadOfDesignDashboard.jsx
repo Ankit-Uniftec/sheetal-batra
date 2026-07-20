@@ -13,6 +13,7 @@ import {
 import SearchByDropdown from "../../components/SearchByDropdown";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
+import { getOrderChannelLabel } from "../../utils/barcodeService";
 
 // Head of Design Dashboard — read-only view for Tanuja Singh.
 // Two focused tabs:
@@ -32,7 +33,9 @@ const TIMELINE_OPTIONS = [
 const ITEMS_PER_PAGE = 15;
 
 const CHANNEL_COLORS = {
-  "Website (LXRTS)": "#1976d2",
+  "Comms": "#1565c0",
+  "Stock": "#546e7a",
+  "Store": "#2e7d32",
   "Delhi Store": "#d5b85a",
   "Ludhiana Store": "#8B7355",
   "B2B": "#7b1fa2",
@@ -73,17 +76,9 @@ const ChartTooltip = ({ active, payload, label, prefix = "₹" }) => {
   );
 };
 
-const getOrderChannel = (order) => {
-  if (order.items?.[0]?.sync_enabled === true) return "Website (LXRTS)";
-  if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") return "B2B";
-  if (order.is_private_order) return "Private";
-  const store = (order.salesperson_store || "").trim();
-  if (!store) return "Other";
-  if (/exhib/i.test(store)) return "Exhibition";
-  if (/delhi/i.test(store)) return "Delhi Store";
-  if (/ludhi/i.test(store)) return "Ludhiana Store";
-  return store;
-};
+// Channel = the shared prefix-based classifier (LXRTS is a TYPE, not a
+// channel — such orders report under the channel they were placed in).
+const getOrderChannel = (order) => getOrderChannelLabel(order);
 
 const getOrderStatus = (order) => {
   if (order.refund_status === "pending" || order.refund_reason) return "refund_requested";

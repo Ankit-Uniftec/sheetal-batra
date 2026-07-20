@@ -17,6 +17,7 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
+import { getOrderChannelLabel } from "../../utils/barcodeService";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -70,7 +71,6 @@ const PIE_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37"];
 const CHANNEL_OPTIONS = [
     { value: "all", label: "All Channels" },
     { value: "store", label: "Stores" },
-    { value: "website", label: "Website" },
     { value: "b2b", label: "B2B" },
     { value: "exhibition", label: "Exhibitions" },
 ];
@@ -335,13 +335,9 @@ export default function CEODashboard() {
     const isLxrtsProduct = (product) => product.sync_enabled === true;
 
     // Channel classifier: LXRTS → Website, B2B → B2B, store → store name
-    const getOrderChannel = (order) => {
-        if (isLxrtsOrder(order)) return "Website (LXRTS)";
-        const store = (order.salesperson_store || "").trim();
-        if (!store) return "Other";
-        if (store.toLowerCase() === "b2b") return "B2B";
-        return store;
-    };
+    // Channel = the shared prefix-based classifier (LXRTS is a TYPE, not a
+    // channel — such orders report under the channel they were placed in).
+    const getOrderChannel = (order) => getOrderChannelLabel(order);
 
     // Get actual person name (not store name) for salesperson fields
     const getOrderSalesperson = (order) => {
@@ -1577,58 +1573,6 @@ export default function CEODashboard() {
         return { storeBreakdown, saBreakdown, topDays, saIssuesList, maxIssueSA, dailySalesData, storeNames: storeBreakdown.map(s => s.name) };
     }, [orders, timeline, customDateFrom, customDateTo]);
 
-    // ═══════════════════════════════════════════════════════════
-    // CEO: WEBSITE PERFORMANCE
-    // ═══════════════════════════════════════════════════════════
-    const websiteStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const webOrders = orders.filter(o => isLxrtsOrder(o));
-        const current = filterOrdersByDateRange(webOrders, dateRange);
-
-        const totalRevenue = current.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const totalOrders = current.length;
-        const totalQty = current.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
-        const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-        // Growth
-        const periodMs = dateRange.end - dateRange.start;
-        const prevWeb = webOrders.filter(o => { const d = new Date(o.created_at); return d >= new Date(dateRange.start.getTime() - periodMs) && d < dateRange.start; });
-        const prevRevenue = prevWeb.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const revenueGrowth = calculateGrowth(totalRevenue, prevRevenue);
-        const ordersGrowth = calculateGrowth(totalOrders, prevWeb.length);
-
-        // Top products
-        const prodMap = {};
-        current.filter(o => o.status !== "cancelled").forEach(o => {
-            (o.items || []).forEach(it => {
-                const name = it.product_name || "Unknown";
-                if (!prodMap[name]) prodMap[name] = { name, sales: 0, count: 0 };
-                prodMap[name].sales += Number(it.price || 0) * Number(it.quantity || 1);
-                prodMap[name].count += Number(it.quantity || 1);
-            });
-        });
-        const topProducts = Object.values(prodMap).sort((a, b) => b.sales - a.sales).slice(0, 10);
-
-        // Returns/cancellations/refunds/exchanges
-        const returns = current.filter(o => o.return_reason).length;
-        const cancellations = current.filter(o => o.status === "cancelled").length;
-        const refunds = current.filter(o => o.refund_reason).length;
-        const exchanges = current.filter(o => o.exchange_reason).length;
-
-        // Weekly/monthly order trend
-        const weeklyMap = {};
-        current.forEach(o => {
-            const d = new Date(o.created_at);
-            const weekStart = new Date(d); weekStart.setDate(d.getDate() - d.getDay());
-            const key = weekStart.toISOString().split("T")[0];
-            if (!weeklyMap[key]) weeklyMap[key] = { week: `${weekStart.getDate()}/${weekStart.getMonth() + 1}`, revenue: 0, orders: 0 };
-            weeklyMap[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            weeklyMap[key].orders += 1;
-        });
-        const weeklyTrend = Object.values(weeklyMap).sort((a, b) => a.week.localeCompare(b.week));
-
-        return { totalRevenue, totalOrders, totalQty, aov, revenueGrowth, ordersGrowth, topProducts, returns, cancellations, refunds, exchanges, weeklyTrend };
-    }, [orders, timeline, customDateFrom, customDateTo]);
 
     // ═══════════════════════════════════════════════════════════
     // CEO: OPERATIONAL FLAGS
@@ -1719,7 +1663,6 @@ export default function CEODashboard() {
                         <button className={`admin-nav-item ${activeTab === "client_insights" ? "active" : ""}`} onClick={() => { setActiveTab("client_insights"); setShowSidebar(false); }}>Client Insights</button>
                         <button className={`admin-nav-item ${activeTab === "b2b_vendor" ? "active" : ""}`} onClick={() => { setActiveTab("b2b_vendor"); setShowSidebar(false); }}>B2B Performance</button>
                         <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
-                        <button className={`admin-nav-item ${activeTab === "website" ? "active" : ""}`} onClick={() => { setActiveTab("website"); setShowSidebar(false); }}>Website Performance</button>
                         <button className={`admin-nav-item ${activeTab === "cost_expenditure" ? "active" : ""}`} onClick={() => { setActiveTab("cost_expenditure"); setShowSidebar(false); }}>Cost & Expenditure</button>
                         <button className={`admin-nav-item ${activeTab === "targets_growth" ? "active" : ""}`} onClick={() => { setActiveTab("targets_growth"); setShowSidebar(false); }}>Targets & Growth</button>
                         <button className={`admin-nav-item ${activeTab === "ops_flags" ? "active" : ""}`} onClick={() => { setActiveTab("ops_flags"); setShowSidebar(false); }}>Operational Flags</button>
@@ -2778,11 +2721,6 @@ export default function CEODashboard() {
                                     <PlaceholderBadge label="Refund data pending" />
                                 </div>
                                 <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refunds — Website</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel refunds pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Refunds — Stores</span>
                                     <span className="stat-value">—</span>
                                     <PlaceholderBadge label="Channel refunds pending" />
@@ -2801,11 +2739,6 @@ export default function CEODashboard() {
                                     <span className="stat-label">Total Returns</span>
                                     <span className="stat-value">₹0</span>
                                     <PlaceholderBadge label="Returns data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Returns — Website</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel returns pending" />
                                 </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Returns — Stores</span>
@@ -3072,58 +3005,9 @@ export default function CEODashboard() {
                                     </div>
                                 )}
                             </div>
-
-                            {/* 4. Website Growth % */}
-                            <h3 className="admin-subsection-title">Website Growth %</h3>
-                            <div className="analytics-chart-card">
-                                <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                    <PlaceholderBadge label="Website analytics integration pending" />
-                                    <span>Website traffic, conversion and revenue growth will appear here</span>
-                                </div>
-                            </div>
                         </div>
                     )}
 
-                    {/* ═══════════ CEO: WEBSITE PERFORMANCE ═══════════ */}
-                    {activeTab === "website" && (
-                        <div className="admin-dashboard-tab">
-                            <h2 className="admin-section-title">Website Performance</h2>
-
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Website Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(websiteStats.totalRevenue))}</span></div>
-                                    <span className={`stat-growth ${websiteStats.revenueGrowth >= 0 ? "positive" : "negative"}`}>{websiteStats.revenueGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(websiteStats.revenueGrowth).toFixed(1)}%</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Orders</span><span className="stat-value">{websiteStats.totalOrders}</span></div>
-                                    <span className={`stat-growth ${websiteStats.ordersGrowth >= 0 ? "positive" : "negative"}`}>{websiteStats.ordersGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(websiteStats.ordersGrowth).toFixed(1)}%</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Qty Sold</span><span className="stat-value">{websiteStats.totalQty}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">AOV</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(websiteStats.aov))}</span></div></div>
-                            </div>
-
-                            {/* Weekly trend */}
-                            {websiteStats.weeklyTrend.length > 0 && (<>
-                                <h3 className="admin-subsection-title">Weekly Order Trend</h3>
-                                <div className="admin-chart-container"><ResponsiveContainer width="100%" height={300}>
-                                    <AreaChart data={websiteStats.weeklyTrend}><CartesianGrid strokeDasharray="3 3" stroke="#eee" /><XAxis dataKey="week" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={v => `\u20B9${(v / 1000).toFixed(0)}K`} /><Tooltip content={<ChartTooltip />} /><Legend /><Area type="monotone" dataKey="revenue" stroke="#d5b85a" fill="#d5b85a" fillOpacity={0.15} name="Revenue" /></AreaChart>
-                                </ResponsiveContainer></div>
-                            </>)}
-
-                            {/* Top products */}
-                            {websiteStats.topProducts.length > 0 && (<>
-                                <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Top Products (Website)</h3>
-                                <div className="admin-chart-container"><ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={websiteStats.topProducts} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#eee" /><XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `\u20B9${(v / 1000).toFixed(0)}K`} /><YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={150} /><Tooltip content={<ChartTooltip />} /><Bar dataKey="sales" fill="#d5b85a" name="Revenue" radius={[0, 4, 4, 0]} /></BarChart>
-                                </ResponsiveContainer></div>
-                            </>)}
-
-                            {/* Returns/cancellations summary */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Returns, Cancellations, Refunds & Exchanges</h3>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Returns</span><span className="stat-value">{websiteStats.returns}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Cancellations</span><span className="stat-value">{websiteStats.cancellations}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Refunds</span><span className="stat-value">{websiteStats.refunds}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Exchanges</span><span className="stat-value">{websiteStats.exchanges}</span></div></div>
-                            </div>
-                        </div>
-                    )}
 
                     {/* ═══════════ CEO: OPERATIONAL FLAGS ═══════════ */}
                     {activeTab === "ops_flags" && (

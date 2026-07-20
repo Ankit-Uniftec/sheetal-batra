@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import Badge from "./Badge";
+import ComponentStageBadge from "./ComponentStageBadge";
 import formatDate from "../utils/formatDate";
 import {
   getStageLabel,
@@ -152,19 +152,20 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                 // When the piece is physically out at a vendor, show "Out to
                 // Vendor (<stage>)" (the stage it went out for, from the active
                 // exited movement) instead of the raw current_stage.
-                const outStageLabel = c.is_outside_wh
-                  ? getStagesOutsideLabel(movements.find((m) => m.status === "exited")?.stages_outside)
-                  : null;
+                // The badge reads comp.stages_outside; this modal knows the
+                // active exited movement, so feed it from there rather than
+                // relying on the caller having enriched the component.
+                const badgeComp = c.is_outside_wh
+                  ? { ...c, stages_outside: movements.find((m) => m.status === "exited")?.stages_outside ?? c.stages_outside }
+                  : c;
                 return (
                   <>
                     <div className="cjm-comp-head">
                       <span className="cjm-comp-name">{c.component_label || c.component_type}</span>
                       <span className="cjm-comp-bc">{c.barcode}</span>
-                      {c.is_outside_wh ? (
-                        <Badge color="#e0913f">{outStageLabel ? `Out to Vendor (${outStageLabel})` : "Out to Vendor"}</Badge>
-                      ) : (
-                        <Badge color={getStageColor(c.current_stage)}>{getStageLabel(c.current_stage)}</Badge>
-                      )}
+                      {/* Shared badge so the stage text (and the re-journey
+                          pass number) matches every dashboard. */}
+                      <ComponentStageBadge comp={badgeComp} />
                       {info && (
                         <span className={`cjm-vendor-now ${info.overdue ? "cjm-overdue" : ""}`}>
                           {info.text}

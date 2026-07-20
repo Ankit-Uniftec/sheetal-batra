@@ -188,16 +188,81 @@ export function getStageTextColor() {
 // order-history list (offline heads still look up any order).
 //
 // Returns the channel key for an order, matching the designation buckets:
-//   'website' | 'comms' | 'b2b' | 'private' | 'offline'  (offline = exhibition/store)
+//   'comms' | 'b2b' | 'private' | 'exhibition' | 'stock' | 'offline' (= store)
+//
+// The ORDER NUMBER PREFIX is the authoritative signal — SB-<PREFIX>-MMYY-NNNNNN
+// — because it is stamped at placement from the store the order was raised in
+// and never drifts afterwards. Flags (is_b2b, is_comms…) and salesperson_store
+// are only a fallback for rows with a missing/unknown prefix.
+//
+// There is deliberately NO "website" channel: LXRTS orders sync from Shopify
+// but are PLACED in a store (or B2B, or any channel), so LXRTS is an order
+// TYPE, not a channel — such an order badges and reports as whatever channel
+// it was placed through. Do not reintroduce a sync_enabled → website rule.
+const CHANNEL_BY_ORDER_PREFIX = {
+  DLC: "offline",     // Delhi store
+  LDHC: "offline",    // Ludhiana store
+  EXB: "exhibition",
+  PVT: "private",
+  B2B: "b2b",
+  COM: "comms",
+  STOCK: "stock",     // internal stock orders, not a customer channel
+};
+
+// "SB-DLC-0726-003625" → "DLC"
+export function getOrderPrefix(order) {
+  const parts = String(order?.order_no || "").split("-");
+  return parts.length > 1 ? parts[1].toUpperCase() : "";
+}
+
+// LXRTS is an order TYPE (product synced from Shopify), not a channel — an
+// LXRTS order is placed through a store/B2B/etc and reports under that channel.
+export const isLxrtsOrder = (order) => order?.items?.[0]?.sync_enabled === true;
+
+// Display label for revenue/channel breakdowns — same prefix authority as
+// getOrderChannelKey, but the two physical stores split out. Every dashboard's
+// channel breakdown must use this so the labels (and the numbers behind them)
+// can't drift between screens.
+export function getOrderChannelLabel(order) {
+  const prefix = getOrderPrefix(order);
+  if (prefix === "DLC") return "Delhi Store";
+  if (prefix === "LDHC") return "Ludhiana Store";
+  const key = getOrderChannelKey(order);
+  if (key === "b2b") return "B2B";
+  if (key === "comms") return "Comms";
+  if (key === "private") return "Private";
+  if (key === "exhibition") return "Exhibition";
+  if (key === "stock") return "Stock";
+  // offline with an unknown/missing prefix — try the store name.
+  const store = (order?.salesperson_store || "").trim().toLowerCase();
+  if (store.includes("delhi")) return "Delhi Store";
+  if (store.includes("ludhiana")) return "Ludhiana Store";
+  return "Store";
+}
+
+// Fixed display order + colors for channel breakdowns, shared app-wide.
+export const CHANNEL_SEGMENTS = [
+  { label: "Delhi Store", color: "#2e7d32" },
+  { label: "Ludhiana Store", color: "#00897b" },
+  { label: "B2B", color: "#d5b85a" },
+  { label: "Private", color: "#8e24aa" },
+  { label: "Comms", color: "#1565c0" },
+  { label: "Exhibition", color: "#6d4c41" },
+  { label: "Stock", color: "#546e7a" },
+  { label: "Store", color: "#2e7d32" }, // offline fallback (unknown prefix)
+];
+
 export function getOrderChannelKey(order) {
   if (!order) return null;
+
+  const byPrefix = CHANNEL_BY_ORDER_PREFIX[getOrderPrefix(order)];
+  if (byPrefix) return byPrefix;
+
+  // Fallback only — order_no missing or an unrecognised prefix.
   const store = (order.salesperson_store || "").trim();
-  // Website (LXRTS): first item sync_enabled = true
-  if (order.items?.[0]?.sync_enabled === true) return "website";
   if (store === "COMMS" || order.is_comms) return "comms";
   if (store === "B2B" || order.is_b2b) return "b2b";
   if (store === "Private" || order.is_private_order) return "private";
-  // Exhibition / Delhi Store / Ludhiana Store → offline (also the safe default)
   return "offline";
 }
 
@@ -206,20 +271,41 @@ export function getOrderChannelKey(order) {
 // all channels — caller should skip scoping when this is null).
 export function getChannelKeyForDesignation(designation) {
   const d = (designation || "").trim().toLowerCase();
-  if (d === "online production head") return "website";
   if (d === "communications executive") return "comms";
   if (d === "b2b production head") return "b2b";
   if (d === "private sa") return "private";
+  // Store + exhibition are one production workload (the offline head owns both).
   if (d === "offline production head") return "offline";
   return null; // not a single-channel head → no scoping
 }
 
-// Filter orders to the channel a designation owns. If the designation isn't a
-// single-channel head, returns the list unchanged (no scoping).
+// Channels a designation owns. Exhibition is its own channel for badges and
+// revenue, but it is not its own production workload — the offline head runs
+// store AND exhibition, so scoping must accept both.
+const CHANNELS_OWNED_BY_DESIGNATION = {
+  offline: ["offline", "exhibition", "stock"],
+};
+
+// Filter orders to the channel(s) a designation owns. If the designation isn't
+// a single-channel head, returns the list unchanged (no scoping).
+//
+// The Online Production Head is special: "website" no longer exists as a
+// channel, but the warehouse workload split is real — the online head runs the
+// LXRTS-TYPE orders (whatever channel they were placed in) and the offline
+// head runs the rest of store/exhibition. Scoping by type here keeps exactly
+// who-sees-what from before the channel model changed.
 export function scopeOrdersToDesignation(orders, designation) {
+  if (!Array.isArray(orders)) return [];
+  const d = (designation || "").trim().toLowerCase();
+  if (d === "online production head") return orders.filter(isLxrtsOrder);
+
   const channel = getChannelKeyForDesignation(designation);
-  if (!channel || !Array.isArray(orders)) return orders || [];
-  return orders.filter((o) => getOrderChannelKey(o) === channel);
+  if (!channel) return orders;
+  const owned = CHANNELS_OWNED_BY_DESIGNATION[channel] || [channel];
+  let scoped = orders.filter((o) => owned.includes(getOrderChannelKey(o)));
+  // LXRTS-type pieces are the online head's workload, not the offline head's.
+  if (channel === "offline") scoped = scoped.filter((o) => !isLxrtsOrder(o));
+  return scoped;
 }
 
 // ============================================================
