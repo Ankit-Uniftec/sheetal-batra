@@ -9,7 +9,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import formatPhoneNumber from "../../utils/formatPhoneNumber";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
-import { SCAN_STATIONS } from "../../utils/barcodeService";
+import { SCAN_STATIONS, getOrderChannelLabel } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
@@ -73,7 +73,6 @@ const PIE_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37"];
 const CHANNEL_OPTIONS = [
     { value: "all", label: "All Channels" },
     { value: "store", label: "Stores" },
-    { value: "website", label: "Website" },
     { value: "b2b", label: "B2B" },
     { value: "exhibition", label: "Exhibitions" },
 ];
@@ -588,13 +587,9 @@ export default function AdminDashboard() {
     const isLxrtsProduct = (product) => product.sync_enabled === true;
 
     // Channel classifier: LXRTS → Website, B2B → B2B, store → store name
-    const getOrderChannel = (order) => {
-        if (isLxrtsOrder(order)) return "Website (LXRTS)";
-        const store = (order.salesperson_store || "").trim();
-        if (!store) return "Other";
-        if (store.toLowerCase() === "b2b") return "B2B";
-        return store;
-    };
+    // Channel = the shared prefix-based classifier (LXRTS is a TYPE, not a
+    // channel — such orders report under the channel they were placed in).
+    const getOrderChannel = (order) => getOrderChannelLabel(order);
 
     // Get actual person name (not store name) for salesperson fields
     const getOrderSalesperson = (order) => {
@@ -3042,11 +3037,6 @@ export default function AdminDashboard() {
                                     <PlaceholderBadge label="Refund data pending" />
                                 </div>
                                 <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refunds — Website</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel refunds pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Refunds — Stores</span>
                                     <span className="stat-value">—</span>
                                     <PlaceholderBadge label="Channel refunds pending" />
@@ -3065,11 +3055,6 @@ export default function AdminDashboard() {
                                     <span className="stat-label">Total Returns</span>
                                     <span className="stat-value">₹0</span>
                                     <PlaceholderBadge label="Returns data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Returns — Website</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel returns pending" />
                                 </div>
                                 <div className="admin-stat-card overview-card">
                                     <span className="stat-label">Returns — Stores</span>
@@ -3335,15 +3320,6 @@ export default function AdminDashboard() {
                                         <span className="stat-sub">No B2B data in period</span>
                                     </div>
                                 )}
-                            </div>
-
-                            {/* 4. Website Growth % */}
-                            <h3 className="admin-subsection-title">Website Growth %</h3>
-                            <div className="analytics-chart-card">
-                                <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                    <PlaceholderBadge label="Website analytics integration pending" />
-                                    <span>Website traffic, conversion and revenue growth will appear here</span>
-                                </div>
                             </div>
                         </div>
                     )}

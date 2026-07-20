@@ -15,6 +15,7 @@ import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
+import { getOrderChannelLabel } from "../../utils/barcodeService";
 
 // Timeline options
 const TIMELINE_OPTIONS = [
@@ -206,13 +207,9 @@ export default function RetailManagerDashboard() {
     // ═══════════════════════════════════════════════════════════
     const isLxrtsOrder = (order) => order.items?.[0]?.sync_enabled === true;
 
-    const getOrderChannel = (order) => {
-        if (isLxrtsOrder(order)) return "Website (LXRTS)";
-        const store = (order.salesperson_store || "").trim();
-        if (!store) return "Other";
-        if (store.toLowerCase() === "b2b") return "B2B";
-        return store;
-    };
+    // Channel = the shared prefix-based classifier (LXRTS is a TYPE, not a
+    // channel — such orders report under the channel they were placed in).
+    const getOrderChannel = (order) => getOrderChannelLabel(order);
 
     // ★ CORE FILTER: exclude B2B from everything
     const retailOrders = useMemo(() => {

@@ -1,3 +1,5 @@
+import { getOrderChannelLabel, CHANNEL_SEGMENTS } from "./barcodeService";
+
 // Shared production-operations metrics — the "Production Overview" numbers
 // (Total Orders, Production Load, Bottlenecks, Delayed, Rework %, Dispatch
 // Backlog, pipeline). Pure functions over an orders array, so every dashboard
@@ -16,16 +18,26 @@ export function computeStatusStats(list) {
   return { pending, inProd, dispatched, readyForDispatch };
 }
 
-// Channel split (B2B vs Store). Single-channel dashboards can ignore this.
-export function computeChannelStats(list) {
+
+// Full channel breakdown for "Orders by Channel" — one row per channel with
+// the two physical stores split (Delhi / Ludhiana), in the shared segment
+// order. Zero-count segments are dropped. Labels/colors come from
+// CHANNEL_SEGMENTS so every dashboard's breakdown is identical.
+export function computeChannelBreakdown(list = []) {
+  const counts = {};
+  list.forEach((o) => {
+    const label = getOrderChannelLabel(o);
+    counts[label] = (counts[label] || 0) + 1;
+  });
   const total = list.length;
-  const b2b = list.filter(o => o.is_b2b === true).length;
-  const store = total - b2b;
-  return {
-    total, b2b, store: store > 0 ? store : 0,
-    b2bPct: total > 0 ? Math.round((b2b / total) * 100) : 0,
-    storePct: total > 0 ? Math.round((store > 0 ? store : 0) / total * 100) : 0,
-  };
+  const segments = CHANNEL_SEGMENTS
+    .filter((s) => counts[s.label] > 0)
+    .map((s) => ({
+      ...s,
+      count: counts[s.label],
+      pct: total > 0 ? Math.round((counts[s.label] / total) * 100) : 0,
+    }));
+  return { total, segments };
 }
 
 // The full production-operations metric set. `statusStats` must be

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import { computeStatusStats, computeChannelStats, computeProductionMetrics } from "../utils/productionMetrics";
+import { computeStatusStats, computeChannelBreakdown, computeProductionMetrics } from "../utils/productionMetrics";
 import "./ProductionOverview.css";
 
 // Shared "Production Overview" — the operational metric cards (Total Orders,
@@ -9,7 +9,7 @@ import "./ProductionOverview.css";
 // dashboard renders identical cards from the same shared compute.
 //
 //   orders       the order set to summarise (already scoped by the caller)
-//   showChannel  include the "Orders by Channel" (B2B vs Store) block — only
+//   showChannel  include the "Orders by Channel" (all channels, stores split) block — only
 //                meaningful on the multi-channel Production Manager dashboard.
 //   totalLabel   heading for the Total Orders card (default "Total Orders").
 
@@ -46,7 +46,7 @@ function ChannelRow({ label, count, percentage, color }) {
 
 export default function ProductionOverview({ orders = [], showChannel = false, totalLabel = "Total Orders" }) {
   const statusStats = useMemo(() => computeStatusStats(orders), [orders]);
-  const channelStats = useMemo(() => computeChannelStats(orders), [orders]);
+  const channelBreakdown = useMemo(() => computeChannelBreakdown(orders), [orders]);
   const metrics = useMemo(() => computeProductionMetrics(orders, statusStats), [orders, statusStats]);
 
   const pipeline = [
@@ -63,8 +63,8 @@ export default function ProductionOverview({ orders = [], showChannel = false, t
       <div className="po-stats-row">
         <StatCard
           title={totalLabel}
-          value={formatIndianNumber(channelStats.total)}
-          subtitle={showChannel ? `B2B: ${channelStats.b2b} | Store: ${channelStats.store}` : `${statusStats.inProd} in production · ${statusStats.dispatched} dispatched`}
+          value={formatIndianNumber(channelBreakdown.total)}
+          subtitle={showChannel ? `across ${channelBreakdown.segments.length} channels` : `${statusStats.inProd} in production · ${statusStats.dispatched} dispatched`}
           highlight
           icon={Icon.package}
         />
@@ -111,8 +111,9 @@ export default function ProductionOverview({ orders = [], showChannel = false, t
           <div className="po-channel-card">
             <p className="po-card-title">Orders by Channel</p>
             <div className="po-channel-body">
-              <ChannelRow label="Store (Offline)" count={channelStats.store} percentage={channelStats.storePct} color="#2e7d32" />
-              <ChannelRow label="B2B" count={channelStats.b2b} percentage={channelStats.b2bPct} color="#d5b85a" />
+              {channelBreakdown.segments.map((s) => (
+                <ChannelRow key={s.label} label={s.label} count={s.count} percentage={s.pct} color={s.color} />
+              ))}
             </div>
           </div>
         )}

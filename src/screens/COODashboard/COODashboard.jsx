@@ -17,6 +17,7 @@ import FactoryPause from "../../components/FactoryPause";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
+import { getOrderChannelLabel } from "../../utils/barcodeService";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -200,13 +201,9 @@ export default function COODashboard() {
     const isLxrtsOrder = (order) => order.items?.[0]?.sync_enabled === true;
     const nonLxrtsOrders = useMemo(() => orders.filter(o => !isLxrtsOrder(o)), [orders]);
 
-    const getOrderChannel = (order) => {
-        if (isLxrtsOrder(order)) return "Website";
-        const store = (order.salesperson_store || "").trim();
-        if (!store) return "Other";
-        if (store.toLowerCase() === "b2b") return "B2B";
-        return store;
-    };
+    // Channel = the shared prefix-based classifier (LXRTS is a TYPE, not a
+    // channel — such orders report under the channel they were placed in).
+    const getOrderChannel = (order) => getOrderChannelLabel(order);
 
     const getOrderSalesperson = (order) => {
         if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") return order.merchandiser_name || order.salesperson || null;

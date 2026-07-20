@@ -187,7 +187,6 @@
 /* Channel Tags */
 .pm-channel-tag { font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
 .pm-channel-b2b { background: #faf6e8; color: #b79b3d; border: 1px solid #d5b85a; }
-.pm-channel-website { background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
 .pm-channel-store { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
 
 /* Status Colors (pills) */
@@ -746,8 +745,8 @@
 /* Channel badges beyond B2B/Store — same palette as the Store filter. */
 .pm-channel-comms { background: #e3f2fd; color: #1565c0; }
 .pm-channel-private { background: #f3e5f5; color: #8e24aa; }
-.pm-channel-website { background: #fff3e0; color: #ef6c00; }
 .pm-channel-exhibition { background: #efebe9; color: #6d4c41; }
+.pm-channel-stock { background: #eceff1; color: #546e7a; }
 
 /* Sub-tab bar — pill row inside a merged section (Delivery Report, Vendors). */
 .pm-subtab-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }

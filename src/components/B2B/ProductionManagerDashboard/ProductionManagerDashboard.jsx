@@ -30,7 +30,8 @@ import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
-import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey } from "../../../utils/barcodeService";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel } from "../../../utils/barcodeService";
+import { computeChannelBreakdown } from "../../../utils/productionMetrics";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
@@ -123,18 +124,18 @@ const StatCard = ({ title, value, subtitle, highlight, icon, onClick }) => (
 // Exhibitions all resolve to the "offline" channel key, so they're disambiguated
 // by salesperson_store; the rest match on getOrderChannelKey. The set is
 // exhaustive (website included) so a breakdown's parts always sum to the total.
+// Channel comes from the order-number prefix (see getOrderChannelKey). The two
+// physical stores share the "offline" channel, so they still split on the store
+// name. There is no Website/LXRTS option: LXRTS is an order type, not a
+// channel — those orders sit under whichever channel they were placed in.
 const STORE_FILTER_OPTIONS = [
-    { value: "Delhi Store", label: "Delhi Store", color: "#2e7d32", match: (o) => (o.salesperson_store || "").trim() === "Delhi Store" },
-    { value: "Ludhiana Store", label: "Ludhiana Store", color: "#00897b", match: (o) => (o.salesperson_store || "").trim() === "Ludhiana Store" },
+    { value: "Delhi Store", label: "Delhi Store", color: "#2e7d32", match: (o) => getOrderChannelLabel(o) === "Delhi Store" },
+    { value: "Ludhiana Store", label: "Ludhiana Store", color: "#00897b", match: (o) => getOrderChannelLabel(o) === "Ludhiana Store" },
     { value: "B2B", label: "B2B", color: "#d5b85a", match: (o) => getOrderChannelKey(o) === "b2b" },
     { value: "Private", label: "Private", color: "#8e24aa", match: (o) => getOrderChannelKey(o) === "private" },
     { value: "Comms", label: "Comms", color: "#1565c0", match: (o) => getOrderChannelKey(o) === "comms" },
-    { value: "Website", label: "Website (LXRTS)", color: "#ef6c00", match: (o) => getOrderChannelKey(o) === "website" },
-    // Exhibitions = offline orders that aren't the two physical stores.
-    { value: "Exhibitions", label: "Exhibitions", color: "#6d4c41", match: (o) => {
-        const s = (o.salesperson_store || "").trim();
-        return getOrderChannelKey(o) === "offline" && s !== "Delhi Store" && s !== "Ludhiana Store";
-    } },
+    { value: "Exhibitions", label: "Exhibitions", color: "#6d4c41", match: (o) => getOrderChannelKey(o) === "exhibition" },
+    { value: "Stock", label: "Stock", color: "#546e7a", match: (o) => getOrderChannelKey(o) === "stock" },
 ];
 const matchesStoreFilter = (order, selected) =>
     STORE_FILTER_OPTIONS.some((opt) => selected.includes(opt.value) && opt.match(order));
@@ -817,16 +818,6 @@ export default function ProductionManagerDashboard() {
     // full order set (shared with the Production tab) or the Overview
     // period-filtered set (overviewOrders). Extracted so the Overview filter can
     // reuse it without changing the shared (full-orders) versions.
-    const computeChannelStats = (list) => {
-        const total = list.length;
-        const b2b = list.filter(o => o.is_b2b === true).length;
-        const store = total - b2b;
-        return {
-            total, b2b, store: store > 0 ? store : 0,
-            b2bPct: total > 0 ? Math.round((b2b / total) * 100) : 0,
-            storePct: total > 0 ? Math.round((store > 0 ? store : 0) / total * 100) : 0,
-        };
-    };
     const computeStatusStats = (list) => {
         const pending = list.filter(o => o.status === "pending" || o.status === "order_received" || o.status === "confirmed").length;
         const inProd = list.filter(o => o.status === "prepared" || o.production_status === "in_production").length;
@@ -834,7 +825,6 @@ export default function ProductionManagerDashboard() {
         const readyForDispatch = list.filter(o => o.production_status === "ready_for_dispatch").length;
         return { pending, inProd, dispatched, readyForDispatch };
     };
-    const channelStats = useMemo(() => computeChannelStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
     const statusStats = useMemo(() => computeStatusStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Human label for the current Overview period (used in the revenue card etc.).
@@ -1123,7 +1113,7 @@ export default function ProductionManagerDashboard() {
     // The originals (channelStats/statusStats/productionMetrics over full orders)
     // stay untouched so the Production tab is unaffected.
     const statusStatsOv = useMemo(() => computeStatusStats(overviewOrders), [overviewOrders]); // eslint-disable-line react-hooks/exhaustive-deps
-    const channelStatsOv = useMemo(() => computeChannelStats(overviewOrders), [overviewOrders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const channelBreakdownOv = useMemo(() => computeChannelBreakdown(overviewOrders), [overviewOrders]);
     const productionMetricsOv = useMemo(() => computeProductionMetrics(overviewOrders, statusStatsOv), [overviewOrders, statusStatsOv]); // eslint-disable-line react-hooks/exhaustive-deps
     const recentOrdersOv = useMemo(() => overviewOrders.slice(0, 10), [overviewOrders]);
 
@@ -1324,22 +1314,14 @@ export default function ProductionManagerDashboard() {
 
     // Channel badge — the full channel model, not the old binary B2B/Store
     // (Comms, Private and Website orders all read as "Store" before).
-    const getChannelLabel = (order) => {
-        const key = getOrderChannelKey(order);
-        if (key === "b2b") return "B2B";
-        if (key === "comms") return "Comms";
-        if (key === "private") return "Private";
-        if (key === "website") return "Website";
-        const st = (order.salesperson_store || "").trim();
-        return (st && st !== "Delhi Store" && st !== "Ludhiana Store") ? "Exhibition" : "Store";
+    const CHANNEL_LABELS = {
+        b2b: "B2B", comms: "Comms", private: "Private",
+        exhibition: "Exhibition", stock: "Stock", offline: "Store",
     };
+    const getChannelLabel = (order) => CHANNEL_LABELS[getOrderChannelKey(order)] || "Store";
     const getChannelClass = (order) => {
         const key = getOrderChannelKey(order);
-        if (key === "offline") {
-            const st = (order.salesperson_store || "").trim();
-            return (st && st !== "Delhi Store" && st !== "Ludhiana Store") ? "pm-channel-exhibition" : "pm-channel-store";
-        }
-        return `pm-channel-${key}`;
+        return `pm-channel-${key === "offline" ? "store" : key}`;
     };
 
     const getStatusLabel = (order) => {
@@ -2023,7 +2005,7 @@ export default function ProductionManagerDashboard() {
                                 {/* ===== PRODUCTION METRICS SECTION ===== */}
                                 <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Production Overview</p>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelStatsOv.total)} subtitle={`B2B: ${channelStatsOv.b2b} | Store: ${channelStatsOv.store}`} highlight={true} icon={Icons.package} />
+                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelBreakdownOv.total)} subtitle={`across ${channelBreakdownOv.segments.length} channels`} highlight={true} icon={Icons.package} />
                                     <StatCard title="Production Load" value={`${productionMetricsOv.productionLoad.percentage}%`} subtitle={`${productionMetricsOv.productionLoad.active} in production`} icon={Icons.gear} />
                                     <StatCard title="Bottlenecks" value={productionMetricsOv.bottlenecks.count} subtitle={productionMetricsOv.bottlenecks.count > 0 ? `${productionMetricsOv.bottlenecks.topBottleneck} · ${productionMetricsOv.bottlenecks.topOverdue} overdue · avg ${productionMetricsOv.bottlenecks.topAvgDays}d late` : "No overdue stages"} highlight={productionMetricsOv.bottlenecks.count > 0} icon={Icons.warning} />
                                 </div>
@@ -2035,8 +2017,9 @@ export default function ProductionManagerDashboard() {
                                 <div className="pm-channel-card">
                                     <p className="pm-card-title">Orders by Channel</p>
                                     <div className="pm-channel-body">
-                                        <ChannelRow label="Store (Offline)" count={channelStatsOv.store} percentage={channelStatsOv.storePct} color="#2e7d32" />
-                                        <ChannelRow label="B2B" count={channelStatsOv.b2b} percentage={channelStatsOv.b2bPct} color="#d5b85a" />
+                                        {channelBreakdownOv.segments.map((seg) => (
+                                            <ChannelRow key={seg.label} label={seg.label} count={seg.count} percentage={seg.pct} color={seg.color} />
+                                        ))}
                                     </div>
                                 </div>
                                 <div className="pm-bottom-row">
@@ -2414,7 +2397,7 @@ export default function ProductionManagerDashboard() {
                                 <div className="pm-stats-row-3">
                                     <StatCard title="Rework" value={productionMetrics.rework.totalReworks} subtitle={`${productionMetrics.rework.percentage}% rate`} icon={Icons.refresh} />
                                     <StatCard title="Delayed" value={productionMetrics.delayed} subtitle={`${productionMetrics.delayRate}% delay rate`} highlight={productionMetrics.delayed > 0} icon={Icons.warning} />
-                                    <StatCard title="Received (Total)" value={channelStats.total} icon={Icons.inbox} />
+                                    <StatCard title="Received (Total)" value={orders.length} icon={Icons.inbox} />
                                 </div>
 
                                 {productionMetrics.stuckByStage.length > 0 && (
