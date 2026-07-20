@@ -219,11 +219,34 @@ export function getOrderPrefix(order) {
 // LXRTS order is placed through a store/B2B/etc and reports under that channel.
 export const isLxrtsOrder = (order) => order?.items?.[0]?.sync_enabled === true;
 
+// "pending" is legacy for "order_received" — the same state, written by older
+// code paths and still sitting in old rows (with mixed casing: "Pending").
+// Nothing branches on the difference; every consumer already maps one to the
+// other, so normalise once here rather than repeating the ternary at each
+// display site (where it kept getting missed — the delivery-report CSV showed
+// a raw "Pending" next to "order_received" for identical orders).
+export function normalizeOrderStatus(status) {
+  const s = (status || "").trim().toLowerCase();
+  if (!s || s === "pending") return "order_received";
+  return s;
+}
+
+// Human label for an order status: "order_received" -> "Order Received".
+export function getOrderStatusLabel(status) {
+  return normalizeOrderStatus(status)
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 // Display label for revenue/channel breakdowns — same prefix authority as
 // getOrderChannelKey, but the two physical stores split out. Every dashboard's
 // channel breakdown must use this so the labels (and the numbers behind them)
 // can't drift between screens.
 export function getOrderChannelLabel(order) {
+  // Stock flag first — see getOrderChannelKey; a stock order raised through a
+  // store keeps that store's prefix but must not report as store revenue.
+  if (order?.is_stock_order === true) return "Stock";
   const prefix = getOrderPrefix(order);
   if (prefix === "DLC") return "Delhi Store";
   if (prefix === "LDHC") return "Ludhiana Store";
@@ -254,6 +277,11 @@ export const CHANNEL_SEGMENTS = [
 
 export function getOrderChannelKey(order) {
   if (!order) return null;
+
+  // The stock FLAG outranks the prefix: internal stock is sometimes raised
+  // through a store's normal flow, so it carries that store's prefix (e.g.
+  // SB-LDHC-…) while being stock. The flag is what dashboards filter on.
+  if (order.is_stock_order === true) return "stock";
 
   const byPrefix = CHANNEL_BY_ORDER_PREFIX[getOrderPrefix(order)];
   if (byPrefix) return byPrefix;

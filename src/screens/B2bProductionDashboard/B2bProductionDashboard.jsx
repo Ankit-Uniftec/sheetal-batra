@@ -12,6 +12,7 @@ import "../../components/ProductionHeadVendors.css";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import useTabParam from "../../hooks/useTabParam";
+import useFilterParam from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import StageCountCards from "../../components/StageCountCards";
 import ProductionOverview from "../../components/ProductionOverview";
@@ -52,7 +53,7 @@ export default function B2bProductionDashboard() {
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
     // All Orders tab
-    const [orderSearch, setOrderSearch] = useState("");
+    const [orderSearch, setOrderSearch] = useFilterParam("q", "");
     const [prodFilter, setProdFilter] = useState("all");
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
@@ -74,8 +75,8 @@ export default function B2bProductionDashboard() {
     const [dispatchPage, setDispatchPage] = useState(1);
 
     // All Orders type filter
-    const [allTypeFilter, setAllTypeFilter] = useState("all");
-    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
+    const [allTypeFilter, setAllTypeFilter] = useFilterParam("type", "all");
+    const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     // Stage-card drill-through: filter the All Orders list to a stage (and kind).

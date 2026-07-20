@@ -138,7 +138,7 @@
 .merch-appr-row { display: flex; align-items: center; gap: 8px; }
 .merch-appr-dlabel { font-size: 13px; color: #c9a34a; font-weight: 600; }
 .merch-appr-dvalue { font-size: 14px; color: #333; font-weight: 500; }
-.merch-appr-grid { display: flex; gap: 48px; flex-wrap: wrap; }
+.merch-appr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px 32px; }
 .merch-appr-gitem { display: flex; flex-direction: column; gap: 2px; }
 .merch-appr-gitem .merch-appr-dlabel { font-size: 13px; }
 .merch-appr-gitem .merch-appr-dvalue { font-size: 12px; }
@@ -185,7 +185,7 @@
 .merch-ocard-row { display: flex; align-items: center; gap: 8px; }
 .merch-ocard-dlabel { font-size: 13px; color: #c9a34a; font-weight: 600; min-width: fit-content; }
 .merch-ocard-dval { font-size: 13px; color: #333; font-weight: 500; }
-.merch-ocard-grid { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 6px; padding-top: 8px; border-top: 1px solid #f0ead0; }
+.merch-ocard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px 32px; margin-top: 6px; padding-top: 8px; border-top: 1px solid #f0ead0; }
 .merch-ocard-gitem { display: flex; flex-direction: column; gap: 2px; }
 .merch-ocard-gitem .merch-ocard-dlabel { font-size: 11px; color: #999; text-transform: uppercase; }
 .merch-ocard-gitem .merch-ocard-dval { font-size: 13px; font-weight: 600; }
@@ -309,7 +309,7 @@
   .merch-appr-info, .merch-ocard-info { flex-wrap: wrap; gap: 20px; }
   .merch-appr-content, .merch-ocard-content { flex-direction: column; }
   .merch-appr-thumb img, .merch-ocard-thumb img { width: 100px; height: 130px; }
-  .merch-appr-grid, .merch-ocard-grid { gap: 24px; }
+  .merch-appr-grid, .merch-ocard-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 16px; }
   .merch-appr-actions, .merch-ocard-actions { flex-wrap: wrap; }
   .merch-vc-avatar-lg { width: 60px; height: 80px; font-size: 24px; }
   .merch-consignment-stats { flex-direction: column; }

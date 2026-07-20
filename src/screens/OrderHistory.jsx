@@ -14,6 +14,7 @@ import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationServi
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import { restoreOrderInventory } from "../utils/restoreOrderInventory";
 import useTabParam from "../hooks/useTabParam";
+import useFilterParam from "../hooks/useFilterParam";
 import Paginator from "../components/Paginator";
 
 // Measurement categories and fields (same as Screen4)
@@ -270,13 +271,13 @@ export default function OrderHistory() {
   const [deletingDraft, setDeletingDraft] = useState(null);
   const [continuingDraft, setContinuingDraft] = useState(null);
 
-  // Search state
-  const [searchQuery, setSearchQuery] = useState("");
+  // Search + filter state lives in the URL so opening an order and pressing
+  // Back returns to the same filtered list instead of a reset one.
+  const [searchQuery, setSearchQuery] = useFilterParam("q");
 
-  // Filter state
-  const [statusFilter, setStatusFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [statusFilter, setStatusFilter] = useFilterParam("status");
+  const [dateFrom, setDateFrom] = useFilterParam("from");
+  const [dateTo, setDateTo] = useFilterParam("to");
 
   const [attachmentLoading, setAttachmentLoading] = useState(null);
 

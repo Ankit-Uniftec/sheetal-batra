@@ -11,13 +11,30 @@ import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
-import { enrichComponentsWithMovements, getOrderChannelKey } from "../../utils/barcodeService";
+import { enrichComponentsWithMovements, getOrderChannelKey, getOrderStatusLabel } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
 import useTabParam from "../../hooks/useTabParam";
+import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
+
+// Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
+// how the Production Head / PM order cards render top and bottom.
+function GarmentValue({ name, color }) {
+    return (
+        <>
+            {name || "—"}
+            {color?.hex && (
+                <>
+                    <span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: color.hex, borderRadius: "50%", marginLeft: 6, border: "1px solid #ccc", verticalAlign: "middle" }} />
+                    <span style={{ marginLeft: 4 }}>{color.name}</span>
+                </>
+            )}
+        </>
+    );
+}
 
 // An order that has finished (or was cancelled) is done — nothing about it is
 // still approvable or actionable. Same terminal set the PM/PH dashboards use.
@@ -55,12 +72,14 @@ export default function B2bMerchandiserDashboard() {
     const [approvalProcessing, setApprovalProcessing] = useState(false);
 
     // Orders tab filters
-    const [orderSearch, setOrderSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
-    const [typeFilter, setTypeFilter] = useState("all");
-    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    const [orderSearch, setOrderSearch] = useFilterParam("q", "");
+    const [statusFilter, setStatusFilter] = useFilterParam("status", "all");
+    const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
+    const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
+    const [dateFrom, setDateFrom] = useFilterParam("from", "");
+    const [dateTo, setDateTo] = useFilterParam("to", "");
+    // One navigation, or the five setters clobber each other (see the hook).
+    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "from", "to"]);
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
 
@@ -1000,9 +1019,16 @@ export default function B2bMerchandiserDashboard() {
                                                     <div className="merch-appr-grid">
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Amount:</span><span className="merch-appr-dvalue">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Qty:</span><span className="merch-appr-dvalue">{order.total_quantity || 1}</span></div>
+                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Top:</span><span className="merch-appr-dvalue"><GarmentValue name={item.top} color={item.top_color} /></span></div>
+                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Bottom:</span><span className="merch-appr-dvalue"><GarmentValue name={item.bottom} color={item.bottom_color} /></span></div>
+                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Size:</span><span className="merch-appr-dvalue">{item.size || "\u2014"}</span></div>
+                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Category:</span><span className="merch-appr-dvalue">{item.isKids ? "Kids" : "Women"}</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Markdown:</span><span className="merch-appr-dvalue">{order.markdown_percent || 0}%</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Delivery:</span><span className="merch-appr-dvalue">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                     </div>
+                                                    {item.extras?.length > 0 && (
+                                                        <div className="merch-appr-row"><span className="merch-appr-dlabel">Extras:</span><span className="merch-appr-dvalue">{item.extras.map((ex, i) => (<span key={i}><GarmentValue name={ex.name} color={ex.color} />{i < item.extras.length - 1 && <span style={{ margin: "0 8px" }}>|</span>}</span>))}</span></div>
+                                                    )}
                                                     {order.comments && (<div className="merch-appr-notes"><span className="merch-appr-dlabel">Notes:</span><span className="merch-appr-dvalue">{order.comments}</span></div>)}
                                                 </div>
                                             </div>
@@ -1031,7 +1057,7 @@ export default function B2bMerchandiserDashboard() {
                             <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="merch-filter-select" title="From date" />
                             <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="merch-filter-select" title="To date" />
                             {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
-                                <button onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
+                                <button onClick={() => { clearOrderFilters(); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
                             )}
                         </div>
                         <div className="merch-order-list-scroll">
@@ -1082,9 +1108,16 @@ export default function B2bMerchandiserDashboard() {
                                                 <div className="merch-ocard-grid">
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Qty:</span><span className="merch-ocard-dval">{order.total_quantity || 1}</span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Top:</span><span className="merch-ocard-dval"><GarmentValue name={item.top} color={item.top_color} /></span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Bottom:</span><span className="merch-ocard-dval"><GarmentValue name={item.bottom} color={item.bottom_color} /></span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Size:</span><span className="merch-ocard-dval">{item.size || "\u2014"}</span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Category:</span><span className="merch-ocard-dval">{item.isKids ? "Kids" : "Women"}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Markdown:</span><span className="merch-ocard-dval">{order.markdown_percent || 0}%</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Delivery:</span><span className="merch-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 </div>
+                                                {item.extras?.length > 0 && (
+                                                    <div className="merch-ocard-row"><span className="merch-ocard-dlabel">Extras:</span><span className="merch-ocard-dval">{item.extras.map((ex, i) => (<span key={i}><GarmentValue name={ex.name} color={ex.color} />{i < item.extras.length - 1 && <span style={{ margin: "0 8px" }}>|</span>}</span>))}</span></div>
+                                                )}
                                             </div>
                                         </div>
                                         {(componentsByOrder[order.id]?.length > 0) && (
@@ -1259,7 +1292,7 @@ export default function B2bMerchandiserDashboard() {
 
                                         {/* Details */}
                                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", fontSize: 13 }}>
-                                            <div><span className="merch-ocard-dlabel">Status:</span> <span className="merch-ocard-dval">{o.status || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Status:</span> <span className="merch-ocard-dval">{getOrderStatusLabel(o.status)}</span></div>
                                             <div><span className="merch-ocard-dlabel">Placed:</span> <span className="merch-ocard-dval">{formatDate(o.created_at)}</span></div>
                                             <div><span className="merch-ocard-dlabel">Amount:</span> <span className="merch-ocard-dval">{`₹${formatIndianNumber(orderAmount(o))}`}</span></div>
                                             <div><span className="merch-ocard-dlabel">Store:</span> <span className="merch-ocard-dval">{o.salesperson_store || "—"}</span></div>

@@ -11,7 +11,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
 import { usePopup } from "../components/Popup";
-import { getSAStageLabel, getSAStageColor } from "../utils/barcodeService";
+import { getSAStageLabel, getSAStageColor, getOrderStatusLabel } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
@@ -1514,7 +1514,7 @@ export default function Dashboard() {
                         <div className="ad-order-item" key={o.id}>
                           <p><b>Order No:</b> {o.order_no}</p>
                           <p><b>Client Name:</b> {o.delivery_name}</p>
-                          <p><b>Status:</b> {(!o.status || o.status === "pending") ? "Order Received" : o.status === "order_received" ? "Order Received" : o.status}</p>
+                          <p><b>Status:</b> {getOrderStatusLabel(o.status)}</p>
                           <p><b>Delivery Date:</b> {formatDate(o.delivery_date)}</p>
                         </div>
                       ))
@@ -2020,7 +2020,7 @@ export default function Dashboard() {
                             {isServices && !isOwnOrder(order) && (
                               <p><b>SA:</b> {order.salesperson || "—"}</p>
                             )}
-                            <p><b>Status:</b> {(!order.status || order.status === "pending") ? "Order Received" : order.status === "order_received" ? "Order Received" : order.status}</p>
+                            <p><b>Status:</b> {getOrderStatusLabel(order.status)}</p>
                             <p><b>Delivery Date:</b> {formatDate(order.delivery_date)}</p>
                           </div>
                         ))

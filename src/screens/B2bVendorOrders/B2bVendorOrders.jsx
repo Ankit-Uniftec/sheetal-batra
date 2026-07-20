@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import Paginator from "../../components/Paginator";
+import useFilterParam from "../../hooks/useFilterParam";
 
 const ORDERS_PER_PAGE = 6;
 
@@ -28,8 +29,8 @@ export default function B2bVendorOrders() {
     });
 
     // Search + status filter — this list previously had neither.
-    const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
+    const [search, setSearch] = useFilterParam("q", "");
+    const [statusFilter, setStatusFilter] = useFilterParam("status", "all");
 
     // Pagination (totalPages derived from the filtered list below)
     const [currentPage, setCurrentPage] = useState(1);
