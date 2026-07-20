@@ -31,7 +31,7 @@ import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
-import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel } from "../../../utils/barcodeService";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_SEGMENTS, getOrderStatusLabel } from "../../../utils/barcodeService";
 import { computeChannelBreakdown } from "../../../utils/productionMetrics";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
@@ -264,6 +264,7 @@ export default function ProductionManagerDashboard() {
     });
     const [drDateTo, setDrDateTo] = useState(() => new Date().toISOString().split("T")[0]);
     const [drChannel, setDrChannel] = useState("all");
+    const [drStatus, setDrStatus] = useState("all");
     const [drBucket, setDrBucket] = useState("all");
     const [drSearch, setDrSearch] = useState("");
 
@@ -518,6 +519,17 @@ export default function ProductionManagerDashboard() {
 
     // Disposed pieces are excluded from stage grouping, so the stage filter
     // can't target them — drill via a dedicated disposedOnly flag instead.
+    // Delivery Report -> All Orders, carrying the report's channel and which
+    // half of the report you were on. The report lists only 50 rows (it is a
+    // summary, not a browser); this hands the full set to the real order list
+    // where paging, search and every filter already exist.
+    const showAllFromReport = (which) => {
+        setChannelFilter(drChannel);
+        setStatusTab(which === "open" ? "unfulfilled" : "completed");
+        setFilters(prev => ({ ...prev, delayedOnly: which === "open" }));
+        setActiveTab("orders");
+    };
+
     const handleDisposedClick = () => {
         setFilters(prev => ({ ...prev, disposedOnly: true }));
         setStatusTab("all");
@@ -1201,8 +1213,10 @@ export default function ProductionManagerDashboard() {
     // ==================== FILTERED + PAGINATED ORDERS ====================
     const filteredByStatus = useMemo(() => {
         return orders.filter(o => {
-            if (channelFilter === "b2b" && !o.is_b2b) return false;
-            if (channelFilter === "store" && o.is_b2b) return false;
+            // Channel is the shared classifier's label (Delhi Store, B2B, …) —
+            // the old check was a b2b/store binary that could not express the
+            // other channels the Delivery Report and badges already use.
+            if (channelFilter !== "all" && getOrderChannelLabel(o) !== channelFilter) return false;
             const status = o.status?.toLowerCase();
             switch (statusTab) {
                 case "unfulfilled": return status !== "completed" && status !== "delivered" && status !== "cancelled";
@@ -1294,7 +1308,7 @@ export default function ProductionManagerDashboard() {
     }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups, disposedOrderIds]);
 
     const orderTabCounts = useMemo(() => {
-        const base = channelFilter === "b2b" ? orders.filter(o => o.is_b2b) : channelFilter === "store" ? orders.filter(o => !o.is_b2b) : orders;
+        const base = channelFilter === "all" ? orders : orders.filter(o => getOrderChannelLabel(o) === channelFilter);
         return {
             all: base.length,
             unfulfilled: base.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length,
@@ -2078,8 +2092,9 @@ export default function ProductionManagerDashboard() {
                                     </div>
                                     <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="pm-filter-select" style={{ flex: "0 0 auto" }}>
                                         <option value="all">All Channels</option>
-                                        <option value="b2b">B2B</option>
-                                        <option value="store">Store</option>
+                                        {CHANNEL_SEGMENTS.map(seg => (
+                                            <option key={seg.label} value={seg.label}>{seg.label}</option>
+                                        ))}
                                     </select>
                                     <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="pm-filter-select" style={{ flex: "0 0 auto" }}>
                                         <option value="newest">Newest First</option>
@@ -2258,7 +2273,7 @@ export default function ProductionManagerDashboard() {
                                                         ) : getStageGroupKey(order.warehouse_stage) ? (
                                                             <Badge color={getStageColor(order.warehouse_stage)}>{getStageLabel(order.warehouse_stage)}</Badge>
                                                         ) : (
-                                                            <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{order.status === "pending" ? "Order Received" : (order.status === "order_received" ? "Order Received" : (order.status || "Order Received"))}</div>
+                                                            <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{getOrderStatusLabel(order.status)}</div>
                                                         )}
                                                         {order.priority && <span className={`pm-priority-tag pm-priority-${order.priority}`}>{order.priority === "urgent" ? "🔴" : order.priority === "high" ? "🟠" : "🟢"} {order.priority}</span>}
                                                     </div>
@@ -2458,7 +2473,7 @@ export default function ProductionManagerDashboard() {
                                                         <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                         <td style={{ padding: "8px 10px" }} title={`Customer date: ${formatDate(o.delivery_date)}`}>{getWarehouseDate(o.delivery_date, o.created_at)}</td>
                                                         <td style={{ padding: "8px 10px", color: "#c62828", fontWeight: 600 }}>{overdue}d</td>
-                                                        <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
+                                                        <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage ? o.warehouse_stage.replace(/_/g, " ") : getOrderStatusLabel(o.status))}</td>
                                                         <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                                                             <button
                                                                 onClick={(e) => handleMarkComplete(o, e)}
@@ -2584,12 +2599,16 @@ export default function ProductionManagerDashboard() {
                             const toDate = drDateTo ? new Date(drDateTo + "T23:59:59") : null;
 
                             // Channel filter
-                            const channelMatch = (o) => {
-                                if (drChannel === "all") return true;
-                                if (drChannel === "b2b") return !!o.is_b2b;
-                                if (drChannel === "store") return !o.is_b2b;
-                                return true;
-                            };
+                            // Channel from the shared classifier — the old check was a
+                            // binary is_b2b, so Delhi/Ludhiana/Private/Exhibition all
+                            // collapsed into one "Store" option.
+                            const channelMatch = (o) => drChannel === "all" || getOrderChannelLabel(o) === drChannel;
+
+                            // Completed vs still-open. "Pending" in this report is not an
+                            // order status — it labels an OPEN order already past its
+                            // deadline (see the open-orders pass below).
+                            const statusMatch = (isOpen) =>
+                                drStatus === "all" || (drStatus === "open" ? isOpen : !isOpen);
 
                             // Bucketing helper: days = how late (negative = on-time)
                             const bucketOf = (daysLate) => {
@@ -2614,6 +2633,7 @@ export default function ProductionManagerDashboard() {
 
                             const completedRows = [];
                             orders.forEach(o => {
+                                if (!statusMatch(false)) return;
                                 if (o.status !== "delivered" && o.status !== "completed") return;
                                 if (!o.delivery_date) return;
                                 if (!channelMatch(o)) return;
@@ -2663,6 +2683,7 @@ export default function ProductionManagerDashboard() {
                             // ==================== OPEN ORDERS (currently running late) ====================
                             const openRows = [];
                             orders.forEach(o => {
+                                if (!statusMatch(true)) return;
                                 if (o.status === "delivered" || o.status === "completed" || o.status === "cancelled") return;
                                 // Dispatched = production complete, so there's no late work to chase.
                                 // status and warehouse_stage track different things: an order that
@@ -2726,15 +2747,19 @@ export default function ProductionManagerDashboard() {
                             const filteredOpen = applyBucketAndSearch(openRows).sort((a, b) => b.daysLate - a.daysLate);
 
                             // ==================== BUCKET STYLING ====================
+                            // bg/fg style the BADGE (fg reads on bg). accent is the card
+                            // colour — the number and active border sit on a WHITE card, so
+                            // it can never be white itself: the critical bucket's fg is #fff,
+                            // which rendered an invisible count.
                             const bucketStyle = (b) => {
                                 switch (b) {
-                                    case "ontime": return { bg: "#e8f5e9", fg: "#2e7d32", label: "On-time" };
-                                    case "0_2": return { bg: "#fffde7", fg: "#f57f17", label: "0\u20132d late" };
-                                    case "2_7": return { bg: "#fff3e0", fg: "#e65100", label: "2\u20137d late" };
-                                    case "7_14": return { bg: "#ffebee", fg: "#c62828", label: "7\u201314d late" };
-                                    case "14_plus": return { bg: "#b71c1c", fg: "#fff", label: "14+d critical" };
-                                    case "no_date": return { bg: "#eceff1", fg: "#546e7a", label: "no completion date" };
-                                    default: return { bg: "#f5f5f5", fg: "#333", label: b };
+                                    case "ontime": return { bg: "#e8f5e9", fg: "#2e7d32", accent: "#2e7d32", label: "On-time" };
+                                    case "0_2": return { bg: "#fffde7", fg: "#f57f17", accent: "#f57f17", label: "0\u20132d late" };
+                                    case "2_7": return { bg: "#fff3e0", fg: "#e65100", accent: "#e65100", label: "2\u20137d late" };
+                                    case "7_14": return { bg: "#ffebee", fg: "#c62828", accent: "#c62828", label: "7\u201314d late" };
+                                    case "14_plus": return { bg: "#b71c1c", fg: "#fff", accent: "#b71c1c", label: "14+d critical" };
+                                    case "no_date": return { bg: "#eceff1", fg: "#546e7a", accent: "#546e7a", label: "no completion date" };
+                                    default: return { bg: "#f5f5f5", fg: "#333", accent: "#333", label: b };
                                 }
                             };
 
@@ -2764,7 +2789,7 @@ export default function ProductionManagerDashboard() {
                                         r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : (r.isOpen ? "Not yet delivered" : "No completion date recorded"),
                                         r.daysLate == null ? "-" : (r.daysLate <= 0 ? "On-time" : r.daysLate),
                                         bucketStyle(r.bucket).label,
-                                        o.status || "",
+                                        getOrderStatusLabel(o.status),
                                     ].map(v => `"${String(v).replace(/"/g, '""')}"`);
                                 });
                                 const csv = [headers.join(","), ...csvRows.map(r => r.join(","))].join("\n");
@@ -2787,7 +2812,7 @@ export default function ProductionManagerDashboard() {
                                         style={{
                                             cursor: "pointer",
                                             background: "#fff",
-                                            border: active ? `2px solid ${style.fg}` : "1px solid #e0e0e0",
+                                            border: active ? `2px solid ${style.accent}` : "1px solid #e0e0e0",
                                             borderRadius: 12,
                                             padding: "14px 16px",
                                             transition: "all 0.15s",
@@ -2795,7 +2820,7 @@ export default function ProductionManagerDashboard() {
                                         }}
                                     >
                                         <p style={{ fontSize: 12, color: "#666", margin: 0, fontWeight: 500 }}>{title}</p>
-                                        <p style={{ fontSize: 24, fontWeight: 700, margin: "6px 0 2px", color: highlight ? style.fg : "#333" }}>{value}</p>
+                                        <p style={{ fontSize: 24, fontWeight: 700, margin: "6px 0 2px", color: highlight ? style.accent : "#333" }}>{value}</p>
                                         {subtitle && <p style={{ fontSize: 11, color: "#999", margin: 0 }}>{subtitle}</p>}
                                     </div>
                                 );
@@ -2819,8 +2844,17 @@ export default function ProductionManagerDashboard() {
                                             <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Channel</label>
                                             <select value={drChannel} onChange={(e) => setDrChannel(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff" }}>
                                                 <option value="all">All Channels</option>
-                                                <option value="store">Store</option>
-                                                <option value="b2b">B2B</option>
+                                                {CHANNEL_SEGMENTS.map(seg => (
+                                                    <option key={seg.label} value={seg.label}>{seg.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Status</label>
+                                            <select value={drStatus} onChange={(e) => setDrStatus(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff" }}>
+                                                <option value="all">All</option>
+                                                <option value="done">Completed / Delivered</option>
+                                                <option value="open">Open (past deadline)</option>
                                             </select>
                                         </div>
                                         <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 200px", minWidth: 180 }}>
@@ -2878,7 +2912,7 @@ export default function ProductionManagerDashboard() {
                                                         <th style={{ padding: "10px 12px", textAlign: "center" }}>Bucket</th>
                                                         <th style={{ padding: "10px 12px" }}>Stage</th>
                                                     </tr></thead>
-                                                    <tbody>{filteredOpen.slice(0, 100).map(r => {
+                                                    <tbody>{filteredOpen.slice(0, 50).map(r => {
                                                         const o = r.order;
                                                         const style = bucketStyle(r.bucket);
                                                         return (
@@ -2890,15 +2924,21 @@ export default function ProductionManagerDashboard() {
                                                                 <td style={{ padding: "8px 12px" }}>{formatDate(o.delivery_date)}</td>
                                                                 <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "#c62828" }}>{r.daysLate}d</td>
                                                                 <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                                                                    <span style={{ background: style.bg, color: style.fg, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{style.label}</span>
+                                                                    <span className="pm-bucket-badge" style={{ background: style.bg, "--bucket-fg": style.fg }}>{style.label}</span>
                                                                 </td>
-                                                                <td style={{ padding: "8px 12px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
+                                                                <td style={{ padding: "8px 12px", textTransform: "capitalize" }}>{(o.warehouse_stage ? o.warehouse_stage.replace(/_/g, " ") : getOrderStatusLabel(o.status))}</td>
                                                             </tr>
                                                         );
                                                     })}</tbody>
                                                 </table>
                                             </div>
-                                            {filteredOpen.length > 100 && <p style={{ fontSize: 11, color: "#999", marginTop: 8, textAlign: "center" }}>Showing top 100 of {filteredOpen.length} {"\u2014"} use filters to narrow</p>}
+                                            {filteredOpen.length > 50 && (
+                                                <div style={{ marginTop: 10, textAlign: "center" }}>
+                                                    <button className="pm-showall-btn" onClick={() => showAllFromReport("open")}>
+                                                        Show all {filteredOpen.length} in All Orders
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -2921,7 +2961,7 @@ export default function ProductionManagerDashboard() {
                                                         <th style={{ padding: "10px 12px", textAlign: "center" }}>Days Late</th>
                                                         <th style={{ padding: "10px 12px", textAlign: "center" }}>Bucket</th>
                                                     </tr></thead>
-                                                    <tbody>{filteredCompleted.slice(0, 200).map(r => {
+                                                    <tbody>{filteredCompleted.slice(0, 50).map(r => {
                                                         const o = r.order;
                                                         const style = bucketStyle(r.bucket);
                                                         return (
@@ -2935,13 +2975,19 @@ export default function ProductionManagerDashboard() {
                                                                 <td style={{ padding: "8px 12px" }}>{r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : "-"}</td>
                                                                 <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: r.daysLate == null ? "#90a4ae" : r.daysLate <= 0 ? "#2e7d32" : "#c62828" }}>{r.daysLate == null ? "\u2014" : r.daysLate <= 0 ? "\u2713" : `${r.daysLate}d`}</td>
                                                                 <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                                                                    <span style={{ background: style.bg, color: style.fg, borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{style.label}</span>
+                                                                    <span className="pm-bucket-badge" style={{ background: style.bg, "--bucket-fg": style.fg }}>{style.label}</span>
                                                                 </td>
                                                             </tr>
                                                         );
                                                     })}</tbody>
                                                 </table>
-                                                {filteredCompleted.length > 200 && <p style={{ fontSize: 11, color: "#999", marginTop: 8, textAlign: "center" }}>Showing top 200 of {filteredCompleted.length} {"\u2014"} use filters or export for full list</p>}
+                                                {filteredCompleted.length > 50 && (
+                                                    <div style={{ marginTop: 10, textAlign: "center" }}>
+                                                        <button className="pm-showall-btn" onClick={() => showAllFromReport("completed")}>
+                                                            Show all {filteredCompleted.length} in All Orders
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -3119,8 +3165,8 @@ export default function ProductionManagerDashboard() {
                                                                 <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
                                                                 <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                                 <td style={{ padding: "8px 10px" }}>{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
-                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
-                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{o.status || "-"}</td>
+                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage ? o.warehouse_stage.replace(/_/g, " ") : getOrderStatusLabel(o.status))}</td>
+                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{getOrderStatusLabel(o.status)}</td>
                                                             </tr>
                                                         ))}</tbody>
                                                     </table>
@@ -3144,7 +3190,7 @@ export default function ProductionManagerDashboard() {
                                                             <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
                                                             <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                             <td style={{ padding: "8px 10px" }} title={`Customer date: ${formatDate(o.delivery_date)}`}>{getWarehouseDate(o.delivery_date, o.created_at)}</td>
-                                                            <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage || (o.status === "pending" ? "order received" : (o.status || "order received"))).replace(/_/g, " ")}</td>
+                                                            <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage ? o.warehouse_stage.replace(/_/g, " ") : getOrderStatusLabel(o.status))}</td>
                                                         </tr>
                                                     ))}</tbody>
                                                 </table>

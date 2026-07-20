@@ -780,3 +780,33 @@
 .pm-disposed-line { font-size: 12.5px; color: #7a3030; }
 .pm-disposed-line b { color: #c62828; }
 .pm-disposed-reason { font-weight: 600; color: #5c2020; }
+
+/* "Show all in All Orders" — hands a truncated report list to the real
+   order browser, carrying the current filter. */
+.pm-showall-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid #d5b85a;
+    background: #fffaea;
+    color: #8b7355;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.pm-showall-btn:hover { background: #f7edd0; }
+
+/* Delay-bucket badge. index.css forces `color: #000 !important` on every
+   span/td globally, which an inline style cannot beat — so the per-bucket
+   colour is passed inline and unlocked here with a matching !important.
+   Without this the white "14+d critical" text rendered black on dark red. */
+.pm-bucket-badge {
+    color: var(--bucket-fg, #333) !important;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    display: inline-block;
+}

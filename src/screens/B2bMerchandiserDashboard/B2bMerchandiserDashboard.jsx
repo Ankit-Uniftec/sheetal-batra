@@ -11,7 +11,7 @@ import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
-import { enrichComponentsWithMovements, getOrderChannelKey } from "../../utils/barcodeService";
+import { enrichComponentsWithMovements, getOrderChannelKey, getOrderStatusLabel } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
@@ -1292,7 +1292,7 @@ export default function B2bMerchandiserDashboard() {
 
                                         {/* Details */}
                                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", fontSize: 13 }}>
-                                            <div><span className="merch-ocard-dlabel">Status:</span> <span className="merch-ocard-dval">{o.status || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Status:</span> <span className="merch-ocard-dval">{getOrderStatusLabel(o.status)}</span></div>
                                             <div><span className="merch-ocard-dlabel">Placed:</span> <span className="merch-ocard-dval">{formatDate(o.created_at)}</span></div>
                                             <div><span className="merch-ocard-dlabel">Amount:</span> <span className="merch-ocard-dval">{`₹${formatIndianNumber(orderAmount(o))}`}</span></div>
                                             <div><span className="merch-ocard-dlabel">Store:</span> <span className="merch-ocard-dval">{o.salesperson_store || "—"}</span></div>
