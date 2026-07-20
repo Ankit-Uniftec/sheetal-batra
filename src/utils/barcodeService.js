@@ -224,6 +224,9 @@ export const isLxrtsOrder = (order) => order?.items?.[0]?.sync_enabled === true;
 // channel breakdown must use this so the labels (and the numbers behind them)
 // can't drift between screens.
 export function getOrderChannelLabel(order) {
+  // Stock flag first — see getOrderChannelKey; a stock order raised through a
+  // store keeps that store's prefix but must not report as store revenue.
+  if (order?.is_stock_order === true) return "Stock";
   const prefix = getOrderPrefix(order);
   if (prefix === "DLC") return "Delhi Store";
   if (prefix === "LDHC") return "Ludhiana Store";
@@ -254,6 +257,11 @@ export const CHANNEL_SEGMENTS = [
 
 export function getOrderChannelKey(order) {
   if (!order) return null;
+
+  // The stock FLAG outranks the prefix: internal stock is sometimes raised
+  // through a store's normal flow, so it carries that store's prefix (e.g.
+  // SB-LDHC-…) while being stock. The flag is what dashboards filter on.
+  if (order.is_stock_order === true) return "stock";
 
   const byPrefix = CHANNEL_BY_ORDER_PREFIX[getOrderPrefix(order)];
   if (byPrefix) return byPrefix;
