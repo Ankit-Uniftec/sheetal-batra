@@ -153,7 +153,7 @@ export default function B2bMerchandiserDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, re_journey_count")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }

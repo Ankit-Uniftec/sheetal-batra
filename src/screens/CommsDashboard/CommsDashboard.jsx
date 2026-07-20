@@ -134,7 +134,7 @@ export default function CommsDashboard() {
         for (let i = 0; i < ids.length; i += 100) {
           const { data, error } = await supabase
             .from("order_components")
-            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason")
+            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count")
             .in("order_id", ids.slice(i, i + 100));
           if (error) { console.error("Comms component fetch failed:", error); break; }
           comps = comps.concat(data || []);
