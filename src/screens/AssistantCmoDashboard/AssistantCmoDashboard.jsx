@@ -13,6 +13,7 @@ import SearchByDropdown from "../../components/SearchByDropdown";
 import WalkInsView from "../../components/WalkInsView/WalkInsView";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
+import { getOrderStatusLabel } from "../../utils/barcodeService";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
@@ -1604,7 +1605,7 @@ export default function AssistantCmoDashboard() {
                               <td>{item.product_name || "—"}</td>
                               <td>{o.salesperson || "—"}</td>
                               <td>{getOrderStore(o)}</td>
-                              <td>{o.status || "—"}</td>
+                              <td>{getOrderStatusLabel(o.status)}</td>
                               <td>₹{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</td>
                             </tr>
                           );

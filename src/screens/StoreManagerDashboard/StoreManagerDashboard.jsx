@@ -13,6 +13,7 @@ import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
+import { getOrderStatusLabel } from "../../utils/barcodeService";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area, Line
@@ -1267,7 +1268,7 @@ export default function StoreManagerDashboard() {
                                                                 <td className="amount">{refundAmt > 0 ? `\u20B9${formatIndianNumber(refundAmt)}` : "\u2014"}</td>
                                                                 <td className="amount">{credit > 0 ? `\u20B9${formatIndianNumber(credit)}` : "\u2014"}</td>
                                                                 <td><span className={`sm-payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o)}</span></td>
-                                                                <td><span className={`sm-status-badge ${(o.status === "pending" ? "order_received" : (o.status || "order_received"))}`}>{o.status === "pending" ? "Order Received" : (o.status === "order_received" ? "Order Received" : (o.status || "Order Received"))}</span></td>
+                                                                <td><span className={`sm-status-badge ${(o.status === "pending" ? "order_received" : (o.status || "order_received"))}`}>{getOrderStatusLabel(o.status)}</span></td>
                                                                 <td>{getOrderSalesperson(o) || "-"}</td>
                                                                 <td>{formatDate(o.created_at)}</td>
                                                                 <td>{o.delivery_date ? formatDate(o.delivery_date) : "\u2014"}</td>

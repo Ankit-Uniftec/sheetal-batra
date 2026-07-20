@@ -9,7 +9,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import formatPhoneNumber from "../../utils/formatPhoneNumber";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
-import { SCAN_STATIONS, getOrderChannelLabel } from "../../utils/barcodeService";
+import { SCAN_STATIONS, getOrderChannelLabel, getOrderStatusLabel, normalizeOrderStatus } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
@@ -2843,7 +2843,7 @@ export default function AdminDashboard() {
                                                             <td className="product-cell">{o.items?.[0]?.product_name || "-"}</td>
                                                             <td>{formatDate(o.delivery_date)}</td>
                                                             <td><span className="urgent-badge">{daysLate} days</span></td>
-                                                            <td><span className={`status-badge ${o.status}`}>{o.status}</span></td>
+                                                            <td><span className={`status-badge ${normalizeOrderStatus(o.status)}`}>{getOrderStatusLabel(o.status)}</span></td>
                                                         </tr>
                                                     );
                                                 })}
