@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
 import NotificationBell from "../../components/NotificationBell";
 import useTabParam from "../../hooks/useTabParam";
+import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 
@@ -29,10 +30,12 @@ export default function B2bExecutiveDashboard() {
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
     // Order History tab
-    const [orderSearch, setOrderSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
-    const [typeFilter, setTypeFilter] = useState("all");
-    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
+    const [orderSearch, setOrderSearch] = useFilterParam("q", "");
+    const [statusFilter, setStatusFilter] = useFilterParam("status", "all");
+    const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
+    const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
+    // One navigation, or the five setters clobber each other (see the hook).
+    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "from", "to"]);
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
@@ -407,7 +410,7 @@ export default function B2bExecutiveDashboard() {
                             <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} title="From date" />
                             <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} title="To date" />
                             {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
-                                <button onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} className="b2b-clear-filters-btn">
+                                <button onClick={() => { clearOrderFilters(); setCurrentPage(1); }} className="b2b-clear-filters-btn">
                                     Clear Filters
                                 </button>
                             )}

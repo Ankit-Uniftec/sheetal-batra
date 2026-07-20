@@ -24,6 +24,7 @@ import { fetchExternalMovements } from "../../../utils/externalMovements";
 import { getWarehouseDate, getWarehouseDateObj } from "../../../utils/warehouseDate";
 import { fetchScanReport, scanReportCsv } from "../../../utils/scanReport";
 import useTabParam from "../../../hooks/useTabParam";
+import useFilterParam from "../../../hooks/useFilterParam";
 import Paginator from "../../../components/Paginator";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
@@ -221,11 +222,11 @@ export default function ProductionManagerDashboard() {
     const [currentUserEmail, setCurrentUserEmail] = useState("");
 
     // Orders tab state
-    const [orderSearch, setOrderSearch] = useState("");
-    const [orderSearchField, setOrderSearchField] = useState("order_no");
-    const [channelFilter, setChannelFilter] = useState("all");
-    const [statusTab, setStatusTab] = useState("all");
-    const [sortBy, setSortBy] = useState("newest");
+    const [orderSearch, setOrderSearch] = useFilterParam("q", "");
+    const [orderSearchField, setOrderSearchField] = useFilterParam("qf", "order_no");
+    const [channelFilter, setChannelFilter] = useFilterParam("channel", "all");
+    const [statusTab, setStatusTab] = useFilterParam("status", "all");
+    const [sortBy, setSortBy] = useFilterParam("sort", "newest");
     const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
     // Overview period filter (scopes the stage cards by each component's ORDER date).
     const [overviewPeriod, setOverviewPeriod] = useState("all"); // all | day | month | year | custom

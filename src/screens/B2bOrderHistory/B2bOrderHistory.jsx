@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import Paginator from "../../components/Paginator";
+import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 
 // Color display component (same as OrderHistory)
 function ColorDot({ color }) {
@@ -36,13 +37,15 @@ export default function B2bOrderHistory() {
     const [loading, setLoading] = useState(true);
 
     // Filters
-    const [statusFilter, setStatusFilter] = useState("all");
-    const [typeFilter, setTypeFilter] = useState("all");
-    const [merchandiserFilter, setMerchandiserFilter] = useState("all");
+    const [statusFilter, setStatusFilter] = useFilterParam("status", "all");
+    const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
+    const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useFilterParam("q", "");
 
+    // One navigation, or the five setters clobber each other (see the hook).
+    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "from", "to"]);
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const ordersPerPage = 5;
@@ -254,7 +257,7 @@ export default function B2bOrderHistory() {
                             <label style={{ fontSize: 12, color: "#888", marginTop: 4 }}>To Date</label>
                             <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="b2boh-filter-select" />
                             {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
-                                <button onClick={() => { setStatusFilter("all"); setTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear All Filters</button>
+                                <button onClick={() => { clearOrderFilters(); setCurrentPage(1); }} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear All Filters</button>
                             )}
                         </div>
                     </div>
