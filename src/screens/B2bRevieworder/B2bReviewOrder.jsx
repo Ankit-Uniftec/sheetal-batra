@@ -489,6 +489,18 @@ export default function B2bReviewOrder() {
                                             {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
                                         </div>
                                     </div>
+                                    {/* Dupatta is its own tracked piece (own barcode) — it was
+                                        captured on the form but never shown back here, so the
+                                        reviewer could not check the colour before placing. */}
+                                    {item.includes_dupatta && (
+                                        <div className="b2b-ro-field">
+                                            <label>Dupatta:</label>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                                <span>Included</span>
+                                                {item.dupatta_color && <ColorDotDisplay colorObject={item.dupatta_color} />}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="b2b-ro-field"><label>Size:</label><span>{item.size}</span></div>
                                     <div className="b2b-ro-field"><label>Qty:</label><span>{item.quantity || 1}</span></div>
                                     <div className="b2b-ro-field"><label>Unit Price:</label><span>{"\u20B9"}{formatIndianNumber(item.price)}</span></div>

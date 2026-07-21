@@ -411,6 +411,14 @@ export default function B2bProductForm() {
     // Helpers
     const toOptions = (arr = []) => arr.map(x => ({ label: String(x), value: x }));
     const toColorOptions = (clrs = []) => clrs.map(c => ({ label: c.name, value: c.name, hex: c.hex }));
+    // dupatta_colors holds names only (no hex column), so the dropdown showed a
+    // bare name while Top/Bottom showed a swatch. Match each name against the
+    // main colours table to recover its hex; unmatched names still render, just
+    // without a dot.
+    const toDupattaColorOptions = (names = []) => names.map((n) => {
+        const match = colors.find((c) => (c.name || "").toLowerCase() === String(n).toLowerCase());
+        return { label: String(n), value: n, ...(match?.hex ? { hex: match.hex } : {}) };
+    });
     const toExtraOptions = (extras = []) => extras.map(e => ({ label: `${e.name} (₹${formatIndianNumber(e.price)})`, value: e.name, price: e.price }));
     const getCategoryKeyFromDisplayName = (displayName) => { for (const [k, v] of Object.entries(CATEGORY_DISPLAY_NAMES)) if (v === displayName) return k; return null; };
     const getRelevantMeasurementCategories = () => {
@@ -725,7 +733,7 @@ export default function B2bProductForm() {
                             <div className="dupatta-box" style={{ margin: "10px 0" }}>
                                 <span style={{ fontSize: "14px", fontWeight: 600 }}>Dupatta included — tracked as a separate piece with its own barcode</span>
                                 <div className="field" style={{ marginTop: 8 }}>
-                                    <SearchableSelect options={toOptions(dupattaColors)} value={selectedDupattaColor} onChange={setSelectedDupattaColor} placeholder="Select Dupatta Color" />
+                                    <SearchableSelect options={toDupattaColorOptions(dupattaColors)} value={selectedDupattaColor} onChange={setSelectedDupattaColor} placeholder="Select Dupatta Color" />
                                 </div>
                             </div>
                         )}
