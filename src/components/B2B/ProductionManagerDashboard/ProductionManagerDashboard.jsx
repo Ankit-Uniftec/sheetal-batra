@@ -29,6 +29,7 @@ import Paginator from "../../../components/Paginator";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
+import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfUtils";
 import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_SEGMENTS, getOrderStatusLabel } from "../../../utils/barcodeService";
@@ -685,86 +686,21 @@ export default function ProductionManagerDashboard() {
         return last;
     };
 
-    // Mark an order as complete (delivered) — triggered from production tab.
-    // itemIndex dispatches just one product of a multi-product order (null = the
-    // whole order). "Delivered" is an ORDER-level fact, so the delivered stamp is
-    // only applied once every product is out — dispatching one product leaves the
-    // order open. For a multi-product order we ask which one first.
-    const handleMarkComplete = async (order, e, itemIndexes = null) => {
-        if (e) e.stopPropagation();
-
-        const products = distinctItemIndexes(componentsByOrder[order.id]);
-        if (itemIndexes === null && products.length > 1) {
-            setCompletePicker({ order, products, mode: "deliver", selected: [] });
-            return;
-        }
-
-        const picked = normaliseItemPick(itemIndexes);
-        const scopeLabel = describeItemPick(order, picked);
-        const confirmed = await new Promise((resolve) => {
-            showPopup({
-                type: "confirm",
-                title: "Mark as Complete",
-                message: picked === null
-                    ? `Mark ${scopeLabel} as delivered? This will finalise the order.`
-                    : `Dispatch ${scopeLabel}? The order stays open until every product is out.`,
-                confirmText: "Yes, Mark Complete",
-                cancelText: "Cancel",
-                onConfirm: () => resolve(true),
-                onCancel: () => resolve(false),
-            });
-        });
-        if (!confirmed) return;
-        try {
-            setActionLoading(order.id);
-            // Dispatch the scoped components (badge -> Dispatched, non-scannable),
-            // then stamp the order as delivered with the dispatch metadata (the
-            // "Mark as Delivered" semantics + Recently-Dispatched fields).
-            const rpcData = await runManualComplete(order, picked);
-
-            // Only stamp the order delivered once nothing is left in production.
-            if (!rpcData?.order_completed) {
-                loadAllData();
-                showPopup({ type: "success", title: "Dispatched", message: rpcData?.message || `${scopeLabel} dispatched.` });
-                return;
-            }
-            const { error } = await supabase
-                .from("orders")
-                .update({
-                    status: "delivered",
-                    production_status: "dispatched",
-                    delivered_at: new Date().toISOString(),
-                    dispatched_at: order.dispatched_at || new Date().toISOString(),
-                    dispatched_by: order.dispatched_by || currentUserEmail,
-                })
-                .eq("id", order.id);
-            if (error) throw error;
-            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", production_status: "dispatched", warehouse_stage: "dispatched", delivered_at: new Date().toISOString() } : o));
-            // Re-fetch components so the piece badges reflect "Dispatched" live.
-            loadAllData();
-            showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} marked as delivered.` });
-        } catch (err) {
-            console.error("Mark complete error:", err);
-            showPopup({ type: "error", title: "Failed", message: err.message || "Could not update order" });
-        } finally {
-            setActionLoading(null);
-        }
-    };
-
-    // Temporary Manual Completion — force the order completed WITHOUT the normal
-    // production flow (bypass), behind a confirm. Sets status='completed' (same
-    // as the Production Head dashboards), separate from 'Mark as Delivered'.
+    // Mark as Completed — production is finished making the garment. Final QC is
+    // MANDATORY: the RPC refuses if any piece has not passed it (no bypass).
+    // Components stay at final_qc_passed — packaging & dispatch is a separate,
+    // later event that moves them to dispatched. Completed ≠ dispatched ≠
+    // delivered.
     //
-    // An order can hold several products; itemIndexes force-completes just those
-    // (null = the whole order, the original behaviour). For a multi-product order
-    // we ask which ones first, via the product picker modal.
+    // An order can hold several products; itemIndexes completes just those
+    // (null = the whole order). For a multi-product order we ask first.
     const markManualComplete = async (order, e, itemIndexes = null) => {
         if (e) e.stopPropagation();
 
         // Multi-product order and nothing chosen yet → ask first.
         const products = distinctItemIndexes(componentsByOrder[order.id]);
         if (itemIndexes === null && products.length > 1) {
-            setCompletePicker({ order, products, mode: "complete", selected: [] });
+            setCompletePicker({ order, products });
             return;
         }
 
@@ -773,8 +709,8 @@ export default function ProductionManagerDashboard() {
         const ok = await new Promise((resolve) => {
             showPopup({
                 type: "confirm",
-                title: "Temporary Manual Completion",
-                message: `Mark ${scopeLabel} as completed WITHOUT the production checks? This bypasses the normal flow.`,
+                title: "Mark as Completed",
+                message: `Mark ${scopeLabel} as completed? Every piece must have passed Final QC — pieces become ready for Packaging & Dispatch.`,
                 confirmText: "Yes, complete it",
                 cancelText: "Cancel",
                 onConfirm: () => resolve(true),
@@ -784,14 +720,13 @@ export default function ProductionManagerDashboard() {
         if (!ok) return;
         try {
             setActionLoading(order.id);
-            // Force-complete: dispatch the scoped components (badge -> Dispatched,
-            // pieces non-scannable). The RPC completes the ORDER only when nothing
-            // active is left undispatched, so a per-product run leaves it open.
+            // The RPC gates on Final QC and completes the ORDER only when every
+            // active piece has passed it.
             const data = await runManualComplete(order, picked);
             if (data?.order_completed) {
-                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed", warehouse_stage: "dispatched" } : o));
+                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed" } : o));
             }
-            // Re-fetch components so the piece badges reflect "Dispatched" live.
+            // Re-fetch components so the piece badges reflect the new stage live.
             loadAllData();
             showPopup({ type: "success", title: "Done", message: data?.message || `${scopeLabel} marked as completed.` });
         } catch (err) {
@@ -831,12 +766,21 @@ export default function ProductionManagerDashboard() {
     // full order set (shared with the Production tab) or the Overview
     // period-filtered set (overviewOrders). Extracted so the Overview filter can
     // reuse it without changing the shared (full-orders) versions.
+    // Pipeline counts from the real signals (status + warehouse_stage). The old
+    // version read dead fields (o.status "prepared", o.production_status) that
+    // are null on every row. Mirrors the shared computeStatusStats.
     const computeStatusStats = (list) => {
-        const pending = list.filter(o => o.status === "pending" || o.status === "order_received" || o.status === "confirmed").length;
-        const inProd = list.filter(o => o.status === "prepared" || o.production_status === "in_production").length;
-        const dispatched = list.filter(o => o.status === "delivered" || o.production_status === "dispatched").length;
-        const readyForDispatch = list.filter(o => o.production_status === "ready_for_dispatch").length;
-        return { pending, inProd, dispatched, readyForDispatch };
+        const st = (o) => (o.status || "").toLowerCase();
+        const orderReceived = list.filter(o => st(o) === "order_received" && (!o.warehouse_stage || o.warehouse_stage === "order_received")).length;
+        const completed = list.filter(o => st(o) === "completed").length;
+        const dispatched = list.filter(o => st(o) === "dispatched" || o.warehouse_stage === "dispatched").length;
+        const delivered = list.filter(o => st(o) === "delivered").length;
+        const inProd = list.filter(o => {
+            const s = st(o);
+            if (["completed", "dispatched", "delivered", "cancelled"].includes(s)) return false;
+            return o.warehouse_stage && o.warehouse_stage !== "order_received";
+        }).length;
+        return { orderReceived, inProd, completed, dispatched, delivered };
     };
     const statusStats = useMemo(() => computeStatusStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1339,8 +1283,13 @@ export default function ProductionManagerDashboard() {
         return `pm-channel-${key === "offline" ? "store" : key}`;
     };
 
+    // completed / dispatched / delivered are DIFFERENT events (client model).
+    // Delivered only when the SA marked it; everything the old fused flow
+    // called "Dispatched" (stage/production_status) reads as Completed until
+    // Aryadeep's packaging & dispatch flow introduces a real dispatched status.
     const getStatusLabel = (order) => {
-        if (order.production_status === "dispatched" || order.status === "delivered") return "Dispatched";
+        if (order.status === "delivered") return "Delivered";
+        if (order.status === "completed" || order.production_status === "dispatched" || order.warehouse_stage === "dispatched") return "Completed";
         if (order.production_status === "ready_for_dispatch") return "Ready";
         if (order.production_status === "in_production" || order.status === "prepared") return "In Production";
         if (order.status === "cancelled") return "Cancelled";
@@ -1348,7 +1297,7 @@ export default function ProductionManagerDashboard() {
     };
 
     const getStatusClass = (status) => {
-        switch (status) { case "Dispatched": return "pm-status-dispatched"; case "Ready": return "pm-status-ready"; case "In Production": return "pm-status-inprod"; case "Cancelled": return "pm-status-cancelled"; default: return "pm-status-pending"; }
+        switch (status) { case "Delivered": case "Completed": case "Dispatched": return "pm-status-dispatched"; case "Ready": return "pm-status-ready"; case "In Production": return "pm-status-inprod"; case "Cancelled": return "pm-status-cancelled"; default: return "pm-status-pending"; }
     };
 
     const getStatusBadgeClass = (status) => {
@@ -1517,115 +1466,17 @@ export default function ProductionManagerDashboard() {
         <>
             {PopupComponent}
 
-            {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
-            {/* Which product to dispatch — only shown for multi-product orders.
-                Serves both "Mark as Delivered" (mode: deliver) and "Temporary
-                Manual Completion" (mode: complete). */}
-            {completePicker && (() => {
-                const isDeliver = completePicker.mode === "deliver";
-                const order = completePicker.order;
-                const comps = componentsByOrder[order.id] || [];
-                const items = Array.isArray(order.items) ? order.items : [];
-
-                // Per-product detail, named from the order's own items[].
-                const rows = completePicker.products.map((idx) => {
-                    const pieces = comps.filter(c => (c.item_index ?? 0) === idx && !["disposed", "scrapped"].includes(c.current_stage));
-                    const done = pieces.filter(c => c.current_stage === "dispatched").length;
-                    const it = items[idx] || {};
-                    return {
-                        idx,
-                        pieces,
-                        allOut: pieces.length > 0 && done === pieces.length,
-                        name: it.product_name || pieces[0]?.component_label || `Product ${idx + 1}`,
-                        // Duplicate product names are common (two of the same
-                        // dupatta); size/colour is what tells them apart.
-                        meta: [it.size, it.color?.name || it.top_color?.name].filter(Boolean).join(" · "),
-                    };
-                });
-                const selectable = rows.filter(r => !r.allOut);
-                const sel = completePicker.selected || [];
-                const toggle = (idx) => setCompletePicker(prev => ({
-                    ...prev,
-                    selected: prev.selected?.includes(idx)
-                        ? prev.selected.filter(i => i !== idx)
-                        : [...(prev.selected || []), idx],
-                }));
-                const allSelected = selectable.length > 0 && sel.length === selectable.length;
-                // Selecting every remaining product IS the whole order — send null
-                // so the order completes/delivers rather than looping per product.
-                const runSelected = () => {
-                    const picked = [...sel].sort((a, b) => a - b);
-                    setCompletePicker(null);
-                    (isDeliver ? handleMarkComplete : markManualComplete)(order, null, allSelected ? null : picked);
-                };
-                return (
-                    <div className="pm-pick-overlay" onClick={() => setCompletePicker(null)}>
-                        <div className="pm-pick-modal" onClick={(e) => e.stopPropagation()}>
-                            <div className="pm-pick-head">
-                                <p className="pm-pick-title">{isDeliver ? "Mark as Delivered" : "Manual Completion"}</p>
-                                <span className="pm-pick-order">{order.order_no}</span>
-                                <button className="pm-pick-close" onClick={() => setCompletePicker(null)}>{"✕"}</button>
-                            </div>
-                            <p className="pm-pick-hint">
-                                This order has {rows.length} products. Select which to
-                                {isDeliver ? " dispatch" : " complete"} — the order stays open until every product is out.
-                            </p>
-
-                            <div className="pm-pick-list">
-                                {rows.map((r) => (
-                                    <label
-                                        key={r.idx}
-                                        className={`pm-pick-item ${r.allOut ? "pm-pick-done" : ""} ${sel.includes(r.idx) ? "pm-pick-sel" : ""}`}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            className="pm-pick-check"
-                                            checked={sel.includes(r.idx)}
-                                            disabled={r.allOut}
-                                            onChange={() => toggle(r.idx)}
-                                        />
-                                        <span className="pm-pick-item-body">
-                                            <span className="pm-pick-item-top">
-                                                <span className="pm-pick-item-name">{r.name}</span>
-                                                <span className="pm-pick-item-count">
-                                                    {r.allOut ? "dispatched" : `${r.pieces.length} pc${r.pieces.length === 1 ? "" : "s"}`}
-                                                </span>
-                                            </span>
-                                            {r.meta && <span className="pm-pick-item-meta">{r.meta}</span>}
-                                            <span className="pm-pick-item-pieces">
-                                                {r.pieces.map(p => p.component_label || p.component_type).join(" · ")}
-                                            </span>
-                                        </span>
-                                    </label>
-                                ))}
-                            </div>
-
-                            <div className="pm-pick-actions">
-                                <button
-                                    className="pm-pick-all"
-                                    disabled={sel.length === 0}
-                                    onClick={runSelected}
-                                >
-                                    {sel.length === 0
-                                        ? "Select at least one product"
-                                        : allSelected
-                                            ? (isDeliver ? "Deliver the whole order" : "Complete the whole order")
-                                            : `${isDeliver ? "Dispatch" : "Complete"} ${sel.length} product${sel.length === 1 ? "" : "s"}`}
-                                </button>
-                                <button
-                                    className="pm-pick-cancel"
-                                    onClick={() => setCompletePicker(prev => ({
-                                        ...prev,
-                                        selected: allSelected ? [] : selectable.map(r => r.idx),
-                                    }))}
-                                >
-                                    {allSelected ? "Clear selection" : "Select all remaining"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
+            {/* Which products to Mark as Completed — shared picker (same as the
+                Warehouse / B2B Production / B2B Merchandiser dashboards). */}
+            {completePicker && (
+                <CompletePicker
+                    order={completePicker.order}
+                    components={componentsByOrder[completePicker.order.id] || []}
+                    productIdxs={completePicker.products}
+                    onConfirm={(picked) => markManualComplete(completePicker.order, null, picked)}
+                    onClose={() => setCompletePicker(null)}
+                />
+            )}
 
             {journeyOrder && (
                 <ComponentJourneyModal
@@ -1687,7 +1538,7 @@ export default function ProductionManagerDashboard() {
                             <div className="pm-edit-row">
                                 <div className="pm-edit-field"><label>Order Status</label>
                                     <select value={editFormData.status} onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}>
-                                        <option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="prepared">Prepared</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option>
+                                        <option value="order_received">Order Received</option><option value="completed">Completed</option><option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option>
                                     </select>
                                 </div>
                                 <div className="pm-edit-field"><label>Production Status</label>
@@ -2050,7 +1901,7 @@ export default function ProductionManagerDashboard() {
                                     <div className="pm-pipeline-card">
                                         <p className="pm-card-title">Production Pipeline</p>
                                         <div className="pm-pipeline-body">
-                                            {[{ label: "Pending", count: statusStatsOv.pending, cls: "pm-dot-pending" }, { label: "In Production", count: statusStatsOv.inProd, cls: "pm-dot-inprod" }, { label: "Ready for Dispatch", count: statusStatsOv.readyForDispatch, cls: "pm-dot-ready" }, { label: "Dispatched", count: statusStatsOv.dispatched, cls: "pm-dot-dispatched" }].map(s => (
+                                            {[{ label: "Order Received", count: statusStatsOv.orderReceived, cls: "pm-dot-pending" }, { label: "In Production", count: statusStatsOv.inProd, cls: "pm-dot-inprod" }, { label: "Completed", count: statusStatsOv.completed, cls: "pm-dot-ready" }, { label: "Dispatched", count: statusStatsOv.dispatched, cls: "pm-dot-dispatched" }, { label: "Delivered", count: statusStatsOv.delivered, cls: "pm-dot-delivered" }].map(s => (
                                                 <div className="pm-pipeline-stage" key={s.label}><div className="pm-pipeline-label"><span className={`pm-pipeline-dot ${s.cls}`}></span><span>{s.label}</span></div><span className="pm-pipeline-count">{s.count}</span></div>
                                             ))}
                                         </div>
@@ -2341,25 +2192,16 @@ export default function ProductionManagerDashboard() {
                                                             <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
                                                         </>
                                                     )}
-                                                    <button
-                                                        className="pm-action-btn pm-complete-btn"
-                                                        disabled={order.status === "completed" || order.status === "delivered" || order.status === "cancelled" || actionLoading === order.id}
-                                                        onClick={(e) => handleMarkComplete(order, e)}
-                                                    >
-                                                        {order.status === "delivered" ? "Delivered" :
-                                                            order.status === "completed" ? "Completed" :
-                                                                order.status === "cancelled" ? "Cancelled" :
-                                                                    actionLoading === order.id ? "Marking..." :
-                                                                        "Mark as Delivered"}
-                                                    </button>
-                                                    {/* Force-complete bypassing the production flow (status='completed'). */}
+                                                    {/* Production completion only — dispatch belongs to Packaging
+                                                        (Aryadeep's flow), delivery to the SA flow. Final QC is
+                                                        enforced by the RPC. */}
                                                     {!["completed", "delivered", "cancelled"].includes(order.status) && (
                                                         <button
                                                             className="pm-action-btn pm-manual-complete-btn"
                                                             disabled={actionLoading === order.id}
                                                             onClick={(e) => markManualComplete(order, e)}
                                                         >
-                                                            Temporary Manual Completion
+                                                            {actionLoading === order.id ? "Marking..." : "Mark as Completed"}
                                                         </button>
                                                     )}
                                                     {/* <span className={`pm-recent-status ${getStatusClass(statusLabel)}`} style={{ marginLeft: "auto" }}>{statusLabel}</span> */}
@@ -2476,12 +2318,12 @@ export default function ProductionManagerDashboard() {
                                                         <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage ? o.warehouse_stage.replace(/_/g, " ") : getOrderStatusLabel(o.status))}</td>
                                                         <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                                                             <button
-                                                                onClick={(e) => handleMarkComplete(o, e)}
+                                                                onClick={(e) => markManualComplete(o, e)}
                                                                 disabled={isBusy}
                                                                 className="pm-action-btn pm-action-complete"
-                                                                title="Mark this order as delivered"
+                                                                title="Mark this order as completed (Final QC required)"
                                                             >
-                                                                {isBusy ? "..." : "\u2713 Deliver"}
+                                                                {isBusy ? "..." : "\u2713 Complete"}
                                                             </button>
                                                             <button
                                                                 onClick={(e) => handleViewWarehousePdf(o, e)}

@@ -39,7 +39,7 @@ const isAfterDeliveryDate = (deliveryDate) => {
 // Status filter helpers — mirror the badge label logic in the Order History cards.
 const ORDER_STATUS_LABELS = {
   order_received: "Order Received",
-  completed: "Completed & Dispatched",
+  completed: "Completed",
   delivered: "Delivered",
   cancelled: "Cancelled",
   exchange_return: "Exchange/Return",
@@ -1634,7 +1634,7 @@ export default function Dashboard() {
                               const s = order.status?.toLowerCase();
                               if (!s || s === "pending") return "Order Received";
                               if (s === "order_received") return "Order Received";
-                              if (s === "completed") return "Completed & Dispatched";
+                              if (s === "completed") return "Completed";
                               if (s === "delivered") return "Delivered";
                               if (s === "cancelled") return "Cancelled";
                               if (s === "exchange_return") return "Exchange/Return";

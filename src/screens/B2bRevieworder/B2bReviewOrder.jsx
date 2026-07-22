@@ -194,6 +194,11 @@ export default function B2bReviewOrder() {
             const isMerchandiser = userRole?.toLowerCase().includes("merchandiser");
 
             const orderPayload = {
+                // Set explicitly: omitting it let the DB column default write
+                // "Pending" — a legacy duplicate of order_received that every
+                // dashboard then had to normalise on display (594 rows on prod,
+                // still growing). Retail and Comms placement already do this.
+                status: "order_received",
                 vendor_id: vendor?.id,
                 po_number: poNumber,
                 b2b_order_type: orderType,

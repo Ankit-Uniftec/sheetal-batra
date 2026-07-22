@@ -17,7 +17,7 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
-import { getOrderChannelLabel } from "../../utils/barcodeService";
+import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel } from "../../utils/barcodeService";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -25,12 +25,14 @@ import {
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
+    // The order lifecycle, in order. Deliberately excludes the dead statuses
+    // in_production / ready / prepared / confirmed / pending: ZERO orders carry
+    // them (they predate barcode tracking, which now derives the middle of the
+    // flow from components), and offering them let a human write bad data back.
     { value: "order_received", label: "Order Received", color: "#ff9800" },
-    { value: "in_production", label: "In Production", color: "#2196f3" },
-    { value: "ready", label: "Ready", color: "#4caf50" },
-    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
-    { value: "delivered", label: "Delivered", color: "#388e3c" },
     { value: "completed", label: "Completed", color: "#388e3c" },
+    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
+    { value: "delivered", label: "Delivered", color: "#2e7d32" },
     { value: "cancelled", label: "Cancelled", color: "#f44336" },
 ];
 
@@ -1642,7 +1644,7 @@ export default function GMDashboard() {
                                                         <td className="amount">{"\u20B9"}{formatIndianNumber(item.gst)}</td>
                                                         <td className="amount invoice">{"\u20B9"}{formatIndianNumber(item.invoice_value)}</td>
                                                         <td>{item.quantity}</td>
-                                                        <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
+                                                        <td><span className={`status-badge ${normalizeOrderStatus(item.status)}`}>{getOrderStatusLabel(item.status)}</span></td>
                                                         <td>{formatDate(item.delivery_date)}</td>
                                                     </tr>
                                                 ))}

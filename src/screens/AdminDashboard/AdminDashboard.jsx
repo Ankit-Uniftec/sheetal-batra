@@ -27,12 +27,14 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
+    // The order lifecycle, in order. Deliberately excludes the dead statuses
+    // in_production / ready / prepared / confirmed / pending: ZERO orders carry
+    // them (they predate barcode tracking, which now derives the middle of the
+    // flow from components), and offering them let a human write bad data back.
     { value: "order_received", label: "Order Received", color: "#ff9800" },
-    { value: "in_production", label: "In Production", color: "#2196f3" },
-    { value: "ready", label: "Ready", color: "#4caf50" },
-    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
-    { value: "delivered", label: "Delivered", color: "#388e3c" },
     { value: "completed", label: "Completed", color: "#388e3c" },
+    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
+    { value: "delivered", label: "Delivered", color: "#2e7d32" },
     { value: "cancelled", label: "Cancelled", color: "#f44336" },
 ];
 
@@ -3464,7 +3466,7 @@ export default function AdminDashboard() {
                                                             <td>₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                             <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
                                                             <td>
-                                                                <select className="status-select" value={order.status === "pending" ? "order_received" : (order.status || "order_received")} onChange={(e) => updateOrderStatus(order.id, e.target.value)} disabled={statusUpdating === order.id}>
+                                                                <select className="status-select" value={normalizeOrderStatus(order.status)} onChange={(e) => updateOrderStatus(order.id, e.target.value)} disabled={statusUpdating === order.id}>
                                                                     {ORDER_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                                                                 </select>
                                                             </td>
@@ -3507,8 +3509,8 @@ export default function AdminDashboard() {
                                 </div>
                                 <select className="cmo-compare-select" value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
                                     <option value="">All Status</option>
-                                    <option value="order_received">Order Received</option><option value="in_production">In Production</option><option value="ready">Ready</option>
-                                    <option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
+                                    <option value="order_received">Order Received</option><option value="completed">Completed</option>
+                                    <option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option>
                                 </select>
                                 <select className="cmo-compare-select" value={accountsStore} onChange={(e) => setAccountsStore(e.target.value)}>
                                     <option value="">All Stores</option>
@@ -3543,7 +3545,7 @@ export default function AdminDashboard() {
                                                         <td className="amount">₹{formatIndianNumber(item.gst)}</td>
                                                         <td className="amount invoice">₹{formatIndianNumber(item.invoice_value)}</td>
                                                         <td>{item.quantity}</td>
-                                                        <td><span className={`status-badge ${item.status}`}>{item.status}</span></td>
+                                                        <td><span className={`status-badge ${normalizeOrderStatus(item.status)}`}>{getOrderStatusLabel(item.status)}</span></td>
                                                         <td>{formatDate(item.delivery_date)}</td>
                                                     </tr>
                                                 ))}

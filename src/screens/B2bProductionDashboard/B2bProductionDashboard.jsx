@@ -16,6 +16,7 @@ import useFilterParam from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import StageCountCards from "../../components/StageCountCards";
 import ProductionOverview from "../../components/ProductionOverview";
+import CompletePicker from "../../components/CompletePicker";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
 import ReJourneyPanel from "../../components/ReJourneyPanel";
 import { getStageLabel, getStageGroupKey, enrichComponentsWithMovements, classifyComponentForStageCard, STAGE_GROUPS } from "../../utils/barcodeService";
@@ -44,9 +45,11 @@ export default function B2bProductionDashboard() {
     const [showSidebar, setShowSidebar] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(null);
 
-    // Temporary Manual Completion confirm modal
+    // Mark as Completed confirm modal
     const [manualCompleteOrder, setManualCompleteOrder] = useState(null);
+    const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
     const [manualCompleteProcessing, setManualCompleteProcessing] = useState(false);
+    const [manualCompleteError, setManualCompleteError] = useState("");
 
     // Calendar
     const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -216,7 +219,7 @@ export default function B2bProductionDashboard() {
     //   in_production — a component is somewhere in the flow (cloth issue..final QC)
     //   ready         — reached packaging, not yet dispatched
     //   dispatched    — fully dispatched, OR the order is completed/delivered
-    //                   (covers Temporary Manual Completion + PM-delivered).
+    //                   (covers Mark as Completed + legacy PM-delivered).
     const getStageBucket = (order) => {
         const st = (order.status || "").toLowerCase();
         if (st === "completed" || st === "delivered" || st === "dispatched") return "dispatched";
@@ -400,27 +403,53 @@ export default function B2bProductionDashboard() {
     const paginatedDispatch = useMemo(() => dispatchList.slice((dispatchPage - 1) * ORDERS_PER_PAGE, dispatchPage * ORDERS_PER_PAGE), [dispatchList, dispatchPage]);
 
     // ==================== STATUS UPDATE ====================
-    // Temporary Manual Completion — force the order completed WITHOUT the normal
-    // production flow (bypass). Opens a styled confirm modal (below); the actual
-    // update runs in confirmManualComplete.
-    const markManualComplete = (order) => setManualCompleteOrder(order);
+    // Mark as Completed — production finished. Final QC is MANDATORY: the RPC
+    // refuses if any piece has not passed it, and pieces land at
+    // final_qc_passed, ready for Packaging & Dispatch to move them on.
+    // Opens a styled confirm modal (below); the update runs in
+    // confirmManualComplete.
+    // Multi-product → product picker; single → the existing confirm modal.
+    const markManualComplete = (order) => {
+        const comps = componentsByOrder[order.id] || [];
+        const productIdxs = [...new Set(comps.map((c) => c.item_index ?? 0))].sort((a, b) => a - b);
+        if (productIdxs.length > 1) { setCompletePicker({ order, productIdxs }); return; }
+        setManualCompleteError(""); setManualCompleteOrder(order);
+    };
+
+    // Loop the picked products through the RPC (null = whole order).
+    const runManualComplete = async (order, picked) => {
+        const scopes = picked === null ? [null] : picked;
+        for (const idx of scopes) {
+            const { data, error } = await supabase.rpc("manual_complete_order", {
+                p_order_id: order.id, p_by: user?.email, p_item_index: idx,
+            });
+            if (error || data?.success === false) {
+                setManualCompleteError(error?.message || data?.message || "Could not complete the order.");
+                return false;
+            }
+        }
+        loadAllData();
+        return true;
+    };
 
     const confirmManualComplete = async () => {
         if (!manualCompleteOrder) return;
         setManualCompleteProcessing(true);
+        setManualCompleteError("");
         try {
-            // Force-complete: dispatch every active component (badge -> Dispatched,
-            // pieces non-scannable) + mark the order completed, via one RPC.
             const { data, error } = await supabase.rpc("manual_complete_order", {
                 p_order_id: manualCompleteOrder.id, p_by: user?.email,
             });
             if (error || data?.success === false) throw new Error(error?.message || data?.message);
-            setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed", warehouse_stage: "dispatched" } : o));
+            setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed" } : o));
             setManualCompleteOrder(null);
-            // Re-fetch components so the piece badges reflect "Dispatched" live.
+            // Re-fetch components so the piece badges reflect the new stage live.
             loadAllData();
         } catch (err) {
             console.error("Manual complete error:", err);
+            // Surface the refusal (e.g. FINAL_QC_REQUIRED) — silently failing
+            // left the PH clicking a button that "did nothing".
+            setManualCompleteError(err.message || "Could not complete the order.");
         } finally {
             setManualCompleteProcessing(false);
         }
@@ -454,7 +483,7 @@ export default function B2bProductionDashboard() {
         if (bucket === "ready") return "Ready for Dispatch";
         if (bucket === "dispatched") {
             const st = (order.status || "").toLowerCase();
-            return st === "completed" ? "Completed" : st === "delivered" ? "Delivered" : "Dispatched";
+            return st === "delivered" ? "Delivered" : "Completed";
         }
         // in_production → name the actual stage
         return getStageLabel(order.warehouse_stage) || "In Production";
@@ -557,7 +586,7 @@ export default function B2bProductionDashboard() {
                             <StatCard title="In Production" value={stats.inProd} change={`Ready: ${stats.ready}`} />
                         </div>
                         <div className="prod-cell prod-stat-3">
-                            <StatCard title="Dispatched" value={stats.dispatched} change={`Consignment: ${stats.consignmentCount}`} />
+                            <StatCard title="Completed" value={stats.dispatched} change={`Consignment: ${stats.consignmentCount}`} />
                         </div>
 
                         {/* Alerts */}
@@ -853,17 +882,28 @@ export default function B2bProductionDashboard() {
             )}
 
 
-            {/* ===== TEMPORARY MANUAL COMPLETION CONFIRM ===== */}
+            {completePicker && (
+                <CompletePicker
+                    order={completePicker.order}
+                    components={componentsByOrder[completePicker.order.id] || []}
+                    productIdxs={completePicker.productIdxs}
+                    onConfirm={(picked) => runManualComplete(completePicker.order, picked)}
+                    onClose={() => setCompletePicker(null)}
+                />
+            )}
+
+            {/* ===== MARK AS COMPLETED CONFIRM ===== */}
             {manualCompleteOrder && (
                 <div className="prod-modal-overlay" onClick={() => !manualCompleteProcessing && setManualCompleteOrder(null)}>
                     <div className="prod-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="prod-modal-top">
-                            <h3>Temporary Manual Completion</h3>
+                            <h3>Mark as Completed</h3>
                             <button className="prod-modal-close" onClick={() => setManualCompleteOrder(null)}>{"×"}</button>
                         </div>
                         <div className="prod-modal-body">
-                            <p>Mark order <b>{manualCompleteOrder.order_no}</b> as completed <b>without</b> the production checks?</p>
-                            <p style={{ color: "#c4631a", fontSize: 13, marginTop: 8 }}>This bypasses the normal production flow.</p>
+                            <p>Mark order <b>{manualCompleteOrder.order_no}</b> as completed?</p>
+                            <p style={{ color: "#c4631a", fontSize: 13, marginTop: 8 }}>Every piece must have passed Final QC — pieces become ready for Packaging &amp; Dispatch.</p>
+                            {manualCompleteError && <p style={{ color: "#c62828", fontSize: 13, marginTop: 8, fontWeight: 600 }}>{manualCompleteError}</p>}
                         </div>
                         <div className="prod-modal-footer">
                             <button className="prod-modal-cancel" onClick={() => setManualCompleteOrder(null)} disabled={manualCompleteProcessing}>Cancel</button>
@@ -930,7 +970,7 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                 <button className="prod-btn-detail" onClick={() => onView(order.id)}>View Details</button>
                 {/* Production Head: force-complete bypassing the flow. */}
                 {onManualComplete && !["completed", "delivered", "cancelled"].includes((order.status || "").toLowerCase()) && (
-                    <button className="prod-btn-manual-complete" onClick={() => onManualComplete(order)}>Temporary Manual Completion</button>
+                    <button className="prod-btn-manual-complete" onClick={() => onManualComplete(order)}>Mark as Completed</button>
                 )}
             </div>
         </div>

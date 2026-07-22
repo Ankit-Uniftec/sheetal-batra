@@ -46,6 +46,9 @@ export const PRODUCTION_STAGES = [
   { value: "final_qc_in_progress", label: "Final QC In-Progress", step: 9, color: "#c2185b", maxDays: 1, mandatory: true },
   { value: "final_qc_passed", label: "Final QC Passed", step: 9, color: "#388e3c", mandatory: true },
   { value: "final_qc_failed", label: "Final QC Failed", step: 9, color: "#b71c1c", mandatory: true },
+  // Set ONLY by "Mark as Completed" (no scan pair). Sits between Final QC and
+  // Packaging. Badge reads "Completed"; Packaging & Dispatch requires it.
+  { value: "production_complete", label: "Completed", step: 10, color: "#388e3c", mandatory: true },
   { value: "packaging_dispatch", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", maxDays: 1, mandatory: true },
   { value: "dispatched", label: "Dispatched", step: 10, color: "#1b5e20", mandatory: true },
   { value: "disposed", label: "Disposed", step: 0, color: "#424242" },
@@ -112,6 +115,7 @@ export const STAGE_GROUPS = [
   { key: "stitching", label: "Stitching", step: 7, color: "#ef6c00", external: true, members: ["stitching_in_progress", "stitching_completed"] },
   { key: "hemming", label: "Hemming", step: 8, color: "#ff5722", external: true, members: ["hemming_in_progress", "hemming_completed"] },
   { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", external: false, members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
+  { key: "production_complete", label: "Production Completed", step: 10, color: "#388e3c", external: false, members: ["production_complete"] },
   { key: "packaging", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", external: false, members: ["packaging_dispatch", "dispatched"] },
 ];
 
@@ -136,10 +140,6 @@ export function getGroupKeyForStep(step) {
   return g ? g.key : null;
 }
 
-// Order statuses that mean the order is finished (out the door), regardless of
-// where its pieces' current_stage got stuck — e.g. Temporary Manual Completion
-// / Mark Delivered bypass the stages and never advance current_stage.
-const DONE_ORDER_STATUSES = new Set(["completed", "delivered", "dispatched", "cancelled"]);
 
 // Which stage-card bucket a single component belongs to, and whether it's an
 // INTERNAL (in-house at a stage) or EXTERNAL (out at a vendor) piece. One place
@@ -151,13 +151,14 @@ const DONE_ORDER_STATUSES = new Set(["completed", "delivered", "dispatched", "ca
 //                (bypass completions leave current_stage stalled).
 //   returns { key, kind: 'internal' | 'external' } or null (not on the flow).
 // External pieces are bucketed by the EARLIEST stage they went out for.
-export function classifyComponentForStageCard(comp, orderStatus) {
+export function classifyComponentForStageCard(comp, orderStatus) { // eslint-disable-line no-unused-vars
   if (!comp) return null;
-  // A finished order's pieces belong in the dispatch bucket, not their stalled
-  // stage — this is what "marked complete bypassing the stages" should look like.
-  if (orderStatus && DONE_ORDER_STATUSES.has(String(orderStatus).toLowerCase())) {
-    return { key: "packaging", kind: "internal" };
-  }
+  // Bucket by the COMPONENT's own stage. (This used to force every piece of a
+  // "completed"/"delivered" order into the packaging bucket — which was needed
+  // when completion bypassed the stages. Now completion moves pieces to a real
+  // production_complete stage, and dispatch to dispatched, so the piece's own
+  // stage is the truth: a production_complete piece shows under Production
+  // Completed, a dispatched piece under Packaging & Dispatch.)
   // Card key for a raw stage, INCLUDING order_received (which getStageGroupKey
   // deliberately maps to null for order-level logic; the cards want its bucket).
   const cardKey = (stage) => (stage === "order_received" ? "order_received" : getStageGroupKey(stage));
