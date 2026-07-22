@@ -544,6 +544,46 @@ export async function fetchOrderComponents(orderId) {
 // ============================================================
 // 7. FETCH COMPONENT BY BARCODE — Quick lookup after scan
 // ============================================================
+const COMPONENT_SELECT =
+  "*, orders(order_no, delivery_name, delivery_date, salesperson, salesperson_email, status)";
+
+// A prefix-less barcode a worker might type: a FULL 6-digit sequence, a dash,
+// then the component tail. The component tail is letters+digits, optionally
+// with a trailing "-N" for an extra of product N (e.g. "EX1-2"):
+//   002773-BTM   002773-TOP2   002773-DUP3   002773-EX1   002773-EX1-2
+// The 6-digit anchor is deliberate: a SHORTER number (e.g. "2773") could be
+// the tail of a real sequence ("002773") and match the wrong piece, so we
+// only accept the complete sequence.
+const PREFIXLESS_BARCODE = /^\d{6}-[A-Za-z]+\d*(?:-\d+)?$/;
+
+// Resolve a possibly-PREFIX-LESS barcode to its true full barcode.
+//   "002773-BTM"     -> "B2B-002773-BTM"   (recovered — exactly one match)
+//   "B2B-002773-BTM" -> unchanged           (already prefixed)
+//   ambiguous / unknown / anything odd -> returned UNCHANGED, so the caller's
+//   exact lookup raises the normal not-found / duplicate error. We NEVER guess
+//   a match: a wrong guess would scan the wrong garment.
+// The sequence is globally unique, so a bare "<6-digit seq>-<comp>" is one piece.
+export async function resolveFullBarcode(barcode) {
+  const raw = (barcode || "").trim();
+  if (!raw) return barcode;
+
+  // Already prefixed (starts with a store code: B2B-, DLC-, LDHC-, …).
+  if (/^[A-Za-z]/.test(raw)) return raw;
+
+  // Only touch strings that look like a bare full-sequence barcode.
+  if (!PREFIXLESS_BARCODE.test(raw)) return raw;
+
+  // Match "<anything>-<the exact tail>". The leading "-" anchors the sequence
+  // so the % cannot swallow extra leading digits of a longer sequence.
+  const { data, error } = await supabase
+    .from("order_components")
+    .select("barcode")
+    .ilike("barcode", `%-${raw}`);
+  if (error) return raw;               // network/RLS issue → caller handles it
+  if (data && data.length === 1) return data[0].barcode;
+  return raw;                          // 0 or >1 → don't guess; caller errors clearly
+}
+
 export async function fetchComponentByBarcode(barcode) {
   // NOTE: intentionally NOT .single() — that throws PostgREST's cryptic
   // "Cannot coerce the result to a single JSON object" (PGRST116) when the
@@ -551,21 +591,43 @@ export async function fetchComponentByBarcode(barcode) {
   // barcode). Fetch the rows and give the worker a plain-English error instead.
   const { data, error } = await supabase
     .from("order_components")
-    .select("*, orders(order_no, delivery_name, delivery_date, salesperson, salesperson_email, status)")
+    .select(COMPONENT_SELECT)
     .eq("barcode", barcode);
 
   if (error) throw error;
-  if (!data || data.length === 0) {
-    const e = new Error(`Barcode "${barcode}" was not found. Check the tag and scan again.`);
-    e.code = "BARCODE_NOT_FOUND";
-    throw e;
-  }
-  if (data.length > 1) {
+
+  if (data && data.length === 1) return data[0];
+
+  if (data && data.length > 1) {
     const e = new Error(`Barcode "${barcode}" matches more than one piece — it can't be scanned safely. Report this to the Production Head.`);
     e.code = "BARCODE_DUPLICATE";
     throw e;
   }
-  return data[0];
+
+  // No exact match. If the input is a PREFIX-LESS barcode — a bare full
+  // sequence + component like "002773-BTM" (the store prefix omitted, which
+  // workers do when typing) — recover it. The sequence is globally unique, so
+  // "…-002773-BTM" can only be one piece. Match on the suffix, but ONLY accept
+  // it when EXACTLY one row matches: ambiguous or none, we must NOT guess.
+  // (Same strict pattern as resolveFullBarcode — a partial sequence is refused
+  // so it can never latch onto the wrong garment.)
+  if (PREFIXLESS_BARCODE.test((barcode || "").trim())) {
+    const { data: fuzzy, error: fErr } = await supabase
+      .from("order_components")
+      .select(COMPONENT_SELECT)
+      .ilike("barcode", `%-${barcode.trim()}`);
+    if (fErr) throw fErr;
+    if (fuzzy && fuzzy.length === 1) return fuzzy[0];
+    if (fuzzy && fuzzy.length > 1) {
+      const e = new Error(`"${barcode}" matches more than one piece — scan the full tag (with its store prefix) so the right one is picked.`);
+      e.code = "BARCODE_DUPLICATE";
+      throw e;
+    }
+  }
+
+  const e = new Error(`Barcode "${barcode}" was not found. Check the tag and scan again.`);
+  e.code = "BARCODE_NOT_FOUND";
+  throw e;
 }
 
 // ============================================================
