@@ -9,13 +9,30 @@ import { getOrderChannelLabel, CHANNEL_SEGMENTS } from "./barcodeService";
 // Extracted verbatim from the Production Manager dashboard so all dashboards
 // share ONE implementation and can't drift.
 
-// Order counts by pipeline status.
+// Order counts by pipeline stage, from the real signals.
+//
+// The old version read dead fields (o.status === "prepared", o.production_status)
+// that are null/unused on every row — so "In Production" and "Ready" were always
+// 0 and "Dispatched" actually counted delivered orders. Now:
+//   orderReceived — placed, nothing scanned (warehouse_stage still order_received)
+//   inProduction  — a component has moved but the order isn't completed yet
+//   completed     — production finished (status = 'completed'), pre-dispatch
+//   dispatched    — status = 'dispatched' (Aryadeep's packaging scan; also the
+//                   legacy warehouse_stage = 'dispatched')
+//   delivered     — status = 'delivered'
 export function computeStatusStats(list) {
-  const pending = list.filter(o => o.status === "pending" || o.status === "order_received" || o.status === "confirmed").length;
-  const inProd = list.filter(o => o.status === "prepared" || o.production_status === "in_production").length;
-  const dispatched = list.filter(o => o.status === "delivered" || o.production_status === "dispatched").length;
-  const readyForDispatch = list.filter(o => o.production_status === "ready_for_dispatch").length;
-  return { pending, inProd, dispatched, readyForDispatch };
+  const s = (o) => (o.status || "").toLowerCase();
+  const orderReceived = list.filter(o => s(o) === "order_received" && (!o.warehouse_stage || o.warehouse_stage === "order_received")).length;
+  const completed = list.filter(o => s(o) === "completed").length;
+  const dispatched = list.filter(o => s(o) === "dispatched" || o.warehouse_stage === "dispatched").length;
+  const delivered = list.filter(o => s(o) === "delivered").length;
+  // In production = active (not a terminal state) and past order_received.
+  const inProd = list.filter(o => {
+    const st = s(o);
+    if (["completed", "dispatched", "delivered", "cancelled"].includes(st)) return false;
+    return o.warehouse_stage && o.warehouse_stage !== "order_received";
+  }).length;
+  return { orderReceived, inProd, completed, dispatched, delivered };
 }
 
 

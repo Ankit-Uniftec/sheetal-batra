@@ -26,6 +26,7 @@ import ProductionOverview from "../components/ProductionOverview";
 import SearchByDropdown from "../components/SearchByDropdown";
 import useTabParam from "../hooks/useTabParam";
 import Paginator from "../components/Paginator";
+import CompletePicker from "../components/CompletePicker";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -200,6 +201,7 @@ const WarehouseDashboard = () => {
   const [reJourneysLoading, setReJourneysLoading] = useState(false);
   // Order whose full component journey is being viewed (shared modal).
   const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+  const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
 
   // QC Fail Popup state
   // const [qcFailPopup, setQcFailPopup] = useState({
@@ -363,29 +365,41 @@ const WarehouseDashboard = () => {
     }, 300);
   };
 
-  // Fetch components for a specific order
-  const fetchComponentsForOrder = async (orderId) => {
-    if (orderComponentsMap[orderId] || componentLoadingMap[orderId]) return;
+  // Fetch (and cache) an order's components. Returns them so callers can await
+  // the result directly (e.g. Mark as Completed needs item_index to decide
+  // whether to open the product picker) instead of racing the lazy card load.
+  const fetchComponentsForOrder = async (orderId, force = false) => {
+    if (!force && orderComponentsMap[orderId]) return orderComponentsMap[orderId];
+    if (!force && componentLoadingMap[orderId]) return null;
 
     setComponentLoadingMap(prev => ({ ...prev, [orderId]: true }));
     try {
       const { data, error } = await supabase
         .from("order_components")
-        .select("id, barcode, component_type, component_label, current_stage, is_active, qc_status, is_delayed, re_journey_count, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
+        .select("id, barcode, component_type, component_label, current_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
         .eq("order_id", orderId)
         .order("component_type", { ascending: true });
+      if (error) throw error;
 
-      if (!error && data) {
-        // Attach stages_outside for any piece out at a vendor so the badge can
-        // read "Out to Vendor (Embroidery)" (shared helper — one impl app-wide).
-        const enriched = await enrichComponentsWithMovements(data);
-        setOrderComponentsMap(prev => ({ ...prev, [orderId]: enriched }));
-      }
+      // Attach stages_outside for any piece out at a vendor so the badge can
+      // read "Out to Vendor (Embroidery)" (shared helper — one impl app-wide).
+      const enriched = await enrichComponentsWithMovements(data || []);
+      setOrderComponentsMap(prev => ({ ...prev, [orderId]: enriched }));
+      return enriched;
     } catch (err) {
       console.error("Failed to fetch components:", err);
+      return [];
+    } finally {
+      // Always clear the loading flag — the "Loading stages…" spinner is gated
+      // on it, so a missed reset leaves the card spinning forever.
+      setComponentLoadingMap(prev => ({ ...prev, [orderId]: false }));
     }
-    setComponentLoadingMap(prev => ({ ...prev, [orderId]: false }));
   };
+
+  // Force a fresh component fetch even if the order is already cached (used
+  // after an action changes a piece's stage — e.g. Mark as Completed). Bypasses
+  // the cache guard directly rather than racing an async setState clear.
+  const refreshComponentsForOrder = (orderId) => fetchComponentsForOrder(orderId, true);
 
   // Orders scoped to THIS Production Head's channel (Offline → retail/store,
   // Online → website). Used ONLY for the overview analytics; the order list
@@ -954,16 +968,50 @@ const WarehouseDashboard = () => {
   // "Mark as Completed" — only the Production-Head bypass below for orders that
   // can't finish the normal flow.
 
-  // Temporary Manual Completion — the old pre-gate behaviour: mark the order
-  // completed WITHOUT the finished-stages check, behind a confirm. For the
-  // Production Head to force-complete an order that can't go through the normal
-  // gated flow. Only rendered for the Production Head (see the button below).
+  // Mark as Completed — production finished. Final QC is MANDATORY (the RPC
+  // refuses otherwise). A multi-product order opens the product picker so one
+  // finished product can be completed while others are still in production;
+  // the completed product's pieces move to production_complete (badge
+  // "Completed"), ready for Packaging & Dispatch. Only for the Production Head.
+  const runManualComplete = async (order, picked) => {
+    // picked: null = whole order; else an array of item indexes to loop.
+    const scopes = picked === null ? [null] : picked;
+    for (const idx of scopes) {
+      const { data, error } = await supabase.rpc("manual_complete_order", {
+        p_order_id: order.id, p_by: currentUserEmail, p_item_index: idx,
+      });
+      if (error || data?.success === false) {
+        showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
+        return false;
+      }
+    }
+    fetchOrders();
+    // The completed product's pieces moved to production_complete. Drop this
+    // order's cached components and re-fetch so the badges — and the picker if
+    // reopened — reflect the new stage instead of the stale one.
+    await refreshComponentsForOrder(order.id);
+    return true;
+  };
+
   const markManualComplete = async (order) => {
+    // Components load lazily per card; if this one hasn't loaded yet, fetch it
+    // now so we can tell single- from multi-product (else the picker never opens).
+    let comps = orderComponentsMap[order.id];
+    if (!comps || comps.length === 0) {
+      comps = (await fetchComponentsForOrder(order.id)) || orderComponentsMap[order.id] || [];
+    }
+    const productIdxs = [...new Set(comps.map((c) => c.item_index ?? 0))].sort((a, b) => a - b);
+
+    // Multi-product → pick which; single → confirm whole order.
+    if (productIdxs.length > 1) {
+      setCompletePicker({ order, productIdxs });
+      return;
+    }
     const ok = await new Promise((resolve) => {
       showPopup({
         type: "confirm",
-        title: "Temporary Manual Completion",
-        message: `Mark order ${order.order_no} as completed WITHOUT the production checks? This bypasses the normal flow.`,
+        title: "Mark as Completed",
+        message: `Mark order ${order.order_no} as completed? Every piece must have passed Final QC — pieces become ready for Packaging & Dispatch.`,
         confirmText: "Yes, complete it",
         cancelText: "Cancel",
         onConfirm: () => resolve(true),
@@ -971,19 +1019,7 @@ const WarehouseDashboard = () => {
       });
     });
     if (!ok) return;
-
-    // Force-complete the whole order: dispatch every active component (badge ->
-    // Dispatched, pieces become non-scannable) and mark the order completed —
-    // one atomic RPC instead of just flipping orders.status.
-    const { data, error } = await supabase.rpc("manual_complete_order", {
-      p_order_id: order.id,
-      p_by: currentUserEmail,
-    });
-    if (error || data?.success === false) {
-      showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
-      return;
-    }
-    fetchOrders();
+    await runManualComplete(order, null);
   };
 
   // Calendar ordersByDate
@@ -1258,6 +1294,15 @@ const WarehouseDashboard = () => {
       )}
 
       {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
+      {completePicker && (
+        <CompletePicker
+          order={completePicker.order}
+          components={orderComponentsMap[completePicker.order.id] || []}
+          productIdxs={completePicker.productIdxs}
+          onConfirm={(picked) => runManualComplete(completePicker.order, picked)}
+          onClose={() => setCompletePicker(null)}
+        />
+      )}
       {journeyOrder && (
         <ComponentJourneyModal
           orderNo={journeyOrder.order_no}
@@ -1945,8 +1990,10 @@ const WarehouseDashboard = () => {
                                         </div>
                                       ))}
                                     </div>
+                                    {/* completed = production finished — dispatch is a separate,
+                                        later event (Packaging & Dispatch), so don't claim it. */}
                                     {order.status === "completed" && (
-                                      <div className="wd-order-status-badge wd-status-completed">All Dispatched</div>
+                                      <div className="wd-order-status-badge wd-status-completed">Completed</div>
                                     )}
                                     {order.status === "delivered" && (
                                       <div className="wd-order-status-badge wd-status-delivered">Delivered</div>
@@ -1988,7 +2035,7 @@ const WarehouseDashboard = () => {
                                     className="wd-manual-complete-btn"
                                     onClick={() => markManualComplete(order)}
                                   >
-                                    Temporary Manual Completion
+                                    Mark as Completed
                                   </button>
                                 )}
                               </div>

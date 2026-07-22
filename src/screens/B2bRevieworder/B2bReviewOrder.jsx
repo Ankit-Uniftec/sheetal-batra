@@ -18,15 +18,17 @@ function ColorDotDisplay({ colorObject }) {
     let displayColorName = "";
     let displayColorHex = "#000000";
     if (typeof colorObject === "string") {
+        // A bare name with no hex (dupatta_colors stores names only): show the
+        // name, no swatch. Painting it grey invented a colour that isn't real.
         displayColorName = colorObject;
-        displayColorHex = colorObject.startsWith("#") ? colorObject : "gray";
+        displayColorHex = colorObject.startsWith("#") ? colorObject : "";
     } else if (typeof colorObject === "object" && colorObject !== null) {
         displayColorName = colorObject.name || "";
         displayColorHex = colorObject.hex || "";
     }
     return (
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <div style={{ background: displayColorHex, height: "14px", width: "28px", borderRadius: "8px", border: "1px solid #ccc" }} />
+            {displayColorHex && <div style={{ background: displayColorHex, height: "14px", width: "28px", borderRadius: "8px", border: "1px solid #ccc" }} />}
             <span>{displayColorName}</span>
         </div>
     );
@@ -192,6 +194,11 @@ export default function B2bReviewOrder() {
             const isMerchandiser = userRole?.toLowerCase().includes("merchandiser");
 
             const orderPayload = {
+                // Set explicitly: omitting it let the DB column default write
+                // "Pending" — a legacy duplicate of order_received that every
+                // dashboard then had to normalise on display (594 rows on prod,
+                // still growing). Retail and Comms placement already do this.
+                status: "order_received",
                 vendor_id: vendor?.id,
                 po_number: poNumber,
                 b2b_order_type: orderType,
@@ -489,6 +496,18 @@ export default function B2bReviewOrder() {
                                             {item.bottom_color && <ColorDotDisplay colorObject={item.bottom_color} />}
                                         </div>
                                     </div>
+                                    {/* Dupatta is its own tracked piece (own barcode) — it was
+                                        captured on the form but never shown back here, so the
+                                        reviewer could not check the colour before placing. */}
+                                    {item.includes_dupatta && (
+                                        <div className="b2b-ro-field">
+                                            <label>Dupatta:</label>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                                <span>Included</span>
+                                                {item.dupatta_color && <ColorDotDisplay colorObject={item.dupatta_color} />}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="b2b-ro-field"><label>Size:</label><span>{item.size}</span></div>
                                     <div className="b2b-ro-field"><label>Qty:</label><span>{item.quantity || 1}</span></div>
                                     <div className="b2b-ro-field"><label>Unit Price:</label><span>{"\u20B9"}{formatIndianNumber(item.price)}</span></div>

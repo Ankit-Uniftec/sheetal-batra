@@ -50,10 +50,11 @@ export default function ProductionOverview({ orders = [], showChannel = false, t
   const metrics = useMemo(() => computeProductionMetrics(orders, statusStats), [orders, statusStats]);
 
   const pipeline = [
-    { label: "Pending", count: statusStats.pending, cls: "po-dot-pending" },
+    { label: "Order Received", count: statusStats.orderReceived, cls: "po-dot-pending" },
     { label: "In Production", count: statusStats.inProd, cls: "po-dot-inprod" },
-    { label: "Ready for Dispatch", count: statusStats.readyForDispatch, cls: "po-dot-ready" },
+    { label: "Completed", count: statusStats.completed, cls: "po-dot-ready" },
     { label: "Dispatched", count: statusStats.dispatched, cls: "po-dot-dispatched" },
+    { label: "Delivered", count: statusStats.delivered, cls: "po-dot-delivered" },
   ];
 
   return (
@@ -64,7 +65,7 @@ export default function ProductionOverview({ orders = [], showChannel = false, t
         <StatCard
           title={totalLabel}
           value={formatIndianNumber(channelBreakdown.total)}
-          subtitle={showChannel ? `across ${channelBreakdown.segments.length} channels` : `${statusStats.inProd} in production · ${statusStats.dispatched} dispatched`}
+          subtitle={showChannel ? `across ${channelBreakdown.segments.length} channels` : `${statusStats.inProd} in production · ${statusStats.completed} completed`}
           highlight
           icon={Icon.package}
         />

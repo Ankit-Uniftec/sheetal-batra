@@ -17,6 +17,7 @@ import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
+import CompletePicker from "../../components/CompletePicker";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 
@@ -42,7 +43,7 @@ const TERMINAL_ORDER_STATUSES = ["completed", "delivered", "cancelled"];
 const isTerminalOrder = (order) =>
     TERMINAL_ORDER_STATUSES.includes((order?.status || "").toLowerCase());
 
-// Temporary Manual Completion bypasses the production checks, so it is gated to
+// Mark as Completed is still gated to
 // the specific merchandisers cleared for it rather than the whole role. Add or
 // remove an email here to grant/revoke (lowercase).
 const MANUAL_COMPLETE_EMAILS = [
@@ -53,6 +54,7 @@ const MANUAL_COMPLETE_EMAILS = [
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
     const { showPopup, PopupComponent } = usePopup();
+    const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
 
     const [activeTab, setActiveTab] = useTabParam("dashboard");
     const [user, setUser] = useState(null);
@@ -741,18 +743,34 @@ export default function B2bMerchandiserDashboard() {
         }
     };
 
-    // Temporary Manual Completion — force the order completed WITHOUT the normal
-    // production checks, behind a confirm. Same behaviour (and the same atomic
-    // manual_complete_order RPC) as the Production Head's button on the retail
-    // order dashboard: dispatches every active component and marks the order
-    // completed, rather than just flipping orders.status. Gated to
-    // MANUAL_COMPLETE_EMAILS — see the button below.
+    // Mark as Completed — production finished. Final QC is MANDATORY (the RPC
+    // refuses otherwise); pieces stay at final_qc_passed, ready for Packaging
+    // & Dispatch. Same manual_complete_order RPC as the
+    // Production Head dashboards. Gated to MANUAL_COMPLETE_EMAILS.
+    const runManualComplete = async (order, picked) => {
+        const scopes = picked === null ? [null] : picked;
+        for (const idx of scopes) {
+            const { data, error } = await supabase.rpc("manual_complete_order", {
+                p_order_id: order.id, p_by: user?.email || "unknown", p_item_index: idx,
+            });
+            if (error || data?.success === false) {
+                showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
+                return;
+            }
+        }
+        loadAllData();
+        showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} updated.`, confirmText: "OK" });
+    };
+
     const markManualComplete = async (order) => {
+        const comps = componentsByOrder[order.id] || [];
+        const productIdxs = [...new Set(comps.map((c) => c.item_index ?? 0))].sort((a, b) => a - b);
+        if (productIdxs.length > 1) { setCompletePicker({ order, productIdxs }); return; }
         const ok = await new Promise((resolve) => {
             showPopup({
                 type: "confirm",
-                title: "Temporary Manual Completion",
-                message: `Mark order ${order.order_no} as completed WITHOUT the production checks? This bypasses the normal flow.`,
+                title: "Mark as Completed",
+                message: `Mark order ${order.order_no} as completed? Every piece must have passed Final QC — pieces become ready for Packaging & Dispatch.`,
                 confirmText: "Yes, complete it",
                 cancelText: "Cancel",
                 onConfirm: () => resolve(true),
@@ -760,17 +778,7 @@ export default function B2bMerchandiserDashboard() {
             });
         });
         if (!ok) return;
-
-        const { data, error } = await supabase.rpc("manual_complete_order", {
-            p_order_id: order.id,
-            p_by: user?.email || "unknown",
-        });
-        if (error || data?.success === false) {
-            showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
-            return;
-        }
-        loadAllData();
-        showPopup({ type: "success", title: "Done", message: data?.message || `Order ${order.order_no} marked as completed.`, confirmText: "OK" });
+        await runManualComplete(order, null);
     };
 
     // ==================== HELPERS ====================
@@ -828,6 +836,15 @@ export default function B2bMerchandiserDashboard() {
 
     return (
         <div className="merch-dashboard-wrapper">
+            {completePicker && (
+                <CompletePicker
+                    order={completePicker.order}
+                    components={componentsByOrder[completePicker.order.id] || []}
+                    productIdxs={completePicker.productIdxs}
+                    onConfirm={(picked) => runManualComplete(completePicker.order, picked)}
+                    onClose={() => setCompletePicker(null)}
+                />
+            )}
             {PopupComponent}
             {/* ===== HEADER ===== */}
             <header className="merch-header">
@@ -1094,7 +1111,7 @@ export default function B2bMerchandiserDashboard() {
                                                         className="merch-manual-complete-btn"
                                                         onClick={(e) => { e.stopPropagation(); markManualComplete(order); }}
                                                     >
-                                                        Temporary Manual Completion
+                                                        Mark as Completed
                                                     </button>
                                                 )}
                                             </div>

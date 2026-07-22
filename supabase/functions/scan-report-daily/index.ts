@@ -76,6 +76,7 @@ const STAGE_LABEL: Record<string, string> = {
   stitching_in_progress: "Stitching In-Progress", stitching_completed: "Stitching Completed",
   hemming_in_progress: "Hemming In-Progress", hemming_completed: "Hemming Completed",
   final_qc_in_progress: "Final QC In-Progress", final_qc_passed: "Final QC Passed", final_qc_failed: "Final QC Failed",
+  production_complete: "Completed",
   packaging_dispatch: "Packaging & Dispatch", dispatched: "Dispatched",
   disposed: "Disposed", scrapped: "Scrapped",
 };

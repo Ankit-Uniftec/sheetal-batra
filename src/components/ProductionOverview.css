@@ -148,7 +148,8 @@
 .po-dot-pending { background: #9e9e9e; }
 .po-dot-inprod { background: #3f51b5; }
 .po-dot-ready { background: #ef6c00; }
-.po-dot-dispatched { background: #2e7d32; }
+.po-dot-dispatched { background: #6a1b9a; }
+.po-dot-delivered { background: #2e7d32; }
 
 .po-pipeline-count {
   font-size: 15px;

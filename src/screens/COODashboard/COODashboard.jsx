@@ -24,12 +24,14 @@ import {
 } from "recharts";
 
 const ORDER_STATUS_OPTIONS = [
+    // The order lifecycle, in order. Deliberately excludes the dead statuses
+    // in_production / ready / prepared / confirmed / pending: ZERO orders carry
+    // them (they predate barcode tracking, which now derives the middle of the
+    // flow from components), and offering them let a human write bad data back.
     { value: "order_received", label: "Order Received", color: "#ff9800" },
-    { value: "in_production", label: "In Production", color: "#2196f3" },
-    { value: "ready", label: "Ready", color: "#4caf50" },
-    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
-    { value: "delivered", label: "Delivered", color: "#388e3c" },
     { value: "completed", label: "Completed", color: "#388e3c" },
+    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
+    { value: "delivered", label: "Delivered", color: "#2e7d32" },
     { value: "cancelled", label: "Cancelled", color: "#f44336" },
 ];
 
