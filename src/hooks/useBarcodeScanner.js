@@ -25,7 +25,12 @@ import { useEffect, useRef, useCallback } from "react";
 const DEFAULT_OPTIONS = {
   enabled: true,
   minLength: 5,          // Minimum characters for a valid barcode
-  maxGap: 50,            // Max ms between keystrokes to count as scanner (scanners type at 5-15ms)
+  maxGap: 80,            // Max ms between keystrokes to count as scanner. Wired
+                         // scanners type at 5-15ms, but a BLUETOOTH scanner on
+                         // a loaded tablet has occasional latency spikes — 50ms
+                         // was tight enough that a spike mid-barcode tripped the
+                         // reset and dropped the front (e.g. -> "08-TOP"). 80ms
+                         // stays well under human typing (~120-200ms).
   debounceDelay: 300,    // Delay after scan before accepting next (prevent double-scan)
   suffixKeyCodes: [13],  // Enter key = end of barcode (configurable)
 };
@@ -112,8 +117,14 @@ export function useBarcodeScanner({ onScan, enabled = true, minLength, maxGap, d
           isScanningRef.current = true;
         }
       } else if (timeSinceLastKey > opts.maxGap && bufferRef.current.length > 0) {
-        // Too slow — previous buffer was human typing, discard
-        resetBuffer();
+        // A slow gap AFTER we already recognised a scanner is a hiccup (BT
+        // latency, a busy tablet) mid-scan — NOT human typing. Resetting here
+        // discarded the front of the barcode, so "DC-002561-TOP" arrived as
+        // "08-TOP". Keep the buffer; only discard a slow gap while we're still
+        // unsure this is a scanner (genuine human typing between fields).
+        if (!isScanningRef.current) {
+          resetBuffer();
+        }
       }
 
       // If scanner detected, SWALLOW the event — prevent it reaching input fields

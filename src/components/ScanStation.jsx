@@ -10,6 +10,7 @@ import {
     verifyPackagingComponents,
     fetchOrderComponents,
     fetchComponentByBarcode,
+    resolveFullBarcode,
     fetchTransitionHistory,
     fetchMovementHistory,
     enrichComponentsWithMovements,
@@ -276,6 +277,15 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         const scanStartedAt = now;
 
         try {
+            // Normalise a PREFIX-LESS entry ("002773-BTM") to the real full
+            // barcode BEFORE any branch runs, so every downstream path — the
+            // duplicate guard, the popups, and the DB RPCs (which match the
+            // exact barcode) — all act on the true value. The sequence is
+            // globally unique, so a bare "…-002773-BTM" resolves to one piece;
+            // resolveFullBarcode returns the input unchanged if it's already
+            // full or can't be resolved unambiguously.
+            barcode = await resolveFullBarcode(barcode);
+
             const station = SCAN_STATIONS.find(s => s.value === selectedStation);
 
             // Security gate has its own flow
