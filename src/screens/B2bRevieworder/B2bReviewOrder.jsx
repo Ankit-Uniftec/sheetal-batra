@@ -18,15 +18,17 @@ function ColorDotDisplay({ colorObject }) {
     let displayColorName = "";
     let displayColorHex = "#000000";
     if (typeof colorObject === "string") {
+        // A bare name with no hex (dupatta_colors stores names only): show the
+        // name, no swatch. Painting it grey invented a colour that isn't real.
         displayColorName = colorObject;
-        displayColorHex = colorObject.startsWith("#") ? colorObject : "gray";
+        displayColorHex = colorObject.startsWith("#") ? colorObject : "";
     } else if (typeof colorObject === "object" && colorObject !== null) {
         displayColorName = colorObject.name || "";
         displayColorHex = colorObject.hex || "";
     }
     return (
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <div style={{ background: displayColorHex, height: "14px", width: "28px", borderRadius: "8px", border: "1px solid #ccc" }} />
+            {displayColorHex && <div style={{ background: displayColorHex, height: "14px", width: "28px", borderRadius: "8px", border: "1px solid #ccc" }} />}
             <span>{displayColorName}</span>
         </div>
     );

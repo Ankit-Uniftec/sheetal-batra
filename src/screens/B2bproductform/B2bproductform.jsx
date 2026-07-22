@@ -319,7 +319,16 @@ export default function B2bProductForm() {
         // products were silently dropping off).
         fetchAllRows("products", (q) => q.select("*, product_extra_prices (*)").order("name")).then(({ data }) => setProducts(data || []));
         supabase.from("colors").select("name, hex").order("name").then(({ data }) => setColors(data || []));
-        supabase.from("dupatta_colors").select("name").order("name").then(({ data }) => setDupattaColors((data || []).map((d) => d.name)));
+        // hex was added in migration 47; fall back to name-only if it is not
+        // there yet so this keeps working before the migration runs.
+        supabase.from("dupatta_colors").select("name, hex").order("name").then(({ data, error }) => {
+            if (error) {
+                supabase.from("dupatta_colors").select("name").order("name")
+                    .then(({ data: d2 }) => setDupattaColors((d2 || []).map((d) => ({ name: d.name, hex: null }))));
+                return;
+            }
+            setDupattaColors(data || []);
+        });
         supabase.from("extras").select("name, price, sort_order").order("sort_order").then(({ data }) => setGlobalExtras(data || []));
     }, []);
 
@@ -411,13 +420,16 @@ export default function B2bProductForm() {
     // Helpers
     const toOptions = (arr = []) => arr.map(x => ({ label: String(x), value: x }));
     const toColorOptions = (clrs = []) => clrs.map(c => ({ label: c.name, value: c.name, hex: c.hex }));
-    // dupatta_colors holds names only (no hex column), so the dropdown showed a
-    // bare name while Top/Bottom showed a swatch. Match each name against the
-    // main colours table to recover its hex; unmatched names still render, just
-    // without a dot.
-    const toDupattaColorOptions = (names = []) => names.map((n) => {
-        const match = colors.find((c) => (c.name || "").toLowerCase() === String(n).toLowerCase());
-        return { label: String(n), value: n, ...(match?.hex ? { hex: match.hex } : {}) };
+    // Dupatta swatches: prefer the row's own hex (migration 47). Before that
+    // migration — or for a colour whose hex has not been filled in yet — fall
+    // back to a name match against the main colours table. No match means no
+    // dot; we never invent a colour.
+    const toDupattaColorOptions = (rows = []) => rows.map((r) => {
+        const name = typeof r === "string" ? r : r.name;
+        const own = typeof r === "object" ? r.hex : null;
+        const match = colors.find((c) => (c.name || "").toLowerCase() === String(name).toLowerCase());
+        const hex = own || match?.hex || null;
+        return { label: String(name), value: name, ...(hex ? { hex } : {}) };
     });
     const toExtraOptions = (extras = []) => extras.map(e => ({ label: `${e.name} (₹${formatIndianNumber(e.price)})`, value: e.name, price: e.price }));
     const getCategoryKeyFromDisplayName = (displayName) => { for (const [k, v] of Object.entries(CATEGORY_DISPLAY_NAMES)) if (v === displayName) return k; return null; };
@@ -631,6 +643,20 @@ export default function B2bProductForm() {
                                                         {item.top && <div className="field"><label>Top Color</label><SearchableSelect options={toColorOptions(colors)} value={item.top_color?.name || ""} onChange={(n) => updateItem(item._id, { top_color: colors.find(c => c.name === n) || { name: "", hex: "" } })} placeholder="Select Color" /></div>}
                                                         <div className="field"><label>Bottom</label><SearchableSelect options={toOptions(opts.bottoms)} value={item.bottom || ""} onChange={(v) => updateItem(item._id, { bottom: v })} placeholder="Select Bottom" /></div>
                                                         {item.bottom && <div className="field"><label>Bottom Color</label><SearchableSelect options={toColorOptions(colors)} value={item.bottom_color?.name || ""} onChange={(n) => updateItem(item._id, { bottom_color: colors.find(c => c.name === n) || { name: "", hex: "" } })} placeholder="Select Color" /></div>}
+                                                        {/* Dupatta: capturable when adding the product, but the edit
+                                                            panel had no field — so its colour could not be seen or
+                                                            corrected afterwards. */}
+                                                        {item.includes_dupatta && (
+                                                            <div className="field">
+                                                                <label>Dupatta Color</label>
+                                                                <SearchableSelect
+                                                                    options={toDupattaColorOptions(dupattaColors)}
+                                                                    value={item.dupatta_color || ""}
+                                                                    onChange={(v) => updateItem(item._id, { dupatta_color: v })}
+                                                                    placeholder="Select Dupatta Color"
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     {/* Extras */}
                                                     <div className="row">
