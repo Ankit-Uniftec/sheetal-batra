@@ -377,7 +377,7 @@ const WarehouseDashboard = () => {
     try {
       const { data, error } = await supabase
         .from("order_components")
-        .select("id, barcode, component_type, component_label, current_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
+        .select("id, barcode, component_type, component_label, current_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, stage_pass_counts, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
         .eq("order_id", orderId)
         .order("component_type", { ascending: true });
       if (error) throw error;
