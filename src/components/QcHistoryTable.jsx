@@ -26,10 +26,14 @@ export default function QcHistoryTable({ records = [], loading, emptyText = "No 
     <div className="qch-list">
       {records.map((q) => {
         const clickable = onOrderClick && q.order_id;
+        // A PH/PM Mark-as-Completed override writes a Final QC row with
+        // result='pass' (so the column's constraint still holds) — is_override
+        // is the only honest signal. Never infer it from result.
+        const isOverride = q.is_override === true;
         return (
         <div
           key={q.id}
-          className={`qch-row ${q.result === "fail" ? "qch-row-fail" : "qch-row-pass"} ${clickable ? "qch-row-click" : ""}`}
+          className={`qch-row ${isOverride ? "qch-row-override" : q.result === "fail" ? "qch-row-fail" : "qch-row-pass"} ${clickable ? "qch-row-click" : ""}`}
           onClick={clickable ? () => onOrderClick(q.order_id, q.order_no) : undefined}
           role={clickable ? "button" : undefined}
           tabIndex={clickable ? 0 : undefined}
@@ -40,11 +44,17 @@ export default function QcHistoryTable({ records = [], loading, emptyText = "No 
             <span className="qch-barcode">{q.barcode}</span>
             {showOrderNo && q.order_no && <span className="qch-order">{q.order_no}</span>}
             <span className="qch-which">{q.which_qc === "final" ? "Final QC" : "QC 1"}</span>
-            <span className={`qch-result ${q.result === "fail" ? "qch-fail" : "qch-pass"}`}>
-              {q.result === "fail" ? "FAIL" : "PASS"}
+            <span className={`qch-result ${isOverride ? "qch-override" : q.result === "fail" ? "qch-fail" : "qch-pass"}`}>
+              {isOverride ? "OVERRIDDEN" : q.result === "fail" ? "FAIL" : "PASS"}
             </span>
           </div>
-          {q.result === "fail" && (
+          {isOverride && (
+            <div className="qch-detail">
+              <div><strong>Final QC skipped</strong> — marked complete without passing Final QC.</div>
+              {q.fail_reason && <div>{q.fail_reason}</div>}
+            </div>
+          )}
+          {!isOverride && q.result === "fail" && (
             <div className="qch-detail">
               {q.fail_reason && <div><strong>Reason:</strong> {q.fail_reason}</div>}
               {q.outcome && <div><strong>Outcome:</strong> {q.outcome}{q.rejourney_number ? ` (re-journey ${q.rejourney_number})` : ""}</div>}
@@ -53,7 +63,9 @@ export default function QcHistoryTable({ records = [], loading, emptyText = "No 
             </div>
           )}
           <div className="qch-meta">
-            {q.inspected_by ? `Inspected by ${q.inspected_by}` : ""}
+            {isOverride
+              ? `Overridden by ${q.overridden_by || q.inspected_by || "unknown"}`
+              : q.inspected_by ? `Inspected by ${q.inspected_by}` : ""}
             {q.created_at ? ` · ${new Date(q.created_at).toLocaleString("en-GB")}` : ""}
           </div>
         </div>
