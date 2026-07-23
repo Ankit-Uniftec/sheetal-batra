@@ -319,7 +319,7 @@ export default function Dashboard() {
     try {
       const { data, error } = await supabase
         .from("order_components")
-        .select("id, barcode, component_type, component_label, current_stage, is_active, is_delayed, re_journey_count")
+        .select("id, barcode, component_type, component_label, current_stage, is_active, is_delayed, re_journey_count, stage_pass_counts")
         .eq("order_id", orderId)
         .order("component_type", { ascending: true });
       if (!error && data) {

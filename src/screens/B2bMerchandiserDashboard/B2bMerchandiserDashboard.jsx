@@ -20,6 +20,7 @@ import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam
 import CompletePicker from "../../components/CompletePicker";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
+import { runManualCompleteWithOverride, describeBlocking } from "../../utils/manualComplete";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -188,7 +189,7 @@ export default function B2bMerchandiserDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, re_journey_count")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, re_journey_count, stage_pass_counts")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
@@ -743,20 +744,36 @@ export default function B2bMerchandiserDashboard() {
         }
     };
 
-    // Mark as Completed — production finished. Final QC is MANDATORY (the RPC
-    // refuses otherwise); pieces stay at final_qc_passed, ready for Packaging
-    // & Dispatch. Same manual_complete_order RPC as the
-    // Production Head dashboards. Gated to MANUAL_COMPLETE_EMAILS.
+    // Mark as Completed — production finished. Final QC is mandatory (the RPC
+    // refuses otherwise) but can be overridden here, same as on the Production
+    // Head / Manager dashboards: a second confirm lists the pieces being
+    // skipped and the override lands in the order's QC Report. Same
+    // manual_complete_order RPC. Gated to MANUAL_COMPLETE_EMAILS.
     const runManualComplete = async (order, picked) => {
-        const scopes = picked === null ? [null] : picked;
-        for (const idx of scopes) {
-            const { data, error } = await supabase.rpc("manual_complete_order", {
-                p_order_id: order.id, p_by: user?.email || "unknown", p_item_index: idx,
+        try {
+            const res = await runManualCompleteWithOverride({
+                orderId: order.id,
+                by: user?.email || "unknown",
+                picked,
+                confirmOverride: ({ blocking }) => new Promise((resolve) => {
+                    showPopup({
+                        type: "confirm",
+                        title: "Override Final QC?",
+                        message:
+                            `${blocking.length} piece(s) have NOT passed Final QC:\n\n${describeBlocking(blocking)}\n\n` +
+                            `Completing now skips Final QC for them — they become ready for Packaging & Dispatch. ` +
+                            `This is recorded against your name in the order's QC Report.`,
+                        confirmText: "Override & complete",
+                        cancelText: "Cancel",
+                        onConfirm: () => resolve(true),
+                        onCancel: () => resolve(false),
+                    });
+                }),
             });
-            if (error || data?.success === false) {
-                showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
-                return;
-            }
+            if (res.cancelled) return;
+        } catch (err) {
+            showPopup({ type: "error", title: "Update Failed", message: err.message || "Could not complete the order.", confirmText: "OK" });
+            return;
         }
         loadAllData();
         showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} updated.`, confirmText: "OK" });
@@ -770,7 +787,7 @@ export default function B2bMerchandiserDashboard() {
             showPopup({
                 type: "confirm",
                 title: "Mark as Completed",
-                message: `Mark order ${order.order_no} as completed? Every piece must have passed Final QC — pieces become ready for Packaging & Dispatch.`,
+                message: `Mark order ${order.order_no} as completed? Pieces become ready for Packaging & Dispatch. If any piece has not passed Final QC you'll be asked to confirm an override.`,
                 confirmText: "Yes, complete it",
                 cancelText: "Cancel",
                 onConfirm: () => resolve(true),

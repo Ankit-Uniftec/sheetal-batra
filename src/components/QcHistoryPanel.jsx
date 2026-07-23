@@ -63,6 +63,7 @@ export default function QcHistoryPanel({ records = [], loading, showInspectorFil
           <option value="">All results</option>
           <option value="pass">Pass</option>
           <option value="fail">Fail</option>
+          <option value="override">Overridden</option>
         </select>
         <select className="qch-input" value={whichQc} onChange={(e) => setWhichQc(e.target.value)}>
           <option value="">QC1 & Final</option>
@@ -82,6 +83,9 @@ export default function QcHistoryPanel({ records = [], loading, showInspectorFil
         <span className="qch-sum-item"><b>{summary.total}</b> records</span>
         <span className="qch-sum-item qch-sum-pass"><b>{summary.pass}</b> pass</span>
         <span className="qch-sum-item qch-sum-fail"><b>{summary.fail}</b> fail</span>
+        {summary.override > 0 && (
+          <span className="qch-sum-item qch-sum-override"><b>{summary.override}</b> overridden</span>
+        )}
         <span className="qch-sum-item"><b>{summary.failRatePct}%</b> fail rate</span>
       </div>
 

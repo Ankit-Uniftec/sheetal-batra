@@ -27,6 +27,7 @@ import SearchByDropdown from "../components/SearchByDropdown";
 import useTabParam from "../hooks/useTabParam";
 import Paginator from "../components/Paginator";
 import CompletePicker from "../components/CompletePicker";
+import { runManualCompleteWithOverride, describeBlocking } from "../utils/manualComplete";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -376,7 +377,7 @@ const WarehouseDashboard = () => {
     try {
       const { data, error } = await supabase
         .from("order_components")
-        .select("id, barcode, component_type, component_label, current_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
+        .select("id, barcode, component_type, component_label, current_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, stage_pass_counts, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
         .eq("order_id", orderId)
         .order("component_type", { ascending: true });
       if (error) throw error;
@@ -968,22 +969,39 @@ const WarehouseDashboard = () => {
   // "Mark as Completed" — only the Production-Head bypass below for orders that
   // can't finish the normal flow.
 
-  // Mark as Completed — production finished. Final QC is MANDATORY (the RPC
-  // refuses otherwise). A multi-product order opens the product picker so one
-  // finished product can be completed while others are still in production;
-  // the completed product's pieces move to production_complete (badge
-  // "Completed"), ready for Packaging & Dispatch. Only for the Production Head.
+  // Mark as Completed — production finished. Final QC is mandatory (the RPC
+  // refuses otherwise) but the Production Head can override it and complete the
+  // product anyway; a second confirm lists the pieces being skipped and the
+  // override is recorded in the order's QC Report. A multi-product order opens
+  // the product picker so one finished product can be completed while others
+  // are still in production; the completed product's pieces move to
+  // production_complete (badge "Completed"), ready for Packaging & Dispatch.
   const runManualComplete = async (order, picked) => {
     // picked: null = whole order; else an array of item indexes to loop.
-    const scopes = picked === null ? [null] : picked;
-    for (const idx of scopes) {
-      const { data, error } = await supabase.rpc("manual_complete_order", {
-        p_order_id: order.id, p_by: currentUserEmail, p_item_index: idx,
+    try {
+      const res = await runManualCompleteWithOverride({
+        orderId: order.id,
+        by: currentUserEmail,
+        picked,
+        confirmOverride: ({ blocking }) => new Promise((resolve) => {
+          showPopup({
+            type: "confirm",
+            title: "Override Final QC?",
+            message:
+              `${blocking.length} piece(s) have NOT passed Final QC:\n\n${describeBlocking(blocking)}\n\n` +
+              `Completing now skips Final QC for them — they become ready for Packaging & Dispatch. ` +
+              `This is recorded against your name in the order's QC Report.`,
+            confirmText: "Override & complete",
+            cancelText: "Cancel",
+            onConfirm: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        }),
       });
-      if (error || data?.success === false) {
-        showPopup({ type: "error", title: "Update Failed", message: error?.message || data?.message || "Could not complete the order.", confirmText: "OK" });
-        return false;
-      }
+      if (res.cancelled) return false;
+    } catch (err) {
+      showPopup({ type: "error", title: "Update Failed", message: err.message || "Could not complete the order.", confirmText: "OK" });
+      return false;
     }
     fetchOrders();
     // The completed product's pieces moved to production_complete. Drop this
@@ -1011,7 +1029,7 @@ const WarehouseDashboard = () => {
       showPopup({
         type: "confirm",
         title: "Mark as Completed",
-        message: `Mark order ${order.order_no} as completed? Every piece must have passed Final QC — pieces become ready for Packaging & Dispatch.`,
+        message: `Mark order ${order.order_no} as completed? Pieces become ready for Packaging & Dispatch. If any piece has not passed Final QC you'll be asked to confirm an override.`,
         confirmText: "Yes, complete it",
         cancelText: "Cancel",
         onConfirm: () => resolve(true),

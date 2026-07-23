@@ -8,7 +8,7 @@ import { supabase } from "../lib/supabaseClient";
 // ============================================================
 
 export const QC_RECORD_COLUMNS =
-  "id, barcode, component_id, order_id, order_no, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at";
+  "id, barcode, component_id, order_id, order_no, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at, is_override, overridden_by";
 
 // Fetch QC records, scoped one of three ways:
 //   { inspectedBy }        -> that QC person's own records ("My QC History")
@@ -73,20 +73,28 @@ export async function fetchQcRecords({ inspectedBy, orderIds, paged } = {}) {
 }
 
 // Pass/fail summary for the counts line.
+// Overrides (PH/PM marked a piece complete without Final QC) are their OWN
+// bucket, never counted as a pass: they carry result='pass' purely to satisfy
+// the column's constraint, and folding them into the pass count would inflate
+// the pass rate with garments nobody inspected. They're excluded from the fail
+// rate's denominator too — an override is not a QC outcome either way.
 export function qcSummary(records = []) {
-  let pass = 0, fail = 0;
+  let pass = 0, fail = 0, override = 0;
   records.forEach((r) => {
-    if (r.result === "fail") fail++;
+    if (r.is_override === true) override++;
+    else if (r.result === "fail") fail++;
     else pass++;
   });
   const total = records.length;
-  const failRatePct = total > 0 ? Math.round((fail / total) * 1000) / 10 : 0;
-  return { total, pass, fail, failRatePct };
+  const inspected = pass + fail;
+  const failRatePct = inspected > 0 ? Math.round((fail / inspected) * 1000) / 10 : 0;
+  return { total, pass, fail, override, failRatePct };
 }
 
 // Client-side filtering for the dashboard controls. All filters optional.
 //   from/to      : YYYY-MM-DD date bounds (inclusive) on created_at
-//   result       : 'pass' | 'fail'
+//   result       : 'pass' | 'fail' | 'override'  ('pass'/'fail' exclude
+//                  overrides — those rows are result='pass' on paper only)
 //   whichQc      : 'qc1' | 'final'
 //   inspectedBy  : exact QC-person email
 //   search       : substring match on order_no or barcode (case-insensitive)
@@ -95,7 +103,9 @@ export function filterQcRecords(records = [], { from, to, result, whichQc, inspe
   const toT = to ? new Date(to + "T23:59:59.999").getTime() : null;
   const q = (search || "").trim().toLowerCase();
   return records.filter((r) => {
-    if (result && r.result !== result) return false;
+    const isOverride = r.is_override === true;
+    if (result === "override") { if (!isOverride) return false; }
+    else if (result && (isOverride || r.result !== result)) return false;
     if (whichQc && r.which_qc !== whichQc) return false;
     if (inspectedBy && r.inspected_by !== inspectedBy) return false;
     if (fromT || toT) {

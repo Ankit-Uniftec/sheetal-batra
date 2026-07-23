@@ -22,6 +22,7 @@ import ReJourneyPanel from "../../components/ReJourneyPanel";
 import { getStageLabel, getStageGroupKey, enrichComponentsWithMovements, classifyComponentForStageCard, STAGE_GROUPS } from "../../utils/barcodeService";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import { fetchReJourneys } from "../../utils/reJourneys";
+import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -50,6 +51,10 @@ export default function B2bProductionDashboard() {
     const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
     const [manualCompleteProcessing, setManualCompleteProcessing] = useState(false);
     const [manualCompleteError, setManualCompleteError] = useState("");
+    // Final QC override — when the RPC blocks, the modal turns into a
+    // "you're skipping Final QC on these pieces" confirm. resolve() is the
+    // pending promise the shared helper is waiting on.
+    const [qcOverride, setQcOverride] = useState(null); // { blocking, resolve }
 
     // Calendar
     const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -155,7 +160,7 @@ export default function B2bProductionDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
@@ -416,17 +421,25 @@ export default function B2bProductionDashboard() {
         setManualCompleteError(""); setManualCompleteOrder(order);
     };
 
+    // Ask the PH to confirm skipping Final QC. Resolves the helper's promise
+    // from the modal's buttons.
+    const askQcOverride = ({ blocking }) => new Promise((resolve) => {
+        setQcOverride({ blocking, resolve });
+    });
+
     // Loop the picked products through the RPC (null = whole order).
     const runManualComplete = async (order, picked) => {
-        const scopes = picked === null ? [null] : picked;
-        for (const idx of scopes) {
-            const { data, error } = await supabase.rpc("manual_complete_order", {
-                p_order_id: order.id, p_by: user?.email, p_item_index: idx,
+        try {
+            const res = await runManualCompleteWithOverride({
+                orderId: order.id,
+                by: user?.email,
+                picked,
+                confirmOverride: askQcOverride,
             });
-            if (error || data?.success === false) {
-                setManualCompleteError(error?.message || data?.message || "Could not complete the order.");
-                return false;
-            }
+            if (res.cancelled) return false;
+        } catch (err) {
+            setManualCompleteError(err.message || "Could not complete the order.");
+            return false;
         }
         loadAllData();
         return true;
@@ -437,11 +450,16 @@ export default function B2bProductionDashboard() {
         setManualCompleteProcessing(true);
         setManualCompleteError("");
         try {
-            const { data, error } = await supabase.rpc("manual_complete_order", {
-                p_order_id: manualCompleteOrder.id, p_by: user?.email,
+            const res = await runManualCompleteWithOverride({
+                orderId: manualCompleteOrder.id,
+                by: user?.email,
+                picked: null,
+                confirmOverride: askQcOverride,
             });
-            if (error || data?.success === false) throw new Error(error?.message || data?.message);
-            setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed" } : o));
+            if (res.cancelled) return;   // override declined — nothing changed
+            if (res.last?.order_completed) {
+                setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed" } : o));
+            }
             setManualCompleteOrder(null);
             // Re-fetch components so the piece badges reflect the new stage live.
             loadAllData();
@@ -902,12 +920,42 @@ export default function B2bProductionDashboard() {
                         </div>
                         <div className="prod-modal-body">
                             <p>Mark order <b>{manualCompleteOrder.order_no}</b> as completed?</p>
-                            <p style={{ color: "#c4631a", fontSize: 13, marginTop: 8 }}>Every piece must have passed Final QC — pieces become ready for Packaging &amp; Dispatch.</p>
+                            <p style={{ color: "#c4631a", fontSize: 13, marginTop: 8 }}>Pieces become ready for Packaging &amp; Dispatch. If any piece has not passed Final QC you&apos;ll be asked to confirm an override.</p>
                             {manualCompleteError && <p style={{ color: "#c62828", fontSize: 13, marginTop: 8, fontWeight: 600 }}>{manualCompleteError}</p>}
                         </div>
                         <div className="prod-modal-footer">
                             <button className="prod-modal-cancel" onClick={() => setManualCompleteOrder(null)} disabled={manualCompleteProcessing}>Cancel</button>
                             <button className="prod-modal-confirm" onClick={confirmManualComplete} disabled={manualCompleteProcessing}>{manualCompleteProcessing ? "Completing..." : "Yes, complete it"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Final QC override — the Production Head is about to complete
+                pieces that never passed Final QC. Name them, then confirm. */}
+            {qcOverride && (
+                <div className="prod-modal-overlay" onClick={(e) => e.stopPropagation()}>
+                    <div className="prod-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="prod-modal-top">
+                            <h3>Override Final QC?</h3>
+                        </div>
+                        <div className="prod-modal-body">
+                            <p><b>{qcOverride.blocking.length} piece(s)</b> have NOT passed Final QC:</p>
+                            <div style={{ maxHeight: 180, overflowY: "auto", margin: "8px 0", fontSize: 13, color: "#444" }}>
+                                {qcOverride.blocking.map((b) => (
+                                    <div key={b.barcode}>
+                                        • {b.component_label || b.barcode} ({b.barcode}) — {(b.current_stage || "").replace(/_/g, " ")}
+                                    </div>
+                                ))}
+                            </div>
+                            <p style={{ color: "#c4631a", fontSize: 13 }}>
+                                Completing now skips Final QC for them — they become ready for Packaging &amp; Dispatch.
+                                This is recorded against your name in the order&apos;s QC Report.
+                            </p>
+                        </div>
+                        <div className="prod-modal-footer">
+                            <button className="prod-modal-cancel" onClick={() => { qcOverride.resolve(false); setQcOverride(null); }}>Cancel</button>
+                            <button className="prod-modal-confirm" onClick={() => { qcOverride.resolve(true); setQcOverride(null); }}>Override &amp; complete</button>
                         </div>
                     </div>
                 </div>

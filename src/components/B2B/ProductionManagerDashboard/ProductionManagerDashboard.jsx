@@ -15,6 +15,7 @@ import ReplacementApprovals from "../../../components/ReplacementApprovals";
 import StageCountCards from "../../../components/StageCountCards";
 import QcHistoryPanel from "../../../components/QcHistoryPanel";
 import { fetchQcRecords } from "../../../utils/qcHistory";
+import { runManualCompleteWithOverride, describeBlocking } from "../../../utils/manualComplete";
 import ReJourneyPanel from "../../../components/ReJourneyPanel";
 import { fetchReJourneys } from "../../../utils/reJourneys";
 import ExternalVendorsPanel from "../../../components/ExternalVendorsPanel";
@@ -352,7 +353,7 @@ export default function ProductionManagerDashboard() {
             while (!cDone) {
                 const { data: cData, error: cErr } = await supabase
                     .from("order_components")
-                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count")
+                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts")
                     .order("created_at", { ascending: false })
                     .range(cFrom, cFrom + PAGE_SIZE - 1);
                 if (cErr) {
@@ -673,21 +674,36 @@ export default function ProductionManagerDashboard() {
     // manual_complete_order takes ONE item index, so a multi-product pick loops.
     // Returns the LAST result — order_completed is only true on the call that
     // leaves nothing active, which is what the caller keys the order stamp off.
+    // Final QC is mandatory; the Production Manager may override it and
+    // complete the product anyway. The shared helper does the retry handshake
+    // and asks confirmOverride first, listing the pieces that are short.
     const runManualComplete = async (order, picked) => {
-        const scopes = picked === null ? [null] : picked;
-        let last = null;
-        for (const idx of scopes) {
-            const { data, error } = await supabase.rpc("manual_complete_order", {
-                p_order_id: order.id, p_by: currentUserEmail, p_item_index: idx,
-            });
-            if (error || data?.success === false) throw new Error(error?.message || data?.message || "Could not update order");
-            last = data;
-        }
-        return last;
+        const res = await runManualCompleteWithOverride({
+            orderId: order.id,
+            by: currentUserEmail,
+            picked,
+            confirmOverride: ({ blocking }) => new Promise((resolve) => {
+                showPopup({
+                    type: "confirm",
+                    title: "Override Final QC?",
+                    message:
+                        `${blocking.length} piece(s) have NOT passed Final QC:\n\n${describeBlocking(blocking)}\n\n` +
+                        `Completing now skips Final QC for them — they become ready for Packaging & Dispatch. ` +
+                        `This is recorded against your name in the order's QC Report.`,
+                    confirmText: "Override & complete",
+                    cancelText: "Cancel",
+                    onConfirm: () => resolve(true),
+                    onCancel: () => resolve(false),
+                });
+            }),
+        });
+        return res.cancelled ? null : res.last;
     };
 
     // Mark as Completed — production is finished making the garment. Final QC is
-    // MANDATORY: the RPC refuses if any piece has not passed it (no bypass).
+    // mandatory: the RPC refuses if any piece has not passed it — but the
+    // Production Manager can override that and complete it anyway (a second
+    // confirm lists what's being skipped; it lands in the QC Report).
     // Components stay at final_qc_passed — packaging & dispatch is a separate,
     // later event that moves them to dispatched. Completed ≠ dispatched ≠
     // delivered.
@@ -710,7 +726,7 @@ export default function ProductionManagerDashboard() {
             showPopup({
                 type: "confirm",
                 title: "Mark as Completed",
-                message: `Mark ${scopeLabel} as completed? Every piece must have passed Final QC — pieces become ready for Packaging & Dispatch.`,
+                message: `Mark ${scopeLabel} as completed? Pieces become ready for Packaging & Dispatch. If any piece has not passed Final QC you'll be asked to confirm an override.`,
                 confirmText: "Yes, complete it",
                 cancelText: "Cancel",
                 onConfirm: () => resolve(true),
@@ -723,6 +739,7 @@ export default function ProductionManagerDashboard() {
             // The RPC gates on Final QC and completes the ORDER only when every
             // active piece has passed it.
             const data = await runManualComplete(order, picked);
+            if (data === null) return;   // override declined — nothing changed
             if (data?.order_completed) {
                 setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "completed" } : o));
             }
