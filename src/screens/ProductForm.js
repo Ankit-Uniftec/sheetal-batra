@@ -2323,15 +2323,19 @@ export default function ProductForm() {
   // const livePrice = getLivePrice();
   const liveSubtotalInclTax = getBasePrice() * quantity + selectedExtrasWithColors.reduce((sum, e) => sum + Number(e.price || 0), 0);
 
-  // CART vs LIVE inclusive subtotal
+  // CART + LIVE inclusive subtotal — the summary counts what is already added
+  // AND the product being filled in right now, so it moves as you type on the
+  // 2nd product the same way it does on the 1st. getBasePrice() is 0 with no
+  // product selected, so the live part contributes nothing on an empty form.
+  const hasLiveProduct = !!selectedProduct;
   const inclusiveSubtotal =
-    orderItems.length > 0 ? cartSubtotal : liveSubtotalInclTax;
+    cartSubtotal + (hasLiveProduct ? liveSubtotalInclTax : 0);
 
   // Reverse GST calculation
   const subtotal = inclusiveSubtotal / (1 + gstRate); // taxable amount
   const taxes = inclusiveSubtotal - subtotal; // GST amount
 
-  const totalQuantity = orderItems.length > 0 ? cartQuantity : liveQuantity;
+  const totalQuantity = cartQuantity + (hasLiveProduct ? liveQuantity : 0);
 
   // Final payable (already tax-inclusive)
   const totalOrder = inclusiveSubtotal;

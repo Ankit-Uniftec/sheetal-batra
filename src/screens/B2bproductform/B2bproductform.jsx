@@ -545,8 +545,13 @@ export default function B2bProductForm() {
     }, 0);
     const liveQty = quantity + selectedExtrasWithColors.length;
     const liveSubtotal = getBasePrice() * quantity + selectedExtrasWithColors.reduce((s, e) => s + Number(e.price || 0), 0);
-    const totalQty = orderItems.length > 0 ? cartQty : liveQty;
-    const inclusiveSubtotal = orderItems.length > 0 ? cartSubtotal : liveSubtotal;
+    // CART + LIVE — the summary counts what is already added AND the product
+    // being filled in right now, so it moves as you type on the 2nd product the
+    // same way it does on the 1st. getBasePrice() is 0 with no product selected,
+    // so the live part contributes nothing on an empty form.
+    const hasLiveProduct = !!selectedProduct;
+    const totalQty = cartQty + (hasLiveProduct ? liveQty : 0);
+    const inclusiveSubtotal = cartSubtotal + (hasLiveProduct ? liveSubtotal : 0);
     const gstRate = 0.18;
     const subtotal = inclusiveSubtotal / (1 + gstRate);
     const taxes = inclusiveSubtotal - subtotal;
