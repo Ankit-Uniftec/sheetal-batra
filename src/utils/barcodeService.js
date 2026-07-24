@@ -1042,19 +1042,28 @@ export async function fetchAllMovements() {
     order_id: m.order_components?.order_id || m.order_id || null,
   }));
 
-  // Attach each movement's ORDER date. external_movements.order_id has no FK
-  // (so no nested select); batch-fetch created_at in chunks — a single .in()
+  // Attach each movement's ORDER date AND channel. external_movements.order_id
+  // has no FK (so no nested select); batch-fetch in chunks — a single .in()
   // with a huge id list silently 400s on large data (URL length).
+  // is_b2b/salesperson_store come along so callers can scope a movement to its
+  // channel (retail vs B2B) — the B2B signal lives on the order, never on the
+  // component, so this is the one place to resolve it. Dual signal because some
+  // B2B orders carry the store but not the flag (see WarehouseDashboard's
+  // isB2bOrder), so neither alone is reliable.
   const orderIds = [...new Set(rows.map((r) => r.order_id).filter(Boolean))];
-  const dateById = {};
+  const infoById = {};
   for (let i = 0; i < orderIds.length; i += 100) {
     const chunk = orderIds.slice(i, i + 100);
     const { data: ords, error: oErr } = await supabase
-      .from("orders").select("id, created_at").in("id", chunk);
-    if (oErr) { console.error("fetchAllMovements order-date fetch failed:", oErr); break; }
-    (ords || []).forEach((o) => { dateById[o.id] = o.created_at; });
+      .from("orders").select("id, created_at, is_b2b, salesperson_store").in("id", chunk);
+    if (oErr) { console.error("fetchAllMovements order fetch failed:", oErr); break; }
+    (ords || []).forEach((o) => { infoById[o.id] = o; });
   }
-  return rows.map((r) => ({ ...r, order_created_at: dateById[r.order_id] || null }));
+  return rows.map((r) => {
+    const o = infoById[r.order_id] || null;
+    const is_b2b = !!o && (o.is_b2b === true || (o.salesperson_store || "").trim().toUpperCase() === "B2B");
+    return { ...r, order_created_at: o?.created_at || null, is_b2b };
+  });
 }
 
 // Edit a still-'configured' movement (vendor / return date / stages). The RPC

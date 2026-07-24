@@ -2131,6 +2131,8 @@ export default function ProductionManagerDashboard() {
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">ORDER NO</span><span className="pm-oheader-value">{order.order_no || "—"}</span></div>
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">ORDER DATE</span><span className="pm-oheader-value">{formatDate(order.created_at) || "—"}</span></div>
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">DELIVERY</span><span className="pm-oheader-value" title={`Warehouse deadline (T-2). Customer date: ${formatDate(order.delivery_date)}`}>{getWarehouseDate(order.delivery_date, order.created_at)}</span></div>
+                                                        {/* PO number is a B2B-only field — gate on is_b2b like WarehouseDashboard and the warehouse PDF do. */}
+                                                        {order.is_b2b && order.po_number && <div className="pm-oheader-item"><span className="pm-oheader-label">PO NUMBER</span><span className="pm-oheader-value">{order.po_number}</span></div>}
                                                     </div>
                                                     <div className="pm-oheader-actions">
                                                         <span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span>

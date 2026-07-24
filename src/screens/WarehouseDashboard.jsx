@@ -2197,7 +2197,7 @@ const WarehouseDashboard = () => {
             />
           )}
           {activeTab === "vendors" && isWarehouseProdHead && (
-            <ProductionHeadVendors currentUserEmail={currentUserEmail} />
+            <ProductionHeadVendors currentUserEmail={currentUserEmail} channel="retail" />
           )}
           {activeTab === "qc_history" && isWarehouseProdHead && (
             <div className="wd-orders-section" style={{ maxWidth: "none" }}>

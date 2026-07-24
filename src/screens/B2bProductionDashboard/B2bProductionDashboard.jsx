@@ -873,7 +873,7 @@ export default function B2bProductionDashboard() {
                 {/* ===== VENDOR / EXTERNAL (Production Head workspace) ===== */}
                 {activeTab === "vendors" && (
                     <div className="prod-tab-wrapper">
-                        <ProductionHeadVendors currentUserEmail={profile?.email || user?.email} />
+                        <ProductionHeadVendors currentUserEmail={profile?.email || user?.email} channel="b2b" />
                     </div>
                 )}
                 {activeTab === "qc_history" && (

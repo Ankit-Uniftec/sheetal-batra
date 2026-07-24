@@ -15,6 +15,13 @@ import {
   PRODUCTION_STAGES,
   getStepLabel,
 } from "../utils/barcodeService";
+import { externalMovementsToCsvRows } from "../utils/externalMovements";
+import { buildCsv, downloadCsv } from "./AddProduct/csvHelpers";
+
+const EXT_CSV_HEADERS = [
+  "Barcode", "Order No", "Component", "Vendor", "Vendor Location",
+  "Stage (out for)", "Status", "Overdue (days)", "Sent Out", "Return By", "Returned", "Ordered",
+];
 
 // The skippable (optional) production steps — mirrors the DB is_step_skippable().
 // Only Cloth Issue (step 1) is mandatory now; every other step is skippable and
@@ -83,7 +90,10 @@ const friendlyMovementError = (res) =>
  *  2. Vendors — list all vendors and (for Production Manager) request a new one.
  *     New vendors stay 'pending' until Manish approves.
  */
-const ProductionHeadVendors = ({ currentUserEmail }) => {
+// channel: "retail" | "b2b" | undefined. When set, Movement History shows only
+// that channel's movements — the retail PH must not see B2B trips and vice
+// versa. Undefined = all channels (unchanged).
+const ProductionHeadVendors = ({ currentUserEmail, channel }) => {
   const { showPopup, PopupComponent } = usePopup();
 
   const [tab, setTab] = useState("movement"); // 'movement' | 'vendors' | 'failure'
@@ -113,6 +123,8 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
   const [movVendorFilter, setMovVendorFilter] = useState("");
   const [movTypeFilter, setMovTypeFilter] = useState("");      // component category
   const [movReturnFilter, setMovReturnFilter] = useState("");  // exact return date
+  const [movFrom, setMovFrom] = useState("");                  // sent-out range from
+  const [movTo, setMovTo] = useState("");                      // sent-out range to
   // Vendors tab filters
   const [vendorSearch, setVendorSearch] = useState("");
   const [vendorStageFilter, setVendorStageFilter] = useState("");
@@ -137,10 +149,18 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
 
   const loadMovements = useCallback(async () => {
     setMovementsLoading(true);
-    try { setMovements(await fetchAllMovements()); setMovPage(1); }
+    try {
+      let rows = (await fetchAllMovements()) || [];
+      // Channel scope: the retail PH must not see B2B trips, and vice versa.
+      // is_b2b is resolved per movement inside fetchAllMovements.
+      if (channel === "retail") rows = rows.filter((m) => !m.is_b2b);
+      else if (channel === "b2b") rows = rows.filter((m) => m.is_b2b);
+      setMovements(rows);
+      setMovPage(1);
+    }
     catch (e) { console.error("Failed to load movements:", e); }
     setMovementsLoading(false);
-  }, []);
+  }, [channel]);
 
   // Distinct vendor names present in the history (for its vendor filter).
   const movVendorOptions = useMemo(() => {
@@ -149,14 +169,40 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
     return [...set].sort();
   }, [movements]);
 
-  // Movement History after vendor / component-category / return-date filters.
-  const filteredMovements = useMemo(() => movements.filter((m) => {
-    if (movVendorFilter && m.vendor_name !== movVendorFilter) return false;
-    if (movTypeFilter && m.component_type !== movTypeFilter) return false;
-    if (movReturnFilter && m.return_date !== movReturnFilter) return false;
-    return true;
-  }), [movements, movVendorFilter, movTypeFilter, movReturnFilter]);
-  useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter]);
+  // Movement History after vendor / component / return-date / sent-out-range
+  // filters. The sent-out range (movFrom..movTo) filters on exit_scan_at — a
+  // still-configured piece has none, so it drops out of a bounded range, which
+  // is correct (it hasn't gone out yet).
+  const filteredMovements = useMemo(() => {
+    const fromT = movFrom ? new Date(movFrom + "T00:00:00").getTime() : null;
+    const toT = movTo ? new Date(movTo + "T23:59:59.999").getTime() : null;
+    return movements.filter((m) => {
+      if (movVendorFilter && m.vendor_name !== movVendorFilter) return false;
+      if (movTypeFilter && m.component_type !== movTypeFilter) return false;
+      if (movReturnFilter && m.return_date !== movReturnFilter) return false;
+      if (fromT || toT) {
+        if (!m.exit_scan_at) return false;
+        const t = new Date(m.exit_scan_at).getTime();
+        if (fromT && t < fromT) return false;
+        if (toT && t > toT) return false;
+      }
+      return true;
+    });
+  }, [movements, movVendorFilter, movTypeFilter, movReturnFilter, movFrom, movTo]);
+  useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter, movFrom, movTo]);
+
+  // Export the currently-filtered movement history as a UTF-8-BOM CSV (Excel
+  // opens it natively; the app has no XLSX library). Same helper the PM panel
+  // uses, so the columns match.
+  const handleMovementsExport = useCallback(() => {
+    if (filteredMovements.length === 0) return;
+    const csvRows = externalMovementsToCsvRows(
+      filteredMovements.map((m) => ({ ...m, stageLabel: stepLabels(m.stages_outside) })),
+      { formatDate }
+    );
+    const csv = buildCsv(EXT_CSV_HEADERS, csvRows);
+    downloadCsv(`external_vendors_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  }, [filteredMovements]);
 
   // Vendors tab after search / stage / status filters.
   const filteredVendors = useMemo(() => {
@@ -459,9 +505,18 @@ const ProductionHeadVendors = ({ currentUserEmail }) => {
               Return date
               <input type="date" value={movReturnFilter} onChange={(e) => setMovReturnFilter(e.target.value)} />
             </label>
-            {(movVendorFilter || movTypeFilter || movReturnFilter) && (
-              <button className="phv-filter-clear" onClick={() => { setMovVendorFilter(""); setMovTypeFilter(""); setMovReturnFilter(""); }}>Clear</button>
+            <label className="phv-filter-date" title="Filter by the date the piece was sent out to the vendor">
+              Sent out
+              <input type="date" value={movFrom} onChange={(e) => setMovFrom(e.target.value)} aria-label="Sent out from" />
+              <span>→</span>
+              <input type="date" value={movTo} min={movFrom || undefined} onChange={(e) => setMovTo(e.target.value)} aria-label="Sent out to" />
+            </label>
+            {(movVendorFilter || movTypeFilter || movReturnFilter || movFrom || movTo) && (
+              <button className="phv-filter-clear" onClick={() => { setMovVendorFilter(""); setMovTypeFilter(""); setMovReturnFilter(""); setMovFrom(""); setMovTo(""); }}>Clear</button>
             )}
+            <button className="phv-filter-export" onClick={handleMovementsExport} disabled={filteredMovements.length === 0} title="Download the filtered list as a CSV (opens in Excel)">
+              Export ({filteredMovements.length})
+            </button>
           </div>
 
           {movementsLoading ? (
