@@ -2,7 +2,9 @@ import { pdf } from "@react-pdf/renderer";
 import { supabase } from "../lib/supabaseClient";
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
 import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
-import Logo from "../images/logo.png";
+// Full-resolution copy reserved for PDF embedding — logo.png (used by screens)
+// is downscaled for the web and must not end up inside generated PDFs.
+import Logo from "../images/logo-pdf.png";
 import { generateOrderBarcodeImages } from "./barcodeImageUtils";
 import { fetchOrderComponents } from "./barcodeService";
 

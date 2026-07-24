@@ -13,7 +13,7 @@ import "../../components/ProductionHeadVendors.css";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import { enrichComponentsWithMovements } from "../../utils/barcodeService";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import CommsSourcingReturns from "./CommsSourcingReturns";
 import CommsReports from "./CommsReports";
 import CommsPRPerformance from "./CommsPRPerformance";

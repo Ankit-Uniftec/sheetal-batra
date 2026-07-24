@@ -6,7 +6,7 @@ import "./B2bMerchandiserDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
@@ -20,7 +20,7 @@ import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam
 import CompletePicker from "../../components/CompletePicker";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
-import { runManualCompleteWithOverride, describeBlocking } from "../../utils/manualComplete";
+import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -751,24 +751,14 @@ export default function B2bMerchandiserDashboard() {
     // manual_complete_order RPC. Gated to MANUAL_COMPLETE_EMAILS.
     const runManualComplete = async (order, picked) => {
         try {
+            // Merchandisers cannot override Final QC — only the Production
+            // Manager can. Without allowOverride, a piece short of Final QC
+            // makes the helper throw the RPC's "Final QC is mandatory" message
+            // (caught below and shown as an error).
             const res = await runManualCompleteWithOverride({
                 orderId: order.id,
                 by: user?.email || "unknown",
                 picked,
-                confirmOverride: ({ blocking }) => new Promise((resolve) => {
-                    showPopup({
-                        type: "confirm",
-                        title: "Override Final QC?",
-                        message:
-                            `${blocking.length} piece(s) have NOT passed Final QC:\n\n${describeBlocking(blocking)}\n\n` +
-                            `Completing now skips Final QC for them — they become ready for Packaging & Dispatch. ` +
-                            `This is recorded against your name in the order's QC Report.`,
-                        confirmText: "Override & complete",
-                        cancelText: "Cancel",
-                        onConfirm: () => resolve(true),
-                        onCancel: () => resolve(false),
-                    });
-                }),
             });
             if (res.cancelled) return;
         } catch (err) {

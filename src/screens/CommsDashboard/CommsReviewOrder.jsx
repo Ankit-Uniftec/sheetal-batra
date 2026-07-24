@@ -6,7 +6,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
-import { generateAllPdfs } from "../../utils/pdfUtils";
+import { generateAllPdfs } from "../../utils/pdfLazy";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import config from "../../config/config";
 

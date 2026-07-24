@@ -36,6 +36,17 @@
 }
 .ev-clear:hover { background: #faf6e8; }
 
+.ev-date-range { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; color: #8b7355; font-size: 12px; }
+.ev-date-range .ev-input { min-width: 0; width: auto; }
+
+.ev-export {
+    border: 1px solid #d5b85a; background: #d5b85a; color: #3a2f14;
+    font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    margin-left: auto;
+}
+.ev-export:hover:not(:disabled) { background: #c9a94a; }
+.ev-export:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* ---- Summary strip (clickable status chips) ---- */
 .ev-summary {
     display: flex; flex-wrap: wrap; gap: 10px;

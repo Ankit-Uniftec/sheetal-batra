@@ -350,10 +350,10 @@ export default function RetailManagerDashboard() {
         const cur = filterByDateRange(analyticsOrders, dateRange);
         const prev = compRange ? filterByDateRange(analyticsOrders, compRange) : [];
 
-        const totalRevenue = cur.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const totalRevenue = cur.reduce((s, o) => s + (isRevenueOrder(o) ? orderRevenueAmount(o) : 0), 0);
         const totalOrders = cur.length;
         const deliveredOrders = cur.filter(o => o.status === "delivered").length;
-        const prevRevenue = prev.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const prevRevenue = prev.reduce((s, o) => s + (isRevenueOrder(o) ? orderRevenueAmount(o) : 0), 0);
         const prevOrders = prev.length;
         const prevDelivered = prev.filter(o => o.status === "delivered").length;
 
@@ -365,7 +365,7 @@ export default function RetailManagerDashboard() {
         cur.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            if (isRevenueOrder(o)) channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (isRevenueOrder(o)) channelMap[ch].revenue += orderRevenueAmount(o);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -531,7 +531,7 @@ export default function RetailManagerDashboard() {
             const sp = getOrderSalesperson(order);
             if (!sp || !isPersonName(sp)) return;
             if (!spData[sp]) spData[sp] = { name: sp, sales: 0, discount: 0, count: 0 };
-            spData[sp].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
+            spData[sp].sales += orderRevenueAmount(order);
             spData[sp].discount += Number(order.discount_amount || 0);
             spData[sp].count += 1;
         });
@@ -542,7 +542,7 @@ export default function RetailManagerDashboard() {
         valid.forEach(order => {
             const store = getOrderChannel(order);
             if (!storeSales[store]) storeSales[store] = { name: store, sales: 0, count: 0 };
-            storeSales[store].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
+            storeSales[store].sales += orderRevenueAmount(order);
             storeSales[store].count += 1;
         });
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);

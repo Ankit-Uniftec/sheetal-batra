@@ -232,6 +232,12 @@
   border: none; background: none; color: #c0392b; font-size: 13px;
   font-weight: 600; cursor: pointer; text-decoration: underline;
 }
+.phv-filter-export {
+  margin-left: auto; border: 1px solid #d5b85a; background: #d5b85a; color: #3a2f14;
+  font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer;
+}
+.phv-filter-export:hover:not(:disabled) { background: #c9a94a; }
+.phv-filter-export:disabled { opacity: 0.45; cursor: not-allowed; }
 .phv-mov-type { color: #999; font-family: inherit; }
 .phv-vendor-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .phv-vendor-stage { font-size: 12px; color: #8a6d2f; font-weight: 600; }

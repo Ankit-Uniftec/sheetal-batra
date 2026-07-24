@@ -6,7 +6,7 @@ import "./B2bExecutiveDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import NotificationBell from "../../components/NotificationBell";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
-import { downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadWarehousePdf } from "../../utils/pdfLazy";
 import Paginator from "../../components/Paginator";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import "../AssociateDashboard.css";

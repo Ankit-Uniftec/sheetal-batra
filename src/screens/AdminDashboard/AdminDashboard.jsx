@@ -8,7 +8,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import formatPhoneNumber from "../../utils/formatPhoneNumber";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { SCAN_STATIONS, getOrderChannelLabel, getOrderStatusLabel, normalizeOrderStatus } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";

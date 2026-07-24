@@ -4,14 +4,17 @@ import { supabase } from "../lib/supabaseClient";
 // Mark as Completed — shared caller for the manual_complete_order RPC.
 //
 // Final QC is mandatory: the RPC refuses (FINAL_QC_REQUIRED) while any active
-// piece of the chosen product is short of it. The Production Head and the
-// Production Manager may override that and complete the product anyway — the
-// RPC's p_override argument (migration 49). Everything else about Mark as
-// Completed is unchanged.
+// piece of the chosen product is short of it. ONLY the Production Manager may
+// override that and complete the product anyway — the RPC's p_override
+// argument (migration 49). Everyone else (retail PH, B2B PH, B2B
+// merchandiser) can Mark as Completed only once Final QC has actually passed;
+// for them the block is terminal and surfaces as an error.
 //
 // Four dashboards do this identically (PM, retail PH, B2B PH, B2B
 // merchandiser), so the retry-with-override handshake lives here once instead
-// of being re-implemented — and re-diverging — in each of them.
+// of being re-implemented — and re-diverging — in each of them. The single
+// allowOverride flag is what separates the PM from the rest, so the rule
+// lives in one place and can't drift per dashboard.
 // ============================================================
 
 // One RPC call. Returns the raw jsonb payload; throws on a transport error.
@@ -40,14 +43,18 @@ export function describeBlocking(blocking = []) {
 
 /**
  * Run Mark as Completed over the picked products, offering the Final QC
- * override when the RPC blocks on it.
+ * override when the RPC blocks on it — but only when allowOverride is true.
  *
  * Scopes are looped one product at a time (null = the whole order), exactly as
- * each dashboard did before. If a scope comes back FINAL_QC_REQUIRED we ask
- * `confirmOverride` — showing which pieces are short — and, on yes, re-run
- * that same scope with p_override=true. On no, the whole run stops: completing
- * some products and silently skipping others would be a worse outcome than
- * doing nothing.
+ * each dashboard did before. If a scope comes back FINAL_QC_REQUIRED and the
+ * caller is allowed to override, we ask `confirmOverride` — showing which
+ * pieces are short — and, on yes, re-run that same scope with p_override=true.
+ * On no, the whole run stops: completing some products and silently skipping
+ * others would be a worse outcome than doing nothing.
+ *
+ * When allowOverride is false (everyone except the Production Manager), a
+ * FINAL_QC_REQUIRED block is terminal — it throws the RPC's message so the
+ * caller shows "Final QC not done yet" instead of an override prompt.
  *
  * COMPONENT_OUTSIDE_WH is never overridable (can_override=false) — a piece
  * sitting at a vendor has to come back through the Security Gate first.
@@ -56,10 +63,11 @@ export function describeBlocking(blocking = []) {
  * @param {string}   opts.orderId
  * @param {string}   opts.by                       PH/PM email, for the audit trail
  * @param {number[]|null} opts.picked              item indexes, or null for the whole order
- * @param {function} opts.confirmOverride          async ({ blocking, message, itemIndex }) => boolean
+ * @param {boolean}  opts.allowOverride            true only for the Production Manager
+ * @param {function} opts.confirmOverride          async ({ blocking, message, itemIndex }) => boolean (only called when allowOverride)
  * @returns {Promise<{ok: boolean, cancelled: boolean, last: object|null, overridden: number}>}
  */
-export async function runManualCompleteWithOverride({ orderId, by, picked, confirmOverride }) {
+export async function runManualCompleteWithOverride({ orderId, by, picked, allowOverride = false, confirmOverride }) {
   const scopes = picked === null || picked === undefined ? [null] : picked;
   let last = null;
   let overridden = 0;
@@ -68,8 +76,10 @@ export async function runManualCompleteWithOverride({ orderId, by, picked, confi
     let data = await callRpc(orderId, by, idx, false);
 
     if (data?.success === false) {
-      // Only the Final QC gate is overridable, and only when the RPC says so.
-      if (data.error !== "FINAL_QC_REQUIRED" || data.can_override !== true) {
+      // Only the Final QC gate is overridable, only when the RPC says so, and
+      // only for a caller cleared to override (the Production Manager). For
+      // everyone else the block is terminal — surface the message as-is.
+      if (data.error !== "FINAL_QC_REQUIRED" || data.can_override !== true || !allowOverride) {
         throw new Error(data.message || "Could not complete the order.");
       }
 

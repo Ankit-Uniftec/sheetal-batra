@@ -10,7 +10,7 @@
 .b2boh-page {
   min-height: 100vh;
   background: linear-gradient(135deg, #fdfcf8 0%, #f5f3ed 100%);
-  background-image: url("../../images/Screen1bg.png");
+  background-image: url("../../images/Screen1bg.webp");
   background-size: cover;
   background-attachment: fixed;
 }
