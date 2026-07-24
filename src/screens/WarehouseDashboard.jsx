@@ -6,7 +6,7 @@ import { fetchAllRows } from "../utils/fetchAllRows";
 import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 import { getWarehouseDate as sharedWarehouseDate, getWarehouseDateObj } from "../utils/warehouseDate";
-import { downloadWarehousePdf } from "../utils/pdfUtils";
+import { downloadWarehousePdf } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
 import NotificationBell from "../components/NotificationBell";
 import ScanStation from "../components/ScanStation";

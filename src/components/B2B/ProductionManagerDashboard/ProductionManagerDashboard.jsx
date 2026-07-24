@@ -32,7 +32,7 @@ import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
 import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
-import { downloadWarehousePdf } from "../../../utils/pdfUtils";
+import { downloadWarehousePdf } from "../../../utils/pdfLazy";
 import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_SEGMENTS, getOrderStatusLabel } from "../../../utils/barcodeService";
 import { computeChannelBreakdown } from "../../../utils/productionMetrics";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";

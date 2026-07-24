@@ -2,7 +2,7 @@
 .inv-page {
   min-height: 100vh;
   background: linear-gradient(135deg, #fdfcfb 0%, #f5f0e8 100%);
-  background-image: url("../../images/Screen1bg.png"); /* Same as other pages */
+  background-image: url("../../images/Screen1bg.webp"); /* Same as other pages */
   background-size: cover;
   background-attachment: fixed;
   background-position: center;

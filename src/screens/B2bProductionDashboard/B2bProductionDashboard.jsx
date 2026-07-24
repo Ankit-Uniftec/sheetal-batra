@@ -5,7 +5,7 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bProductionDashboard.css";
 import Logo from "../../images/logo.png";
 import formatDate from "../../utils/formatDate";
-import { downloadWarehousePdf } from "../../utils/pdfUtils";
+import { downloadWarehousePdf } from "../../utils/pdfLazy";
 import NotificationBell from "../../components/NotificationBell";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";

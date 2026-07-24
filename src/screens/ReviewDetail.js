@@ -8,7 +8,7 @@ import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import config from "../config/config";
-import { generateAllPdfs } from "../utils/pdfUtils";
+import { generateAllPdfs } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";

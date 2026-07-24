@@ -26,6 +26,11 @@ schema.sql
 docs
 db
 
+# local data dumps / exports — may contain customer PII, never commit
+data.json
+response.json
+delivery_report_*.csv
+
 # Supabase — track edge function SOURCE (it's deployed code that exists
 # nowhere else), but never secrets, local state or generated temp files.
 # Function secrets live in Supabase's own config and are read at runtime via
@@ -36,3 +41,4 @@ supabase/functions/*/.env*
 supabase/.branches
 supabase/.temp
 supabase/.env*
+.dup/

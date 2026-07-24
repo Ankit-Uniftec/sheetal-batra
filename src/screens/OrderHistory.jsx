@@ -7,7 +7,7 @@ import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfUtils";
+import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
 import config from "../config/config";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
