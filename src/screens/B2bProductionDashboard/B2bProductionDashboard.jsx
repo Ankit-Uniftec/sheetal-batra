@@ -51,10 +51,6 @@ export default function B2bProductionDashboard() {
     const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
     const [manualCompleteProcessing, setManualCompleteProcessing] = useState(false);
     const [manualCompleteError, setManualCompleteError] = useState("");
-    // Final QC override — when the RPC blocks, the modal turns into a
-    // "you're skipping Final QC on these pieces" confirm. resolve() is the
-    // pending promise the shared helper is waiting on.
-    const [qcOverride, setQcOverride] = useState(null); // { blocking, resolve }
 
     // Calendar
     const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -421,20 +417,16 @@ export default function B2bProductionDashboard() {
         setManualCompleteError(""); setManualCompleteOrder(order);
     };
 
-    // Ask the PH to confirm skipping Final QC. Resolves the helper's promise
-    // from the modal's buttons.
-    const askQcOverride = ({ blocking }) => new Promise((resolve) => {
-        setQcOverride({ blocking, resolve });
-    });
-
     // Loop the picked products through the RPC (null = whole order).
+    // The B2B Production Head cannot override Final QC — only the Production
+    // Manager can. Without allowOverride, a piece short of Final QC makes the
+    // helper throw the RPC's "Final QC is mandatory" message (caught below).
     const runManualComplete = async (order, picked) => {
         try {
             const res = await runManualCompleteWithOverride({
                 orderId: order.id,
                 by: user?.email,
                 picked,
-                confirmOverride: askQcOverride,
             });
             if (res.cancelled) return false;
         } catch (err) {
@@ -454,9 +446,8 @@ export default function B2bProductionDashboard() {
                 orderId: manualCompleteOrder.id,
                 by: user?.email,
                 picked: null,
-                confirmOverride: askQcOverride,
             });
-            if (res.cancelled) return;   // override declined — nothing changed
+            if (res.cancelled) return;   // nothing changed
             if (res.last?.order_completed) {
                 setOrders(prev => prev.map(o => o.id === manualCompleteOrder.id ? { ...o, status: "completed" } : o));
             }
@@ -931,35 +922,6 @@ export default function B2bProductionDashboard() {
                 </div>
             )}
 
-            {/* Final QC override — the Production Head is about to complete
-                pieces that never passed Final QC. Name them, then confirm. */}
-            {qcOverride && (
-                <div className="prod-modal-overlay" onClick={(e) => e.stopPropagation()}>
-                    <div className="prod-modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="prod-modal-top">
-                            <h3>Override Final QC?</h3>
-                        </div>
-                        <div className="prod-modal-body">
-                            <p><b>{qcOverride.blocking.length} piece(s)</b> have NOT passed Final QC:</p>
-                            <div style={{ maxHeight: 180, overflowY: "auto", margin: "8px 0", fontSize: 13, color: "#444" }}>
-                                {qcOverride.blocking.map((b) => (
-                                    <div key={b.barcode}>
-                                        • {b.component_label || b.barcode} ({b.barcode}) — {(b.current_stage || "").replace(/_/g, " ")}
-                                    </div>
-                                ))}
-                            </div>
-                            <p style={{ color: "#c4631a", fontSize: 13 }}>
-                                Completing now skips Final QC for them — they become ready for Packaging &amp; Dispatch.
-                                This is recorded against your name in the order&apos;s QC Report.
-                            </p>
-                        </div>
-                        <div className="prod-modal-footer">
-                            <button className="prod-modal-cancel" onClick={() => { qcOverride.resolve(false); setQcOverride(null); }}>Cancel</button>
-                            <button className="prod-modal-confirm" onClick={() => { qcOverride.resolve(true); setQcOverride(null); }}>Override &amp; complete</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

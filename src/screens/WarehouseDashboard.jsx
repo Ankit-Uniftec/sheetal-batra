@@ -27,7 +27,7 @@ import SearchByDropdown from "../components/SearchByDropdown";
 import useTabParam from "../hooks/useTabParam";
 import Paginator from "../components/Paginator";
 import CompletePicker from "../components/CompletePicker";
-import { runManualCompleteWithOverride, describeBlocking } from "../utils/manualComplete";
+import { runManualCompleteWithOverride } from "../utils/manualComplete";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -979,24 +979,13 @@ const WarehouseDashboard = () => {
   const runManualComplete = async (order, picked) => {
     // picked: null = whole order; else an array of item indexes to loop.
     try {
+      // The Production Head cannot override Final QC — only the Production
+      // Manager can. Without allowOverride, a piece short of Final QC makes the
+      // helper throw the RPC's "Final QC is mandatory" message (caught below).
       const res = await runManualCompleteWithOverride({
         orderId: order.id,
         by: currentUserEmail,
         picked,
-        confirmOverride: ({ blocking }) => new Promise((resolve) => {
-          showPopup({
-            type: "confirm",
-            title: "Override Final QC?",
-            message:
-              `${blocking.length} piece(s) have NOT passed Final QC:\n\n${describeBlocking(blocking)}\n\n` +
-              `Completing now skips Final QC for them — they become ready for Packaging & Dispatch. ` +
-              `This is recorded against your name in the order's QC Report.`,
-            confirmText: "Override & complete",
-            cancelText: "Cancel",
-            onConfirm: () => resolve(true),
-            onCancel: () => resolve(false),
-          });
-        }),
       });
       if (res.cancelled) return false;
     } catch (err) {

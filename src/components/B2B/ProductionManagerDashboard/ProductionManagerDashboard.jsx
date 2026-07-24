@@ -682,6 +682,8 @@ export default function ProductionManagerDashboard() {
             orderId: order.id,
             by: currentUserEmail,
             picked,
+            // Only the Production Manager may override an incomplete Final QC.
+            allowOverride: true,
             confirmOverride: ({ blocking }) => new Promise((resolve) => {
                 showPopup({
                     type: "confirm",
