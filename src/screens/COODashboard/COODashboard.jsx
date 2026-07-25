@@ -18,6 +18,7 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { getOrderChannelLabel } from "../../utils/barcodeService";
+import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -41,15 +42,6 @@ const STATUS_TABS = [
     { value: "prepared", label: "Prepared" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
-];
-
-const TIMELINE_OPTIONS = [
-    { value: "today", label: "Today" },
-    { value: "yesterday", label: "Yesterday" },
-    { value: "weekly", label: "Last 7 Days" },
-    { value: "monthly", label: "Last 30 Days" },
-    { value: "yearly", label: "Last 365 Days" },
-    { value: "custom", label: "Custom" },
 ];
 
 const COMPARISON_OPTIONS = [
@@ -102,11 +94,9 @@ export default function COODashboard() {
     // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
     const [activeTab, setActiveTab] = useTabParam("operations");
     const [showSidebar, setShowSidebar] = useState(false);
-    const [timeline, setTimeline] = useState("monthly");
+    // Shared PeriodFilter drives every date-aware tab; comparison stays local.
+    const { inPeriod, range: periodRangeValue, props: periodProps } = usePeriodFilter("month", { variant: "pills" });
     const [comparison, setComparison] = useState("none");
-    const [customDateFrom, setCustomDateFrom] = useState("");
-    const [customDateTo, setCustomDateTo] = useState("");
-    const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
@@ -114,7 +104,14 @@ export default function COODashboard() {
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
     const [sortBy, setSortBy] = useState("newest");
-    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    // Order-date scope for the orders list — shared PeriodFilter (select),
+    // rendered inside the Date dropdown panel.
+    const {
+        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
+        range: ordersPeriodRange, props: ordersPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
     const [openDropdown, setOpenDropdown] = useState(null);
     const [statusUpdating, setStatusUpdating] = useState(null);
     const [pdfLoading, setPdfLoading] = useState(null);
@@ -233,32 +230,13 @@ export default function COODashboard() {
     // ═══════════════════════════════════════════════════════════
     // DATE HELPERS
     // ═══════════════════════════════════════════════════════════
-    const getDateRange = (tv) => {
-        const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        switch (tv) {
-            case "today": return { start: today, end: now };
-            case "yesterday": const y = new Date(today); y.setDate(y.getDate() - 1); const ye = new Date(today); ye.setMilliseconds(-1); return { start: y, end: ye };
-            case "weekly": const w = new Date(today); w.setDate(w.getDate() - 7); return { start: w, end: now };
-            case "monthly": const m = new Date(today); m.setDate(m.getDate() - 30); return { start: m, end: now };
-            case "yearly": const yr = new Date(today); yr.setDate(yr.getDate() - 365); return { start: yr, end: now };
-            case "custom": return { start: customDateFrom ? new Date(customDateFrom) : new Date(0), end: customDateTo ? new Date(customDateTo + "T23:59:59") : now };
-            default: return { start: today, end: now };
-        }
-    };
-    const filterByDate = (list, dr) => { if (!dr) return list; return list.filter(o => { const d = new Date(o.created_at); return d >= dr.start && d <= dr.end; }); };
     const calcGrowth = (c, p) => { if (p === 0) return c > 0 ? 100 : 0; return ((c - p) / p) * 100; };
-    const getPrevRange = () => {
-        const cur = getDateRange(timeline);
-        if (comparison === "previous_year") { const s = new Date(cur.start); s.setFullYear(s.getFullYear() - 1); const e = new Date(cur.end); e.setFullYear(e.getFullYear() - 1); return { start: s, end: e }; }
-        const dur = cur.end - cur.start; const pe = new Date(cur.start); pe.setMilliseconds(-1); return { start: new Date(pe - dur), end: pe };
-    };
 
     // ═══════════════════════════════════════════════════════════
     // TAB 1: OPERATIONS SUMMARY
     // ═══════════════════════════════════════════════════════════
     const opsStats = useMemo(() => {
-        const dr = getDateRange(timeline);
-        const period = filterByDate(nonLxrtsOrders, dr);
+        const period = nonLxrtsOrders.filter(o => inPeriod(o.created_at));
         const now = new Date();
 
         const inProduction = period.filter(o => o.status === "in_production");
@@ -337,16 +315,15 @@ export default function COODashboard() {
             readyForDispatch: readyForDispatch.length, dispatched: dispatched.length,
             delayByStageData, exceedingDelivery: exceedingDelivery.slice(0, 20), exceedingCount: exceedingDelivery.length,
         };
-    }, [nonLxrtsOrders, timeline, customDateFrom, customDateTo, consignmentInventory, products, variantInventory]);
+    }, [nonLxrtsOrders, inPeriod, consignmentInventory, products, variantInventory]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 2: BRAND PERFORMANCE
     // ═══════════════════════════════════════════════════════════
     const brandStats = useMemo(() => {
-        const dr = getDateRange(timeline);
-        const prevDr = comparison !== "none" ? getPrevRange() : null;
-        const current = filterByDate(orders, dr);
-        const prev = prevDr ? filterByDate(orders, prevDr) : [];
+        const prevDr = comparisonPeriodRange(periodRangeValue, comparison);
+        const current = orders.filter(o => inPeriod(o.created_at));
+        const prev = prevDr ? orders.filter(o => inRange(prevDr, o.created_at)) : [];
 
         const totalRevenue = current.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const netSbRev = totalNetSbRevenue(current.filter(isRevenueOrder));
@@ -402,17 +379,16 @@ export default function COODashboard() {
             totalRevenue, netSbRev, totalOrders: current.length,
             revenueGrowth: calcGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calcGrowth(current.length, prev.length),
-            showComparison: comparison !== "none",
+            showComparison: comparison !== "none" && !!periodRangeValue,
             totalRefund, refundCount, channelBreakdown, topCategories, topProducts, topColors,
         };
-    }, [orders, timeline, comparison, customDateFrom, customDateTo]);
+    }, [orders, inPeriod, periodRangeValue, comparison]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 5: QC & ISSUES
     // ═══════════════════════════════════════════════════════════
     const qcStats = useMemo(() => {
-        const dr = getDateRange(timeline);
-        const period = filterByDate(nonLxrtsOrders, dr);
+        const period = nonLxrtsOrders.filter(o => inPeriod(o.created_at));
 
         const qcFailed = period.filter(o => o.qc_fail_reason);
         const rework = period.filter(o => o.is_rework);
@@ -445,7 +421,7 @@ export default function COODashboard() {
             cancellationReasons: analyzeReasons(cancelled, "cancellation_reason"),
             exchangeReasons: analyzeReasons(exchanged, "exchange_reason"),
         };
-    }, [nonLxrtsOrders, timeline, customDateFrom, customDateTo]);
+    }, [nonLxrtsOrders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 6: CONSIGNMENT
@@ -483,11 +459,10 @@ export default function COODashboard() {
         const byVendor = Object.values(vendorMap).sort((a, b) => b.sent - a.sent);
 
         // Consignment B2B orders in execution
-        const dr = getDateRange(timeline);
-        const consignmentOrders = filterByDate(orders.filter(o => o.b2b_order_type === "Consignment"), dr);
+        const consignmentOrders = orders.filter(o => o.b2b_order_type === "Consignment" && inPeriod(o.created_at));
 
         // Dispatch daily/weekly/monthly
-        const dispatched = filterByDate(orders.filter(o => o.dispatched_at && o.b2b_order_type === "Consignment"), dr);
+        const dispatched = orders.filter(o => o.dispatched_at && o.b2b_order_type === "Consignment" && inPeriod(o.created_at));
 
         return {
             totalSent, totalSold, totalRemaining, totalLost, sellThrough: sellThrough.toFixed(1),
@@ -495,7 +470,7 @@ export default function COODashboard() {
             consignmentOrdersCount: consignmentOrders.length,
             dispatchedCount: dispatched.length,
         };
-    }, [consignmentInventory, vendors, orders, timeline, customDateFrom, customDateTo]);
+    }, [consignmentInventory, vendors, orders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 7: INVENTORY
@@ -536,8 +511,7 @@ export default function COODashboard() {
     // TAB 8: FINANCIAL
     // ═══════════════════════════════════════════════════════════
     const financialStats = useMemo(() => {
-        const dr = getDateRange(timeline);
-        const period = filterByDate(nonLxrtsOrders, dr);
+        const period = nonLxrtsOrders.filter(o => inPeriod(o.created_at));
 
         const totalGrand = period.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalAdvance = period.reduce((s, o) => s + Number(o.advance_payment || 0), 0);
@@ -582,7 +556,7 @@ export default function COODashboard() {
         }).sort((a, b) => (Number(b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - Number(b.advance_payment || 0)) - (Number(a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - Number(a.advance_payment || 0)));
 
         return { totalGrand, totalAdvance, totalPending, byChannel, byPaymentMode, unpaidCount: unpaidOrders.length };
-    }, [nonLxrtsOrders, timeline, customDateFrom, customDateTo]);
+    }, [nonLxrtsOrders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // ORDERS TAB
@@ -618,7 +592,7 @@ export default function COODashboard() {
                 }
             });
         }
-        if (filters.dateFrom || filters.dateTo) { result = result.filter(o => { const d = new Date(o.created_at); if (filters.dateFrom && d < new Date(filters.dateFrom)) return false; if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false; return true; }); }
+        if (ordersPeriodRange) result = result.filter(o => inOrdersPeriod(o.created_at));
         if (filters.minPrice > 0 || filters.maxPrice < 500000) { result = result.filter(o => { const t = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0; return t >= filters.minPrice && t <= filters.maxPrice; }); }
         if (filters.payment.length > 0) result = result.filter(o => filters.payment.includes(getPaymentStatus(o)));
         if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
@@ -640,15 +614,15 @@ export default function COODashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
 
     const orderTabCounts = useMemo(() => ({ all: nonLxrtsOrders.length, unfulfilled: nonLxrtsOrders.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length, prepared: nonLxrtsOrders.filter(o => o.status?.toLowerCase() === "completed").length, delivered: nonLxrtsOrders.filter(o => o.status?.toLowerCase() === "delivered").length, cancelled: nonLxrtsOrders.filter(o => o.status?.toLowerCase() === "cancelled").length }), [nonLxrtsOrders]);
     const ordersTotalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
     const currentOrders = useMemo(() => filteredOrders.slice((ordersPage - 1) * ITEMS_PER_PAGE, ordersPage * ITEMS_PER_PAGE), [filteredOrders, ordersPage]);
 
-    const appliedFilters = useMemo(() => { const c = []; if (filters.dateFrom || filters.dateTo) c.push({ type: "date", label: `${filters.dateFrom || "..."} to ${filters.dateTo || "..."}` }); if (filters.minPrice > 0 || filters.maxPrice < 500000) c.push({ type: "price", label: `\u20B9${(filters.minPrice / 1000).toFixed(0)}K - \u20B9${(filters.maxPrice / 1000).toFixed(0)}K` }); filters.payment.forEach(p => c.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) })); filters.priority.forEach(p => c.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) })); filters.store.forEach(s => c.push({ type: "store", value: s, label: s })); if (filters.salesperson) c.push({ type: "salesperson", label: filters.salesperson }); return c; }, [filters]);
-    const removeFilter = (type, value) => { if (type === "date") setFilters(p => ({ ...p, dateFrom: "", dateTo: "" })); else if (type === "price") setFilters(p => ({ ...p, minPrice: 0, maxPrice: 500000 })); else if (type === "salesperson") setFilters(p => ({ ...p, salesperson: "" })); else setFilters(p => ({ ...p, [type]: p[type].filter(v => v !== value) })); };
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    const appliedFilters = useMemo(() => { const c = []; if (ordersTimeline !== "all") c.push({ type: "date", label: periodLabel(ordersTimeline) }); if (filters.minPrice > 0 || filters.maxPrice < 500000) c.push({ type: "price", label: `\u20B9${(filters.minPrice / 1000).toFixed(0)}K - \u20B9${(filters.maxPrice / 1000).toFixed(0)}K` }); filters.payment.forEach(p => c.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) })); filters.priority.forEach(p => c.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) })); filters.store.forEach(s => c.push({ type: "store", value: s, label: s })); if (filters.salesperson) c.push({ type: "salesperson", label: filters.salesperson }); return c; }, [filters, ordersTimeline]);
+    const removeFilter = (type, value) => { if (type === "date") clearOrdersPeriod(); else if (type === "price") setFilters(p => ({ ...p, minPrice: 0, maxPrice: 500000 })); else if (type === "salesperson") setFilters(p => ({ ...p, salesperson: "" })); else setFilters(p => ({ ...p, [type]: p[type].filter(v => v !== value) })); };
+    const clearAllFilters = () => { setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" }); clearOrdersPeriod(); };
     const toggleFilter = (cat, val) => setFilters(p => ({ ...p, [cat]: p[cat].includes(val) ? p[cat].filter(v => v !== val) : [...p[cat], val] }));
 
     const updateOrderStatus = async (orderId, newStatus) => {
@@ -678,7 +652,7 @@ export default function COODashboard() {
     };
 
     // Resets
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy, ordersPeriodRange]);
     useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
     useEffect(() => {
         if (activeTab === "inventory") {
@@ -687,7 +661,6 @@ export default function COODashboard() {
         }
     }, [activeTab, products]);
 
-    const handleTimelineChange = (v) => { setTimeline(v); setShowCustomDatePicker(v === "custom"); };
 
     // ═══════════════════════════════════════════════════════════
     // RENDER
@@ -721,13 +694,15 @@ export default function COODashboard() {
                 </aside>
 
                 <main className="admin-main">
-                    {/* Timeline bar */}
+                    {/* Timeline bar (shared PeriodFilter; comparison select rides in its right slot) */}
                     {["operations", "brand", "qc_issues", "consignment", "inventory", "financial"].includes(activeTab) && (
-                        <div className="cmo-filters-bar">
-                            <div className="cmo-timeline-group">{TIMELINE_OPTIONS.map(opt => (<button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`} onClick={() => handleTimelineChange(opt.value)}>{opt.label}</button>))}</div>
-                            {activeTab === "brand" && (<div className="cmo-compare-group"><select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>{COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>)}
-                            {showCustomDatePicker && (<div className="cmo-date-range"><input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} /><span className="cmo-date-sep">{"\u2192"}</span><input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} /></div>)}
-                        </div>
+                        <PeriodFilter {...periodProps} variant="pills">
+                            {activeTab === "brand" && (
+                                <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
+                                    {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                </select>
+                            )}
+                        </PeriodFilter>
                     )}
 
                     {/* ═══════════ OPERATIONS SUMMARY ═══════════ */}
@@ -998,7 +973,7 @@ export default function COODashboard() {
                             <div className="admin-status-tabs">{STATUS_TABS.map(tab => (<button key={tab.value} className={`status-tab ${statusTab === tab.value ? "active" : ""}`} onClick={() => setStatusTab(tab.value)}>{tab.label}<span className="tab-count">{orderTabCounts[tab.value]}</span></button>))}</div>
 
                             <div className="admin-filter-bar" ref={dropdownRef}>
-                                <div className="filter-dropdown"><button className={`filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date {"\u25BE"}</button>{openDropdown === "date" && (<div className="dropdown-panel"><div className="dropdown-title">Date Range</div><div className="date-inputs"><input type="date" value={filters.dateFrom} onChange={(e) => setFilters(p => ({ ...p, dateFrom: e.target.value }))} /><span>to</span><input type="date" value={filters.dateTo} onChange={(e) => setFilters(p => ({ ...p, dateTo: e.target.value }))} /></div><button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button></div>)}</div>
+                                <div className="filter-dropdown"><button className={`filter-btn ${ordersTimeline !== "all" ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date {"\u25BE"}</button>{openDropdown === "date" && (<div className="dropdown-panel"><div className="dropdown-title">Select Period</div><PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" /><button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button></div>)}</div>
                                 <div className="filter-dropdown"><button className={`filter-btn ${filters.payment.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}>Payment {"\u25BE"}</button>{openDropdown === "payment" && (<div className="dropdown-panel"><div className="dropdown-title">Payment</div>{["paid", "partial", "unpaid"].map(o => (<label key={o} className="checkbox-label"><input type="checkbox" checked={filters.payment.includes(o)} onChange={() => toggleFilter("payment", o)} /><span>{o.charAt(0).toUpperCase() + o.slice(1)}</span></label>))}<button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button></div>)}</div>
                                 <div className="filter-dropdown"><button className={`filter-btn ${filters.store.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "store" ? null : "store")}>Store {"\u25BE"}</button>{openDropdown === "store" && (<div className="dropdown-panel"><div className="dropdown-title">Store</div>{["Delhi Store", "Ludhiana Store", "B2B"].map(o => (<label key={o} className="checkbox-label"><input type="checkbox" checked={filters.store.includes(o)} onChange={() => toggleFilter("store", o)} /><span>{o}</span></label>))}<button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button></div>)}</div>
                                 <select className="filter-btn" style={{ cursor: 'pointer' }} value={filters.salesperson} onChange={(e) => setFilters(p => ({ ...p, salesperson: e.target.value }))}><option value="">All SAs</option>{salespersons.map(sp => <option key={sp} value={sp}>{sp}</option>)}</select>

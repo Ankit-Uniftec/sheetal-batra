@@ -16,16 +16,7 @@ import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 import { getOrderChannelLabel } from "../../utils/barcodeService";
-
-// Timeline options
-const TIMELINE_OPTIONS = [
-    { value: "today", label: "Today" },
-    { value: "yesterday", label: "Yesterday" },
-    { value: "weekly", label: "Last 7 Days" },
-    { value: "monthly", label: "Last 30 Days" },
-    { value: "yearly", label: "Last 365 Days" },
-    { value: "custom", label: "Custom" },
-];
+import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 
 const COMPARISON_OPTIONS = [
     { value: "none", label: "No comparison" },
@@ -123,18 +114,13 @@ export default function RetailManagerDashboard() {
     const [activeTab, setActiveTab] = useTabParam("store_analytics");
     const [showSidebar, setShowSidebar] = useState(false);
 
-    // Timeline
-    const [timeline, setTimeline] = useState("monthly");
+    // Timeline — shared PeriodFilter (store analytics + day-wise + b2b tabs);
+    // comparison stays local.
+    const { inPeriod, range: periodRangeValue, props: periodProps } = usePeriodFilter("month", { variant: "pills" });
     const [comparison, setComparison] = useState("none");
-    const [customDateFrom, setCustomDateFrom] = useState("");
-    const [customDateTo, setCustomDateTo] = useState("");
-    const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
 
-    // Product analytics timeline
-    const [analyticsTimeline, setAnalyticsTimeline] = useState("monthly");
-    const [analyticsCustomFrom, setAnalyticsCustomFrom] = useState("");
-    const [analyticsCustomTo, setAnalyticsCustomTo] = useState("");
-    const [showAnalyticsCustomPicker, setShowAnalyticsCustomPicker] = useState(false);
+    // Product analytics timeline — its own instance.
+    const { inPeriod: inAnalyticsPeriod, props: analyticsPeriodProps } = usePeriodFilter("month", { variant: "pills" });
 
     // Day-wise tab
     const [dayWiseStore, setDayWiseStore] = useState("all");
@@ -147,9 +133,16 @@ export default function RetailManagerDashboard() {
     const [sortBy, setSortBy] = useState("newest");
     const [ordersPage, setOrdersPage] = useState(1);
     const [filters, setFilters] = useState({
-        dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000,
+        minPrice: 0, maxPrice: 500000,
         payment: [], priority: [], orderType: [], store: [], salesperson: ""
     });
+    // Order-date scope for the orders list — shared PeriodFilter (select),
+    // rendered inside the Date Range dropdown panel.
+    const {
+        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
+        range: ordersPeriodRange, props: ordersPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
     const [openDropdown, setOpenDropdown] = useState(null);
     const dropdownRef = useRef(null);
 
@@ -268,87 +261,15 @@ export default function RetailManagerDashboard() {
     // ═══════════════════════════════════════════════════════════
     // DATE RANGE HELPERS
     // ═══════════════════════════════════════════════════════════
-    const getDateRange = (timelineValue) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        switch (timelineValue) {
-            case "today": return { start: today, end: now };
-            case "yesterday": {
-                const y = new Date(today); y.setDate(y.getDate() - 1);
-                const ye = new Date(today); ye.setMilliseconds(-1);
-                return { start: y, end: ye };
-            }
-            case "weekly": { const w = new Date(today); w.setDate(w.getDate() - 7); return { start: w, end: now }; }
-            case "monthly": { const m = new Date(today); m.setDate(m.getDate() - 30); return { start: m, end: now }; }
-            case "yearly": { const yr = new Date(today); yr.setDate(yr.getDate() - 365); return { start: yr, end: now }; }
-            case "custom": return {
-                start: customDateFrom ? new Date(customDateFrom) : new Date(0),
-                end: customDateTo ? new Date(customDateTo + "T23:59:59") : now
-            };
-            default: return { start: today, end: now };
-        }
-    };
-
-    const getComparisonDateRange = (timelineValue, comparisonType) => {
-        const currentRange = getDateRange(timelineValue);
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        if (comparisonType === "previous_year") {
-            const s = new Date(currentRange.start); s.setFullYear(s.getFullYear() - 1);
-            const e = new Date(currentRange.end); e.setFullYear(e.getFullYear() - 1);
-            return { start: s, end: e };
-        }
-        if (comparisonType !== "previous_period") return null;
-        switch (timelineValue) {
-            case "today": { const y = new Date(today); y.setDate(y.getDate() - 1); const ye = new Date(today); ye.setMilliseconds(-1); return { start: y, end: ye }; }
-            case "yesterday": { const t = new Date(today); t.setDate(t.getDate() - 2); const te = new Date(today); te.setDate(te.getDate() - 1); te.setMilliseconds(-1); return { start: t, end: te }; }
-            case "weekly": { const a = new Date(today); a.setDate(a.getDate() - 14); const b = new Date(today); b.setDate(b.getDate() - 7); b.setMilliseconds(-1); return { start: a, end: b }; }
-            case "monthly": { const a = new Date(today); a.setDate(a.getDate() - 60); const b = new Date(today); b.setDate(b.getDate() - 30); b.setMilliseconds(-1); return { start: a, end: b }; }
-            case "yearly": { const a = new Date(today); a.setDate(a.getDate() - 730); const b = new Date(today); b.setDate(b.getDate() - 365); b.setMilliseconds(-1); return { start: a, end: b }; }
-            case "custom": {
-                if (customDateFrom && customDateTo) {
-                    const cs = new Date(customDateFrom); const ce = new Date(customDateTo + "T23:59:59");
-                    const dur = ce - cs; const pe = new Date(cs); pe.setMilliseconds(-1); const ps = new Date(pe - dur);
-                    return { start: ps, end: pe };
-                }
-                return null;
-            }
-            default: return null;
-        }
-    };
-
-    const filterByDateRange = (list, range) => {
-        if (!range) return list;
-        return list.filter(o => { const d = new Date(o.created_at); return d >= range.start && d <= range.end; });
-    };
-
     const calcGrowth = (cur, prev) => { if (prev === 0) return cur > 0 ? 100 : 0; return ((cur - prev) / prev) * 100; };
-
-    const getAnalyticsDateRange = (tv) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        switch (tv) {
-            case "today": return { start: today, end: now };
-            case "yesterday": { const y = new Date(today); y.setDate(y.getDate() - 1); const ye = new Date(today); ye.setMilliseconds(-1); return { start: y, end: ye }; }
-            case "weekly": { const w = new Date(today); w.setDate(w.getDate() - 7); return { start: w, end: now }; }
-            case "monthly": { const m = new Date(today); m.setDate(m.getDate() - 30); return { start: m, end: now }; }
-            case "yearly": { const yr = new Date(today); yr.setDate(yr.getDate() - 365); return { start: yr, end: now }; }
-            case "custom": return {
-                start: analyticsCustomFrom ? new Date(analyticsCustomFrom) : new Date(0),
-                end: analyticsCustomTo ? new Date(analyticsCustomTo + "T23:59:59") : now
-            };
-            default: return { start: today, end: now };
-        }
-    };
 
     // ═══════════════════════════════════════════════════════════
     // TAB 1: STORE ANALYTICS (retail stores + B2B as a channel)
     // ═══════════════════════════════════════════════════════════
     const dashboardStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const compRange = getComparisonDateRange(timeline, comparison);
-        const cur = filterByDateRange(analyticsOrders, dateRange);
-        const prev = compRange ? filterByDateRange(analyticsOrders, compRange) : [];
+        const compRange = comparisonPeriodRange(periodRangeValue, comparison);
+        const cur = analyticsOrders.filter(o => inPeriod(o.created_at));
+        const prev = compRange ? analyticsOrders.filter(o => inRange(compRange, o.created_at)) : [];
 
         const totalRevenue = cur.reduce((s, o) => s + (isRevenueOrder(o) ? orderRevenueAmount(o) : 0), 0);
         const totalOrders = cur.length;
@@ -413,18 +334,17 @@ export default function RetailManagerDashboard() {
             revenueGrowth: calcGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calcGrowth(totalOrders, prevOrders),
             deliveredGrowth: calcGrowth(deliveredOrders, prevDelivered),
-            showComparison: comparison !== "none",
+            showComparison: comparison !== "none" && !!periodRangeValue,
             channelBreakdown, revenueMix, topProducts, topColors,
         };
-    }, [analyticsOrders, timeline, comparison, customDateFrom, customDateTo]);
+    }, [analyticsOrders, inPeriod, periodRangeValue, comparison]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 2: DAY-WISE SALES (Delhi, Ludhiana & B2B)
     // ═══════════════════════════════════════════════════════════
     const dayWiseData = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const storeOrders = filterByDateRange(retailOrders, dateRange).filter(o => !isLxrtsOrder(o));
-        const b2bPeriodOrders = filterByDateRange(b2bOrders, dateRange);
+        const storeOrders = retailOrders.filter(o => inPeriod(o.created_at) && !isLxrtsOrder(o));
+        const b2bPeriodOrders = b2bOrders.filter(o => inPeriod(o.created_at));
 
         // Split by store
         const delhiOrders = storeOrders.filter(o => (o.salesperson_store || "").toLowerCase().includes("delhi") || (o.salesperson_store || "") === "DLC");
@@ -475,18 +395,13 @@ export default function RetailManagerDashboard() {
             ludhianaAov: ludhianaOrders.length > 0 ? Math.round(ludhianaTotal / ludhianaOrders.length) : 0,
             b2bAov: b2bPeriodOrders.length > 0 ? Math.round(b2bTotal / b2bPeriodOrders.length) : 0,
         };
-    }, [retailOrders, b2bOrders, timeline, customDateFrom, customDateTo]);
+    }, [retailOrders, b2bOrders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 3: PRODUCT ANALYTICS (retail stores + B2B as a channel)
     // ═══════════════════════════════════════════════════════════
     const productAnalytics = useMemo(() => {
-        const dateRange = getAnalyticsDateRange(analyticsTimeline);
-        const valid = analyticsOrders.filter(o => {
-            if (!isRevenueOrder(o)) return false;
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const valid = analyticsOrders.filter(o => isRevenueOrder(o) && inAnalyticsPeriod(o.created_at));
 
         // Products (net of proportional order discount)
         const productSales = {};
@@ -548,7 +463,7 @@ export default function RetailManagerDashboard() {
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);
 
         return { topProducts, bottomProducts, topColors, bottomColors, salesBySalesperson, salesByStore };
-    }, [analyticsOrders, retailOrders, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
+    }, [analyticsOrders, retailOrders, inAnalyticsPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // B2B-SPECIFIC block on Store Analytics — only the two things B2B has that
@@ -557,8 +472,7 @@ export default function RetailManagerDashboard() {
     // they're deliberately NOT repeated here. Shares the page's timeline filter.
     // ═══════════════════════════════════════════════════════════
     const b2bAnalytics = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const periodOrders = filterByDateRange(b2bOrders, dateRange);
+        const periodOrders = b2bOrders.filter(o => inPeriod(o.created_at));
         const revenueOrders = periodOrders.filter(isRevenueOrder);
 
         const newCount = periodOrders.length;
@@ -586,7 +500,7 @@ export default function RetailManagerDashboard() {
             .slice(0, 10);
 
         return { newCount, pendingCount, fulfilledCount, cancelledReturnedCount, top10Clients };
-    }, [b2bOrders, vendors, timeline, customDateFrom, customDateTo]);
+    }, [b2bOrders, vendors, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 4: ORDERS (B2B included by default)
@@ -632,14 +546,7 @@ export default function RetailManagerDashboard() {
                 }
             });
         }
-        if (filters.dateFrom || filters.dateTo) {
-            result = result.filter(order => {
-                const d = new Date(order.created_at);
-                if (filters.dateFrom && d < new Date(filters.dateFrom)) return false;
-                if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false;
-                return true;
-            });
-        }
+        if (ordersPeriodRange) result = result.filter(order => inOrdersPeriod(order.created_at));
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(order => {
                 const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
@@ -672,7 +579,7 @@ export default function RetailManagerDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
 
     const orderTabCounts = useMemo(() => {
         const valid = orders.filter(o => !isLxrtsOrder(o));
@@ -693,9 +600,8 @@ export default function RetailManagerDashboard() {
 
     const appliedFilters = useMemo(() => {
         const chips = [];
-        if (filters.dateFrom || filters.dateTo) {
-            const label = filters.dateFrom && filters.dateTo ? `${filters.dateFrom} to ${filters.dateTo}` : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
-            chips.push({ type: "date", label });
+        if (ordersTimeline !== "all") {
+            chips.push({ type: "date", label: periodLabel(ordersTimeline) });
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `\u20B9${(filters.minPrice / 1000).toFixed(0)}K - \u20B9${(filters.maxPrice / 1000).toFixed(0)}K` });
         filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
@@ -704,22 +610,25 @@ export default function RetailManagerDashboard() {
         filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
         return chips;
-    }, [filters]);
+    }, [filters, ordersTimeline]);
 
     const removeFilter = (type, value) => {
-        if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+        if (type === "date") clearOrdersPeriod();
         else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
         else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    const clearAllFilters = () => {
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+        clearOrdersPeriod();
+    };
 
     const toggleFilter = (category, value) => setFilters(prev => ({
         ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value]
     }));
 
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy, ordersPeriodRange]);
 
     // ═══════════════════════════════════════════════════════════
     // RENDER
@@ -771,28 +680,11 @@ export default function RetailManagerDashboard() {
                         <div className="rm-analytics-tab">
                             <div className="rm-tab-header">
                                 <h2 className="rm-section-title">Store Analytics</h2>
-                                <div className="rm-filters-row">
-                                    <div className="rm-timeline-pills">
-                                        {TIMELINE_OPTIONS.map(opt => (
-                                            <button key={opt.value} className={`rm-pill ${timeline === opt.value ? "active" : ""}`}
-                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="rm-filters-right">
-                                        {showCustomDatePicker && (
-                                            <div className="rm-date-range">
-                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                                <span className="rm-date-sep">{"\u2192"}</span>
-                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                            </div>
-                                        )}
-                                        <select className="rm-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
-                                            {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
+                                <PeriodFilter {...periodProps} variant="pills">
+                                    <select className="rm-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
+                                        {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                    </select>
+                                </PeriodFilter>
                             </div>
 
                             {/* KPIs */}
@@ -1007,25 +899,7 @@ export default function RetailManagerDashboard() {
                         <div className="rm-analytics-tab">
                             <div className="rm-tab-header">
                                 <h2 className="rm-section-title">Day-wise Sales</h2>
-                                <div className="rm-filters-row">
-                                    <div className="rm-timeline-pills">
-                                        {TIMELINE_OPTIONS.map(opt => (
-                                            <button key={opt.value} className={`rm-pill ${timeline === opt.value ? "active" : ""}`}
-                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="rm-filters-right">
-                                        {showCustomDatePicker && (
-                                            <div className="rm-date-range">
-                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                                <span className="rm-date-sep">{"\u2192"}</span>
-                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                <PeriodFilter {...periodProps} variant="pills" />
                             </div>
 
                             {/* Store summary cards */}
@@ -1174,25 +1048,7 @@ export default function RetailManagerDashboard() {
                         <div className="rm-analytics-tab">
                             <div className="rm-tab-header">
                                 <h2 className="rm-section-title">Product Analytics</h2>
-                                <div className="rm-filters-row">
-                                    <div className="rm-timeline-pills">
-                                        {TIMELINE_OPTIONS.map(opt => (
-                                            <button key={opt.value} className={`rm-pill ${analyticsTimeline === opt.value ? "active" : ""}`}
-                                                onClick={() => { setAnalyticsTimeline(opt.value); setShowAnalyticsCustomPicker(opt.value === "custom"); }}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="rm-filters-right">
-                                        {showAnalyticsCustomPicker && (
-                                            <div className="rm-date-range">
-                                                <input type="date" value={analyticsCustomFrom} onChange={(e) => setAnalyticsCustomFrom(e.target.value)} />
-                                                <span className="rm-date-sep">{"\u2192"}</span>
-                                                <input type="date" value={analyticsCustomTo} onChange={(e) => setAnalyticsCustomTo(e.target.value)} />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                <PeriodFilter {...analyticsPeriodProps} variant="pills" />
                             </div>
 
                             <div className="rm-charts-grid">
@@ -1397,15 +1253,11 @@ export default function RetailManagerDashboard() {
 
                             <div className="rm-filter-bar" ref={dropdownRef}>
                                 <div className="rm-filter-dropdown">
-                                    <button className={`rm-filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range {"\u25BE"}</button>
+                                    <button className={`rm-filter-btn ${ordersTimeline !== "all" ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range {"\u25BE"}</button>
                                     {openDropdown === "date" && (
                                         <div className="rm-dropdown-panel">
-                                            <div className="rm-dropdown-title">Select Date Range</div>
-                                            <div className="rm-date-inputs">
-                                                <input type="date" value={filters.dateFrom} onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))} />
-                                                <span>to</span>
-                                                <input type="date" value={filters.dateTo} onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))} />
-                                            </div>
+                                            <div className="rm-dropdown-title">Select Period</div>
+                                            <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
                                             <button className="rm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
                                         </div>
                                     )}

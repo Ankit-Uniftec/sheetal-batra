@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function WarehouseTab() {
   const { showPopup, PopupComponent } = usePopup();
@@ -12,6 +13,8 @@ export default function WarehouseTab() {
   const [stockData, setStockData] = useState({});
   const [stockLoading, setStockLoading] = useState(null);
   const [warehouseSearch, setWarehouseSearch] = useState("");
+  // Time scope by warehouse creation date — shared PeriodFilter (select).
+  const { control: periodControl, inPeriod, range: periodRange } = usePeriodFilter("all", { variant: "select", label: "Created:" });
   const [stockSearch, setStockSearch] = useState(""); // search inside the expanded stock table
 
   // Form state (shared between create and edit)
@@ -220,14 +223,15 @@ export default function WarehouseTab() {
     return products.filter((p) => !selectedIds.includes(p.id));
   };
 
-  // Warehouse card search (name / location)
+  // Warehouse card search (name / location) + creation-date period scope.
   const filteredWarehouses = useMemo(() => {
     const q = warehouseSearch.trim().toLowerCase();
-    if (!q) return warehouses;
-    return warehouses.filter(
-      (w) => w.name?.toLowerCase().includes(q) || w.location?.toLowerCase().includes(q)
-    );
-  }, [warehouses, warehouseSearch]);
+    return warehouses.filter((w) => {
+      if (periodRange && !inPeriod(w.created_at)) return false;
+      if (q && !(w.name?.toLowerCase().includes(q) || w.location?.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [warehouses, warehouseSearch, periodRange, inPeriod]);
 
   // Expanded stock table search (SKU / product name) — only one warehouse expands at a time
   const expandedStock = expandedId ? stockData[expandedId] : null;
@@ -284,6 +288,7 @@ export default function WarehouseTab() {
           />
           {warehouseSearch && <button className="inv-search-clear" onClick={() => setWarehouseSearch("")}>✕</button>}
         </div>
+        {periodControl}
         {filteredWarehouses.length === 0 ? (
         <div className="inv-empty-state">
           <p>No warehouses match your search.</p>

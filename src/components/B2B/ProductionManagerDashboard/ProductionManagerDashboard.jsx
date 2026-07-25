@@ -30,6 +30,7 @@ import Paginator from "../../../components/Paginator";
 import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
+import PeriodFilter, { usePeriodFilter, periodLabel } from "../../../components/PeriodFilter";
 import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfLazy";
@@ -229,11 +230,16 @@ export default function ProductionManagerDashboard() {
     const [channelFilter, setChannelFilter] = useFilterParam("channel", "all");
     const [statusTab, setStatusTab] = useFilterParam("status", "all");
     const [sortBy, setSortBy] = useFilterParam("sort", "newest");
-    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
-    // Overview period filter (scopes the stage cards by each component's ORDER date).
-    const [overviewPeriod, setOverviewPeriod] = useState("all"); // all | day | month | year | custom
-    const [overviewFrom, setOverviewFrom] = useState("");
-    const [overviewTo, setOverviewTo] = useState("");
+    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
+    // Order-date scope for the orders list — shared PeriodFilter (select),
+    // rendered inside the Date Range dropdown panel.
+    const {
+        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
+        range: ordersPeriodRange, props: ordersPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
+    // Overview period filter — shared PeriodFilter (scopes the stage cards + business metrics).
+    const { control: overviewPeriodControl, timeline: overviewTimeline, inPeriod: inOverviewPeriod } = usePeriodFilter("all", { variant: "pills" });
     const [openDropdown, setOpenDropdown] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const dropdownRef = useRef(null);
@@ -258,13 +264,9 @@ export default function ProductionManagerDashboard() {
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
     const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
-    // Delivery Report state
-    const [drDateFrom, setDrDateFrom] = useState(() => {
-        const d = new Date();
-        d.setDate(d.getDate() - 30);
-        return d.toISOString().split("T")[0];
-    });
-    const [drDateTo, setDrDateTo] = useState(() => new Date().toISOString().split("T")[0]);
+    // Delivery Report state — period via the shared PeriodFilter (default:
+    // last 30 days, matching the report's old preset range).
+    const { control: drPeriodControl, range: drPeriodRange } = usePeriodFilter("30d", { variant: "select", label: "Period:" });
     const [drChannel, setDrChannel] = useState("all");
     const [drStatus, setDrStatus] = useState("all");
     const [drBucket, setDrBucket] = useState("all");
@@ -441,7 +443,7 @@ export default function ProductionManagerDashboard() {
     }, []);
 
     // Reset page when filters change
-    useEffect(() => { setCurrentPage(1); }, [orderSearch, orderSearchField, statusTab, channelFilter, filters, sortBy]);
+    useEffect(() => { setCurrentPage(1); }, [orderSearch, orderSearchField, statusTab, channelFilter, filters, sortBy, ordersPeriodRange]);
 
     // When highlighted order is set (e.g. from navigation state), scroll to it once orders are loaded
     useEffect(() => {
@@ -479,7 +481,7 @@ export default function ProductionManagerDashboard() {
     }));
 
     const removeFilter = (type, value) => {
-        if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+        if (type === "date") clearOrdersPeriod();
         else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
         else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
         else if (type === "stage") setFilters(prev => ({ ...prev, stage: prev.stage.filter(v => v !== value), stageKind: "both" }));
@@ -488,7 +490,10 @@ export default function ProductionManagerDashboard() {
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
+    const clearAllFilters = () => {
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
+        clearOrdersPeriod();
+    };
 
     // Jump from a QC-history / re-journey / external-vendor row to that order's
     // card in All Orders: switch tab, search by order #, highlight + scroll, then
@@ -561,9 +566,8 @@ export default function ProductionManagerDashboard() {
 
     const appliedFilters = useMemo(() => {
         const chips = [];
-        if (filters.dateFrom || filters.dateTo) {
-            const label = filters.dateFrom && filters.dateTo ? `${filters.dateFrom} to ${filters.dateTo}` : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
-            chips.push({ type: "date", label });
+        if (ordersTimeline !== "all") {
+            chips.push({ type: "date", label: periodLabel(ordersTimeline) });
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `₹${(filters.minPrice / 1000).toFixed(0)}K - ₹${(filters.maxPrice / 1000).toFixed(0)}K` });
         filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p === "unpaid" ? "Unpaid (COD)" : p.charAt(0).toUpperCase() + p.slice(1) }));
@@ -578,7 +582,7 @@ export default function ProductionManagerDashboard() {
         if (filters.disposedOnly) chips.push({ type: "disposedOnly", label: "Disposed components" });
         if (filters.delayedOnly) chips.push({ type: "delayedOnly", label: "Delayed (past delivery)" });
         return chips;
-    }, [filters]);
+    }, [filters, ordersTimeline]);
 
     const handleExportCSV = () => {
         if (filteredOrders.length === 0) return;
@@ -804,11 +808,7 @@ export default function ProductionManagerDashboard() {
     const statusStats = useMemo(() => computeStatusStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Human label for the current Overview period (used in the revenue card etc.).
-    const overviewPeriodLabel =
-        overviewPeriod === "day" ? "Today" :
-        overviewPeriod === "month" ? "This Month" :
-        overviewPeriod === "year" ? "This Year" :
-        overviewPeriod === "custom" ? "Custom Range" : "All Time";
+    const overviewPeriodLabel = periodLabel(overviewTimeline);
 
     // Per-stage component counts. Source of truth: order_components.current_stage
     // (advanced live by the warehouse Scan Station). One row per top/bottom/
@@ -816,57 +816,20 @@ export default function ProductionManagerDashboard() {
     // Orders placed within the selected Overview period. Their COMPONENTS
     // (overviewComponents) feed the "Orders by Production Stage" cards, which
     // count pieces and split in-house vs out-at-vendor.
-    const overviewOrders = useMemo(() => {
-        if (overviewPeriod === "all") return orders;
-        const now = new Date();
-        let from = null, to = null;
-        if (overviewPeriod === "day") {
-            from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        } else if (overviewPeriod === "month") {
-            from = new Date(now.getFullYear(), now.getMonth(), 1);
-        } else if (overviewPeriod === "year") {
-            from = new Date(now.getFullYear(), 0, 1);
-        } else if (overviewPeriod === "custom") {
-            from = overviewFrom ? new Date(overviewFrom) : null;
-            to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
-        }
-        return orders.filter((o) => {
-            if (!o.created_at) return false;
-            const dt = new Date(o.created_at);
-            if (from && dt < from) return false;
-            if (to && dt > to) return false;
-            return true;
-        });
-    }, [orders, overviewPeriod, overviewFrom, overviewTo]);
+    const overviewOrders = useMemo(
+        () => orders.filter((o) => inOverviewPeriod(o.created_at)),
+        [orders, inOverviewPeriod]
+    );
 
     // Components whose stage activity (stage_updated_at) falls in the selected
     // Overview period — powers the piece-count stage cards with the in-house/
     // vendor split. Filtered by the PIECE's own scan time, not its order's
     // created_at, so a scan today on an old order shows up under "Today".
     // (components carry is_outside_wh + stages_outside from enrichComponentsWithMovements.)
-    const overviewComponents = useMemo(() => {
-        if (overviewPeriod === "all") return components;
-        const now = new Date();
-        let from = null, to = null;
-        if (overviewPeriod === "day") {
-            from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        } else if (overviewPeriod === "month") {
-            from = new Date(now.getFullYear(), now.getMonth(), 1);
-        } else if (overviewPeriod === "year") {
-            from = new Date(now.getFullYear(), 0, 1);
-        } else if (overviewPeriod === "custom") {
-            from = overviewFrom ? new Date(overviewFrom) : null;
-            to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
-        }
-        return components.filter((c) => {
-            const ts = c.stage_updated_at || c.created_at;
-            if (!ts) return false;
-            const dt = new Date(ts);
-            if (from && dt < from) return false;
-            if (to && dt > to) return false;
-            return true;
-        });
-    }, [components, overviewPeriod, overviewFrom, overviewTo]);
+    const overviewComponents = useMemo(
+        () => components.filter((c) => inOverviewPeriod(c.stage_updated_at || c.created_at)),
+        [components, inOverviewPeriod]
+    );
 
     // Disposed components in the selected Overview period (disposal sets
     // stage_updated_at = NOW(), so overviewComponents already scopes by when it
@@ -1211,14 +1174,7 @@ export default function ProductionManagerDashboard() {
                 }
             });
         }
-        if (filters.dateFrom || filters.dateTo) {
-            result = result.filter(o => {
-                const d = new Date(o.created_at);
-                if (filters.dateFrom && d < new Date(filters.dateFrom)) return false;
-                if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false;
-                return true;
-            });
-        }
+        if (ordersPeriodRange) result = result.filter(o => inOrdersPeriod(o.created_at));
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(o => { const t = o.grand_total || 0; return t >= filters.minPrice && t <= filters.maxPrice; });
         }
@@ -1268,7 +1224,7 @@ export default function ProductionManagerDashboard() {
         return result;
         // vendorMap is a dep because client_name search resolves through it for B2B orders
         // orderStageGroups is a dep because the Stage filter matches on it (any-piece-at-stage)
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups, disposedOrderIds]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups, disposedOrderIds, ordersPeriodRange, inOrdersPeriod]);
 
     const orderTabCounts = useMemo(() => {
         const base = channelFilter === "all" ? orders : orders.filter(o => getOrderChannelLabel(o) === channelFilter);
@@ -1703,29 +1659,8 @@ export default function ProductionManagerDashboard() {
                                 {/* ===== ORDERS BY PRODUCTION STAGE (click a card to drill into the orders list) ===== */}
                                 <div className="pm-overview-head">
                                     <p className="pm-card-title" style={{ margin: 0, color: "#8B7355" }}>Production Stages (Components)</p>
-                                    <div className="pm-period-pills">
-                                        {[
-                                            { key: "all", label: "All Time" },
-                                            { key: "day", label: "Today" },
-                                            { key: "month", label: "This Month" },
-                                            { key: "year", label: "This Year" },
-                                            { key: "custom", label: "Custom" },
-                                        ].map((p) => (
-                                            <button
-                                                key={p.key}
-                                                className={`pm-period-pill ${overviewPeriod === p.key ? "active" : ""}`}
-                                                onClick={() => setOverviewPeriod(p.key)}
-                                            >{p.label}</button>
-                                        ))}
-                                    </div>
                                 </div>
-                                {overviewPeriod === "custom" && (
-                                    <div className="pm-period-custom">
-                                        <input type="date" value={overviewFrom} onChange={(e) => setOverviewFrom(e.target.value)} />
-                                        <span>→</span>
-                                        <input type="date" value={overviewTo} min={overviewFrom || undefined} onChange={(e) => setOverviewTo(e.target.value)} />
-                                    </div>
-                                )}
+                                {overviewPeriodControl}
                                 <StageCountCards components={overviewComponents} orderStatusById={orderStatusById} onStageClick={handleStageCardClick} />
 
                                 {/* ===== BUSINESS METRICS SECTION (scoped to the selected period) ===== */}
@@ -1988,15 +1923,11 @@ export default function ProductionManagerDashboard() {
                                 <div ref={dropdownRef} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                                     {/* Date Range */}
                                     <div style={{ position: "relative" }}>
-                                        <button className={`pm-filter-select ${(filters.dateFrom || filters.dateTo) ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")} style={{ cursor: "pointer" }}>Date Range {"\u25BE"}</button>
+                                        <button className={`pm-filter-select ${ordersTimeline !== "all" ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")} style={{ cursor: "pointer" }}>Date Range {"\u25BE"}</button>
                                         {openDropdown === "date" && (
                                             <div className="pm-dropdown-panel">
-                                                <div className="pm-dropdown-title">Select Date Range</div>
-                                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                                                    <input type="date" value={filters.dateFrom} onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))} style={{ padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6, fontSize: 13 }} />
-                                                    <span>to</span>
-                                                    <input type="date" value={filters.dateTo} onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))} style={{ padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6, fontSize: 13 }} />
-                                                </div>
+                                                <div className="pm-dropdown-title">Select Period</div>
+                                                <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
                                                 <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
                                             </div>
                                         )}
@@ -2458,8 +2389,8 @@ export default function ProductionManagerDashboard() {
                             const todayStr = now.toISOString().split("T")[0];
 
                             // Date range filter — applied to delivery_date for open orders, delivered_at for completed
-                            const fromDate = drDateFrom ? new Date(drDateFrom + "T00:00:00") : null;
-                            const toDate = drDateTo ? new Date(drDateTo + "T23:59:59") : null;
+                            const fromDate = drPeriodRange ? drPeriodRange.start : null;
+                            const toDate = drPeriodRange ? drPeriodRange.end : null;
 
                             // Channel filter
                             // Channel from the shared classifier — the old check was a
@@ -2695,14 +2626,7 @@ export default function ProductionManagerDashboard() {
 
                                     {/* ===== CONTROLS ===== */}
                                     <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>From</label>
-                                            <input type="date" value={drDateFrom} onChange={(e) => setDrDateFrom(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13 }} />
-                                        </div>
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>To</label>
-                                            <input type="date" value={drDateTo} onChange={(e) => setDrDateTo(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13 }} />
-                                        </div>
+                                        {drPeriodControl}
                                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                             <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Channel</label>
                                             <select value={drChannel} onChange={(e) => setDrChannel(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff" }}>

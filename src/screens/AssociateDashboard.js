@@ -82,10 +82,13 @@ export default function Dashboard() {
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderSearchField, setOrderSearchField] = useState("order_no");
-  // Order History filters
+  // Order History filters — order-date scope via the shared PeriodFilter
+  // (its own instance, independent of the dashboard-wide period pills).
   const [orderStatusFilter, setOrderStatusFilter] = useState("");
-  const [orderDateFrom, setOrderDateFrom] = useState("");
-  const [orderDateTo, setOrderDateTo] = useState("");
+  const {
+    control: ordersPeriodControl, timeline: ordersTimeline,
+    inPeriod: inOrdersPeriod, range: ordersPeriodRange, props: ordersPeriodProps,
+  } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
   const [clientSearch, setClientSearch] = useState("");
 
   const ASSOCIATE_SEARCH_FIELDS = [
@@ -229,8 +232,7 @@ export default function Dashboard() {
     // Status + created_at date-range filters
     const filteredByControls = baseOrders.filter((order) => {
       if (orderStatusFilter && normalizeOrderStatus(order.status) !== orderStatusFilter) return false;
-      if (orderDateFrom && new Date(order.created_at) < new Date(`${orderDateFrom}T00:00:00`)) return false;
-      if (orderDateTo && new Date(order.created_at) > new Date(`${orderDateTo}T23:59:59.999`)) return false;
+      if (ordersPeriodRange && !inOrdersPeriod(order.created_at)) return false;
       return true;
     });
 
@@ -253,7 +255,7 @@ export default function Dashboard() {
           return order.order_no?.toLowerCase().includes(q);
       }
     });
-  }, [orders, orderSearch, orderSearchField, orderStatusFilter, orderDateFrom, orderDateTo]);
+  }, [orders, orderSearch, orderSearchField, orderStatusFilter, ordersPeriodRange, inOrdersPeriod]);
 
   // Distinct normalized statuses present in the data (for the filter dropdown)
   const orderStatusOptions = useMemo(() => {
@@ -1559,24 +1561,10 @@ export default function Dashboard() {
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
-                <input
-                  type="date"
-                  value={orderDateFrom}
-                  onChange={(e) => { setOrderDateFrom(e.target.value); setCurrentPage(1); }}
-                  title="Order date from"
-                  style={{ width: "auto", padding: "8px 10px", fontSize: 13 }}
-                />
-                <span style={{ fontSize: 13, color: "#8B7355" }}>to</span>
-                <input
-                  type="date"
-                  value={orderDateTo}
-                  onChange={(e) => { setOrderDateTo(e.target.value); setCurrentPage(1); }}
-                  title="Order date to"
-                  style={{ width: "auto", padding: "8px 10px", fontSize: 13 }}
-                />
-                {(orderStatusFilter || orderDateFrom || orderDateTo) && (
+                {ordersPeriodControl}
+                {(orderStatusFilter || ordersTimeline !== "all") && (
                   <button
-                    onClick={() => { setOrderStatusFilter(""); setOrderDateFrom(""); setOrderDateTo(""); setCurrentPage(1); }}
+                    onClick={() => { setOrderStatusFilter(""); ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); setCurrentPage(1); }}
                     style={{ border: "none", background: "none", color: "#c0392b", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
                   >
                     Clear
@@ -1587,7 +1575,7 @@ export default function Dashboard() {
               <div className="ad-order-list-scroll">
                 {filteredOrders.length === 0 && (
                   <p className="ad-muted">
-                    {orderSearch.trim() || orderStatusFilter || orderDateFrom || orderDateTo
+                    {orderSearch.trim() || orderStatusFilter || ordersTimeline !== "all"
                       ? "No orders match the current search/filters."
                       : "No orders found for this associate."}
                   </p>

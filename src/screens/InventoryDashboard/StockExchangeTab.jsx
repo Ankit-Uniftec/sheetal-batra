@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function StockExchangeTab() {
   const { showPopup, PopupComponent } = usePopup();
@@ -14,8 +15,8 @@ export default function StockExchangeTab() {
   // List filters
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Time scope by exchange date — shared PeriodFilter (select).
+  const { control: periodControl, inPeriod, range: periodRange } = usePeriodFilter("all", { variant: "select", label: "Date:" });
 
   // Form state
   const [warehouses, setWarehouses] = useState([]);
@@ -239,14 +240,7 @@ export default function StockExchangeTab() {
   const filteredExchanges = useMemo(() => {
     let list = exchanges;
     if (statusFilter !== "all") list = list.filter((ex) => ex.status === statusFilter);
-    if (dateFrom) {
-      const from = new Date(dateFrom);
-      list = list.filter((ex) => new Date(ex.created_at) >= from);
-    }
-    if (dateTo) {
-      const to = new Date(dateTo + "T23:59:59.999");
-      list = list.filter((ex) => new Date(ex.created_at) <= to);
-    }
+    if (periodRange) list = list.filter((ex) => inPeriod(ex.created_at));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((ex) =>
@@ -257,7 +251,7 @@ export default function StockExchangeTab() {
       );
     }
     return list;
-  }, [exchanges, search, statusFilter, dateFrom, dateTo]);
+  }, [exchanges, search, statusFilter, periodRange, inPeriod]);
 
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
@@ -305,20 +299,7 @@ export default function StockExchangeTab() {
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-          <input
-            type="date"
-            className="inv-exchange-filter"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            title="From date"
-          />
-          <input
-            type="date"
-            className="inv-exchange-filter"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            title="To date"
-          />
+          {periodControl}
         </div>
       )}
 

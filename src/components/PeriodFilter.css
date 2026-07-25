@@ -80,6 +80,10 @@
 
 .pfx-custom { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* Right-hand slot for extra controls a screen mounts beside the filter
+   (e.g. the analytics dashboards' comparison dropdown). */
+.pfx-slot { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
 /* Full-width band placement on the legacy grid dashboards: the filled pills
    strip spans the whole line, so the band reads as a designed toolbar rather
    than one orphaned control in empty space. */

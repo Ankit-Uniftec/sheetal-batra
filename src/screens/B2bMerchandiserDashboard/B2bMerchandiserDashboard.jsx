@@ -19,7 +19,7 @@ import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import CompletePicker from "../../components/CompletePicker";
 import Paginator from "../../components/Paginator";
-import { usePeriodFilter } from "../../components/PeriodFilter";
+import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange } from "../../components/PeriodFilter";
 import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
@@ -79,12 +79,18 @@ export default function B2bMerchandiserDashboard() {
     const [statusFilter, setStatusFilter] = useFilterParam("status", "all");
     const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
     const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
-    const [dateFrom, setDateFrom] = useFilterParam("from", "");
-    const [dateTo, setDateTo] = useFilterParam("to", "");
-    // One navigation, or the five setters clobber each other (see the hook).
-    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "from", "to"]);
+    // Order-date scope — URL-persisted PeriodFilter (legacy ?from/?to links
+    // still apply as a custom range).
+    const {
+        control: ordersPeriodControl, timeline: ordersTimeline,
+        inPeriod: inOrdersPeriod, range: ordersPeriodRange,
+    } = usePeriodFilterParam("all", { variant: "select", label: "Order date:" });
+    // One navigation, or the setters clobber each other (see the hook).
+    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "period", "from", "to"]);
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { setCurrentPage(1); }, [ordersPeriodRange]);
 
     // Consignment tab filters
     const [consignSearch, setConsignSearch] = useState("");
@@ -122,11 +128,11 @@ export default function B2bMerchandiserDashboard() {
     const [calendarDate, setCalendarDate] = useState(() => new Date());
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
 
-    // Analytics tab
-    const [analyticsTimeline, setAnalyticsTimeline] = useState("monthly");
-    const [analyticsCustomFrom, setAnalyticsCustomFrom] = useState("");
-    const [analyticsCustomTo, setAnalyticsCustomTo] = useState("");
-    const [showAnalyticsCustomPicker, setShowAnalyticsCustomPicker] = useState(false);
+    // Analytics tab — its own shared-PeriodFilter instance (vendor growth
+    // compares against the immediately-preceding period of the same length).
+    const {
+        control: analyticsPeriodControl, inPeriod: inAnalyticsPeriod, range: analyticsPeriodRange,
+    } = usePeriodFilter("month", { variant: "pills" });
     const [analyticsPage, setAnalyticsPage] = useState(1);
 
     // ==================== FETCH DATA ====================
@@ -270,35 +276,9 @@ export default function B2bMerchandiserDashboard() {
 
     // ==================== VENDOR GROWTH ANALYTICS ====================
     const vendorGrowthStats = useMemo(() => {
-        const now = new Date();
-
-        let currentStart, currentEnd, prevStart, prevEnd;
-
-        if (analyticsTimeline === "custom" && analyticsCustomFrom && analyticsCustomTo) {
-            currentStart = new Date(analyticsCustomFrom);
-            currentEnd = new Date(analyticsCustomTo);
-            currentEnd.setHours(23, 59, 59, 999);
-            const periodMs = currentEnd - currentStart;
-            prevStart = new Date(currentStart.getTime() - periodMs);
-            prevEnd = new Date(currentStart);
-        } else {
-            const periodDays = analyticsTimeline === "weekly" ? 7 : analyticsTimeline === "yearly" ? 365 : 30;
-            currentEnd = new Date(now);
-            currentStart = new Date(now);
-            currentStart.setDate(currentStart.getDate() - periodDays);
-            prevEnd = new Date(currentStart);
-            prevStart = new Date(currentStart);
-            prevStart.setDate(prevStart.getDate() - periodDays);
-        }
-
-        const currentOrders = orders.filter(o => {
-            const d = new Date(o.created_at);
-            return d >= currentStart && d <= currentEnd;
-        });
-        const prevOrders = orders.filter(o => {
-            const d = new Date(o.created_at);
-            return d >= prevStart && d < prevEnd;
-        });
+        const prevRange = comparisonPeriodRange(analyticsPeriodRange, "previous_period");
+        const currentOrders = orders.filter(o => inAnalyticsPeriod(o.created_at));
+        const prevOrders = prevRange ? orders.filter(o => inRange(prevRange, o.created_at)) : [];
 
         // Aggregate by vendor
         const vendorData = {};
@@ -327,7 +307,7 @@ export default function B2bMerchandiserDashboard() {
                 ordersGrowth: v.prevOrders > 0 ? ((v.currentOrders - v.prevOrders) / v.prevOrders * 100) : v.currentOrders > 0 ? 100 : 0,
             }))
             .sort((a, b) => b.current - a.current);
-    }, [orders, vendors, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
+    }, [orders, vendors, inAnalyticsPeriod, analyticsPeriodRange]);
 
     // ==================== FILTERED ORDERS ====================
     const filteredOrders = useMemo(() => {
@@ -338,12 +318,7 @@ export default function B2bMerchandiserDashboard() {
         else if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter && (o.status || "").toLowerCase() !== "cancelled" && !(statusFilter === "pending" && isTerminalOrder(o)));
         if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
-        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
-        if (dateTo) {
-            const endDate = new Date(dateTo);
-            endDate.setHours(23, 59, 59, 999);
-            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
-        }
+        if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
             // Client + product included so legacy SA-placed B2B orders (no PO,
@@ -355,7 +330,7 @@ export default function B2bMerchandiserDashboard() {
             );
         }
         return filtered;
-    }, [orders, statusFilter, typeFilter, merchandiserFilter, dateFrom, dateTo, orderSearch, vendorMap]);
+    }, [orders, statusFilter, typeFilter, merchandiserFilter, ordersPeriodRange, inOrdersPeriod, orderSearch, vendorMap]);
 
     const paginatedOrders = useMemo(() => {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -1078,9 +1053,8 @@ export default function B2bMerchandiserDashboard() {
                             <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>
                             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option></select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Merchandisers</option>{uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}</select>
-                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="merch-filter-select" title="From date" />
-                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="merch-filter-select" title="To date" />
-                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
+                            {ordersPeriodControl}
+                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || ordersTimeline !== "all") && (
                                 <button onClick={() => { clearOrderFilters(); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
                             )}
                         </div>
@@ -1402,25 +1376,8 @@ export default function B2bMerchandiserDashboard() {
                 {activeTab === "analytics" && (
                     <div className="merch-tab-wrapper">
                         <div className="merch-ios-card" style={{ marginBottom: 16 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <span style={{ fontWeight: 600, fontSize: 15 }}>Vendor Growth Analytics</span>
-                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
-                                    {[{ v: "weekly", l: "7 Days" }, { v: "monthly", l: "30 Days" }, { v: "yearly", l: "365 Days" }, { v: "custom", l: "Custom" }].map(opt => (
-                                        <button key={opt.v}
-                                            onClick={() => { setAnalyticsTimeline(opt.v); setShowAnalyticsCustomPicker(opt.v === "custom"); }}
-                                            style={{ padding: '4px 12px', borderRadius: 20, border: '1px solid #d5b85a', background: analyticsTimeline === opt.v ? '#d5b85a' : 'transparent', color: analyticsTimeline === opt.v ? '#fff' : '#d5b85a', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-                                            {opt.l}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            {showAnalyticsCustomPicker && (
-                                <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
-                                    <input type="date" value={analyticsCustomFrom} onChange={e => setAnalyticsCustomFrom(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
-                                    <span>→</span>
-                                    <input type="date" value={analyticsCustomTo} onChange={e => setAnalyticsCustomTo(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
-                                </div>
-                            )}
+                            <span style={{ fontWeight: 600, fontSize: 15, display: 'block', marginBottom: 10 }}>Vendor Growth Analytics</span>
+                            {analyticsPeriodControl}
                         </div>
 
                         {vendorGrowthStats.length === 0 ? (

@@ -8,6 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function AccountsDashboard() {
   const navigate = useNavigate();
@@ -16,8 +17,11 @@ export default function AccountsDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchField, setSearchField] = useState("order_no");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Order-date scope — shared PeriodFilter (select variant).
+  const {
+    control: periodControl, timeline: periodTimeline,
+    inPeriod, range: periodRange,
+  } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
   const [statusFilter, setStatusFilter] = useState("");
 
   // Pagination
@@ -190,15 +194,8 @@ export default function AccountsDashboard() {
       });
     }
 
-    if (dateFrom) {
-      filtered = filtered.filter(
-        (item) => new Date(item.order_date) >= new Date(dateFrom)
-      );
-    }
-    if (dateTo) {
-      filtered = filtered.filter(
-        (item) => new Date(item.order_date) <= new Date(dateTo + "T23:59:59")
-      );
+    if (periodRange) {
+      filtered = filtered.filter((item) => inPeriod(item.order_date));
     }
 
     if (statusFilter) {
@@ -206,7 +203,7 @@ export default function AccountsDashboard() {
     }
 
     return filtered;
-  }, [lineItems, searchQuery, searchField, dateFrom, dateTo, statusFilter]);
+  }, [lineItems, searchQuery, searchField, periodRange, inPeriod, statusFilter]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -217,7 +214,7 @@ export default function AccountsDashboard() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, searchField, dateFrom, dateTo, statusFilter]);
+  }, [searchQuery, searchField, periodRange, statusFilter]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -441,20 +438,8 @@ export default function AccountsDashboard() {
 
           <div className="acc-filters">
             <div className="acc-filter-item">
-              <label>From</label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-              />
-            </div>
-            <div className="acc-filter-item">
-              <label>To</label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-              />
+              <label>Period</label>
+              {periodControl}
             </div>
             <div className="acc-filter-item">
               <label>Status</label>
@@ -517,7 +502,7 @@ export default function AccountsDashboard() {
               {currentItems.length === 0 ? (
                 <tr>
                   <td colSpan="20" className="acc-no-data">
-                    {searchQuery || dateFrom || dateTo || statusFilter
+                    {searchQuery || periodTimeline !== "all" || statusFilter
                       ? "No records match your filters"
                       : "No records found"}
                   </td>

@@ -28,6 +28,7 @@ import useTabParam from "../hooks/useTabParam";
 import Paginator from "../components/Paginator";
 import CompletePicker from "../components/CompletePicker";
 import { runManualCompleteWithOverride } from "../utils/manualComplete";
+import PeriodFilter, { usePeriodFilter, periodLabel } from "../components/PeriodFilter";
 
 // Status options for alterations
 const ALTERATION_STATUS_OPTIONS = [
@@ -103,11 +104,9 @@ const WarehouseDashboard = () => {
   // LIST stays global; only these analytics are scoped to their channel.
   const [overviewComponents, setOverviewComponents] = useState([]);
   const [overviewLoading, setOverviewLoading] = useState(false);
-  // Overview date-period filter (scopes the stage cards + Production Overview by
-  // order placement date). all | day | month | year | custom.
-  const [overviewPeriod, setOverviewPeriod] = useState("all");
-  const [overviewFrom, setOverviewFrom] = useState("");
-  const [overviewTo, setOverviewTo] = useState("");
+  // Overview date-period filter — shared PeriodFilter (scopes the stage cards +
+  // Production Overview).
+  const { control: overviewPeriodControl, inPeriod: inOverviewPeriod } = usePeriodFilter("all", { variant: "pills" });
   // Maps vendor.id → vendor row. Used to resolve B2B orders' "client name"
   // (B2B orders have no delivery_name; the vendor's store_brand_name is the
   // operations-facing analogue, same convention as PM dashboard + PDFs).
@@ -150,10 +149,16 @@ const WarehouseDashboard = () => {
   // Status Tab (Primary Filter)
   const [statusTab, setStatusTab] = useState("all");
 
+  // Order-date scope for the orders list (by WAREHOUSE date, T-2) — shared
+  // PeriodFilter (select), rendered inside the Date Range dropdown panel.
+  const {
+    timeline: ordersTimeline, inPeriod: inOrdersPeriod,
+    range: ordersPeriodRange, props: ordersPeriodProps,
+  } = usePeriodFilter("all", { variant: "select", label: "Warehouse date:" });
+  const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
+
   // Secondary Filters
   const [filters, setFilters] = useState({
-    dateFrom: "",
-    dateTo: "",
     minPrice: 0,
     maxPrice: 500000,
     priority: [],
@@ -446,25 +451,10 @@ const WarehouseDashboard = () => {
   // created_at). Drives the orders-count label + Production Overview summary —
   // NOT the stage cards, which filter by the piece's own scan time instead (see
   // overviewComponentsInPeriod below).
-  const periodScopedOrders = useMemo(() => {
-    if (overviewPeriod === "all") return scopedOrders;
-    const now = new Date();
-    let from = null, to = null;
-    if (overviewPeriod === "day") from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    else if (overviewPeriod === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
-    else if (overviewPeriod === "year") from = new Date(now.getFullYear(), 0, 1);
-    else if (overviewPeriod === "custom") {
-      from = overviewFrom ? new Date(overviewFrom) : null;
-      to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
-    }
-    return scopedOrders.filter((o) => {
-      if (!o.created_at) return false;
-      const dt = new Date(o.created_at);
-      if (from && dt < from) return false;
-      if (to && dt > to) return false;
-      return true;
-    });
-  }, [scopedOrders, overviewPeriod, overviewFrom, overviewTo]);
+  const periodScopedOrders = useMemo(
+    () => scopedOrders.filter((o) => inOverviewPeriod(o.created_at)),
+    [scopedOrders, inOverviewPeriod]
+  );
 
   // order_id -> status for ALL channel-scoped orders (not date-narrowed), so a
   // bypass-completed order's pieces show under Packaging & Dispatch even when
@@ -479,26 +469,10 @@ const WarehouseDashboard = () => {
   // Overview period — powers the stage cards. Filtered by the PIECE's own scan
   // time, not its order's created_at, so a scan today on an old order shows up
   // under "Today".
-  const overviewComponentsInPeriod = useMemo(() => {
-    if (overviewPeriod === "all") return overviewComponents;
-    const now = new Date();
-    let from = null, to = null;
-    if (overviewPeriod === "day") from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    else if (overviewPeriod === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
-    else if (overviewPeriod === "year") from = new Date(now.getFullYear(), 0, 1);
-    else if (overviewPeriod === "custom") {
-      from = overviewFrom ? new Date(overviewFrom) : null;
-      to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
-    }
-    return overviewComponents.filter((c) => {
-      const ts = c.stage_updated_at || c.created_at;
-      if (!ts) return false;
-      const dt = new Date(ts);
-      if (from && dt < from) return false;
-      if (to && dt > to) return false;
-      return true;
-    });
-  }, [overviewComponents, overviewPeriod, overviewFrom, overviewTo]);
+  const overviewComponentsInPeriod = useMemo(
+    () => overviewComponents.filter((c) => inOverviewPeriod(c.stage_updated_at || c.created_at)),
+    [overviewComponents, inOverviewPeriod]
+  );
 
   // order_id -> { stageKey: Set('internal'|'external') }, from the period-
   // filtered overview components, so clicking a card / sub-count drills the
@@ -709,16 +683,13 @@ const WarehouseDashboard = () => {
       });
     }
 
-    // Date range filter
-    if (filters.dateFrom || filters.dateTo) {
+    // Date range filter (by warehouse date, T-2)
+    if (ordersPeriodRange) {
       result = result.filter((order) => {
         const warehouseDate = getWarehouseDateForCalendar(order.delivery_date, order.created_at);
         if (!warehouseDate) return false;
         const [day, month, year] = warehouseDate.split("-");
-        const orderDate = new Date(year, month - 1, day);
-        if (filters.dateFrom && orderDate < new Date(filters.dateFrom)) return false;
-        if (filters.dateTo && orderDate > new Date(filters.dateTo)) return false;
-        return true;
+        return inOrdersPeriod(new Date(year, month - 1, day));
       });
     }
 
@@ -860,11 +831,8 @@ const WarehouseDashboard = () => {
   // Applied filters for chips
   const appliedFilters = useMemo(() => {
     const chips = [];
-    if (filters.dateFrom || filters.dateTo) {
-      const label = filters.dateFrom && filters.dateTo
-        ? `${filters.dateFrom} to ${filters.dateTo}`
-        : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
-      chips.push({ type: "date", label });
+    if (ordersTimeline !== "all") {
+      chips.push({ type: "date", label: periodLabel(ordersTimeline) });
     }
     if (filters.minPrice > 0 || filters.maxPrice < 500000) {
       chips.push({ type: "price", label: `Rs.${(filters.minPrice / 1000).toFixed(0)}K - Rs.${(filters.maxPrice / 1000).toFixed(0)}K` });
@@ -881,12 +849,12 @@ const WarehouseDashboard = () => {
       chips.push({ type: "salesperson", label: filters.salesperson });
     }
     return chips;
-  }, [filters]);
+  }, [filters, ordersTimeline]);
 
   // Remove a filter
   const removeFilter = (type, value) => {
     if (type === "date") {
-      setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+      clearOrdersPeriod();
     } else if (type === "price") {
       setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
     } else if (type === "salesperson") {
@@ -900,9 +868,8 @@ const WarehouseDashboard = () => {
 
   // Clear all filters
   const clearAllFilters = () => {
+    clearOrdersPeriod();
     setFilters({
-      dateFrom: "",
-      dateTo: "",
       minPrice: 0,
       maxPrice: 500000,
       priority: [],
@@ -1398,28 +1365,7 @@ const WarehouseDashboard = () => {
               {/* Date-period filter — scopes the stage cards by piece scan time
                   (stage_updated_at) and Production Overview by order placement
                   date (created_at). Same pattern as the PM dashboard. */}
-              <div className="wd-overview-period">
-                {[
-                  { key: "all", label: "All Time" },
-                  { key: "day", label: "Today" },
-                  { key: "month", label: "This Month" },
-                  { key: "year", label: "This Year" },
-                  { key: "custom", label: "Custom" },
-                ].map((p) => (
-                  <button
-                    key={p.key}
-                    className={`wd-period-pill ${overviewPeriod === p.key ? "active" : ""}`}
-                    onClick={() => setOverviewPeriod(p.key)}
-                  >{p.label}</button>
-                ))}
-                {overviewPeriod === "custom" && (
-                  <span className="wd-period-custom">
-                    <input type="date" value={overviewFrom} onChange={(e) => setOverviewFrom(e.target.value)} />
-                    <span>→</span>
-                    <input type="date" value={overviewTo} min={overviewFrom || undefined} onChange={(e) => setOverviewTo(e.target.value)} />
-                  </span>
-                )}
-              </div>
+              {overviewPeriodControl}
 
               {overviewLoading ? (
                 <p className="wd-muted" style={{ padding: "12px 2px" }}>Loading production stages…</p>
@@ -1496,7 +1442,7 @@ const WarehouseDashboard = () => {
                 {/* Date Filter */}
                 <div className="wd-filter-dropdown">
                   <button
-                    className={`wd-filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`}
+                    className={`wd-filter-btn ${ordersTimeline !== "all" ? "active" : ""}`}
                     onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}
                   >
                     Date Range
@@ -1504,20 +1450,8 @@ const WarehouseDashboard = () => {
                   </button>
                   {openDropdown === "date" && (
                     <div className="wd-dropdown-panel">
-                      <div className="wd-dropdown-title">Select Date Range</div>
-                      <div className="wd-date-inputs">
-                        <input
-                          type="date"
-                          value={filters.dateFrom}
-                          onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                        />
-                        <span>to</span>
-                        <input
-                          type="date"
-                          value={filters.dateTo}
-                          onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                        />
-                      </div>
+                      <div className="wd-dropdown-title">Select Period</div>
+                      <PeriodFilter {...ordersPeriodProps} variant="select" label="Warehouse date:" />
                       <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
                     </div>
                   )}

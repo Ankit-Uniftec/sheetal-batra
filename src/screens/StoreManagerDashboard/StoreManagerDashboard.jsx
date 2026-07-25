@@ -14,6 +14,7 @@ import useTabParam from "../../hooks/useTabParam";
 import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
 import { getOrderStatusLabel } from "../../utils/barcodeService";
+import PeriodFilter, { usePeriodFilter, periodLabel } from "../../components/PeriodFilter";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area, Line
@@ -24,15 +25,6 @@ const STATUS_TABS = [
     { value: "in_progress", label: "In Progress" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
-];
-
-const TIMELINE_OPTIONS = [
-    { value: "today", label: "Today" },
-    { value: "yesterday", label: "Yesterday" },
-    { value: "weekly", label: "Last 7 Days" },
-    { value: "monthly", label: "Last 30 Days" },
-    { value: "yearly", label: "Last 365 Days" },
-    { value: "custom", label: "Custom" },
 ];
 
 const ITEMS_PER_PAGE = 15;
@@ -80,10 +72,9 @@ export default function StoreManagerDashboard() {
     // UI
     const [activeTab, setActiveTab] = useTabParam("sales");
     const [showSidebar, setShowSidebar] = useState(false);
-    const [timeline, setTimeline] = useState("monthly");
-    const [customDateFrom, setCustomDateFrom] = useState("");
-    const [customDateTo, setCustomDateTo] = useState("");
-    const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+    // Shared PeriodFilter — drives sales / SA performance / returns / inventory /
+    // alterations. (SM previously had no "All time" option; it gains one.)
+    const { control: periodControl, inPeriod } = usePeriodFilter("month", { variant: "pills" });
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
@@ -94,9 +85,16 @@ export default function StoreManagerDashboard() {
     // RM-style filters (copied pattern). orderType kept for parity even though
     // SM doesn't currently filter on it — leaves the door open.
     const [filters, setFilters] = useState({
-        dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000,
+        minPrice: 0, maxPrice: 500000,
         payment: [], priority: [], orderType: [], salesperson: ""
     });
+    // Order-date scope for the orders list — shared PeriodFilter (select),
+    // rendered inside the Date Range dropdown panel.
+    const {
+        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
+        range: ordersPeriodRange, props: ordersPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
     const [openDropdown, setOpenDropdown] = useState(null);
 
     // Returns tab — drill-down list when a stat-card number is clicked
@@ -255,31 +253,18 @@ export default function StoreManagerDashboard() {
     // ═══════════════════════════════════════════════════════════
     // DATE HELPERS
     // ═══════════════════════════════════════════════════════════
-    const getDateRange = (tv) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        switch (tv) {
-            case "today": return { start: today, end: now };
-            case "yesterday": { const y = new Date(today); y.setDate(y.getDate() - 1); const ye = new Date(today); ye.setMilliseconds(-1); return { start: y, end: ye }; }
-            case "weekly": { const w = new Date(today); w.setDate(w.getDate() - 7); return { start: w, end: now }; }
-            case "monthly": { const m = new Date(today); m.setDate(m.getDate() - 30); return { start: m, end: now }; }
-            case "yearly": { const yr = new Date(today); yr.setDate(yr.getDate() - 365); return { start: yr, end: now }; }
-            case "custom": return { start: customDateFrom ? new Date(customDateFrom) : new Date(0), end: customDateTo ? new Date(customDateTo + "T23:59:59") : now };
-            default: return { start: today, end: now };
-        }
-    };
-
-    const filterByDate = (list, range) => {
-        if (!range) return list;
-        return list.filter(o => { const d = new Date(o.created_at); return d >= range.start && d <= range.end; });
-    };
+    // One period-scoped slice shared by every date-aware tab (dedupes the five
+    // identical filters the old getDateRange/filterByDate pattern recomputed).
+    const periodStoreOrders = useMemo(
+        () => storeOrders.filter((o) => inPeriod(o.created_at)),
+        [storeOrders, inPeriod]
+    );
 
     // ═══════════════════════════════════════════════════════════
     // TAB 1: SALES OVERVIEW
     // ═══════════════════════════════════════════════════════════
     const salesStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const period = filterByDate(storeOrders, dateRange);
+        const period = periodStoreOrders;
 
         const totalRevenue = period.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const totalOrders = period.length;
@@ -320,14 +305,13 @@ export default function StoreManagerDashboard() {
         const unpaid = period.filter(o => getPaymentStatus(o) === "unpaid").length;
 
         return { totalRevenue, totalOrders, totalItems, aov, totalDiscount, dailySales, paid, partial, unpaid, extrasIncluded, extrasExcluded, extrasTotal };
-    }, [storeOrders, timeline, customDateFrom, customDateTo]);
+    }, [periodStoreOrders]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 2: SA PERFORMANCE
     // ═══════════════════════════════════════════════════════════
     const saPerformance = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const period = filterByDate(storeOrders, dateRange);
+        const period = periodStoreOrders;
 
         const saMap = {};
         period.forEach(o => {
@@ -353,7 +337,7 @@ export default function StoreManagerDashboard() {
         });
 
         return { saList: saWithTargets };
-    }, [storeOrders, timeline, customDateFrom, customDateTo, salespersonTable]);
+    }, [periodStoreOrders, salespersonTable]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 3: ORDERS
@@ -391,15 +375,8 @@ export default function StoreManagerDashboard() {
             });
         }
 
-        // Filter chip logic — mirrors RM dashboard (filters.dateFrom, etc.)
-        if (filters.dateFrom || filters.dateTo) {
-            result = result.filter(o => {
-                const d = new Date(o.created_at);
-                if (filters.dateFrom && d < new Date(filters.dateFrom)) return false;
-                if (filters.dateTo && d > new Date(filters.dateTo + "T23:59:59")) return false;
-                return true;
-            });
-        }
+        // Filter chip logic — mirrors RM dashboard
+        if (ordersPeriodRange) result = result.filter(o => inOrdersPeriod(o.created_at));
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(o => {
                 const total = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0;
@@ -426,16 +403,13 @@ export default function StoreManagerDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, orderSearchField, sortBy, filters]);
+    }, [filteredByStatus, orderSearch, orderSearchField, sortBy, filters, ordersPeriodRange, inOrdersPeriod]);
 
     // Filter helpers — RM-style
     const appliedFilters = useMemo(() => {
         const chips = [];
-        if (filters.dateFrom || filters.dateTo) {
-            const label = filters.dateFrom && filters.dateTo
-                ? `${filters.dateFrom} to ${filters.dateTo}`
-                : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
-            chips.push({ type: "date", label });
+        if (ordersTimeline !== "all") {
+            chips.push({ type: "date", label: periodLabel(ordersTimeline) });
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             chips.push({ type: "price", label: `₹${(filters.minPrice / 1000).toFixed(0)}K - ₹${(filters.maxPrice / 1000).toFixed(0)}K` });
@@ -444,19 +418,22 @@ export default function StoreManagerDashboard() {
         filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
         return chips;
-    }, [filters]);
+    }, [filters, ordersTimeline]);
 
     const removeFilter = (type, value) => {
-        if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+        if (type === "date") clearOrdersPeriod();
         else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
         else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({
-        dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000,
-        payment: [], priority: [], orderType: [], salesperson: ""
-    });
+    const clearAllFilters = () => {
+        setFilters({
+            minPrice: 0, maxPrice: 500000,
+            payment: [], priority: [], orderType: [], salesperson: ""
+        });
+        clearOrdersPeriod();
+    };
 
     const toggleFilter = (category, value) => setFilters(prev => ({
         ...prev,
@@ -543,8 +520,7 @@ export default function StoreManagerDashboard() {
     // TAB 4: RETURNS & ISSUES
     // ═══════════════════════════════════════════════════════════
     const returnsStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const period = filterByDate(storeOrders, dateRange);
+        const period = periodStoreOrders;
 
         const cancelled = period.filter(o => o.status === "cancelled");
         const returned = period.filter(o => o.return_reason);
@@ -593,7 +569,7 @@ export default function StoreManagerDashboard() {
             saIssues: saIssuesList.sort((a, b) => (b.cancellations + b.returns + b.refunds + b.exchanges + b.revokes) - (a.cancellations + a.returns + a.refunds + a.exchanges + a.revokes)),
             topCancelSA,
         };
-    }, [storeOrders, timeline, customDateFrom, customDateTo]);
+    }, [periodStoreOrders]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 5: INVENTORY
@@ -609,8 +585,7 @@ export default function StoreManagerDashboard() {
         });
 
         // Stock aging: products with inventory but no recent sales
-        const dateRange = getDateRange(timeline);
-        const recentOrders = filterByDate(storeOrders, dateRange);
+        const recentOrders = periodStoreOrders;
         const soldProductNames = new Set();
         recentOrders.forEach(o => (o.items || []).forEach(it => { if (it.product_name) soldProductNames.add(it.product_name); }));
         const slowMoving = products.filter(p => {
@@ -619,7 +594,7 @@ export default function StoreManagerDashboard() {
         });
 
         return { total: products.length, totalInventory, lowStock, outOfStock, slowMovingCount: slowMoving.length, slowMoving: slowMoving.slice(0, 20) };
-    }, [products, storeOrders, timeline, customDateFrom, customDateTo, variantInventory]);
+    }, [products, periodStoreOrders, variantInventory]);
 
     // All Products search + filters (same stock buckets as Admin's inventory tab: 0 / <5 / 5+)
     const filteredInventoryProducts = useMemo(() => {
@@ -765,8 +740,7 @@ export default function StoreManagerDashboard() {
     // TAB 7: ALTERATIONS
     // ═══════════════════════════════════════════════════════════
     const alterationStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const period = filterByDate(storeOrders, dateRange);
+        const period = periodStoreOrders;
         const alterations = period.filter(o => o.is_alteration);
         const totalOrders = period.length;
         const alterationRate = totalOrders > 0 ? ((alterations.length / totalOrders) * 100).toFixed(1) : 0;
@@ -805,10 +779,10 @@ export default function StoreManagerDashboard() {
         const flagged = byOutfit.filter(a => a.count >= 3);
 
         return { total: alterations.length, alterationRate, byOutfit, byCustomer, bySA, flagged };
-    }, [storeOrders, timeline, customDateFrom, customDateTo]);
+    }, [periodStoreOrders]);
 
     // Resets
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, sortBy, filters]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, sortBy, filters, ordersPeriodRange]);
 
     // Close filter dropdowns when clicking outside
     useEffect(() => {
@@ -826,8 +800,6 @@ export default function StoreManagerDashboard() {
             if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
         }
     }, [activeTab, products]);
-
-    const handleTimelineChange = (v) => { setTimeline(v); setShowCustomDatePicker(v === "custom"); };
 
     // ═══════════════════════════════════════════════════════════
     // RENDER
@@ -876,23 +848,8 @@ export default function StoreManagerDashboard() {
                 {/* MAIN */}
                 <main className="sm-content">
 
-                    {/* Timeline bar */}
-                    {["sales", "sa_performance", "returns", "inventory", "alterations"].includes(activeTab) && (
-                        <div className="sm-filters-bar">
-                            <div className="sm-timeline-pills">
-                                {TIMELINE_OPTIONS.map(opt => (
-                                    <button key={opt.value} className={`sm-pill ${timeline === opt.value ? "active" : ""}`} onClick={() => handleTimelineChange(opt.value)}>{opt.label}</button>
-                                ))}
-                            </div>
-                            {showCustomDatePicker && (
-                                <div className="sm-date-range">
-                                    <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                    <span className="sm-date-sep">{"\u2192"}</span>
-                                    <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    {/* Timeline bar (shared PeriodFilter) */}
+                    {["sales", "sa_performance", "returns", "inventory", "alterations"].includes(activeTab) && periodControl}
 
                     {/* ═══════════ TAB 1: SALES OVERVIEW ═══════════ */}
                     {activeTab === "sales" && (
@@ -1094,17 +1051,13 @@ export default function StoreManagerDashboard() {
                             <div className="sm-filter-bar">
                                 <div className="sm-filter-dropdown">
                                     <button
-                                        className={`sm-filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`}
+                                        className={`sm-filter-btn ${ordersTimeline !== "all" ? "active" : ""}`}
                                         onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}
                                     >Date Range {"\u25BE"}</button>
                                     {openDropdown === "date" && (
                                         <div className="sm-dropdown-panel">
-                                            <div className="sm-dropdown-title">Select Date Range</div>
-                                            <div className="sm-date-inputs">
-                                                <input type="date" value={filters.dateFrom} onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))} />
-                                                <span>to</span>
-                                                <input type="date" value={filters.dateTo} onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))} />
-                                            </div>
+                                            <div className="sm-dropdown-title">Select Period</div>
+                                            <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
                                             <button className="sm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
                                         </div>
                                     )}

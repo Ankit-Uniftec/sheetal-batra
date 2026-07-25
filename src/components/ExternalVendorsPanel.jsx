@@ -9,6 +9,7 @@ import {
     externalMovementsToCsvRows,
 } from "../utils/externalMovements";
 import { buildCsv, downloadCsv } from "./AddProduct/csvHelpers";
+import { usePeriodFilter } from "./PeriodFilter";
 import "./ExternalVendorsPanel.css";
 
 const CSV_HEADERS = [
@@ -40,33 +41,39 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
     const [stage, setStage] = useState("");
     const [status, setStatus] = useState(""); // "" = all statuses (full history)
     const [overdueOnly, setOverdueOnly] = useState(false);
-    const [from, setFrom] = useState(""); // sent-out date range (exit_scan_at)
-    const [to, setTo] = useState("");
+    // Sent-out period (exit_scan_at) — shared PeriodFilter (select).
+    const {
+        control: periodControl, timeline: periodTimeline,
+        inPeriod, range: periodRange, props: periodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Sent out:" });
 
     const vendors = useMemo(() => externalMovementVendors(rows), [rows]);
     // Per-stage counts (busiest first) — the count-labelled dropdown + the
     // "most out for" insight chip.
     const stageCounts = useMemo(() => externalMovementStages(rows), [rows]);
     const topStage = stageCounts[0] || null;
-    const filtered = useMemo(
-        () => filterExternalMovements(rows, { search, vendor, componentType, status, overdueOnly, stage, from, to }),
-        [rows, search, vendor, componentType, status, overdueOnly, stage, from, to]
-    );
+    const filtered = useMemo(() => {
+        const periodRows = periodRange ? rows.filter((r) => r.exit_scan_at && inPeriod(r.exit_scan_at)) : rows;
+        return filterExternalMovements(periodRows, { search, vendor, componentType, status, overdueOnly, stage });
+    }, [rows, search, vendor, componentType, status, overdueOnly, stage, periodRange, inPeriod]);
     // Summary reflects the whole dataset (so the counts don't collapse to the
     // filtered subset) — same intent as the other panels' summary strips.
     const summary = useMemo(() => externalMovementSummary(rows), [rows]);
 
     // Page within the filtered set; filter changes reset to page 1.
     const [page, setPage] = useState(1);
-    useEffect(() => { setPage(1); }, [rows, search, vendor, componentType, status, overdueOnly, stage, from, to]);
+    useEffect(() => { setPage(1); }, [rows, search, vendor, componentType, status, overdueOnly, stage, periodRange]);
     const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
     const pageRows = useMemo(
         () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
         [filtered, page]
     );
 
-    const hasFilters = search || vendor || componentType || status || overdueOnly || stage || from || to;
-    const clear = () => { setSearch(""); setVendor(""); setComponentType(""); setStatus(""); setOverdueOnly(false); setStage(""); setFrom(""); setTo(""); };
+    const hasFilters = search || vendor || componentType || status || overdueOnly || stage || periodTimeline !== "all";
+    const clear = () => {
+        setSearch(""); setVendor(""); setComponentType(""); setStatus(""); setOverdueOnly(false); setStage("");
+        periodProps.setTimeline("all"); periodProps.setCustomFrom(""); periodProps.setCustomTo("");
+    };
 
     // Export exactly what is currently filtered (the same set the user sees),
     // as a UTF-8-BOM CSV that Excel opens natively.
@@ -110,12 +117,8 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
                     <option value="configured">Awaiting scan-out</option>
                 </select>
                 <label className="ev-check"><input type="checkbox" checked={overdueOnly} onChange={toggleOverdue} /> Overdue only</label>
-                {/* Sent-out date range (filters on exit_scan_at). */}
-                <div className="ev-date-range" title="Filter by the date the piece was sent out to the vendor">
-                    <input className="ev-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Sent out from" />
-                    <span>→</span>
-                    <input className="ev-input" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="Sent out to" />
-                </div>
+                {/* Sent-out period (filters on exit_scan_at). */}
+                {periodControl}
                 {hasFilters && <button className="ev-clear" onClick={clear}>Clear</button>}
                 <button className="ev-export" onClick={handleExport} disabled={filtered.length === 0} title="Download the filtered list as a CSV (opens in Excel)">
                     Export ({filtered.length})
