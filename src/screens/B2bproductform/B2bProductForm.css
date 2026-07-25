@@ -1,10 +1,95 @@
 /* ===================================
    B2B PRODUCT FORM - Overrides for B2B
-   Base styles come from Screen4.css
+   Base styles come from Screen4.css.
+   All rules are scoped under .b2b-pf-page (added to the page's
+   .screen4-bg root) so these overrides win over Screen4.css by
+   specificity, independent of lazy-chunk CSS load order.
    =================================== */
 
+/* Pin the shared card/form layout to this page so it survives even when a
+   lazy-loaded chunk redefines the generic Screen4.css classes or arrives
+   late. Keeps the form on the wide, centred card. */
+.b2b-pf-page .screen4-card {
+  width: 95%;
+  max-width: 1300px;
+  margin: 20px auto;
+}
+
+.b2b-pf-page .screen4-form {
+  flex: 1;
+  width: 100%;
+}
+
+/* Pin the intended field look for this form. The generic .row/.field/.input-line
+   classes are redefined differently in Screen4.css, Screen3.css and Screen6.css;
+   with lazy-loaded chunks whichever loads last wins globally, so this form's
+   appearance was flipping between a boxed style and an underline style depending
+   on which dashboard the user visited first. These scoped rules make the
+   design (label above a borderless input, gold underline under the field) win
+   deterministically by specificity, regardless of chunk order. */
+/* Top-level form rows only (direct children of .screen4-form) — NOT the
+   boxed inputs inside the edit panels (.expand-panel.full-edit), which keep
+   Screen4's boxed .input-line look. */
+.b2b-pf-page .screen4-form > .row {
+  display: flex;
+  gap: 25px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.b2b-pf-page .screen4-form > .row > .field {
+  flex: 1;
+  min-width: 150px;
+  min-height: 0;
+  display: block;
+  padding: 8px 0 0;
+  margin: 0;
+  border-bottom: 2px solid #d5b85a;
+}
+
+.b2b-pf-page .screen4-form > .row > .field > label {
+  display: block;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+  margin-bottom: 6px;
+  white-space: normal;
+}
+
+/* Borderless, transparent inputs — the gold line comes from the .field */
+.b2b-pf-page .screen4-form > .row > .field > .input-line,
+.b2b-pf-page .screen4-form > .row > .field input.input-line {
+  width: 100%;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 0;
+  font-size: 15px;
+  outline: none;
+}
+
+@media (max-width: 1100px) {
+  .b2b-pf-page .screen4-form > .row {
+    gap: 15px;
+  }
+}
+
+@media (max-width: 600px) {
+  .b2b-pf-page .screen4-form > .row {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .b2b-pf-page .screen4-form > .row > .field {
+    min-width: 100%;
+    flex: 1 1 100%;
+  }
+}
+
 /* B2B Vendor Badge in header */
-.b2b-vendor-badge {
+.b2b-pf-page .b2b-vendor-badge {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -14,20 +99,20 @@
   padding: 6px 14px;
 }
 
-.b2b-vendor-badge .vendor-name {
+.b2b-pf-page .b2b-vendor-badge .vendor-name {
   font-weight: 600;
   font-size: 14px;
   color: #333;
 }
 
-.b2b-vendor-badge .vendor-code {
+.b2b-pf-page .b2b-vendor-badge .vendor-code {
   font-size: 12px;
   color: #888;
   font-family: monospace !important;
 }
 
 /* Order Type Badge */
-.b2b-order-type-badge {
+.b2b-pf-page .b2b-order-type-badge {
   display: inline-block;
   padding: 4px 12px;
   border-radius: 6px;
@@ -35,18 +120,18 @@
   font-weight: 600;
 }
 
-.b2b-order-type-badge.buyout {
+.b2b-pf-page .b2b-order-type-badge.buyout {
   background: #e3f2fd;
   color: #1565c0;
 }
 
-.b2b-order-type-badge.consignment {
+.b2b-pf-page .b2b-order-type-badge.consignment {
   background: #f3e5f5;
   color: #7b1fa2;
 }
 
 /* ===== ADDED PRODUCTS BOX ===== */
-.added-products-top {
+.b2b-pf-page .added-products-top {
   margin-bottom: 20px;
   background: #FFFFFFB0;
   border: 1px solid #D4D4D4;
@@ -54,27 +139,27 @@
   padding: 12px;
 }
 
-.added-product-row {
+.b2b-pf-page .added-product-row {
   padding: 10px 0;
   border-bottom: 1px solid #f0f0f0;
 }
 
-.added-product-row:last-child {
+.b2b-pf-page .added-product-row:last-child {
   border-bottom: none;
 }
 
-.product-info {
+.b2b-pf-page .product-info {
   font-size: 13px;
   color: #333;
 }
 
-.product-buttons {
+.b2b-pf-page .product-buttons {
   display: flex;
   gap: 8px;
   margin-top: 6px;
 }
 
-.product-buttons button {
+.b2b-pf-page .product-buttons button {
   border: none;
   background: none;
   cursor: pointer;
@@ -84,16 +169,16 @@
   transition: background 0.15s;
 }
 
-.product-buttons button:hover {
+.b2b-pf-page .product-buttons button:hover {
   background: #f0f0f0;
 }
 
-.product-buttons button.delete:hover {
+.b2b-pf-page .product-buttons button.delete:hover {
   background: #ffebee;
 }
 
 /* Expand Panel */
-.expand-panel.full-edit {
+.b2b-pf-page .expand-panel.full-edit {
   margin-top: 10px;
   padding: 12px;
   background: rgba(213, 184, 90, 0.05);
@@ -101,12 +186,12 @@
   border: 1px solid #eee;
 }
 
-.edit-size-box {
+.b2b-pf-page .edit-size-box {
   margin: 10px 0;
 }
 
 /* ===== SUMMARY BOX ===== */
-.summary-box-fixed {
+.b2b-pf-page .summary-box-fixed {
   background: #FFFFFFB0;
   border: 1px solid #D4D4D4;
   border-radius: 12px;
@@ -114,85 +199,85 @@
   margin-top: 20px;
 }
 
-.summary-box-fixed h3 {
+.b2b-pf-page .summary-box-fixed h3 {
   font-family: "Athleas", serif !important;
   color: #d5b85a !important;
   font-size: 16px;
   margin: 0 0 10px 0;
 }
 
-.summary-box-fixed p {
+.b2b-pf-page .summary-box-fixed p {
   margin: 6px 0;
   font-size: 14px;
 }
 
-.summary-box-fixed .grand-total {
+.b2b-pf-page .summary-box-fixed .grand-total {
   font-size: 16px;
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid #D4D4D4;
 }
 
-.summary-box-fixed .grand-total strong {
+.b2b-pf-page .summary-box-fixed .grand-total strong {
   color: #d5b85a;
 }
 
 /* ===== FOOTER BUTTONS ===== */
-.footer-btns {
+.b2b-pf-page .footer-btns {
   display: flex;
-  gap: 12px;
-  margin-top: 20px;
+  gap: 16px;
+  margin-top: 30px;
   justify-content: center;
   flex-wrap: wrap;
 }
 
-.footer-btns button {
-  padding: 12px 28px;
+.b2b-pf-page .footer-btns button {
+  padding: 14px 34px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.productBtn {
+.b2b-pf-page .productBtn {
   background: #d5b85a;
   border: none;
   color: white !important;
 }
 
-.productBtn:hover {
+.b2b-pf-page .productBtn:hover {
   background: white;
   border: 1px solid #d5b85a;
   color: #d5b85a !important;
 }
 
-.draftBtn {
+.b2b-pf-page .draftBtn {
   background: #d5b85a;
   border: none;
   color: white !important;
 }
 
-.draftBtn:hover {
+.b2b-pf-page .draftBtn:hover {
   background: white;
   border: 1px solid #d5b85a;
   color: #d5b85a !important;
 }
 
-.continueBtn {
+.b2b-pf-page .continueBtn {
   background: #d5b85a;
   border: none;
   color: white !important;
 }
 
-.continueBtn:hover {
+.b2b-pf-page .continueBtn:hover {
   background: white;
   border: 1px solid #d5b85a;
   color: #d5b85a !important;
 }
 
 /* ===== BACK BUTTON ===== */
-.back-btn {
+.b2b-pf-page .back-btn {
   position: fixed;
   bottom: 40px;
   left: 30px;
@@ -212,13 +297,13 @@
   transition: all 0.2s;
 }
 
-.back-btn:hover {
+.b2b-pf-page .back-btn:hover {
   background: #d5b85a;
   color: white !important;
 }
 
 /* ===== MODAL ===== */
-.modal-overlay {
+.b2b-pf-page .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
@@ -228,7 +313,7 @@
   z-index: 500;
 }
 
-.modal-box {
+.b2b-pf-page .modal-box {
   background: white;
   border-radius: 12px;
   padding: 24px;
@@ -237,27 +322,27 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
 }
 
-.modal-box h3 {
+.b2b-pf-page .modal-box h3 {
   font-family: "Athleas", serif !important;
   color: #d5b85a !important;
   margin: 0 0 16px 0;
 }
 
-.modal-box label {
+.b2b-pf-page .modal-box label {
   display: block;
   font-size: 13px;
   margin-bottom: 8px;
   color: #555;
 }
 
-.modal-actions {
+.b2b-pf-page .modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 16px;
 }
 
-.cancel-btn {
+.b2b-pf-page .cancel-btn {
   padding: 8px 18px;
   border: 1px solid #D4D4D4;
   border-radius: 6px;
@@ -265,7 +350,7 @@
   cursor: pointer;
 }
 
-.confirm-btn {
+.b2b-pf-page .confirm-btn {
   padding: 8px 18px;
   border: none;
   border-radius: 6px;
@@ -274,17 +359,17 @@
   cursor: pointer;
 }
 
-.confirm-btn:hover {
+.b2b-pf-page .confirm-btn:hover {
   background: #c9a94e;
 }
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
-  .footer-btns {
+  .b2b-pf-page .footer-btns {
     flex-direction: column;
   }
 
-  .footer-btns button {
+  .b2b-pf-page .footer-btns button {
     width: 100%;
   }
 }

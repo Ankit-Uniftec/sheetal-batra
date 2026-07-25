@@ -35,7 +35,7 @@ import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfLazy";
 import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_SEGMENTS, getOrderStatusLabel } from "../../../utils/barcodeService";
-import { computeChannelBreakdown } from "../../../utils/productionMetrics";
+import { computeChannelBreakdown, computeStatusStats, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady } from "../../../utils/productionMetrics";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
@@ -91,6 +91,7 @@ const Icons = {
     rotate: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>,
     tag: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>,
     wallet: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg>,
+    layers: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d5b85a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>,
 };
 
 // ==================== STATUS TABS ====================
@@ -143,6 +144,20 @@ const STORE_FILTER_OPTIONS = [
 ];
 const matchesStoreFilter = (order, selected) =>
     STORE_FILTER_OPTIONS.some((opt) => selected.includes(opt.value) && opt.match(order));
+
+// "Currently running late" — the single source of truth for every delayed
+// figure on this dashboard (the In-Progress/Delayed card, the Currently
+// Running Late by-channel list, the Total-vs-Late chart, and the delayedOnly
+// order filter). An order is late only while it is STILL RUNNING: dispatched
+// counts as done (out of production), same as delivered/completed/cancelled, so
+// the number drops the moment an order is dispatched/finished. Past its
+// customer delivery date is the "late" test.
+const DONE_STATUSES = new Set(["delivered", "completed", "dispatched", "cancelled"]);
+const isOrderRunningLate = (o, now = new Date()) => {
+    const s = (o.status || "").toLowerCase();
+    if (DONE_STATUSES.has(s) || o.warehouse_stage === "dispatched") return false;
+    return o.delivery_date && new Date(o.delivery_date) < now;
+};
 
 // The distinct products (item_index) still dispatchable in an order's component
 // list. An order can hold several products, each with its own pieces; >1 here
@@ -230,7 +245,7 @@ export default function ProductionManagerDashboard() {
     const [channelFilter, setChannelFilter] = useFilterParam("channel", "all");
     const [statusTab, setStatusTab] = useFilterParam("status", "all");
     const [sortBy, setSortBy] = useFilterParam("sort", "newest");
-    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
+    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false });
     // Order-date scope for the orders list — shared PeriodFilter (select),
     // rendered inside the Date Range dropdown panel.
     const {
@@ -355,7 +370,7 @@ export default function ProductionManagerDashboard() {
             while (!cDone) {
                 const { data: cData, error: cErr } = await supabase
                     .from("order_components")
-                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts")
+                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts, is_rework, is_active")
                     .order("created_at", { ascending: false })
                     .range(cFrom, cFrom + PAGE_SIZE - 1);
                 if (cErr) {
@@ -487,11 +502,13 @@ export default function ProductionManagerDashboard() {
         else if (type === "stage") setFilters(prev => ({ ...prev, stage: prev.stage.filter(v => v !== value), stageKind: "both" }));
         else if (type === "disposedOnly") setFilters(prev => ({ ...prev, disposedOnly: false }));
         else if (type === "delayedOnly") setFilters(prev => ({ ...prev, delayedOnly: false }));
+        else if (type === "dispatchedOnly") setFilters(prev => ({ ...prev, dispatchedOnly: false }));
+        else if (type === "dispatchReadyOnly") setFilters(prev => ({ ...prev, dispatchReadyOnly: false }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
     const clearAllFilters = () => {
-        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false });
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false });
         clearOrdersPeriod();
     };
 
@@ -555,12 +572,44 @@ export default function ProductionManagerDashboard() {
         setActiveTab("orders");
     };
 
-    // Drill from a "Delayed by Channel" row into that channel's delayed orders:
-    // the delayed filter plus the store filter for just that channel.
+    // Drill from a "Currently Running Late by Channel" row into that channel's
+    // late orders: the delayed filter plus the store filter for just that channel.
     const handleDelayedChannelClick = (storeValue) => {
         setFilters(prev => ({ ...prev, delayedOnly: true, store: [storeValue] }));
         setStatusTab("unfulfilled");
         setChannelFilter("all");
+        setActiveTab("orders");
+    };
+
+    // Drill from the "Dispatch Backlog" card into orders that have a component
+    // ready at the packaging_dispatch stage.
+    const handleDispatchBacklogClick = () => {
+        setFilters(prev => ({ ...prev, dispatchReadyOnly: true }));
+        setStatusTab("all");
+        setChannelFilter("all");
+        setActiveTab("orders");
+    };
+
+    // Drill from a Production Pipeline row into the matching orders. Each row
+    // clears the mutually-exclusive drill flags then sets its own target status
+    // (Dispatched has no status tab, so it uses the dispatchedOnly flag).
+    const handlePipelineClick = (key) => {
+        setChannelFilter("all");
+        setFilters(prev => ({
+            ...prev,
+            delayedOnly: false, disposedOnly: false, dispatchReadyOnly: false,
+            dispatchedOnly: key === "dispatched",
+            stage: key === "order_received" ? ["order_received"] : [],
+            stageKind: "both",
+        }));
+        switch (key) {
+            case "order_received": setStatusTab("unfulfilled"); break;
+            case "in_production": setStatusTab("unfulfilled"); break;
+            case "completed": setStatusTab("completed"); break;
+            case "dispatched": setStatusTab("all"); break;
+            case "delivered": setStatusTab("delivered"); break;
+            default: setStatusTab("all");
+        }
         setActiveTab("orders");
     };
 
@@ -580,7 +629,9 @@ export default function ProductionManagerDashboard() {
         });
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
         if (filters.disposedOnly) chips.push({ type: "disposedOnly", label: "Disposed components" });
-        if (filters.delayedOnly) chips.push({ type: "delayedOnly", label: "Delayed (past delivery)" });
+        if (filters.delayedOnly) chips.push({ type: "delayedOnly", label: "Currently running late" });
+        if (filters.dispatchedOnly) chips.push({ type: "dispatchedOnly", label: "Dispatched" });
+        if (filters.dispatchReadyOnly) chips.push({ type: "dispatchReadyOnly", label: "Ready for dispatch" });
         return chips;
     }, [filters, ordersTimeline]);
 
@@ -787,24 +838,9 @@ export default function ProductionManagerDashboard() {
 
     // Channel + status counts are computed by the same logic over either the
     // full order set (shared with the Production tab) or the Overview
-    // period-filtered set (overviewOrders). Extracted so the Overview filter can
-    // reuse it without changing the shared (full-orders) versions.
-    // Pipeline counts from the real signals (status + warehouse_stage). The old
-    // version read dead fields (o.status "prepared", o.production_status) that
-    // are null on every row. Mirrors the shared computeStatusStats.
-    const computeStatusStats = (list) => {
-        const st = (o) => (o.status || "").toLowerCase();
-        const orderReceived = list.filter(o => st(o) === "order_received" && (!o.warehouse_stage || o.warehouse_stage === "order_received")).length;
-        const completed = list.filter(o => st(o) === "completed").length;
-        const dispatched = list.filter(o => st(o) === "dispatched" || o.warehouse_stage === "dispatched").length;
-        const delivered = list.filter(o => st(o) === "delivered").length;
-        const inProd = list.filter(o => {
-            const s = st(o);
-            if (["completed", "dispatched", "delivered", "cancelled"].includes(s)) return false;
-            return o.warehouse_stage && o.warehouse_stage !== "order_received";
-        }).length;
-        return { orderReceived, inProd, completed, dispatched, delivered };
-    };
+    // period-filtered set (overviewOrders). computeStatusStats /
+    // computeProductionMetrics now come from the shared util (src/utils/
+    // productionMetrics.js) so every dashboard shares ONE implementation.
     const statusStats = useMemo(() => computeStatusStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Human label for the current Overview period (used in the revenue card etc.).
@@ -831,6 +867,16 @@ export default function ProductionManagerDashboard() {
         [components, inOverviewPeriod]
     );
 
+    // Total components CONTAINED IN the orders shown on the Overview — counted by
+    // order membership, NOT by scan time. This is the count that lines up with
+    // the Total Orders card: 2 orders with 3 + 4 pieces = 7. (overviewComponents
+    // above is scan-time-scoped for the stage cards, so it can't be used here —
+    // it would exclude pieces of orders that weren't scanned in the period.)
+    const overviewComponentCount = useMemo(() => {
+        const ids = new Set(overviewOrders.map(o => o.id));
+        return components.reduce((n, c) => n + (ids.has(c.order_id) ? 1 : 0), 0);
+    }, [components, overviewOrders]);
+
     // Disposed components in the selected Overview period (disposal sets
     // stage_updated_at = NOW(), so overviewComponents already scopes by when it
     // was disposed). Powers the clickable "Disposed" Business Performance card.
@@ -843,6 +889,13 @@ export default function ProductionManagerDashboard() {
     const disposedOrderIds = useMemo(() => {
         const s = new Set();
         components.forEach((c) => { if (c.current_stage === "disposed") s.add(c.order_id); });
+        return s;
+    }, [components]);
+    // Orders with ≥1 component sitting at packaging_dispatch (ready, not yet
+    // dispatch-scanned) — the set the "Dispatch Backlog" card drills into.
+    const dispatchReadyOrderIds = useMemo(() => {
+        const s = new Set();
+        components.forEach((c) => { if (c.current_stage === "packaging_dispatch") s.add(c.order_id); });
         return s;
     }, [components]);
 
@@ -909,63 +962,25 @@ export default function ProductionManagerDashboard() {
         return components.filter((c) => (c.current_stage || "order_received") === stageDrillDown);
     }, [components, stageDrillDown]);
 
-    const computeProductionMetrics = (orders, statusStats) => {
-        const now = new Date();
-        const activeOrders = orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
-        const delayed = activeOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
-        const reworkOrders = orders.filter(o => o.is_rework);
-        const qcFailed = orders.filter(o => o.qc_fail_reason);
-        const reworkPct = orders.length > 0 ? ((reworkOrders.length / orders.length) * 100) : 0;
-        const qcFailRate = orders.length > 0 ? ((qcFailed.length / orders.length) * 100) : 0;
+    // order_id -> order, so the dispatch-backlog helper can flag overdue-ready
+    // pieces against their order's delivery date. Full-orders scope.
+    const orderById = useMemo(() => {
+        const m = {};
+        orders.forEach(o => { m[o.id] = o; });
+        return m;
+    }, [orders]);
 
-        // Bottleneck logic — only orders genuinely in production flow
-        // Excludes raw "pending" orders (not yet confirmed, not a production stage)
-        const inFlowOrders = activeOrders.filter(o =>
-            o.warehouse_stage ||
-            o.status === "confirmed" ||
-            o.status === "prepared"
-        );
-
-        const stageData = {};
-        inFlowOrders.forEach(o => {
-            const stage = o.warehouse_stage || o.status || "unknown";
-            if (!stageData[stage]) stageData[stage] = { total: 0, overdue: 0, totalOverdueDays: 0 };
-            stageData[stage].total++;
-            if (o.delivery_date && new Date(o.delivery_date) < now) {
-                const days = Math.ceil((now - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
-                stageData[stage].overdue++;
-                stageData[stage].totalOverdueDays += days;
-            }
-        });
-
-        const stuckByStage = Object.entries(stageData)
-            .map(([name, data]) => ({
-                name: name.replace(/_/g, " "),
-                total: data.total,
-                overdue: data.overdue,
-                avgOverdueDays: data.overdue > 0 ? Math.round(data.totalOverdueDays / data.overdue) : 0,
-                severity: data.overdue > 0 ? "critical" : data.total >= 3 ? "warning" : "normal",
-            }))
-            .sort((a, b) => b.overdue - a.overdue || b.total - a.total);
-
-        const criticalBottlenecks = stuckByStage.filter(s => s.severity === "critical").length;
-        const topBottleneck = stuckByStage[0] || null;
-
-        const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
-        const overdueDispatch = readyNotDispatched.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
-
-        return {
-            productionLoad: { active: statusStats.inProd, percentage: activeOrders.length > 0 ? Math.round((statusStats.inProd / activeOrders.length) * 100) : 0 },
-            bottlenecks: { count: criticalBottlenecks, critical: criticalBottlenecks, topBottleneck: topBottleneck?.name || "None", topOverdue: topBottleneck?.overdue || 0, topAvgDays: topBottleneck?.avgOverdueDays || 0 },
-            rework: { percentage: reworkPct.toFixed(1), totalReworks: reworkOrders.length, trend: reworkPct < 5 ? "down" : "up" },
-            dispatchBacklog: { pending: readyNotDispatched.length, overdue: overdueDispatch.length, avgDelay: delayed.length > 0 ? `${Math.round(delayed.reduce((s, o) => s + (now - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24), 0) / delayed.length)}d` : "0d" },
-            delayed: delayed.length, delayRate: activeOrders.length > 0 ? ((delayed.length / activeOrders.length) * 100).toFixed(1) : "0",
-            qcFailed: qcFailed.length, qcFailRate: qcFailRate.toFixed(1), stuckByStage,
-            avgLeadTime: (() => { let total = 0, count = 0; orders.forEach(o => { if (o.in_production_at && (o.ready_for_dispatch_at || o.delivered_at)) { const days = (new Date(o.ready_for_dispatch_at || o.delivered_at) - new Date(o.in_production_at)) / (1000 * 60 * 60 * 24); if (days > 0 && days < 365) { total += days; count++; } } }); return count > 0 ? (total / count).toFixed(1) : "0"; })(),
-            exceedingDelivery: orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled" && o.delivery_date && new Date(o.delivery_date) < now).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date)),
-        };
-    };
-    const productionMetrics = useMemo(() => computeProductionMetrics(orders, statusStats), [orders, statusStats]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Piece-level opts for computeProductionMetrics (full-orders scope, for the
+    // Production tab). Re-journey % is (live re-journey pieces / active pieces),
+    // matching the Re-journeys tab; Dispatch Backlog is pieces at
+    // packaging_dispatch. Both come from the real order_components signals — the
+    // old orders.is_rework / orders.ready_for_dispatch_at fields are never written.
+    const productionOpts = useMemo(() => ({
+        reJourneyActive: computeReJourneyCount(components),
+        reJourneyDenom: countActiveComponents(components),
+        dispatchReady: computeDispatchReady(components, orderById),
+    }), [components, orderById]);
+    const productionMetrics = useMemo(() => computeProductionMetrics(orders, statusStats, productionOpts), [orders, statusStats, productionOpts]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
 
@@ -980,8 +995,13 @@ export default function ProductionManagerDashboard() {
         // Total revenue for the period.
         const revenuePeriod = overviewOrders.reduce((sum, o) => sum + (isRevenue(o) ? Number(o.grand_total || 0) : 0), 0);
 
-        // Pending + Delayed (open orders in the period).
-        const openOrders = overviewOrders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
+        // Pending + Delayed (still-running orders in the period). Dispatched is
+        // treated as done (out of production), so it's excluded from both — the
+        // In-Progress and Delayed numbers count only orders still on the floor.
+        const openOrders = overviewOrders.filter(o => {
+            const s = (o.status || "").toLowerCase();
+            return !DONE_STATUSES.has(s) && o.warehouse_stage !== "dispatched";
+        });
         const pendingCount = openOrders.length;
         const delayedCount = openOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now).length;
 
@@ -1022,17 +1042,14 @@ export default function ProductionManagerDashboard() {
         };
     }, [overviewOrders]);
 
-    // Which channel the delayed orders are coming from — same period + same
-    // "delayed" rule as the In-Progress/Delayed card (open order past its
-    // delivery date), bucketed by the shared channel definitions so the parts
-    // sum to the card's delayed count. Sorted worst-first.
+    // Which channel the currently-running-late orders are coming from — same
+    // period + same isOrderRunningLate rule as the In-Progress/Delayed card (a
+    // still-running order past its delivery date; dispatched/completed excluded),
+    // bucketed by the shared channel definitions so the parts sum to the card's
+    // delayed count. Sorted worst-first.
     const delayedByChannel = useMemo(() => {
         const now = new Date();
-        const delayed = overviewOrders.filter(o => {
-            const s = (o.status || "").toLowerCase();
-            if (s === "delivered" || s === "completed" || s === "cancelled") return false;
-            return o.delivery_date && new Date(o.delivery_date) < now;
-        });
+        const delayed = overviewOrders.filter(o => isOrderRunningLate(o, now));
         const total = delayed.length;
         const rows = STORE_FILTER_OPTIONS.map(opt => {
             const count = delayed.filter(opt.match).length;
@@ -1048,12 +1065,40 @@ export default function ProductionManagerDashboard() {
         return { total, rows };
     }, [overviewOrders]);
 
+    // Total orders vs currently-running-late, per channel — the grouped-bar
+    // chart on the Overview. "Late" uses the SAME isOrderRunningLate rule as the
+    // list/card, so as orders are dispatched/completed the Late bar shrinks live.
+    // Zero-order channels are dropped so the chart only shows active ones.
+    const channelOrdersVsLate = useMemo(() => {
+        const now = new Date();
+        return STORE_FILTER_OPTIONS.map(opt => {
+            const inChannel = overviewOrders.filter(opt.match);
+            const late = inChannel.filter(o => isOrderRunningLate(o, now)).length;
+            return { name: opt.label, color: opt.color, Total: inChannel.length, Late: late };
+        }).filter(r => r.Total > 0);
+    }, [overviewOrders]);
+
     // Overview-scoped copies of the SHARED memos, computed over the period set.
     // The originals (channelStats/statusStats/productionMetrics over full orders)
     // stay untouched so the Production tab is unaffected.
     const statusStatsOv = useMemo(() => computeStatusStats(overviewOrders), [overviewOrders]); // eslint-disable-line react-hooks/exhaustive-deps
     const channelBreakdownOv = useMemo(() => computeChannelBreakdown(overviewOrders), [overviewOrders]);
-    const productionMetricsOv = useMemo(() => computeProductionMetrics(overviewOrders, statusStatsOv), [overviewOrders, statusStatsOv]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Piece-level opts for the Overview's Production Overview cards, scoped to the
+    // period's components (Re-journey % and Dispatch Backlog from the real
+    // order_components signals). overviewComponents is already period-scoped by
+    // scan time (stage_updated_at), which is the right scope for "currently in
+    // rework" — a rework re-stamps stage_updated_at.
+    const overviewOrderById = useMemo(() => {
+        const m = {};
+        overviewOrders.forEach(o => { m[o.id] = o; });
+        return m;
+    }, [overviewOrders]);
+    const productionOptsOv = useMemo(() => ({
+        reJourneyActive: computeReJourneyCount(overviewComponents),
+        reJourneyDenom: countActiveComponents(overviewComponents),
+        dispatchReady: computeDispatchReady(overviewComponents, overviewOrderById),
+    }), [overviewComponents, overviewOrderById]);
+    const productionMetricsOv = useMemo(() => computeProductionMetrics(overviewOrders, statusStatsOv, productionOptsOv), [overviewOrders, statusStatsOv, productionOptsOv]); // eslint-disable-line react-hooks/exhaustive-deps
     const recentOrdersOv = useMemo(() => overviewOrders.slice(0, 10), [overviewOrders]);
 
     // ==================== TOP PRODUCT / COLOR / SIZE BY STORE (period-scoped) ====================
@@ -1195,16 +1240,19 @@ export default function ProductionManagerDashboard() {
         });
         // Disposed drill-down: keep only orders that have ≥1 disposed component.
         if (filters.disposedOnly) result = result.filter(o => disposedOrderIds.has(o.id));
-        // Delayed drill-down: open orders whose delivery date has passed (same
-        // rule as the Pending/Delayed card).
+        // Currently-running-late drill-down: same isOrderRunningLate rule as the
+        // Currently Running Late card/list (dispatched/completed excluded).
         if (filters.delayedOnly) {
             const now = new Date();
-            result = result.filter(o => {
-                const s = (o.status || "").toLowerCase();
-                if (s === "delivered" || s === "completed" || s === "cancelled") return false;
-                return o.delivery_date && new Date(o.delivery_date) < now;
-            });
+            result = result.filter(o => isOrderRunningLate(o, now));
         }
+        // Dispatched drill-down: from the Production Pipeline "Dispatched" row.
+        if (filters.dispatchedOnly) {
+            result = result.filter(o => (o.status || "").toLowerCase() === "dispatched" || o.warehouse_stage === "dispatched");
+        }
+        // Ready-for-dispatch drill-down: from the "Dispatch Backlog" card —
+        // orders with ≥1 component at the packaging_dispatch stage.
+        if (filters.dispatchReadyOnly) result = result.filter(o => dispatchReadyOrderIds.has(o.id));
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
             const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
@@ -1224,7 +1272,7 @@ export default function ProductionManagerDashboard() {
         return result;
         // vendorMap is a dep because client_name search resolves through it for B2B orders
         // orderStageGroups is a dep because the Stage filter matches on it (any-piece-at-stage)
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups, disposedOrderIds, ordersPeriodRange, inOrdersPeriod]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, vendorMap, orderStageGroups, disposedOrderIds, dispatchReadyOrderIds, ordersPeriodRange, inOrdersPeriod]);
 
     const orderTabCounts = useMemo(() => {
         const base = channelFilter === "all" ? orders : orders.filter(o => getOrderChannelLabel(o) === channelFilter);
@@ -1712,10 +1760,55 @@ export default function ProductionManagerDashboard() {
                                     />
                                 </div>
 
-                                {/* Which channel the delayed orders are coming from */}
+                                {/* ===== PRODUCTION METRICS SECTION ===== */}
+                                <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Production Overview</p>
+                                <div className="pm-stats-row-3">
+                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelBreakdownOv.total)} subtitle={`across ${channelBreakdownOv.segments.length} channels`} highlight={true} icon={Icons.package} />
+                                    <StatCard title="Total Components" value={formatIndianNumber(overviewComponentCount)} subtitle={`across ${overviewOrders.length} order${overviewOrders.length === 1 ? "" : "s"}`} icon={Icons.layers} />
+                                    <StatCard title="Production Load" value={`${productionMetricsOv.productionLoad.percentage}%`} subtitle={`${productionMetricsOv.productionLoad.active} in production`} icon={Icons.gear} />
+                                </div>
+                                <div className="pm-stats-row-3">
+                                    <StatCard title="Bottlenecks" value={productionMetricsOv.bottlenecks.count} subtitle={productionMetricsOv.bottlenecks.count > 0 ? `${productionMetricsOv.bottlenecks.topBottleneck} · ${productionMetricsOv.bottlenecks.topOverdue} overdue · avg ${productionMetricsOv.bottlenecks.topAvgDays}d late` : "No overdue stages"} highlight={productionMetricsOv.bottlenecks.count > 0} icon={Icons.warning} />
+                                    <StatCard title="Delayed Orders" value={productionMetricsOv.delayed} subtitle={`Delay rate: ${productionMetricsOv.delayRate}%`} highlight={productionMetricsOv.delayed > 0} icon={Icons.clock} />
+                                    <StatCard title="Re-journey %" value={`${productionMetricsOv.rework.percentage}%`} subtitle={`${productionMetricsOv.rework.totalReworks} piece${productionMetricsOv.rework.totalReworks === 1 ? "" : "s"} in rework ${"\u00B7"} View re-journeys`} highlight={productionMetricsOv.rework.totalReworks > 0} icon={Icons.refresh} onClick={() => setActiveTab("rejourneys")} />
+                                </div>
+                                <div className="pm-stats-row-3">
+                                    <StatCard title="Dispatch Backlog" value={productionMetricsOv.dispatchBacklog.pending} subtitle={productionMetricsOv.dispatchBacklog.pending > 0 ? `${productionMetricsOv.dispatchBacklog.overdue} overdue ${"\u00B7"} ready to dispatch` : "Nothing awaiting dispatch"} highlight={productionMetricsOv.dispatchBacklog.overdue > 0} icon={Icons.truck} onClick={productionMetricsOv.dispatchBacklog.pending > 0 ? handleDispatchBacklogClick : undefined} />
+                                </div>
+                                <div className="pm-channel-card">
+                                    <p className="pm-card-title">Orders by Channel</p>
+                                    <div className="pm-channel-body">
+                                        {channelBreakdownOv.segments.map((seg) => (
+                                            <ChannelRow key={seg.label} label={seg.label} count={seg.count} percentage={seg.pct} color={seg.color} />
+                                        ))}
+                                    </div>
+                                </div>
+                                {/* ===== TOTAL ORDERS vs CURRENTLY RUNNING LATE (by channel) ===== */}
+                                <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Orders vs Currently Running Late by Channel</p>
+                                <div className="pm-chart-card">
+                                    {channelOrdersVsLate.length === 0 ? (
+                                        <p className="pm-chart-empty">No orders in this period</p>
+                                    ) : (
+                                        <ResponsiveContainer width="100%" height={320}>
+                                            <BarChart data={channelOrdersVsLate} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                                                <XAxis dataKey="name" interval={0} tick={{ fontSize: 11, fill: "#555" }} angle={-20} textAnchor="end" height={50} />
+                                                <YAxis tick={{ fontSize: 11, fill: "#888" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                <Tooltip
+                                                    contentStyle={{ background: "#fff", border: "1px solid #e8e2d0", borderRadius: 10, fontSize: 12 }}
+                                                    cursor={{ fill: "rgba(213, 184, 90, 0.08)" }}
+                                                />
+                                                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                                                <Bar dataKey="Total" name="Total orders" fill="#d5b85a" radius={[4, 4, 0, 0]} barSize={22} />
+                                                <Bar dataKey="Late" name="Currently running late" fill="#c62828" radius={[4, 4, 0, 0]} barSize={22} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </div>
+                                {/* Which channel the currently-running-late orders are coming from */}
                                 {delayedByChannel.total > 0 && (
                                     <div className="pm-channel-card" style={{ marginTop: 18, borderLeft: "4px solid #c62828" }}>
-                                        <p className="pm-card-title">Delayed Orders by Channel <span className="pm-muted" style={{ fontSize: 12, fontWeight: 400 }}>({delayedByChannel.total} past delivery date)</span></p>
+                                        <p className="pm-card-title">Currently Running Late Orders by Channel <span className="pm-muted" style={{ fontSize: 12, fontWeight: 400 }}>({delayedByChannel.total} still open, past delivery date)</span></p>
                                         <div className="pm-channel-body">
                                             {delayedByChannel.rows.map(r => (
                                                 <ChannelRow
@@ -1822,26 +1915,6 @@ export default function ProductionManagerDashboard() {
                                     </div>
                                 </div>
 
-                                {/* ===== PRODUCTION METRICS SECTION ===== */}
-                                <p className="pm-card-title" style={{ margin: "18px 0 10px 2px", color: "#8B7355" }}>Production Overview</p>
-                                <div className="pm-stats-row-3">
-                                    <StatCard title="Total Orders (All Channels)" value={formatIndianNumber(channelBreakdownOv.total)} subtitle={`across ${channelBreakdownOv.segments.length} channels`} highlight={true} icon={Icons.package} />
-                                    <StatCard title="Production Load" value={`${productionMetricsOv.productionLoad.percentage}%`} subtitle={`${productionMetricsOv.productionLoad.active} in production`} icon={Icons.gear} />
-                                    <StatCard title="Bottlenecks" value={productionMetricsOv.bottlenecks.count} subtitle={productionMetricsOv.bottlenecks.count > 0 ? `${productionMetricsOv.bottlenecks.topBottleneck} · ${productionMetricsOv.bottlenecks.topOverdue} overdue · avg ${productionMetricsOv.bottlenecks.topAvgDays}d late` : "No overdue stages"} highlight={productionMetricsOv.bottlenecks.count > 0} icon={Icons.warning} />
-                                </div>
-                                <div className="pm-stats-row-3">
-                                    <StatCard title="Delayed Orders" value={productionMetricsOv.delayed} subtitle={`Delay rate: ${productionMetricsOv.delayRate}%`} highlight={productionMetricsOv.delayed > 0} icon={Icons.clock} />
-                                    <StatCard title="Rework %" value={`${productionMetricsOv.rework.percentage}%`} subtitle={`${productionMetricsOv.rework.totalReworks} items ${"\u00B7"} ${productionMetricsOv.rework.trend === "down" ? "\u2193 Improving" : "\u2191 Rising"}`} icon={Icons.refresh} />
-                                    <StatCard title="Dispatch Backlog" value={productionMetricsOv.dispatchBacklog.pending} subtitle={`${productionMetricsOv.dispatchBacklog.overdue} overdue ${"\u00B7"} Avg: ${productionMetricsOv.dispatchBacklog.avgDelay}`} highlight={productionMetricsOv.dispatchBacklog.overdue > 0} icon={Icons.truck} />
-                                </div>
-                                <div className="pm-channel-card">
-                                    <p className="pm-card-title">Orders by Channel</p>
-                                    <div className="pm-channel-body">
-                                        {channelBreakdownOv.segments.map((seg) => (
-                                            <ChannelRow key={seg.label} label={seg.label} count={seg.count} percentage={seg.pct} color={seg.color} />
-                                        ))}
-                                    </div>
-                                </div>
                                 <div className="pm-bottom-row">
                                     <div className="pm-recent-card">
                                         <div className="pm-card-header"><p className="pm-card-title">Recent Orders</p><button className="pm-view-all-btn" onClick={() => setActiveTab("orders")}>View All</button></div>
@@ -1855,8 +1928,8 @@ export default function ProductionManagerDashboard() {
                                     <div className="pm-pipeline-card">
                                         <p className="pm-card-title">Production Pipeline</p>
                                         <div className="pm-pipeline-body">
-                                            {[{ label: "Order Received", count: statusStatsOv.orderReceived, cls: "pm-dot-pending" }, { label: "In Production", count: statusStatsOv.inProd, cls: "pm-dot-inprod" }, { label: "Completed", count: statusStatsOv.completed, cls: "pm-dot-ready" }, { label: "Dispatched", count: statusStatsOv.dispatched, cls: "pm-dot-dispatched" }, { label: "Delivered", count: statusStatsOv.delivered, cls: "pm-dot-delivered" }].map(s => (
-                                                <div className="pm-pipeline-stage" key={s.label}><div className="pm-pipeline-label"><span className={`pm-pipeline-dot ${s.cls}`}></span><span>{s.label}</span></div><span className="pm-pipeline-count">{s.count}</span></div>
+                                            {[{ label: "Order Received", count: statusStatsOv.orderReceived, cls: "pm-dot-pending", key: "order_received" }, { label: "In Production", count: statusStatsOv.inProd, cls: "pm-dot-inprod", key: "in_production" }, { label: "Completed", count: statusStatsOv.completed, cls: "pm-dot-ready", key: "completed" }, { label: "Dispatched", count: statusStatsOv.dispatched, cls: "pm-dot-dispatched", key: "dispatched" }, { label: "Delivered", count: statusStatsOv.delivered, cls: "pm-dot-delivered", key: "delivered" }].map(s => (
+                                                <div className="pm-pipeline-stage pm-pipeline-clickable" key={s.label} role="button" tabIndex={0} onClick={() => handlePipelineClick(s.key)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePipelineClick(s.key); } }} title={`View ${s.label} orders`} style={{ cursor: "pointer" }}><div className="pm-pipeline-label"><span className={`pm-pipeline-dot ${s.cls}`}></span><span>{s.label}</span></div><span className="pm-pipeline-count">{s.count}</span></div>
                                             ))}
                                         </div>
                                     </div>

@@ -57,15 +57,68 @@ export function computeChannelBreakdown(list = []) {
   return { total, segments };
 }
 
+// Component stages that no longer count as "in re-journey" — a piece has
+// cleared production once it reaches one of these, so it drops off the live
+// rework count. Mirrors reJourneys.js TERMINAL_STAGES exactly so the Overview
+// card and the Re-journeys tab agree.
+const REJOURNEY_TERMINAL = new Set([
+  "qc_passed", "final_qc_passed", "packaging_dispatch", "dispatched", "disposed", "scrapped",
+]);
+
+// Components that no longer count toward the "active" population — the same set
+// the "Total Active Components" stage card excludes, so the Re-journey %
+// denominator reconciles with that card.
+const INACTIVE_COMPONENT_STAGES = new Set(["disposed", "scrapped"]);
+
+// Live re-journey count: pieces sent back to an earlier stage by a QC fail and
+// not yet cleared production. is_rework is the DB rework STATE; is_active !==
+// false keeps only live pieces; terminal stages are excluded (is_rework is
+// never reset). One definition, reused by every dashboard's Re-journey % card.
+export function computeReJourneyCount(components = []) {
+  return components.filter(c =>
+    c.is_rework && c.is_active !== false && !REJOURNEY_TERMINAL.has(c.current_stage)
+  ).length;
+}
+
+// Active-component population — the Re-journey % denominator (and the stage
+// card's grand total): every piece still in the system, disposed/scrapped out.
+export function countActiveComponents(components = []) {
+  return components.filter(c => !INACTIVE_COMPONENT_STAGES.has(c.current_stage)).length;
+}
+
+// Dispatch backlog from the REAL scan signal: pieces sitting at the
+// packaging_dispatch stage (ready, not yet dispatch-scanned). overdue = those
+// whose order is past its customer delivery date and not cancelled. Replaces
+// the dead orders.ready_for_dispatch_at path. `orderById` maps order_id -> order
+// so we can check the delivery date for the overdue split.
+export function computeDispatchReady(components = [], orderById = {}) {
+  const now = new Date();
+  const ready = components.filter(c => c.current_stage === "packaging_dispatch");
+  const overdue = ready.filter(c => {
+    const o = orderById[c.order_id];
+    return o && o.delivery_date && new Date(o.delivery_date) < now && o.status !== "cancelled";
+  });
+  return { pending: ready.length, overdue: overdue.length };
+}
+
 // The full production-operations metric set. `statusStats` must be
 // computeStatusStats(orders) for the same list.
-export function computeProductionMetrics(orders, statusStats) {
+//
+// `opts` carries the piece-level signals the pure order set can't express:
+//   reJourneyActive — live re-journey piece count (computeReJourneyCount)
+//   reJourneyDenom  — active-component count for the %; null falls back to
+//                     orders.length so callers with no components still work
+//   dispatchReady   — { pending, overdue } from computeDispatchReady
+// Omitting opts yields 0% re-journey / 0 dispatch — a strict improvement over
+// the old dead-field values for callers that don't (yet) pass components.
+export function computeProductionMetrics(orders, statusStats, opts = {}) {
   const now = new Date();
   const activeOrders = orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
   const delayed = activeOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
-  const reworkOrders = orders.filter(o => o.is_rework);
+  const reJourneyActive = opts.reJourneyActive || 0;
+  const reJourneyDenom = opts.reJourneyDenom != null ? opts.reJourneyDenom : orders.length;
   const qcFailed = orders.filter(o => o.qc_fail_reason);
-  const reworkPct = orders.length > 0 ? ((reworkOrders.length / orders.length) * 100) : 0;
+  const reworkPct = reJourneyDenom > 0 ? ((reJourneyActive / reJourneyDenom) * 100) : 0;
   const qcFailRate = orders.length > 0 ? ((qcFailed.length / orders.length) * 100) : 0;
 
   // Bottleneck logic — only orders genuinely in the production flow.
@@ -98,14 +151,16 @@ export function computeProductionMetrics(orders, statusStats) {
   const criticalBottlenecks = stuckByStage.filter(s => s.severity === "critical").length;
   const topBottleneck = stuckByStage[0] || null;
 
-  const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
-  const overdueDispatch = readyNotDispatched.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
+  // Dispatch backlog from the real packaging_dispatch scan signal (see
+  // computeDispatchReady). The old orders.ready_for_dispatch_at column is never
+  // written, so it always read 0/stray rows.
+  const dispatch = opts.dispatchReady || { pending: 0, overdue: 0 };
 
   return {
     productionLoad: { active: statusStats.inProd, percentage: activeOrders.length > 0 ? Math.round((statusStats.inProd / activeOrders.length) * 100) : 0 },
     bottlenecks: { count: criticalBottlenecks, critical: criticalBottlenecks, topBottleneck: topBottleneck?.name || "None", topOverdue: topBottleneck?.overdue || 0, topAvgDays: topBottleneck?.avgOverdueDays || 0 },
-    rework: { percentage: reworkPct.toFixed(1), totalReworks: reworkOrders.length, trend: reworkPct < 5 ? "down" : "up" },
-    dispatchBacklog: { pending: readyNotDispatched.length, overdue: overdueDispatch.length, avgDelay: delayed.length > 0 ? `${Math.round(delayed.reduce((s, o) => s + (now - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24), 0) / delayed.length)}d` : "0d" },
+    rework: { percentage: reworkPct.toFixed(1), totalReworks: reJourneyActive, trend: reworkPct < 5 ? "down" : "up" },
+    dispatchBacklog: { pending: dispatch.pending, overdue: dispatch.overdue, avgDelay: delayed.length > 0 ? `${Math.round(delayed.reduce((s, o) => s + (now - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24), 0) / delayed.length)}d` : "0d" },
     delayed: delayed.length, delayRate: activeOrders.length > 0 ? ((delayed.length / activeOrders.length) * 100).toFixed(1) : "0",
     qcFailed: qcFailed.length, qcFailRate: qcFailRate.toFixed(1), stuckByStage,
     avgLeadTime: (() => { let total = 0, count = 0; orders.forEach(o => { if (o.in_production_at && (o.ready_for_dispatch_at || o.delivered_at)) { const days = (new Date(o.ready_for_dispatch_at || o.delivered_at) - new Date(o.in_production_at)) / (1000 * 60 * 60 * 24); if (days > 0 && days < 365) { total += days; count++; } } }); return count > 0 ? (total / count).toFixed(1) : "0"; })(),

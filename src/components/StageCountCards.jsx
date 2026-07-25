@@ -85,12 +85,6 @@ const StageCountCards = ({
     <div className="scc-wrap">
       {title && <h3 className="scc-title">{title}</h3>}
       <div className="scc-grid">
-        {/* Total first, so every stage count reads against it. */}
-        <div className="scc-card scc-total">
-          <span className="scc-accent-bar" />
-          <span className="scc-count">{grandTotal}</span>
-          <span className="scc-label">{pieceMode ? "Total Components" : "Total Orders"}</span>
-        </div>
         {visible.map((g) => {
           const total = totalFor(g.key);
           const split = pieceMode ? pieceCounts[g.key] : null;
@@ -136,6 +130,14 @@ const StageCountCards = ({
             </div>
           );
         })}
+        {/* Total last — the reference number every stage count reads against.
+            grandTotal already excludes disposed/scrapped pieces, so it is the
+            count of ACTIVE components (piece mode). */}
+        <div className="scc-card scc-total">
+          <span className="scc-accent-bar" />
+          <span className="scc-count">{grandTotal}</span>
+          <span className="scc-label">{pieceMode ? "Total Active Components" : "Total Orders"}</span>
+        </div>
       </div>
     </div>
   );

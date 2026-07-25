@@ -160,7 +160,7 @@ export default function B2bProductionDashboard() {
                     while (true) {
                         const { data: cData, error: cErr } = await supabase
                             .from("order_components")
-                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts")
+                            .select("id, order_id, barcode, component_type, component_label, current_stage, item_index, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts, is_rework, is_active")
                             .order("created_at", { ascending: false })
                             .range(from, from + PAGE - 1);
                         if (cErr) { console.warn("order_components fetch failed:", cErr.message); break; }
@@ -613,7 +613,7 @@ export default function B2bProductionDashboard() {
                         {/* Production Overview — operational metrics for THIS
                             dashboard's B2B orders (single channel, no channel split). */}
                         <div className="prod-cell prod-overview-cell">
-                            <ProductionOverview orders={orders} totalLabel="Total B2B Orders" />
+                            <ProductionOverview orders={orders} components={componentsInPeriod} allComponents={components} totalLabel="Total B2B Orders" />
                         </div>
                     </>
                 )}

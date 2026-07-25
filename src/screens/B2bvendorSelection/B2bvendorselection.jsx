@@ -238,7 +238,7 @@ export default function B2bVendorSelection() {
     };
 
     return (
-        <div className="screen4-bg">
+        <div className="screen4-bg b2b-vs-page">
             {PopupComponent}
 
             <header className="pf-header">
