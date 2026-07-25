@@ -1,20 +1,23 @@
 import React, { useMemo } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import { computeStatusStats, computeChannelBreakdown, computeProductionMetrics } from "../utils/productionMetrics";
+import { computeStatusStats, computeChannelBreakdown, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady } from "../utils/productionMetrics";
 import "./ProductionOverview.css";
 
 // Shared "Production Overview" — the operational metric cards (Total Orders,
-// Production Load, Bottlenecks, Delayed, Rework %, Dispatch Backlog) plus the
-// pipeline breakdown. Feed it whatever order set the dashboard shows; every
+// Production Load, Bottlenecks, Delayed, Re-journey %, Dispatch Backlog) plus
+// the pipeline breakdown. Feed it whatever order set the dashboard shows; every
 // dashboard renders identical cards from the same shared compute.
 //
 //   orders       the order set to summarise (already scoped by the caller)
+//   components   the piece set for the same scope — powers Re-journey % and
+//                Dispatch Backlog (both are piece-level). Omit and those two
+//                cards read 0 (needs is_rework / is_active / current_stage).
 //   showChannel  include the "Orders by Channel" (all channels, stores split) block — only
 //                meaningful on the multi-channel Production Manager dashboard.
 //   totalLabel   heading for the Total Orders card (default "Total Orders").
 
 const Icon = {
-  package: "📦", gear: "⚙️", warning: "⚠️", clock: "⏱️", refresh: "🔄", truck: "🚚",
+  package: "📦", gear: "⚙️", warning: "⚠️", clock: "⏱️", refresh: "🔄", truck: "🚚", layers: "🧩",
 };
 
 function StatCard({ title, value, subtitle, highlight, icon }) {
@@ -44,10 +47,31 @@ function ChannelRow({ label, count, percentage, color }) {
   );
 }
 
-export default function ProductionOverview({ orders = [], showChannel = false, totalLabel = "Total Orders" }) {
+export default function ProductionOverview({ orders = [], components = [], allComponents, showChannel = false, totalLabel = "Total Orders" }) {
   const statusStats = useMemo(() => computeStatusStats(orders), [orders]);
   const channelBreakdown = useMemo(() => computeChannelBreakdown(orders), [orders]);
-  const metrics = useMemo(() => computeProductionMetrics(orders, statusStats), [orders, statusStats]);
+  // Piece-level signals for the two rewired cards (Re-journey % / Dispatch
+  // Backlog). orderById lets computeDispatchReady flag overdue-ready pieces.
+  const metrics = useMemo(() => {
+    const orderById = {};
+    orders.forEach((o) => { orderById[o.id] = o; });
+    return computeProductionMetrics(orders, statusStats, {
+      reJourneyActive: computeReJourneyCount(components),
+      reJourneyDenom: countActiveComponents(components),
+      dispatchReady: computeDispatchReady(components, orderById),
+    });
+  }, [orders, statusStats, components]);
+
+  // Total components CONTAINED IN the shown orders — counted by order membership
+  // so it lines up with the Total Orders card (2 orders with 3 + 4 pieces = 7).
+  // Uses `allComponents` (the caller's FULL piece set) because `components` is
+  // often scan-time-scoped for the stage cards and would undercount. Falls back
+  // to `components` when the caller doesn't pass the full set.
+  const totalComponents = useMemo(() => {
+    const src = Array.isArray(allComponents) ? allComponents : components;
+    const ids = new Set(orders.map((o) => o.id));
+    return src.reduce((n, c) => n + (ids.has(c.order_id) ? 1 : 0), 0);
+  }, [orders, components, allComponents]);
 
   const pipeline = [
     { label: "Order Received", count: statusStats.orderReceived, cls: "po-dot-pending" },
@@ -68,6 +92,12 @@ export default function ProductionOverview({ orders = [], showChannel = false, t
           subtitle={showChannel ? `across ${channelBreakdown.segments.length} channels` : `${statusStats.inProd} in production · ${statusStats.completed} completed`}
           highlight
           icon={Icon.package}
+        />
+        <StatCard
+          title="Total Components"
+          value={formatIndianNumber(totalComponents)}
+          subtitle={`across ${orders.length} order${orders.length === 1 ? "" : "s"}`}
+          icon={Icon.layers}
         />
         <StatCard
           title="Production Load"
@@ -93,9 +123,9 @@ export default function ProductionOverview({ orders = [], showChannel = false, t
           icon={Icon.clock}
         />
         <StatCard
-          title="Rework %"
+          title="Re-journey %"
           value={`${metrics.rework.percentage}%`}
-          subtitle={`${metrics.rework.totalReworks} items · ${metrics.rework.trend === "down" ? "↓ Improving" : "↑ Rising"}`}
+          subtitle={`${metrics.rework.totalReworks} pieces in rework · ${metrics.rework.trend === "down" ? "↓ Improving" : "↑ Rising"}`}
           icon={Icon.refresh}
         />
         <StatCard

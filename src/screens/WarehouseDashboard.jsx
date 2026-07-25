@@ -513,7 +513,7 @@ const WarehouseDashboard = () => {
           const chunk = ids.slice(i, i + 200);
           const { data, error } = await supabase
             .from("order_components")
-            .select("id, order_id, barcode, component_type, current_stage, is_active, is_outside_wh, stage_updated_at")
+            .select("id, order_id, barcode, component_type, current_stage, is_active, is_rework, is_outside_wh, stage_updated_at")
             .in("order_id", chunk);
           if (error) { console.error("overview components fetch failed:", error); break; }
           all = all.concat(data || []);
@@ -1375,7 +1375,7 @@ const WarehouseDashboard = () => {
 
               {/* Production Overview — operational metrics for the PH's own
                   channel orders (retail for Offline, website for Online). */}
-              <ProductionOverview orders={periodScopedOrders} totalLabel="Total Orders (Your Channel)" />
+              <ProductionOverview orders={periodScopedOrders} components={overviewComponentsInPeriod} allComponents={overviewComponents} totalLabel="Total Orders (Your Channel)" />
             </div>
           )}
 
