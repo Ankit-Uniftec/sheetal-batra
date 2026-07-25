@@ -603,7 +603,7 @@ export default function B2bProductForm() {
     const handleBack = () => navigate("/b2b-vendor-selection");
 
     return (
-        <div className="screen4-bg">
+        <div className="screen4-bg b2b-pf-page">
             {PopupComponent}
 
             <header className="pf-header">

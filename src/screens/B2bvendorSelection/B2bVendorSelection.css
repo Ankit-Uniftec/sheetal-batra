@@ -3,6 +3,152 @@
    row, field, input-line, footer-btns, draftBtn, continueBtn, back-btn,
    product-title, product-select, ss-* all from Screen4.css */
 
+/* ===================================================================
+   PAGE-ROOT SCOPED LAYOUT (added to the .screen4-bg root as .b2b-vs-page)
+   These pin the intended layout to this page so they win over any
+   lazy-loaded chunk that redefines the same generic classes, and so the
+   shared Screen4.css base always applies here regardless of chunk order.
+   =================================================================== */
+
+/* Keep the form on the wide, centred card even if a late chunk clobbers it */
+.b2b-vs-page .screen4-card {
+    width: 95%;
+    max-width: 1300px;
+    margin: 20px auto;
+}
+
+.b2b-vs-page .screen4-form {
+    flex: 1;
+    width: 100%;
+}
+
+/* Pin the intended field look. The generic .row/.field/.input-line classes are
+   redefined differently in Screen4.css, Screen3.css and Screen6.css; with
+   lazy-loaded chunks whichever loads last wins globally, so this form's look
+   was flipping (boxed vs underline) depending on which dashboard loaded first.
+   These scoped rules make the design — label above a borderless input with a
+   gold underline under the field — win deterministically by specificity. */
+.b2b-vs-page .screen4-form > .row {
+    display: flex;
+    gap: 25px;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.b2b-vs-page .screen4-form > .row > .field {
+    flex: 1;
+    min-width: 150px;
+    min-height: 0;
+    display: block;
+    padding: 8px 0 0;
+    margin: 0;
+    border-bottom: 2px solid #d5b85a;
+}
+
+/* Order Type holds buttons, not an input — no underline under it */
+.b2b-vs-page .screen4-form > .row > .field:has(.vs-type-btns) {
+    border-bottom: none;
+}
+
+.b2b-vs-page .screen4-form > .row > .field > label {
+    display: block;
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+    margin-bottom: 6px;
+    white-space: normal;
+}
+
+/* Borderless, transparent inputs — the gold line comes from the .field */
+.b2b-vs-page .screen4-form > .row > .field > .input-line,
+.b2b-vs-page .screen4-form > .row > .field input.input-line {
+    width: 100%;
+    height: auto;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 4px 0;
+    font-size: 15px;
+    outline: none;
+}
+
+@media (max-width: 1100px) {
+    .b2b-vs-page .screen4-form > .row {
+        gap: 15px;
+    }
+}
+
+@media (max-width: 600px) {
+    .b2b-vs-page .screen4-form > .row {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .b2b-vs-page .screen4-form > .row > .field {
+        min-width: 100%;
+        flex: 1 1 100%;
+    }
+}
+
+/* Footer buttons: centred (matches design), not pushed to the edges */
+.b2b-vs-page .footer-btns {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+}
+
+/* Order Type: three equal-width buttons that never wrap the label */
+.b2b-vs-page .vs-type-btns {
+    display: flex;
+    gap: 12px;
+}
+
+.b2b-vs-page .vs-type-btn {
+    flex: 1;
+    white-space: nowrap;
+    padding: 12px 10px;
+}
+
+/* Footer buttons: both solid gold (matches design). Screen4.css styles
+   .draftBtn as a transparent outline button, so pin it here. */
+.b2b-vs-page .footer-btns button {
+    height: 52px;
+    min-width: 165px;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.b2b-vs-page .draftBtn,
+.b2b-vs-page .continueBtn {
+    background: #d5b85a;
+    border: none;
+    color: #fff !important;
+}
+
+.b2b-vs-page .draftBtn:hover,
+.b2b-vs-page .continueBtn:hover {
+    background: #fff;
+    border: 1px solid #d5b85a;
+    color: #d5b85a !important;
+}
+
+@media (max-width: 600px) {
+    .b2b-vs-page .footer-btns {
+        flex-direction: column;
+    }
+
+    .b2b-vs-page .footer-btns button {
+        width: 100%;
+    }
+}
+
 /* ===== VENDOR INFO CARD ===== */
 .vs-vendor-card {
     background: rgba(255, 255, 255, 0.75);
