@@ -1363,7 +1363,6 @@
 
 .acc-filter-bar .admin-search-wrapper { max-width: 280px; }
 .acc-filter-bar .cmo-compare-select { flex: 0 0 auto; }
-.acc-filter-bar .cmo-date-range { flex: 0 0 auto; }
 
 /* ============================================
    PLACEHOLDER BADGE
@@ -1750,12 +1749,6 @@
     flex-wrap: wrap;
 }
 
-.cmo-timeline-pills {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-}
-
 .cmo-pill {
     padding: 6px 14px;
     background: transparent;
@@ -1786,33 +1779,6 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
-}
-
-.cmo-date-range {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.cmo-date-range input {
-    padding: 6px 10px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 12px;
-    background: #fff;
-    color: #444;
-    width: 130px;
-}
-
-.cmo-date-range input:focus {
-    border-color: #d5b85a;
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.15);
-}
-
-.cmo-date-sep {
-    color: #bbb;
-    font-size: 13px;
 }
 
 .cmo-compare-select {
@@ -1914,10 +1880,6 @@
         gap: 8px;
     }
 
-    .cmo-timeline-pills {
-        justify-content: center;
-    }
-
     .cmo-filters-right {
         justify-content: center;
     }
@@ -1925,10 +1887,6 @@
     .cmo-pill {
         padding: 5px 10px;
         font-size: 11px;
-    }
-
-    .cmo-date-range input {
-        width: 110px;
     }
 }
 

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import formatDate from "../../utils/formatDate";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 /**
  * CommsSourcingReturns — list of sourcing orders and a per-order Mark Returned
@@ -34,10 +35,17 @@ const NEW_LOCATION_OPTIONS = [
 ];
 
 export default function CommsSourcingReturns({ orders, onOrderUpdated, showPopup }) {
-  // Filter to Sourcing orders only.
+  // Time scope (by order date) via the shared PeriodFilter; bucketing below
+  // (pending/overdue/returned by outfit return date) is unchanged.
+  const { control: periodControl, inPeriod, range: periodRange } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+
+  // Filter to Sourcing orders only (within the selected period). hasSourcing
+  // ignores the period so the filter bar stays visible (and resettable) even
+  // when the selected period matches nothing.
+  const hasSourcing = useMemo(() => orders.some((o) => o.comms_engagement_type === "Sourcing"), [orders]);
   const sourcingOrders = useMemo(
-    () => orders.filter((o) => o.comms_engagement_type === "Sourcing"),
-    [orders]
+    () => orders.filter((o) => o.comms_engagement_type === "Sourcing" && (!periodRange || inPeriod(o.created_at))),
+    [orders, periodRange, inPeriod]
   );
 
   const now = new Date();
@@ -254,13 +262,13 @@ export default function CommsSourcingReturns({ orders, onOrderUpdated, showPopup
 
   return (
     <>
-      {sourcingOrders.length === 0 && (
+      {!hasSourcing && (
         <div className="comms-card">
           <p className="comms-muted">No sourcing orders yet. They appear here when an order's engagement type is Sourcing.</p>
         </div>
       )}
 
-      {sourcingOrders.length > 0 && (
+      {hasSourcing && (
         <div className="comms-card">
           <input
             type="text"
@@ -269,15 +277,16 @@ export default function CommsSourcingReturns({ orders, onOrderUpdated, showPopup
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {periodControl}
         </div>
       )}
 
-      {sourcingOrders.length > 0 &&
+      {hasSourcing &&
         filteredBuckets.overdue.length === 0 &&
         filteredBuckets.pending.length === 0 &&
         filteredBuckets.returned.length === 0 && (
         <div className="comms-card">
-          <p className="comms-muted">No sourcing orders match your search.</p>
+          <p className="comms-muted">No sourcing orders match your filters.</p>
         </div>
       )}
 

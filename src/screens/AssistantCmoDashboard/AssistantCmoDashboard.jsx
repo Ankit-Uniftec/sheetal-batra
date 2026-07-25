@@ -11,6 +11,7 @@ import { usePopup } from "../../components/Popup";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import WalkInsView from "../../components/WalkInsView/WalkInsView";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import { getOrderStatusLabel } from "../../utils/barcodeService";
@@ -18,16 +19,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
 } from "recharts";
-
-const TIMELINE_OPTIONS = [
-  { value: "today", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "weekly", label: "Last 7 Days" },
-  { value: "monthly", label: "Last 30 Days" },
-  { value: "yearly", label: "Last 365 Days" },
-  { value: "all", label: "All Time" },
-  { value: "custom", label: "Custom" },
-];
 
 const COLOR_NAME_MAP = {
   black: "#1a1a1a", white: "#f5f5f5", red: "#c62828", blue: "#1565c0",
@@ -65,40 +56,6 @@ const StatCard = ({ title, value, subtitle, highlight }) => (
   </div>
 );
 
-// Inline timeline picker — dropdown + optional custom-range inputs. Shared by
-// overview, brand performance, and client insights tabs.
-const TimelineFilter = ({ timeline, setTimeline, customFrom, setCustomFrom, customTo, setCustomTo }) => (
-  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 16 }}>
-    <label style={{ fontSize: 13, color: "#666" }}>Showing data for:</label>
-    <select
-      value={timeline}
-      onChange={(e) => setTimeline(e.target.value)}
-      style={{ padding: "8px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 13, background: "#fff", color: "#333", cursor: "pointer", outline: "none" }}
-    >
-      {TIMELINE_OPTIONS.map((o) => (
-        <option key={o.value} value={o.value}>{o.label}</option>
-      ))}
-    </select>
-    {timeline === "custom" && (
-      <>
-        <input
-          type="date"
-          value={customFrom}
-          onChange={(e) => setCustomFrom(e.target.value)}
-          style={{ padding: "7px 10px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 13 }}
-        />
-        <span style={{ color: "#888", fontSize: 13 }}>to</span>
-        <input
-          type="date"
-          value={customTo}
-          onChange={(e) => setCustomTo(e.target.value)}
-          style={{ padding: "7px 10px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 13 }}
-        />
-      </>
-    )}
-  </div>
-);
-
 export default function AssistantCmoDashboard() {
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
@@ -107,9 +64,8 @@ export default function AssistantCmoDashboard() {
   // Date-wise filter for overview / brand performance / client insights tabs.
   // Defaults to "all" — viewing the full dataset is the most useful starting
   // point on this dashboard (CMO ops, not daily SA-style monitoring).
-  const [timeline, setTimeline] = useState("all");
-  const [customDateFrom, setCustomDateFrom] = useState("");
-  const [customDateTo, setCustomDateTo] = useState("");
+  // One shared PeriodFilter instance so the three tabs stay in sync.
+  const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "select" });
   // Set when user clicks a top-product row. The Orders tab reads this on
   // mount via an effect to pre-fill the search box with the product name.
   const [productFilterForOrders, setProductFilterForOrders] = useState("");
@@ -120,9 +76,11 @@ export default function AssistantCmoDashboard() {
   const [orderStatusTab, setOrderStatusTab] = useState("all");
   const [orderSortBy, setOrderSortBy] = useState("newest");
   const [ordersPage, setOrdersPage] = useState(1);
-  // Order-date range filter (by created_at). "" = no bound.
-  const [orderDateFrom, setOrderDateFrom] = useState("");
-  const [orderDateTo, setOrderDateTo] = useState("");
+  // Order-date scope for the Orders tab (by created_at) — its own instance,
+  // deliberately independent of the dashboard-wide period filter.
+  const {
+    control: ordersPeriodControl, inPeriod: inOrdersPeriod, range: ordersPeriodRange,
+  } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
   const ORDERS_PER_PAGE = 20;
 
   // Client Book tab state
@@ -131,8 +89,10 @@ export default function AssistantCmoDashboard() {
   const [clientsPage, setClientsPage] = useState(1);
   // Client Book order-date range filter — limits to clients whose orders fall
   // in the range (by order created_at). "" = no bound.
-  const [clientDateFrom, setClientDateFrom] = useState("");
-  const [clientDateTo, setClientDateTo] = useState("");
+  // Client-book order-date scope (clients who ordered in the window).
+  const {
+    control: clientsPeriodControl, inPeriod: inClientsPeriod, range: clientsPeriodRange,
+  } = usePeriodFilter("all", { variant: "select", label: "Ordered:" });
   const CLIENTS_PER_PAGE = 25;
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -245,54 +205,13 @@ export default function AssistantCmoDashboard() {
   };
 
   // ==================== HELPERS ====================
-  // Resolve the start/end of the active timeline. Mirrors AdminDashboard's
-  // getDateRange so future changes can be unified. "all" returns an open range.
-  const getDateRange = (tl) => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    switch (tl) {
-      case "today": return { start: today, end: now };
-      case "yesterday": {
-        const y = new Date(today); y.setDate(y.getDate() - 1);
-        const yEnd = new Date(today); yEnd.setMilliseconds(-1);
-        return { start: y, end: yEnd };
-      }
-      case "weekly": {
-        const d = new Date(today); d.setDate(d.getDate() - 7);
-        return { start: d, end: now };
-      }
-      case "monthly": {
-        const d = new Date(today); d.setDate(d.getDate() - 30);
-        return { start: d, end: now };
-      }
-      case "yearly": {
-        const d = new Date(today); d.setDate(d.getDate() - 365);
-        return { start: d, end: now };
-      }
-      case "custom":
-        return {
-          start: customDateFrom ? new Date(customDateFrom) : new Date(0),
-          end: customDateTo ? new Date(customDateTo + "T23:59:59") : now,
-        };
-      case "all":
-      default:
-        return { start: new Date(0), end: now };
-    }
-  };
-
   // The orders slice that the date-aware tabs (overview, brand, clients)
   // compute their metrics from. Other tabs (revenue, product, inventory)
   // still iterate the full `orders` array.
-  const dateFilteredOrders = useMemo(() => {
-    const range = getDateRange(timeline);
-    if (timeline === "all") return orders;
-    return orders.filter((o) => {
-      if (!o.created_at) return false;
-      const d = new Date(o.created_at);
-      return d >= range.start && d <= range.end;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, timeline, customDateFrom, customDateTo]);
+  const dateFilteredOrders = useMemo(
+    () => orders.filter((o) => inPeriod(o.created_at)),
+    [orders, inPeriod]
+  );
 
   const getOrderStore = (o) => {
     if (o.is_b2b) return "B2B";
@@ -677,18 +596,8 @@ export default function AssistantCmoDashboard() {
   // search-by-order-no to work across history).
   const filteredOrders = useMemo(() => {
     let result = orders.filter((o) => matchOrderStatus(o, orderStatusTab));
-    // Order-date range (created_at). From = start of day, To = end of day.
-    const fromTs = orderDateFrom ? new Date(orderDateFrom + "T00:00:00").getTime() : null;
-    const toTs = orderDateTo ? new Date(orderDateTo + "T23:59:59.999").getTime() : null;
-    if (fromTs != null || toTs != null) {
-      result = result.filter((o) => {
-        if (!o.created_at) return false;
-        const ts = new Date(o.created_at).getTime();
-        if (fromTs != null && ts < fromTs) return false;
-        if (toTs != null && ts > toTs) return false;
-        return true;
-      });
-    }
+    // Order-date scope (created_at) via the shared PeriodFilter.
+    if (ordersPeriodRange) result = result.filter((o) => inOrdersPeriod(o.created_at));
     const q = orderSearch.trim().toLowerCase();
     if (q) {
       result = result.filter((o) => {
@@ -722,7 +631,7 @@ export default function AssistantCmoDashboard() {
       }
     });
     return result;
-  }, [orders, orderStatusTab, orderSearch, orderSearchField, orderSortBy, orderDateFrom, orderDateTo]);
+  }, [orders, orderStatusTab, orderSearch, orderSearchField, orderSortBy, ordersPeriodRange, inOrdersPeriod]);
 
   // Status tab counts
   const orderTabCounts = useMemo(() => {
@@ -733,7 +642,7 @@ export default function AssistantCmoDashboard() {
   }, [orders, ORDER_STATUS_TABS]);
 
   // Reset pagination when filters change
-  useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, orderStatusTab, orderSortBy, orderDateFrom, orderDateTo]);
+  useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, orderStatusTab, orderSortBy, ordersPeriodRange]);
 
   // Top-product click-through: when a product name is set, pre-fill the
   // Orders search with it and clear the consumed value.
@@ -806,17 +715,7 @@ export default function AssistantCmoDashboard() {
     };
     // Date-range filter (by order created_at). When active, only orders in the
     // range feed the index — so the book shows clients who ordered in that window.
-    const cFromTs = clientDateFrom ? new Date(clientDateFrom + "T00:00:00").getTime() : null;
-    const cToTs = clientDateTo ? new Date(clientDateTo + "T23:59:59.999").getTime() : null;
-    const dateActive = cFromTs != null || cToTs != null;
-    const inDateRange = (o) => {
-      if (!dateActive) return true;
-      if (!o.created_at) return false;
-      const ts = new Date(o.created_at).getTime();
-      if (cFromTs != null && ts < cFromTs) return false;
-      if (cToTs != null && ts > cToTs) return false;
-      return true;
-    };
+    const inDateRange = (o) => inClientsPeriod(o.created_at);
 
     // Index each order under ONE key — its profile (user_id) when present,
     // else a phone fallback for the rare order with no user_id. Keying by a
@@ -878,7 +777,7 @@ export default function AssistantCmoDashboard() {
     // Hide abandoned signups (no name, no email, no orders) — same as Admin.
     const isAbandoned = (c) => c.name === "—" && !c.email && c.orderCount === 0;
     // With a date range active, show only clients who actually ordered in it.
-    const visible = all.filter((c) => !isAbandoned(c) && (!dateActive || c.orderCount > 0));
+    const visible = all.filter((c) => !isAbandoned(c) && (!clientsPeriodRange || c.orderCount > 0));
 
     // Store filter
     let filtered = visible;
@@ -917,10 +816,10 @@ export default function AssistantCmoDashboard() {
       visibleCount: visible.length,
       storeBreakdown,
     };
-  }, [profiles, orders, clientSearch, clientStoreFilter, clientsPage, clientDateFrom, clientDateTo]);
+  }, [profiles, orders, clientSearch, clientStoreFilter, clientsPage, inClientsPeriod, clientsPeriodRange]);
 
   // Reset to page 1 when search or store filter changes
-  useEffect(() => { setClientsPage(1); }, [clientSearch, clientStoreFilter, clientDateFrom, clientDateTo]);
+  useEffect(() => { setClientsPage(1); }, [clientSearch, clientStoreFilter, clientsPeriodRange]);
 
   // CSV export for client book
   const handleClientBookExportCSV = () => {
@@ -1056,7 +955,7 @@ export default function AssistantCmoDashboard() {
           {activeTab === "overview" && (
             <>
               <h2 className="acmo-section-title">Overview</h2>
-              <TimelineFilter timeline={timeline} setTimeline={setTimeline} customFrom={customDateFrom} setCustomFrom={setCustomDateFrom} customTo={customDateTo} setCustomTo={setCustomDateTo} />
+              {periodControl}
 
               <div className="acmo-card">
                 <p className="acmo-card-title">Store-wise Sales Breakdown</p>
@@ -1188,7 +1087,7 @@ export default function AssistantCmoDashboard() {
           {activeTab === "brand" && (
             <>
               <h2 className="acmo-section-title">Overall Brand Performance</h2>
-              <TimelineFilter timeline={timeline} setTimeline={setTimeline} customFrom={customDateFrom} setCustomFrom={setCustomDateFrom} customTo={customDateTo} setCustomTo={setCustomDateTo} />
+              {periodControl}
 
               <div className="acmo-card">
                 <p className="acmo-card-title">Top-Performing Products (Overall)</p>
@@ -1453,7 +1352,7 @@ export default function AssistantCmoDashboard() {
           {activeTab === "clients" && (
             <>
               <h2 className="acmo-section-title">Client Insights</h2>
-              <TimelineFilter timeline={timeline} setTimeline={setTimeline} customFrom={customDateFrom} setCustomFrom={setCustomDateFrom} customTo={customDateTo} setCustomTo={setCustomDateTo} />
+              {periodControl}
 
               <div className="acmo-stats-grid">
                 <StatCard title="Average Client Age" value={clientInsights.avgClientAge !== "—" ? `${clientInsights.avgClientAge} yrs` : "—"} subtitle={`${clientInsights.totalClients} total clients`} />
@@ -1498,32 +1397,7 @@ export default function AssistantCmoDashboard() {
                     <option value="amount_high">Amount: High to Low</option>
                     <option value="amount_low">Amount: Low to High</option>
                   </select>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="date"
-                      value={orderDateFrom}
-                      onChange={(e) => setOrderDateFrom(e.target.value)}
-                      max={orderDateTo || undefined}
-                      aria-label="Order date from"
-                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
-                    />
-                    <span style={{ color: "#999" }}>→</span>
-                    <input
-                      type="date"
-                      value={orderDateTo}
-                      onChange={(e) => setOrderDateTo(e.target.value)}
-                      min={orderDateFrom || undefined}
-                      aria-label="Order date to"
-                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
-                    />
-                    {(orderDateFrom || orderDateTo) && (
-                      <button
-                        onClick={() => { setOrderDateFrom(""); setOrderDateTo(""); }}
-                        title="Clear date filter"
-                        style={{ padding: "8px 10px", border: "1px solid #e0d5c5", borderRadius: 8, background: "#fff", color: "#8B7355", cursor: "pointer", fontSize: 13 }}
-                      >Clear</button>
-                    )}
-                  </div>
+                  {ordersPeriodControl}
                   <button
                     onClick={handleOrdersExportCSV}
                     disabled={filteredOrders.length === 0}
@@ -1667,34 +1541,7 @@ export default function AssistantCmoDashboard() {
                     onChange={(e) => setClientSearch(e.target.value)}
                     style={{ flex: "1 1 280px", maxWidth: 480, padding: "10px 14px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, outline: "none" }}
                   />
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="date"
-                      value={clientDateFrom}
-                      onChange={(e) => setClientDateFrom(e.target.value)}
-                      max={clientDateTo || undefined}
-                      aria-label="Order date from"
-                      title="Filter to clients who ordered from this date"
-                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
-                    />
-                    <span style={{ color: "#999" }}>→</span>
-                    <input
-                      type="date"
-                      value={clientDateTo}
-                      onChange={(e) => setClientDateTo(e.target.value)}
-                      min={clientDateFrom || undefined}
-                      aria-label="Order date to"
-                      title="Filter to clients who ordered up to this date"
-                      style={{ padding: "10px 12px", border: "1px solid #e0d5c5", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer", outline: "none" }}
-                    />
-                    {(clientDateFrom || clientDateTo) && (
-                      <button
-                        onClick={() => { setClientDateFrom(""); setClientDateTo(""); }}
-                        title="Clear date filter"
-                        style={{ padding: "8px 10px", border: "1px solid #e0d5c5", borderRadius: 8, background: "#fff", color: "#8B7355", cursor: "pointer", fontSize: 13 }}
-                      >Clear</button>
-                    )}
-                  </div>
+                  {clientsPeriodControl}
                   <span style={{ color: "#888", fontSize: 13 }}>
                     {clientBook.totalCount} {clientBook.totalCount === 1 ? "client" : "clients"}
                   </span>

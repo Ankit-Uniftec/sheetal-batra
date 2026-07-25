@@ -14,7 +14,8 @@ import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationServi
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import { restoreOrderInventory } from "../utils/restoreOrderInventory";
 import useTabParam from "../hooks/useTabParam";
-import useFilterParam from "../hooks/useFilterParam";
+import useFilterParam, { useClearFilterParams } from "../hooks/useFilterParam";
+import { usePeriodFilterParam } from "../components/PeriodFilter";
 import Paginator from "../components/Paginator";
 
 // Measurement categories and fields (same as Screen4)
@@ -276,8 +277,14 @@ export default function OrderHistory() {
   const [searchQuery, setSearchQuery] = useFilterParam("q");
 
   const [statusFilter, setStatusFilter] = useFilterParam("status");
-  const [dateFrom, setDateFrom] = useFilterParam("from");
-  const [dateTo, setDateTo] = useFilterParam("to");
+  // Order-date scope — URL-persisted PeriodFilter (legacy ?from/?to links
+  // still apply as a custom range).
+  const {
+    control: periodControl, timeline: periodTimeline,
+    inPeriod, range: periodRange,
+  } = usePeriodFilterParam("all", { variant: "select", label: "Order date:" });
+  // One navigation for Clear, or the setters clobber each other (see the hook).
+  const clearListFilters = useClearFilterParams(["status", "period", "from", "to"]);
 
   const [attachmentLoading, setAttachmentLoading] = useState(null);
 
@@ -289,7 +296,7 @@ export default function OrderHistory() {
   // Reset to page 1 when search or filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, dateFrom, dateTo]);
+  }, [searchQuery, statusFilter, periodRange]);
 
   // Customer info
   const customerName = customerFromState?.name || profile?.full_name || "Customer";
@@ -318,8 +325,7 @@ export default function OrderHistory() {
     // Status + created_at date-range filters
     const filteredByControls = baseOrders.filter((order) => {
       if (statusFilter && normalizeOrderStatus(order.status) !== statusFilter) return false;
-      if (dateFrom && new Date(order.created_at) < new Date(`${dateFrom}T00:00:00`)) return false;
-      if (dateTo && new Date(order.created_at) > new Date(`${dateTo}T23:59:59.999`)) return false;
+      if (periodRange && !inPeriod(order.created_at)) return false;
       return true;
     });
 
@@ -338,7 +344,7 @@ export default function OrderHistory() {
         order.salesperson?.toLowerCase().includes(query)
       );
     });
-  }, [orders, searchQuery, statusFilter, dateFrom, dateTo]);
+  }, [orders, searchQuery, statusFilter, periodRange, inPeriod]);
 
   // Distinct normalized statuses present in the data (for the filter dropdown)
   const statusOptions = useMemo(() => {
@@ -1981,24 +1987,10 @@ export default function OrderHistory() {
                     <option key={s} value={s}>{STATUS_FILTER_LABELS[s]}</option>
                   ))}
                 </select>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  title="Order date from"
-                  style={{ padding: "7px 10px", border: "1px solid #d5b85a", borderRadius: 8, fontSize: 13, outline: "none" }}
-                />
-                <span style={{ fontSize: 13, color: "#888" }}>to</span>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  title="Order date to"
-                  style={{ padding: "7px 10px", border: "1px solid #d5b85a", borderRadius: 8, fontSize: 13, outline: "none" }}
-                />
-                {(statusFilter || dateFrom || dateTo) && (
+                {periodControl}
+                {(statusFilter || periodTimeline !== "all") && (
                   <button
-                    onClick={() => { setStatusFilter(""); setDateFrom(""); setDateTo(""); }}
+                    onClick={() => { clearListFilters(); }}
                     style={{ border: "none", background: "none", color: "#c0392b", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
                   >
                     Clear
@@ -2010,7 +2002,7 @@ export default function OrderHistory() {
                 <p className="oh-empty">
                   {searchQuery
                     ? `No orders found for "${searchQuery}"`
-                    : (statusFilter || dateFrom || dateTo)
+                    : (statusFilter || periodTimeline !== "all")
                       ? "No orders match the selected filters."
                       : "No orders found."}
                 </p>

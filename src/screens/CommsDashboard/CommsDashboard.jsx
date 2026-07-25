@@ -70,8 +70,11 @@ export default function CommsDashboard() {
   const [ordersSearch, setOrdersSearch] = useState("");
   const [engagementFilter, setEngagementFilter] = useState("all");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
-  const [orderDateFrom, setOrderDateFrom] = useState("");
-  const [orderDateTo, setOrderDateTo] = useState("");
+  // Order-date scope — shared PeriodFilter (select variant).
+  const {
+    control: ordersPeriodControl, timeline: ordersTimeline,
+    inPeriod: inOrdersPeriod, range: ordersPeriodRange, props: ordersPeriodProps,
+  } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
 
   // Per-order PDF loading state — disables the button while the PDF is
   // being generated/opened. Mirrors AssociateDashboard's pattern.
@@ -226,10 +229,6 @@ export default function CommsDashboard() {
   // Full filtered list for the Orders tab.
   const filteredOrders = useMemo(() => {
     const q = ordersSearch.trim().toLowerCase();
-    // Convert date filters to comparable timestamps. From = start of day,
-    // To = end of day, so the From/To pair is inclusive of both endpoints.
-    const fromTs = orderDateFrom ? new Date(orderDateFrom + "T00:00:00").getTime() : null;
-    const toTs = orderDateTo ? new Date(orderDateTo + "T23:59:59.999").getTime() : null;
     return orders.filter((o) => {
       // Engagement filter
       if (engagementFilter !== "all" && o.comms_engagement_type !== engagementFilter) return false;
@@ -246,12 +245,7 @@ export default function CommsDashboard() {
         if (orderStatusFilter === "cancelled" && s !== "cancelled") return false;
       }
       // Date range filter (applied to created_at — order placement date)
-      if (fromTs != null || toTs != null) {
-        if (!o.created_at) return false;
-        const ts = new Date(o.created_at).getTime();
-        if (fromTs != null && ts < fromTs) return false;
-        if (toTs != null && ts > toTs) return false;
-      }
+      if (ordersPeriodRange && !inOrdersPeriod(o.created_at)) return false;
       // Search by order_no, client name, agency name, POC
       if (q) {
         const hay = [
@@ -261,11 +255,11 @@ export default function CommsDashboard() {
       }
       return true;
     });
-  }, [orders, ordersSearch, engagementFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
+  }, [orders, ordersSearch, engagementFilter, orderStatusFilter, ordersPeriodRange, inOrdersPeriod]);
 
   // Page within the filtered orders; any filter change resets to page 1.
   const [ordersPage, setOrdersPage] = useState(1);
-  useEffect(() => { setOrdersPage(1); }, [ordersSearch, engagementFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
+  useEffect(() => { setOrdersPage(1); }, [ordersSearch, engagementFilter, orderStatusFilter, ordersPeriodRange]);
   const ordersTotalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
   const pagedOrders = useMemo(
     () => filteredOrders.slice((ordersPage - 1) * ORDERS_PER_PAGE, ordersPage * ORDERS_PER_PAGE),
@@ -563,27 +557,11 @@ export default function CommsDashboard() {
                 <div className="comms-filters-row">
                   <span className="comms-filters-row-label">Order Date</span>
                   <div className="comms-filters-row-controls comms-filters-date-controls">
-                    <input
-                      type="date"
-                      className="comms-date-input"
-                      value={orderDateFrom}
-                      onChange={(e) => setOrderDateFrom(e.target.value)}
-                      max={orderDateTo || undefined}
-                      aria-label="From date"
-                    />
-                    <span className="comms-date-sep" aria-hidden="true">→</span>
-                    <input
-                      type="date"
-                      className="comms-date-input"
-                      value={orderDateTo}
-                      onChange={(e) => setOrderDateTo(e.target.value)}
-                      min={orderDateFrom || undefined}
-                      aria-label="To date"
-                    />
-                    {(orderDateFrom || orderDateTo) && (
+                    {ordersPeriodControl}
+                    {ordersTimeline !== "all" && (
                       <button
                         className="comms-date-clear"
-                        onClick={() => { setOrderDateFrom(""); setOrderDateTo(""); }}
+                        onClick={() => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); }}
                       >Clear</button>
                     )}
                   </div>

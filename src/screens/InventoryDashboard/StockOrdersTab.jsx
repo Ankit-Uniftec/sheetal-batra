@@ -5,6 +5,7 @@ import { usePopup } from "../../components/Popup";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
 import Paginator from "../../components/Paginator";
 import formatIndianNumber from "../../utils/formatIndianNumber";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 import "../AssociateDashboard.css";
 import "./StockOrdersTab.css";
 
@@ -64,6 +65,8 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
   const [search, setSearch] = useState("");
   const [saFilter, setSaFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  // Time scope by order date — shared PeriodFilter (select).
+  const { control: periodControl, inPeriod, range: periodRange } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
   const [saDropdownOpen, setSaDropdownOpen] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
@@ -141,6 +144,7 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
     return orders.filter((o) => {
       if (saFilter && o.salesperson !== saFilter) return false;
       if (statusFilter && normalizeStatus(o.status) !== statusFilter) return false;
+      if (periodRange && !inPeriod(o.created_at)) return false;
       if (q) {
         const hit = [o.order_no, o.salesperson, o.salesperson_email, o.delivery_date]
           .filter(Boolean)
@@ -149,11 +153,11 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
       }
       return true;
     });
-  }, [orders, search, saFilter, statusFilter]);
+  }, [orders, search, saFilter, statusFilter, periodRange, inPeriod]);
 
   // Page within the filtered set; filter changes reset to page 1.
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [search, saFilter, statusFilter]);
+  useEffect(() => { setPage(1); }, [search, saFilter, statusFilter, periodRange]);
   const totalPages = Math.ceil(filtered.length / 15);
   const paged = useMemo(() => filtered.slice((page - 1) * 15, page * 15), [filtered, page]);
 
@@ -277,6 +281,7 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
+        {periodControl}
         <button className="stock-refresh" onClick={fetchStockOrders}>Refresh</button>
       </div>
 

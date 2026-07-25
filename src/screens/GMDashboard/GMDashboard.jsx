@@ -18,6 +18,7 @@ import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel } from "../../utils/barcodeService";
+import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -42,15 +43,6 @@ const STATUS_TABS = [
     { value: "prepared", label: "Prepared" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
-];
-
-const TIMELINE_OPTIONS = [
-    { value: "today", label: "Today" },
-    { value: "yesterday", label: "Yesterday" },
-    { value: "weekly", label: "Last 7 Days" },
-    { value: "monthly", label: "Last 30 Days" },
-    { value: "yearly", label: "Last 365 Days" },
-    { value: "custom", label: "Custom" },
 ];
 
 const COMPARISON_OPTIONS = [
@@ -137,11 +129,9 @@ export default function GMDashboard() {
     // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
     const [activeTab, setActiveTab] = useTabParam("store_performance");
     const [showSidebar, setShowSidebar] = useState(false);
-    const [timeline, setTimeline] = useState("monthly");
+    // Shared PeriodFilter drives every date-aware tab; comparison stays local.
+    const { inPeriod, range: periodRangeValue, props: periodProps } = usePeriodFilter("month", { variant: "pills" });
     const [comparison, setComparison] = useState("none");
-    const [customDateFrom, setCustomDateFrom] = useState("");
-    const [customDateTo, setCustomDateTo] = useState("");
-    const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
 
     // Orders tab
     const [orderSearch, setOrderSearch] = useState("");
@@ -149,7 +139,14 @@ export default function GMDashboard() {
     const [statusTab, setStatusTab] = useState("all");
     const [ordersPage, setOrdersPage] = useState(1);
     const [sortBy, setSortBy] = useState("newest");
-    const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    // Order-date scope for the orders list — shared PeriodFilter (select),
+    // rendered inside the Date Range dropdown panel.
+    const {
+        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
+        range: ordersPeriodRange, props: ordersPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
     const [openDropdown, setOpenDropdown] = useState(null);
     const [statusUpdating, setStatusUpdating] = useState(null);
     const [pdfLoading, setPdfLoading] = useState(null);
@@ -160,8 +157,11 @@ export default function GMDashboard() {
 
     // Accounts tab
     const [accountsSearch, setAccountsSearch] = useState("");
-    const [accountsDateFrom, setAccountsDateFrom] = useState("");
-    const [accountsDateTo, setAccountsDateTo] = useState("");
+    // Order-date scope for the accounts line items — shared PeriodFilter (select).
+    const {
+        control: accountsPeriodControl, timeline: accountsTimeline,
+        inPeriod: inAccountsPeriod, range: accountsPeriodRange, props: accountsPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
     const [accountsStatus, setAccountsStatus] = useState("");
     const [accountsStore, setAccountsStore] = useState("");
     const [accountsSA, setAccountsSA] = useState("");
@@ -382,48 +382,6 @@ export default function GMDashboard() {
     // ═══════════════════════════════════════════════════════════
     // DATE RANGE HELPERS
     // ═══════════════════════════════════════════════════════════
-    const getDateRange = (timelineValue) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        switch (timelineValue) {
-            case "today": return { start: today, end: now };
-            case "yesterday":
-                const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayEnd = new Date(today); yesterdayEnd.setMilliseconds(-1);
-                return { start: yesterday, end: yesterdayEnd };
-            case "weekly":
-                const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
-                return { start: weekAgo, end: now };
-            case "monthly":
-                const monthAgo = new Date(today); monthAgo.setDate(monthAgo.getDate() - 30);
-                return { start: monthAgo, end: now };
-            case "yearly":
-                const yearAgo = new Date(today); yearAgo.setDate(yearAgo.getDate() - 365);
-                return { start: yearAgo, end: now };
-            case "custom":
-                return { start: customDateFrom ? new Date(customDateFrom) : new Date(0), end: customDateTo ? new Date(customDateTo + "T23:59:59") : now };
-            default: return { start: today, end: now };
-        }
-    };
-
-    const getComparisonDateRange = (timelineValue, comparisonType) => {
-        const currentRange = getDateRange(timelineValue);
-        if (comparisonType === "previous_year") {
-            const s = new Date(currentRange.start); s.setFullYear(s.getFullYear() - 1);
-            const e = new Date(currentRange.end); e.setFullYear(e.getFullYear() - 1);
-            return { start: s, end: e };
-        }
-        const duration = currentRange.end - currentRange.start;
-        const prevEnd = new Date(currentRange.start); prevEnd.setMilliseconds(-1);
-        const prevStart = new Date(prevEnd - duration);
-        return { start: prevStart, end: prevEnd };
-    };
-
-    const filterOrdersByDateRange = (ordersList, dateRange) => {
-        if (!dateRange) return ordersList;
-        return ordersList.filter(o => { const d = new Date(o.created_at); return d >= dateRange.start && d <= dateRange.end; });
-    };
-
     const calculateGrowth = (current, previous) => {
         if (previous === 0) return current > 0 ? 100 : 0;
         return ((current - previous) / previous) * 100;
@@ -433,10 +391,9 @@ export default function GMDashboard() {
     // STORE PERFORMANCE STATS
     // ═══════════════════════════════════════════════════════════
     const storePerformanceStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const compRange = comparison !== "none" ? getComparisonDateRange(timeline, comparison) : null;
-        const currentOrders = filterOrdersByDateRange(orders.filter(o => !isLxrtsOrder(o)), dateRange);
-        const prevOrders = compRange ? filterOrdersByDateRange(orders.filter(o => !isLxrtsOrder(o)), compRange) : [];
+        const compRange = comparisonPeriodRange(periodRangeValue, comparison);
+        const currentOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at));
+        const prevOrders = compRange ? orders.filter(o => !isLxrtsOrder(o) && inRange(compRange, o.created_at)) : [];
 
         const totalRevenue = currentOrders.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
@@ -502,22 +459,17 @@ export default function GMDashboard() {
             totalRevenue, netSbRev, totalOrders,
             revenueGrowth: calculateGrowth(totalRevenue, prevRevenue),
             ordersGrowth: calculateGrowth(totalOrders, prevOrders.length),
-            showComparison: comparison !== "none",
+            showComparison: comparison !== "none" && !!periodRangeValue,
             storeBreakdown, storeGrowth, saBreakdown, staffProductivity,
             aov: totalOrders > 0 ? totalRevenue / totalOrders : 0,
         };
-    }, [orders, timeline, comparison, customDateFrom, customDateTo, storeFilter, salespersonTable]);
+    }, [orders, inPeriod, periodRangeValue, comparison, storeFilter, salespersonTable]);
 
     // ═══════════════════════════════════════════════════════════
     // DAY-WISE SALES
     // ═══════════════════════════════════════════════════════════
     const dayWiseSales = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const validOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const validOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at));
         const buckets = {};
         validOrders.forEach(o => {
             const d = new Date(o.created_at);
@@ -534,18 +486,17 @@ export default function GMDashboard() {
             else if (store === "b2b") buckets[key].b2bRevenue += amount;
         });
         return Object.values(buckets).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-    }, [orders, timeline, customDateFrom, customDateTo]);
+    }, [orders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
         const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B");
-        const dateRange = getDateRange(timeline);
-        const currentB2b = allB2bOrders.filter(o => { const d = new Date(o.created_at); return d >= dateRange.start && d <= dateRange.end; });
+        const currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
 
         const totalB2bRevenue = currentB2b.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
-        const totalAllRevenue = filterOrdersByDateRange(orders, dateRange).reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const totalAllRevenue = orders.filter(o => inPeriod(o.created_at)).reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const b2bContribution = totalAllRevenue > 0 ? ((totalB2bRevenue / totalAllRevenue) * 100).toFixed(1) : 0;
 
         const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
@@ -584,9 +535,9 @@ export default function GMDashboard() {
         });
         const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
 
-        // Growth
-        const periodMs = dateRange.end - dateRange.start;
-        const prevB2b = allB2bOrders.filter(o => { const d = new Date(o.created_at); return d >= new Date(dateRange.start.getTime() - periodMs) && d < dateRange.start; });
+        // Growth vs the immediately-preceding period (no growth figure on "All time").
+        const prevRange = comparisonPeriodRange(periodRangeValue, "previous_period");
+        const prevB2b = prevRange ? allB2bOrders.filter(o => inRange(prevRange, o.created_at)) : [];
         const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
         return {
@@ -596,9 +547,9 @@ export default function GMDashboard() {
             clientOrderCount: clientOrderOrders.length, clientOrderValue: clientOrderOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             currentB2bClients, b2bTotalPages, allClientSales, topB2bProducts,
             advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
-            revenueGrowth: calculateGrowth(totalB2bRevenue, prevRevenue),
+            revenueGrowth: periodRangeValue ? calculateGrowth(totalB2bRevenue, prevRevenue) : 0,
         };
-    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, vendors]);
+    }, [orders, inPeriod, periodRangeValue, b2bSearch, b2bPage, vendors]);
 
     // ═══════════════════════════════════════════════════════════
     // INVENTORY STATS
@@ -620,12 +571,7 @@ export default function GMDashboard() {
         const lostConsignment = consignmentInventory.reduce((s, c) => s + (c.quantity_lost || 0), 0);
 
         // Stock vs Sales analysis
-        const dateRange = getDateRange(timeline);
-        const recentOrders = orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const recentOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at));
         const soldQty = recentOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
 
         // Filtered products for table
@@ -654,14 +600,13 @@ export default function GMDashboard() {
             totalConsignmentPieces, soldConsignment, remainingConsignment, lostConsignment,
             soldQty, currentProducts, inventoryTotalPages,
         };
-    }, [products, consignmentInventory, orders, timeline, customDateFrom, customDateTo, inventorySearch, inventoryStockFilter, inventoryTypeFilter, inventoryPage, variantInventory]);
+    }, [products, consignmentInventory, orders, inPeriod, inventorySearch, inventoryStockFilter, inventoryTypeFilter, inventoryPage, variantInventory]);
 
     // ═══════════════════════════════════════════════════════════
     // RETURNS & ANALYTICS
     // ═══════════════════════════════════════════════════════════
     const returnsAnalytics = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const periodOrders = filterOrdersByDateRange(orders, dateRange);
+        const periodOrders = orders.filter(o => inPeriod(o.created_at));
 
         const cancelled = periodOrders.filter(o => o.status === "cancelled");
         const returned = periodOrders.filter(o => o.return_reason);
@@ -710,7 +655,7 @@ export default function GMDashboard() {
             exchangeReasons: analyzeReasons(exchanged, "exchange_reason"),
             saIssuesList,
         };
-    }, [orders, timeline, customDateFrom, customDateTo]);
+    }, [orders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // ACCOUNTS (line items)
@@ -757,13 +702,12 @@ export default function GMDashboard() {
             result = result.filter(item => item.order_no?.toLowerCase().includes(q) || item.client_name?.toLowerCase().includes(q) ||
                 item.product_name?.toLowerCase().includes(q) || item.sa_name?.toLowerCase().includes(q));
         }
-        if (accountsDateFrom) result = result.filter(item => new Date(item.order_date) >= new Date(accountsDateFrom));
-        if (accountsDateTo) result = result.filter(item => new Date(item.order_date) <= new Date(accountsDateTo + "T23:59:59"));
+        if (accountsPeriodRange) result = result.filter(item => inAccountsPeriod(item.order_date));
         if (accountsStatus) result = result.filter(item => (item.status === "pending" ? "order_received" : item.status) === accountsStatus);
         if (accountsStore) result = result.filter(item => item.store === accountsStore);
         if (accountsSA) result = result.filter(item => item.sa_name === accountsSA);
         return result;
-    }, [accountsLineItems, accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
+    }, [accountsLineItems, accountsSearch, accountsPeriodRange, inAccountsPeriod, accountsStatus, accountsStore, accountsSA]);
 
     const accountsStoreOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.store).filter(s => s && s !== "-"))].sort(), [accountsLineItems]);
     const accountsSAOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.sa_name).filter(s => s && s !== "-" && isPersonName(s)))].sort(), [accountsLineItems, knownStoreNames]);
@@ -814,14 +758,7 @@ export default function GMDashboard() {
                 }
             });
         }
-        if (filters.dateFrom || filters.dateTo) {
-            result = result.filter(order => {
-                const orderDate = new Date(order.created_at);
-                if (filters.dateFrom && orderDate < new Date(filters.dateFrom)) return false;
-                if (filters.dateTo && orderDate > new Date(filters.dateTo + "T23:59:59")) return false;
-                return true;
-            });
-        }
+        if (ordersPeriodRange) result = result.filter(order => inOrdersPeriod(order.created_at));
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(order => { const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0; return total >= filters.minPrice && total <= filters.maxPrice; });
         }
@@ -847,7 +784,7 @@ export default function GMDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
 
     const orderTabCounts = useMemo(() => {
         const valid = orders.filter(o => !isLxrtsOrder(o));
@@ -865,7 +802,7 @@ export default function GMDashboard() {
 
     const appliedFilters = useMemo(() => {
         const chips = [];
-        if (filters.dateFrom || filters.dateTo) chips.push({ type: "date", label: `${filters.dateFrom || "..."} to ${filters.dateTo || "..."}` });
+        if (ordersTimeline !== "all") chips.push({ type: "date", label: periodLabel(ordersTimeline) });
         if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `\u20B9${(filters.minPrice / 1000).toFixed(0)}K - \u20B9${(filters.maxPrice / 1000).toFixed(0)}K` });
         filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
         filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
@@ -873,16 +810,19 @@ export default function GMDashboard() {
         filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
         return chips;
-    }, [filters]);
+    }, [filters, ordersTimeline]);
 
     const removeFilter = (type, value) => {
-        if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+        if (type === "date") clearOrdersPeriod();
         else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
         else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    const clearAllFilters = () => {
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+        clearOrdersPeriod();
+    };
     const toggleFilter = (category, value) => setFilters(prev => ({ ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value] }));
 
     const handleExportCSV = () => {
@@ -912,8 +852,8 @@ export default function GMDashboard() {
     };
 
     // Reset pages on filter change
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
-    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy, ordersPeriodRange]);
+    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsPeriodRange, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
     useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
     useEffect(() => {
@@ -922,11 +862,6 @@ export default function GMDashboard() {
             if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
         }
     }, [activeTab, products]);
-
-    const handleTimelineChange = (value) => {
-        setTimeline(value);
-        setShowCustomDatePicker(value === "custom");
-    };
 
     // ═══════════════════════════════════════════════════════════
     // RENDER
@@ -983,27 +918,13 @@ export default function GMDashboard() {
 
                     {/* ═══════════ TIMELINE CONTROLS (shown on dashboard tabs) ═══════════ */}
                     {["store_performance", "day_sales", "b2b_overview", "inventory", "returns"].includes(activeTab) && (
-                        <div className="cmo-filters-bar">
-                            <div className="cmo-timeline-group">
-                                {TIMELINE_OPTIONS.map(opt => (
-                                    <button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`} onClick={() => handleTimelineChange(opt.value)}>{opt.label}</button>
-                                ))}
-                            </div>
+                        <PeriodFilter {...periodProps} variant="pills">
                             {activeTab === "store_performance" && (
-                                <div className="cmo-compare-group">
-                                    <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
-                                        {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                    </select>
-                                </div>
+                                <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
+                                    {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                </select>
                             )}
-                            {showCustomDatePicker && (
-                                <div className="cmo-date-range">
-                                    <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                    <span className="cmo-date-sep">\u2192</span>
-                                    <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                </div>
-                            )}
-                        </div>
+                        </PeriodFilter>
                     )}
 
                     {/* ═══════════ TAB 1: STORE PERFORMANCE ═══════════ */}
@@ -1494,15 +1415,11 @@ export default function GMDashboard() {
 
                             <div className="admin-filter-bar" ref={dropdownRef}>
                                 <div className="filter-dropdown">
-                                    <button className={`filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range {"\u25BE"}</button>
+                                    <button className={`filter-btn ${ordersTimeline !== "all" ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range {"\u25BE"}</button>
                                     {openDropdown === "date" && (
                                         <div className="dropdown-panel">
-                                            <div className="dropdown-title">Select Date Range</div>
-                                            <div className="date-inputs">
-                                                <input type="date" value={filters.dateFrom} onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))} />
-                                                <span>to</span>
-                                                <input type="date" value={filters.dateTo} onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))} />
-                                            </div>
+                                            <div className="dropdown-title">Select Period</div>
+                                            <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
                                             <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
                                         </div>
                                     )}
@@ -1601,11 +1518,7 @@ export default function GMDashboard() {
                                     <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
                                     <input type="text" placeholder="Search Order, Customer..." value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} className="admin-search-input" />
                                 </div>
-                                <div className="cmo-date-range">
-                                    <input type="date" value={accountsDateFrom} onChange={(e) => setAccountsDateFrom(e.target.value)} />
-                                    <span className="cmo-date-sep">{"\u2192"}</span>
-                                    <input type="date" value={accountsDateTo} onChange={(e) => setAccountsDateTo(e.target.value)} />
-                                </div>
+                                {accountsPeriodControl}
                                 <select className="cmo-compare-select" value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
                                     <option value="">All Status</option>
                                     <option value="order_received">Order Received</option><option value="in_production">In Production</option><option value="ready">Ready</option>
@@ -1619,8 +1532,8 @@ export default function GMDashboard() {
                                     <option value="">All Salespersons</option>
                                     {accountsSAOptions.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
-                                {(accountsDateFrom || accountsDateTo || accountsStatus || accountsStore || accountsSA) && (
-                                    <button className="cmo-pill" onClick={() => { setAccountsDateFrom(""); setAccountsDateTo(""); setAccountsStatus(""); setAccountsStore(""); setAccountsSA(""); }}
+                                {(accountsTimeline !== "all" || accountsStatus || accountsStore || accountsSA) && (
+                                    <button className="cmo-pill" onClick={() => { accountsPeriodProps.setTimeline("all"); accountsPeriodProps.setCustomFrom(""); accountsPeriodProps.setCustomTo(""); setAccountsStatus(""); setAccountsStore(""); setAccountsSA(""); }}
                                         style={{ color: '#c62828', borderColor: '#c62828' }}>Clear</button>
                                 )}
                             </div>

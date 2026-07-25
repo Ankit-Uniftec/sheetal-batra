@@ -14,21 +14,12 @@ import SearchByDropdown from "../../components/SearchByDropdown";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import { getOrderChannelLabel } from "../../utils/barcodeService";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 // Head of Design Dashboard — read-only view for Tanuja Singh.
 // Two focused tabs:
 //   1. Order Status (transparency across all channels)
 //   2. B2B Orders (full B2B transparency: vendor, merchandiser, PO, approval)
-
-const TIMELINE_OPTIONS = [
-  { value: "today", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "weekly", label: "Last 7 Days" },
-  { value: "monthly", label: "Last 30 Days" },
-  { value: "yearly", label: "Last 365 Days" },
-  { value: "all", label: "All Time" },
-  { value: "custom", label: "Custom" },
-];
 
 const ITEMS_PER_PAGE = 15;
 
@@ -105,11 +96,8 @@ export default function HeadOfDesignDashboard() {
   const [activeTab, setActiveTab] = useTabParam("status");
   const [showSidebar, setShowSidebar] = useState(false);
 
-  // Filter state
-  const [timeline, setTimeline] = useState("monthly");
-  const [customDateFrom, setCustomDateFrom] = useState("");
-  const [customDateTo, setCustomDateTo] = useState("");
-  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  // Filter state — shared PeriodFilter drives both tabs.
+  const { control: periodControl, inPeriod, range: periodRangeValue } = usePeriodFilter("month", { variant: "pills" });
 
   // Order Status drill-down
   const [statusFilter, setStatusFilter] = useState("all");
@@ -158,37 +146,10 @@ export default function HeadOfDesignDashboard() {
     navigate("/login");
   };
 
-  // ─── Date range helpers ──────────────────────────────────────
-  const dateRange = useMemo(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    switch (timeline) {
-      case "today":     return { start: today, end: now };
-      case "yesterday": {
-        const y = new Date(today); y.setDate(y.getDate() - 1);
-        const ye = new Date(today); ye.setMilliseconds(-1);
-        return { start: y, end: ye };
-      }
-      case "weekly":  { const w = new Date(today); w.setDate(w.getDate() - 7);   return { start: w, end: now }; }
-      case "monthly": { const m = new Date(today); m.setDate(m.getDate() - 30);  return { start: m, end: now }; }
-      case "yearly":  { const y = new Date(today); y.setDate(y.getDate() - 365); return { start: y, end: now }; }
-      case "all":     return null;
-      case "custom":
-        return {
-          start: customDateFrom ? new Date(customDateFrom) : new Date(0),
-          end: customDateTo ? new Date(customDateTo + "T23:59:59") : now,
-        };
-      default: return { start: today, end: now };
-    }
-  }, [timeline, customDateFrom, customDateTo]);
-
-  const periodOrders = useMemo(() => {
-    if (!dateRange) return orders;
-    return orders.filter(o => {
-      const d = new Date(o.created_at);
-      return d >= dateRange.start && d <= dateRange.end;
-    });
-  }, [orders, dateRange]);
+  const periodOrders = useMemo(
+    () => orders.filter((o) => inPeriod(o.created_at)),
+    [orders, inPeriod]
+  );
 
   // Vendor lookup
   const vendorById = useMemo(() => {
@@ -235,7 +196,7 @@ export default function HeadOfDesignDashboard() {
     () => filteredOrdersForTable.slice((ordersPage - 1) * ITEMS_PER_PAGE, ordersPage * ITEMS_PER_PAGE),
     [filteredOrdersForTable, ordersPage]
   );
-  useEffect(() => { setOrdersPage(1); }, [statusFilter, orderSearch, orderSearchField, timeline, customDateFrom, customDateTo]);
+  useEffect(() => { setOrdersPage(1); }, [statusFilter, orderSearch, orderSearchField, periodRangeValue]);
 
   // ─── B2B (Tab 2) ─────────────────────────────────────────────
   const b2bAll = useMemo(
@@ -314,7 +275,7 @@ export default function HeadOfDesignDashboard() {
     () => b2bFiltered.slice((b2bPage - 1) * ITEMS_PER_PAGE, b2bPage * ITEMS_PER_PAGE),
     [b2bFiltered, b2bPage]
   );
-  useEffect(() => { setB2bPage(1); }, [b2bApprovalFilter, b2bVendorFilter, b2bSearch, timeline, customDateFrom, customDateTo]);
+  useEffect(() => { setB2bPage(1); }, [b2bApprovalFilter, b2bVendorFilter, b2bSearch, periodRangeValue]);
 
   if (loading) {
     return (
@@ -327,27 +288,8 @@ export default function HeadOfDesignDashboard() {
     );
   }
 
-  // ─── Reusable: Timeline filter bar ───
-  const TimelineBar = (
-    <div className="hod-filters-bar">
-      <div className="hod-timeline-pills">
-        {TIMELINE_OPTIONS.map(opt => (
-          <button
-            key={opt.value}
-            className={`hod-pill ${timeline === opt.value ? "active" : ""}`}
-            onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}
-          >{opt.label}</button>
-        ))}
-      </div>
-      {showCustomDatePicker && (
-        <div className="hod-date-range">
-          <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-          <span>{"→"}</span>
-          <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-        </div>
-      )}
-    </div>
-  );
+  // ─── Reusable: Timeline filter bar (shared PeriodFilter) ───
+  const TimelineBar = periodControl;
 
   return (
     <div className="hod-page">

@@ -23,9 +23,8 @@
    The search box takes the leftover space; selects/dates stay fixed. */
 .qch-filters > input[type="text"] { flex: 1 1 180px; min-width: 160px; }
 .qch-filters > select.qch-input { flex: 0 0 auto; width: auto; min-width: 120px; }
-.qch-date-range input[type="date"].qch-input { width: 148px; }
-
-.qch-date-range { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+/* The shared PeriodFilter (.pfx) sits inline in the bar without its own bottom margin. */
+.qch-filters .pfx { margin-bottom: 0; }
 
 .qch-clear {
   border: 1px solid #e0d8c6;

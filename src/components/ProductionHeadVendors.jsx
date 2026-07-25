@@ -17,6 +17,7 @@ import {
 } from "../utils/barcodeService";
 import { externalMovementsToCsvRows } from "../utils/externalMovements";
 import { buildCsv, downloadCsv } from "./AddProduct/csvHelpers";
+import { usePeriodFilter } from "./PeriodFilter";
 
 const EXT_CSV_HEADERS = [
   "Barcode", "Order No", "Component", "Vendor", "Vendor Location",
@@ -123,8 +124,11 @@ const ProductionHeadVendors = ({ currentUserEmail, channel }) => {
   const [movVendorFilter, setMovVendorFilter] = useState("");
   const [movTypeFilter, setMovTypeFilter] = useState("");      // component category
   const [movReturnFilter, setMovReturnFilter] = useState("");  // exact return date
-  const [movFrom, setMovFrom] = useState("");                  // sent-out range from
-  const [movTo, setMovTo] = useState("");                      // sent-out range to
+  // Sent-out period (exit_scan_at) — shared PeriodFilter (select).
+  const {
+    control: movPeriodControl, timeline: movTimeline,
+    inPeriod: inMovPeriod, range: movPeriodRange, props: movPeriodProps,
+  } = usePeriodFilter("all", { variant: "select", label: "Sent out:" });
   // Vendors tab filters
   const [vendorSearch, setVendorSearch] = useState("");
   const [vendorStageFilter, setVendorStageFilter] = useState("");
@@ -174,22 +178,17 @@ const ProductionHeadVendors = ({ currentUserEmail, channel }) => {
   // still-configured piece has none, so it drops out of a bounded range, which
   // is correct (it hasn't gone out yet).
   const filteredMovements = useMemo(() => {
-    const fromT = movFrom ? new Date(movFrom + "T00:00:00").getTime() : null;
-    const toT = movTo ? new Date(movTo + "T23:59:59.999").getTime() : null;
     return movements.filter((m) => {
       if (movVendorFilter && m.vendor_name !== movVendorFilter) return false;
       if (movTypeFilter && m.component_type !== movTypeFilter) return false;
       if (movReturnFilter && m.return_date !== movReturnFilter) return false;
-      if (fromT || toT) {
-        if (!m.exit_scan_at) return false;
-        const t = new Date(m.exit_scan_at).getTime();
-        if (fromT && t < fromT) return false;
-        if (toT && t > toT) return false;
-      }
+      // A still-configured piece has no exit_scan_at, so it drops out of a
+      // bounded period, which is correct (it hasn't gone out yet).
+      if (movPeriodRange && !(m.exit_scan_at && inMovPeriod(m.exit_scan_at))) return false;
       return true;
     });
-  }, [movements, movVendorFilter, movTypeFilter, movReturnFilter, movFrom, movTo]);
-  useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter, movFrom, movTo]);
+  }, [movements, movVendorFilter, movTypeFilter, movReturnFilter, movPeriodRange, inMovPeriod]);
+  useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter, movPeriodRange]);
 
   // Export the currently-filtered movement history as a UTF-8-BOM CSV (Excel
   // opens it natively; the app has no XLSX library). Same helper the PM panel
@@ -505,14 +504,9 @@ const ProductionHeadVendors = ({ currentUserEmail, channel }) => {
               Return date
               <input type="date" value={movReturnFilter} onChange={(e) => setMovReturnFilter(e.target.value)} />
             </label>
-            <label className="phv-filter-date" title="Filter by the date the piece was sent out to the vendor">
-              Sent out
-              <input type="date" value={movFrom} onChange={(e) => setMovFrom(e.target.value)} aria-label="Sent out from" />
-              <span>→</span>
-              <input type="date" value={movTo} min={movFrom || undefined} onChange={(e) => setMovTo(e.target.value)} aria-label="Sent out to" />
-            </label>
-            {(movVendorFilter || movTypeFilter || movReturnFilter || movFrom || movTo) && (
-              <button className="phv-filter-clear" onClick={() => { setMovVendorFilter(""); setMovTypeFilter(""); setMovReturnFilter(""); setMovFrom(""); setMovTo(""); }}>Clear</button>
+            {movPeriodControl}
+            {(movVendorFilter || movTypeFilter || movReturnFilter || movTimeline !== "all") && (
+              <button className="phv-filter-clear" onClick={() => { setMovVendorFilter(""); setMovTypeFilter(""); setMovReturnFilter(""); movPeriodProps.setTimeline("all"); movPeriodProps.setCustomFrom(""); movPeriodProps.setCustomTo(""); }}>Clear</button>
             )}
             <button className="phv-filter-export" onClick={handleMovementsExport} disabled={filteredMovements.length === 0} title="Download the filtered list as a CSV (opens in Excel)">
               Export ({filteredMovements.length})

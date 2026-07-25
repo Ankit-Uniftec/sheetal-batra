@@ -223,60 +223,6 @@
   margin: 12px 0 0 0;
 }
 
-/* ── TIMELINE PILLS ── */
-.acct-filters-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.acct-timeline-pills {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.acct-pill {
-  padding: 8px 14px;
-  background: #FFFFFFB0;
-  border: 1px solid #D4D4D4;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.acct-pill:hover { border-color: #d5b85a; color: #d5b85a; }
-
-.acct-pill.active {
-  background: #d5b85a;
-  color: white !important;
-  border-color: #d5b85a;
-}
-
-.acct-date-range {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.acct-date-range input[type="date"] {
-  padding: 8px 10px;
-  border: 1px solid #D4D4D4;
-  border-radius: 6px;
-  font-size: 12px;
-  background: #FFFFFFB0;
-}
-
-.acct-date-range input[type="date"]:focus { border-color: #d5b85a; outline: none; }
-
-.acct-date-range span { color: #999; font-size: 12px; }
-
 /* ── STATS GRID ── */
 .acct-stats-grid {
   display: grid;

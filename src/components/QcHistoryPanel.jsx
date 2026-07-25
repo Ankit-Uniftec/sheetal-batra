@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import QcHistoryTable from "./QcHistoryTable";
 import Paginator from "./Paginator";
 import { qcSummary, filterQcRecords, distinctInspectors } from "../utils/qcHistory";
+import { usePeriodFilter } from "./PeriodFilter";
 import "./QcHistoryPanel.css";
 
 // QC history can be thousands of records (the PM fetch pages the whole table) —
@@ -10,7 +11,7 @@ const PAGE_SIZE = 25;
 
 /**
  * QcHistoryPanel — the full dashboard QC-history view: a filter bar
- * (date range, Pass/Fail, QC1/Final, QC person, order/barcode search),
+ * (time period, Pass/Fail, QC1/Final, QC person, order/barcode search),
  * a summary counts line, and the shared QcHistoryTable below.
  *
  * Fully self-contained (client-side filtering) — the caller only supplies
@@ -24,41 +25,46 @@ const PAGE_SIZE = 25;
  * @param {function} [onOrderClick]              (orderId, orderNo) => void — jump to the order
  */
 export default function QcHistoryPanel({ records = [], loading, showInspectorFilter = true, showOrderNo = true, onOrderClick }) {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  // Time scope via the shared PeriodFilter (by inspection time, created_at).
+  const {
+    control: periodControl, timeline, inPeriod, range: periodRange, props: periodProps,
+  } = usePeriodFilter("all", { variant: "select", label: "Date:" });
   const [result, setResult] = useState("");
   const [whichQc, setWhichQc] = useState("");
   const [inspectedBy, setInspectedBy] = useState("");
   const [search, setSearch] = useState("");
 
   const inspectors = useMemo(() => distinctInspectors(records), [records]);
+  const periodRecords = useMemo(
+    () => (periodRange ? records.filter((r) => inPeriod(r.created_at)) : records),
+    [records, periodRange, inPeriod]
+  );
   const filtered = useMemo(
-    () => filterQcRecords(records, { from, to, result, whichQc, inspectedBy, search }),
-    [records, from, to, result, whichQc, inspectedBy, search]
+    () => filterQcRecords(periodRecords, { result, whichQc, inspectedBy, search }),
+    [periodRecords, result, whichQc, inspectedBy, search]
   );
   const summary = useMemo(() => qcSummary(filtered), [filtered]);
 
   // Page within the FILTERED set; any filter change starts back at page 1.
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [records, from, to, result, whichQc, inspectedBy, search]);
+  useEffect(() => { setPage(1); }, [records, periodRange, result, whichQc, inspectedBy, search]);
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageRecords = useMemo(
     () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
     [filtered, page]
   );
 
-  const clear = () => { setFrom(""); setTo(""); setResult(""); setWhichQc(""); setInspectedBy(""); setSearch(""); };
-  const hasFilters = from || to || result || whichQc || inspectedBy || search;
+  const clear = () => {
+    periodProps.setTimeline("all"); periodProps.setCustomFrom(""); periodProps.setCustomTo("");
+    setResult(""); setWhichQc(""); setInspectedBy(""); setSearch("");
+  };
+  const hasFilters = timeline !== "all" || result || whichQc || inspectedBy || search;
 
   return (
     <div className="qch-panel">
       <div className="qch-filters">
         <input className="qch-input" type="text" placeholder="Search order # or barcode…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <div className="qch-date-range">
-          <input className="qch-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <span>→</span>
-          <input className="qch-input" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
-        </div>
+        {periodControl}
         <select className="qch-input" value={result} onChange={(e) => setResult(e.target.value)}>
           <option value="">All results</option>
           <option value="pass">Pass</option>

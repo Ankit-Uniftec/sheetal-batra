@@ -10,6 +10,7 @@ import {
   reconcileConversions,
   setManualConversion,
 } from "../utils/walkinConversion";
+import { usePeriodFilter } from "../components/PeriodFilter";
 import "./WalkInTab.css";
 
 const formatDateTime = (iso) => {
@@ -85,16 +86,23 @@ export default function WalkInTab({ saEmail, showPopup }) {
     return () => { cancelled = true; };
   }, [saEmail]);
 
-  // Apply the conversion filter to the loaded walk-ins.
+  // Time scope (by visit date) via the shared PeriodFilter.
+  const { control: periodControl, inPeriod, range: periodRange } = usePeriodFilter("all", { variant: "select", label: "Visited:" });
+  const periodWalkins = useMemo(
+    () => (periodRange ? walkins.filter((w) => inPeriod(w.created_at)) : walkins),
+    [walkins, periodRange, inPeriod]
+  );
+
+  // Apply the conversion filter to the period-scoped walk-ins.
   const visibleWalkins = useMemo(() => {
-    if (convFilter === "all") return walkins;
+    if (convFilter === "all") return periodWalkins;
     const want = convFilter === "converted";
-    return walkins.filter((w) => effectiveConverted(w, orderPhoneSet) === want);
-  }, [walkins, convFilter, orderPhoneSet]);
+    return periodWalkins.filter((w) => effectiveConverted(w, orderPhoneSet) === want);
+  }, [periodWalkins, convFilter, orderPhoneSet]);
 
   const convertedCount = useMemo(
-    () => walkins.filter((w) => effectiveConverted(w, orderPhoneSet)).length,
-    [walkins, orderPhoneSet]
+    () => periodWalkins.filter((w) => effectiveConverted(w, orderPhoneSet)).length,
+    [periodWalkins, orderPhoneSet]
   );
 
   // Manual override toggle. Cycles the effective status: clicking flips it and
@@ -172,15 +180,15 @@ export default function WalkInTab({ saEmail, showPopup }) {
     <div className="ad-order-details-wrapper">
       <div className="wi-header">
         <h2 className="ad-order-title" style={{ margin: 0 }}>
-          Walk-In ({walkins.length})
-          {walkins.length > 0 && (
+          Walk-In ({periodWalkins.length})
+          {periodWalkins.length > 0 && (
             <span className="wi-converted-summary"> · {convertedCount} converted</span>
           )}
         </h2>
         <button className="wi-add-btn" onClick={openForm}>+ Add Walk-In</button>
       </div>
 
-      {/* ─── Conversion filter ─── */}
+      {/* ─── Time + conversion filters ─── */}
       {!loading && walkins.length > 0 && (
         <div className="wi-filter-row">
           {[
@@ -196,6 +204,7 @@ export default function WalkInTab({ saEmail, showPopup }) {
               {opt.label}
             </button>
           ))}
+          {periodControl}
         </div>
       )}
 

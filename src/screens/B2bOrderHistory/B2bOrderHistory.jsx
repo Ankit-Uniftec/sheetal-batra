@@ -8,6 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import Paginator from "../../components/Paginator";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
+import { usePeriodFilterParam } from "../../components/PeriodFilter";
 
 // Color display component (same as OrderHistory)
 function ColorDot({ color }) {
@@ -40,12 +41,16 @@ export default function B2bOrderHistory() {
     const [statusFilter, setStatusFilter] = useFilterParam("status", "all");
     const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
     const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    // Order-date scope — URL-persisted PeriodFilter (Back keeps the filter,
+    // legacy ?from/?to links still apply as a custom range).
+    const {
+        control: periodControl, timeline: periodTimeline,
+        inPeriod, range: periodRange,
+    } = usePeriodFilterParam("all", { variant: "select", label: "Order date:" });
     const [searchQuery, setSearchQuery] = useFilterParam("q", "");
 
     // One navigation, or the five setters clobber each other (see the hook).
-    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "from", "to"]);
+    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "period", "from", "to"]);
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const ordersPerPage = 5;
@@ -115,12 +120,7 @@ export default function B2bOrderHistory() {
         let filtered = [...orders];
 
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
-        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
-        if (dateTo) {
-            const endDate = new Date(dateTo);
-            endDate.setHours(23, 59, 59, 999);
-            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
-        }
+        if (periodRange) filtered = filtered.filter(o => inPeriod(o.created_at));
 
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase().trim();
@@ -137,14 +137,14 @@ export default function B2bOrderHistory() {
         }
 
         return filtered;
-    }, [orders, searchQuery, merchandiserFilter, dateFrom, dateTo]);
+    }, [orders, searchQuery, merchandiserFilter, periodRange, inPeriod]);
 
     const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
     const startIndex = (currentPage - 1) * ordersPerPage;
     const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
 
     // Reset page on search change
-    useEffect(() => { setCurrentPage(1); }, [searchQuery]);
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, periodRange]);
 
     const recent = useMemo(() => orders.slice(0, 3), [orders]);
 
@@ -252,11 +252,8 @@ export default function B2bOrderHistory() {
                                 <option value="all">All Merchandisers</option>
                                 {uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
-                            <label style={{ fontSize: 12, color: "#888", marginTop: 8 }}>From Date</label>
-                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="b2boh-filter-select" />
-                            <label style={{ fontSize: 12, color: "#888", marginTop: 4 }}>To Date</label>
-                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="b2boh-filter-select" />
-                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
+                            {periodControl}
+                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || periodTimeline !== "all") && (
                                 <button onClick={() => { clearOrderFilters(); setCurrentPage(1); }} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear All Filters</button>
                             )}
                         </div>

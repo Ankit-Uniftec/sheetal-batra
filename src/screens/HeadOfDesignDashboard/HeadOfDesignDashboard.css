@@ -224,60 +224,6 @@
   margin: 12px 0 0 0;
 }
 
-/* ── TIMELINE PILLS ── */
-.hod-filters-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.hod-timeline-pills {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.hod-pill {
-  padding: 8px 14px;
-  background: #FFFFFFB0;
-  border: 1px solid #D4D4D4;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.hod-pill:hover { border-color: #d5b85a; color: #d5b85a; }
-
-.hod-pill.active {
-  background: #d5b85a;
-  color: white !important;
-  border-color: #d5b85a;
-}
-
-.hod-date-range {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.hod-date-range input[type="date"] {
-  padding: 8px 10px;
-  border: 1px solid #D4D4D4;
-  border-radius: 6px;
-  font-size: 12px;
-  background: #FFFFFFB0;
-}
-
-.hod-date-range input[type="date"]:focus { border-color: #d5b85a; outline: none; }
-
-.hod-date-range span { color: #999; font-size: 12px; }
-
 /* ── STATS GRID ── */
 .hod-stats-grid {
   display: grid;

@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 /**
  * CommsInventory — read-only inventory view + temp-block management.
@@ -55,6 +56,8 @@ export default function CommsInventory({ profile, showPopup }) {
   // Filter state
   const [search, setSearch] = useState("");
   const [showOutOfStock, setShowOutOfStock] = useState(true);
+  // Time scope by product creation date — shared PeriodFilter (select).
+  const { control: periodControl, inPeriod, range: periodRange } = usePeriodFilter("all", { variant: "select", label: "Added:" });
 
   // Block modal
   const [blockModal, setBlockModal] = useState(null); // { product, variant? }
@@ -124,11 +127,13 @@ export default function CommsInventory({ profile, showPopup }) {
     return map;
   }, [blocks, today]);
 
-  // Filter products by search and stock toggle
+  // Filter products by search, stock toggle, and creation-date period.
+  // (Current-state stock list — the period scopes by when the product was added.)
   const visibleProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
     return products.filter((p) => {
       if (!showOutOfStock && totalInventoryFor(p) <= 0) return false;
+      if (periodRange && !inPeriod(p.created_at)) return false;
       if (q) {
         const hay = `${p.name || ""} ${p.sku_id || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -136,7 +141,7 @@ export default function CommsInventory({ profile, showPopup }) {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, variants, search, showOutOfStock]);
+  }, [products, variants, search, showOutOfStock, periodRange, inPeriod]);
 
   // Open / close the block modal. We can pass a variant for LXRTS rows or
   // skip it (defaults to product-level block) for non-LXRTS.
@@ -318,6 +323,11 @@ export default function CommsInventory({ profile, showPopup }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+        </div>
+
+        <div className="comms-filters-row">
+          <span className="comms-filters-row-label">Period</span>
+          <div className="comms-filters-row-controls">{periodControl}</div>
         </div>
 
         <div className="comms-filters-row">

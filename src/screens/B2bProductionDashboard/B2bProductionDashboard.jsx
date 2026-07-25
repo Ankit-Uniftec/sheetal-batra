@@ -23,6 +23,7 @@ import { getStageLabel, getStageGroupKey, enrichComponentsWithMovements, classif
 import { fetchQcRecords } from "../../utils/qcHistory";
 import { fetchReJourneys } from "../../utils/reJourneys";
 import { runManualCompleteWithOverride } from "../../utils/manualComplete";
+import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
@@ -81,17 +82,20 @@ export default function B2bProductionDashboard() {
     // All Orders type filter
     const [allTypeFilter, setAllTypeFilter] = useFilterParam("type", "all");
     const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    // Order-date scope for the All Orders list — shared PeriodFilter (select variant).
+    const {
+        control: ordersPeriodControl, timeline: ordersTimeline,
+        inPeriod: inOrdersPeriod, range: ordersPeriodRange, props: ordersPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { setCurrentPage(1); }, [ordersPeriodRange]);
     // Stage-card drill-through: filter the All Orders list to a stage (and kind).
     const [stageFilter, setStageFilter] = useState(null);      // stage group key or null
     const [stageKindFilter, setStageKindFilter] = useState("both"); // 'both' | 'internal' | 'external'
 
     // Overview date-period filter for the stage cards (by piece scan time, not
     // order placement date — same pattern as PM / Offline PH dashboards).
-    const [overviewPeriod, setOverviewPeriod] = useState("all"); // all | day | month | year | custom
-    const [overviewFrom, setOverviewFrom] = useState("");
-    const [overviewTo, setOverviewTo] = useState("");
+    const { control: overviewPeriodControl, inPeriod: inOverviewPeriod } = usePeriodFilter("all", { variant: "pills" });
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -256,26 +260,10 @@ export default function B2bProductionDashboard() {
     // Overview period — powers the stage cards. Filtered by the PIECE's own
     // scan time, not its order's created_at, so a scan today on an old order
     // shows up under "Today".
-    const componentsInPeriod = useMemo(() => {
-        if (overviewPeriod === "all") return components;
-        const now = new Date();
-        let from = null, to = null;
-        if (overviewPeriod === "day") from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        else if (overviewPeriod === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
-        else if (overviewPeriod === "year") from = new Date(now.getFullYear(), 0, 1);
-        else if (overviewPeriod === "custom") {
-            from = overviewFrom ? new Date(overviewFrom) : null;
-            to = overviewTo ? new Date(new Date(overviewTo).setHours(23, 59, 59, 999)) : null;
-        }
-        return components.filter((c) => {
-            const ts = c.stage_updated_at || c.created_at;
-            if (!ts) return false;
-            const dt = new Date(ts);
-            if (from && dt < from) return false;
-            if (to && dt > to) return false;
-            return true;
-        });
-    }, [components, overviewPeriod, overviewFrom, overviewTo]);
+    const componentsInPeriod = useMemo(
+        () => components.filter((c) => inOverviewPeriod(c.stage_updated_at || c.created_at)),
+        [components, inOverviewPeriod]
+    );
 
     // order_id -> { stageKey: Set('internal'|'external') }, using the SAME
     // classifier the cards use, so clicking a card / sub-count drills the order
@@ -341,12 +329,7 @@ export default function B2bProductionDashboard() {
         else if (prodFilter !== "all") filtered = filtered.filter(o => (o.status || "").toLowerCase() !== "cancelled" && getStageBucket(o) === prodFilter);
         if (allTypeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type === allTypeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
-        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
-        if (dateTo) {
-            const endDate = new Date(dateTo);
-            endDate.setHours(23, 59, 59, 999);
-            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
-        }
+        if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
             // Client + product included so legacy SA-placed B2B orders (no PO or
@@ -368,7 +351,7 @@ export default function B2bProductionDashboard() {
             });
         }
         return filtered;
-    }, [orders, prodFilter, allTypeFilter, merchandiserFilter, dateFrom, dateTo, orderSearch, vendorMap, stageFilter, stageKindFilter, orderStageGroups]);
+    }, [orders, prodFilter, allTypeFilter, merchandiserFilter, ordersPeriodRange, inOrdersPeriod, orderSearch, vendorMap, stageFilter, stageKindFilter, orderStageGroups]);
 
     const paginatedOrders = useMemo(() => {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -562,28 +545,7 @@ export default function B2bProductionDashboard() {
                                 <div className="prod-card-header">
                                     <span className="prod-card-title">Production Stages (Components)</span>
                                 </div>
-                                <div className="prod-overview-period">
-                                    {[
-                                        { key: "all", label: "All Time" },
-                                        { key: "day", label: "Today" },
-                                        { key: "month", label: "This Month" },
-                                        { key: "year", label: "This Year" },
-                                        { key: "custom", label: "Custom" },
-                                    ].map((p) => (
-                                        <button
-                                            key={p.key}
-                                            className={`prod-period-pill ${overviewPeriod === p.key ? "active" : ""}`}
-                                            onClick={() => setOverviewPeriod(p.key)}
-                                        >{p.label}</button>
-                                    ))}
-                                    {overviewPeriod === "custom" && (
-                                        <span className="prod-period-custom">
-                                            <input type="date" value={overviewFrom} onChange={(e) => setOverviewFrom(e.target.value)} />
-                                            <span>→</span>
-                                            <input type="date" value={overviewTo} min={overviewFrom || undefined} onChange={(e) => setOverviewTo(e.target.value)} />
-                                        </span>
-                                    )}
-                                </div>
+                                {overviewPeriodControl}
                                 <StageCountCards components={componentsInPeriod} orderStatusById={orderStatusById} onStageClick={handleStageCardClick} />
                             </div>
                         </div>
@@ -760,8 +722,7 @@ export default function B2bProductionDashboard() {
                                 <option value="all">All Merchandisers</option>
                                 {uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
-                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} className="prod-filter-select" title="From date" />
-                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} className="prod-filter-select" title="To date" />
+                            {ordersPeriodControl}
                             {stageFilter && (
                                 <button onClick={() => { setStageFilter(null); setStageKindFilter("both"); setCurrentPage(1); }} title="Clear stage filter"
                                     style={{ padding: "6px 12px", borderRadius: 999, border: "1px solid #d5b85a", background: "#faf6e8", color: "#6b5842", fontSize: 12, cursor: "pointer", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -770,8 +731,8 @@ export default function B2bProductionDashboard() {
                                     <span aria-hidden="true">{"✕"}</span>
                                 </button>
                             )}
-                            {(prodFilter !== "all" || allTypeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
-                                <button onClick={() => { setProdFilter("all"); setAllTypeFilter("all"); setMerchandiserFilter("all"); setDateFrom(""); setDateTo(""); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
+                            {(prodFilter !== "all" || allTypeFilter !== "all" || merchandiserFilter !== "all" || ordersTimeline !== "all") && (
+                                <button onClick={() => { setProdFilter("all"); setAllTypeFilter("all"); setMerchandiserFilter("all"); ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
                             )}
                         </div>
                         <div className="prod-list-scroll">

@@ -10,6 +10,7 @@ import formatDate from "../../utils/formatDate";
 import formatPhoneNumber from "../../utils/formatPhoneNumber";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { SCAN_STATIONS, getOrderChannelLabel, getOrderStatusLabel, normalizeOrderStatus } from "../../utils/barcodeService";
+import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
@@ -45,16 +46,6 @@ const STATUS_TABS = [
     { value: "prepared", label: "Prepared" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
-];
-
-// Timeline options for Dashboard
-const TIMELINE_OPTIONS = [
-    { value: "today", label: "Today" },
-    { value: "yesterday", label: "Yesterday" },
-    { value: "weekly", label: "Last 7 Days" },
-    { value: "monthly", label: "Last 30 Days" },
-    { value: "yearly", label: "Last 365 Days" },
-    { value: "custom", label: "Custom" },
 ];
 
 // Comparison options (like Shopify)
@@ -212,11 +203,10 @@ export default function AdminDashboard() {
 
     // Dashboard states
     const [recentOrdersCount, setRecentOrdersCount] = useState(10);
-    const [timeline, setTimeline] = useState("today");
+    // Shared PeriodFilter drives every date-aware dashboard tab; comparison
+    // stays local.
+    const { inPeriod, range: periodRangeValue, props: periodProps } = usePeriodFilter("today", { variant: "pills" });
     const [comparison, setComparison] = useState("previous_period");
-    const [customDateFrom, setCustomDateFrom] = useState("");
-    const [customDateTo, setCustomDateTo] = useState("");
-    const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
 
     // Inventory states
     const [inventorySearch, setInventorySearch] = useState("");
@@ -241,16 +231,26 @@ export default function AdminDashboard() {
     const [ordersPage, setOrdersPage] = useState(1);
     const [statusUpdating, setStatusUpdating] = useState(null);
     const [filters, setFilters] = useState({
-        dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000,
+        minPrice: 0, maxPrice: 500000,
         payment: [], priority: [], orderType: [], store: [], salesperson: "",
     });
+    // Order-date scope for the orders list — shared PeriodFilter (select),
+    // rendered inside the Date Range dropdown panel.
+    const {
+        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
+        range: ordersPeriodRange, props: ordersPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
     const [openDropdown, setOpenDropdown] = useState(null);
     const dropdownRef = useRef(null);
 
     // Accounts states
     const [accountsSearch, setAccountsSearch] = useState("");
-    const [accountsDateFrom, setAccountsDateFrom] = useState("");
-    const [accountsDateTo, setAccountsDateTo] = useState("");
+    // Order-date scope for the accounts line items — shared PeriodFilter (select).
+    const {
+        control: accountsPeriodControl, timeline: accountsTimeline,
+        inPeriod: inAccountsPeriod, range: accountsPeriodRange, props: accountsPeriodProps,
+    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
     const [accountsStatus, setAccountsStatus] = useState("");
     const [accountsStore, setAccountsStore] = useState("");
     const [accountsSA, setAccountsSA] = useState("");
@@ -276,11 +276,8 @@ export default function AdminDashboard() {
     // Channel filter for dashboard
     const [channelFilter, setChannelFilter] = useState("all");
 
-    // Analytics states
-    const [analyticsTimeline, setAnalyticsTimeline] = useState("monthly");
-    const [analyticsCustomFrom, setAnalyticsCustomFrom] = useState("");
-    const [analyticsCustomTo, setAnalyticsCustomTo] = useState("");
-    const [showAnalyticsCustomPicker, setShowAnalyticsCustomPicker] = useState(false);
+    // Analytics states — separate PeriodFilter instance for the analytics tab.
+    const { inPeriod: inAnalyticsPeriod, props: analyticsPeriodProps } = usePeriodFilter("month", { variant: "pills" });
     const [currentUserEmail, setCurrentUserEmail] = useState("");
     // Logged-in admin's own salesperson row. Used to render the "Stock Order"
     // sidebar button only when can_place_stock_orders is set, and to seed the
@@ -637,113 +634,6 @@ export default function AdminDashboard() {
         return "admin-stock-ok";
     };
 
-    // Date range helpers
-    const getDateRange = (timelineValue) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-        switch (timelineValue) {
-            case "today": return { start: today, end: now };
-            case "yesterday":
-                const yesterday = new Date(today);
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayEnd = new Date(today);
-                yesterdayEnd.setMilliseconds(-1);
-                return { start: yesterday, end: yesterdayEnd };
-            case "weekly":
-                const weekAgo = new Date(today);
-                weekAgo.setDate(weekAgo.getDate() - 7);
-                return { start: weekAgo, end: now };
-            case "monthly":
-                const monthAgo = new Date(today);
-                monthAgo.setDate(monthAgo.getDate() - 30);
-                return { start: monthAgo, end: now };
-            case "yearly":
-                const yearAgo = new Date(today);
-                yearAgo.setDate(yearAgo.getDate() - 365);
-                return { start: yearAgo, end: now };
-            case "custom":
-                return {
-                    start: customDateFrom ? new Date(customDateFrom) : new Date(0),
-                    end: customDateTo ? new Date(customDateTo + "T23:59:59") : now
-                };
-            default: return { start: today, end: now };
-        }
-    };
-
-    const getComparisonDateRange = (timelineValue, comparisonType) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const currentRange = getDateRange(timelineValue);
-
-        if (comparisonType === "previous_year") {
-            // Same period last year
-            const startLastYear = new Date(currentRange.start);
-            startLastYear.setFullYear(startLastYear.getFullYear() - 1);
-            const endLastYear = new Date(currentRange.end);
-            endLastYear.setFullYear(endLastYear.getFullYear() - 1);
-            return { start: startLastYear, end: endLastYear };
-        }
-
-        // previous_period - period immediately before current
-        switch (timelineValue) {
-            case "today":
-                const yesterday = new Date(today);
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayEnd = new Date(today);
-                yesterdayEnd.setMilliseconds(-1);
-                return { start: yesterday, end: yesterdayEnd };
-            case "yesterday":
-                const twoDaysAgo = new Date(today);
-                twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-                const twoDaysAgoEnd = new Date(today);
-                twoDaysAgoEnd.setDate(twoDaysAgoEnd.getDate() - 1);
-                twoDaysAgoEnd.setMilliseconds(-1);
-                return { start: twoDaysAgo, end: twoDaysAgoEnd };
-            case "weekly":
-                const twoWeeksAgo = new Date(today);
-                twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-                const oneWeekAgo = new Date(today);
-                oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-                oneWeekAgo.setMilliseconds(-1);
-                return { start: twoWeeksAgo, end: oneWeekAgo };
-            case "monthly":
-                const twoMonthsAgo = new Date(today);
-                twoMonthsAgo.setDate(twoMonthsAgo.getDate() - 60);
-                const oneMonthAgo = new Date(today);
-                oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-                oneMonthAgo.setMilliseconds(-1);
-                return { start: twoMonthsAgo, end: oneMonthAgo };
-            case "yearly":
-                const twoYearsAgo = new Date(today);
-                twoYearsAgo.setDate(twoYearsAgo.getDate() - 730);
-                const oneYearAgo = new Date(today);
-                oneYearAgo.setDate(oneYearAgo.getDate() - 365);
-                oneYearAgo.setMilliseconds(-1);
-                return { start: twoYearsAgo, end: oneYearAgo };
-            case "custom":
-                if (customDateFrom && customDateTo) {
-                    const customStart = new Date(customDateFrom);
-                    const customEnd = new Date(customDateTo + "T23:59:59");
-                    const customDuration = customEnd - customStart;
-                    const prevEnd = new Date(customStart);
-                    prevEnd.setMilliseconds(-1);
-                    const prevStart = new Date(prevEnd - customDuration);
-                    return { start: prevStart, end: prevEnd };
-                }
-                return null;
-            default: return null;
-        }
-    };
-
-    const filterOrdersByDateRange = (ordersList, dateRange) => {
-        if (!dateRange) return ordersList;
-        return ordersList.filter(o => {
-            const orderDate = new Date(o.created_at);
-            return orderDate >= dateRange.start && orderDate <= dateRange.end;
-        });
-    };
-
     const calculateGrowth = (current, previous) => {
         if (previous === 0) return current > 0 ? 100 : 0;
         return ((current - previous) / previous) * 100;
@@ -754,11 +644,9 @@ export default function AdminDashboard() {
 
     // Dashboard Stats (ALL orders: store + website/LXRTS + B2B). Comms orders are excluded — they live in the Comms Approvals tab.
     const dashboardStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const comparisonRange = getComparisonDateRange(timeline, comparison);
-
-        const currentOrders = filterOrdersByDateRange(nonCommsOrders, dateRange);
-        const previousOrders = comparisonRange ? filterOrdersByDateRange(nonCommsOrders, comparisonRange) : [];
+        const comparisonRange = comparisonPeriodRange(periodRangeValue, comparison);
+        const currentOrders = nonCommsOrders.filter(o => inPeriod(o.created_at));
+        const previousOrders = comparisonRange ? nonCommsOrders.filter(o => inRange(comparisonRange, o.created_at)) : [];
 
         const totalRevenue = currentOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
         const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
@@ -783,9 +671,9 @@ export default function AdminDashboard() {
             preparedGrowth: calculateGrowth(preparedOrders, prevPreparedOrders),
             deliveredGrowth: calculateGrowth(deliveredOrders, prevDeliveredOrders),
             cancelledGrowth: calculateGrowth(cancelledOrders, prevCancelledOrders),
-            showComparison: comparison !== "none",
+            showComparison: comparison !== "none" && !!periodRangeValue,
         };
-    }, [orders, timeline, comparison, customDateFrom, customDateTo]);
+    }, [nonCommsOrders, inPeriod, periodRangeValue, comparison]);
 
     const inventoryStats = useMemo(() => {
         const total = products.length;
@@ -808,48 +696,9 @@ export default function AdminDashboard() {
         return { total, onShopify, lowStock, outOfStock, totalInventory };
     }, [products, variantInventory]);
 
-    // Analytics date range helper
-    const getAnalyticsDateRange = (timelineValue) => {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-        switch (timelineValue) {
-            case "today": return { start: today, end: now };
-            case "yesterday":
-                const yesterday = new Date(today);
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayEnd = new Date(today);
-                yesterdayEnd.setMilliseconds(-1);
-                return { start: yesterday, end: yesterdayEnd };
-            case "weekly":
-                const weekAgo = new Date(today);
-                weekAgo.setDate(weekAgo.getDate() - 7);
-                return { start: weekAgo, end: now };
-            case "monthly":
-                const monthAgo = new Date(today);
-                monthAgo.setDate(monthAgo.getDate() - 30);
-                return { start: monthAgo, end: now };
-            case "yearly":
-                const yearAgo = new Date(today);
-                yearAgo.setDate(yearAgo.getDate() - 365);
-                return { start: yearAgo, end: now };
-            case "custom":
-                return {
-                    start: analyticsCustomFrom ? new Date(analyticsCustomFrom) : new Date(0),
-                    end: analyticsCustomTo ? new Date(analyticsCustomTo + "T23:59:59") : now
-                };
-            default: return { start: today, end: now };
-        }
-    };
-
     // Analytics Data
     const analyticsData = useMemo(() => {
-        const dateRange = getAnalyticsDateRange(analyticsTimeline);
-        const validOrders = nonCommsOrders.filter(o => {
-            if (!isRevenueOrder(o)) return false;
-            const orderDate = new Date(o.created_at);
-            return orderDate >= dateRange.start && orderDate <= dateRange.end;
-        });
+        const validOrders = nonCommsOrders.filter(o => isRevenueOrder(o) && inAnalyticsPeriod(o.created_at));
 
         // 1. Sales by Top 10 Products (net of proportional order discount)
         const productSales = {};
@@ -914,11 +763,7 @@ export default function AdminDashboard() {
             .slice(0, 10);
 
         // 5. Alteration by Outfit (filter alteration orders)
-        const alterationOrders = nonCommsOrders.filter(o => {
-            if (!o.is_alteration) return false;
-            const orderDate = new Date(o.created_at);
-            return orderDate >= dateRange.start && orderDate <= dateRange.end;
-        });
+        const alterationOrders = nonCommsOrders.filter(o => o.is_alteration && inAnalyticsPeriod(o.created_at));
 
         const outfitAlterations = {};
         alterationOrders.forEach(order => {
@@ -952,12 +797,7 @@ export default function AdminDashboard() {
             alterationsByCustomer,
             totalAlterations: alterationOrders.length,
         };
-    }, [orders, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
-
-    const handleAnalyticsTimelineChange = (value) => {
-        setAnalyticsTimeline(value);
-        setShowAnalyticsCustomPicker(value === "custom");
-    };
+    }, [nonCommsOrders, inAnalyticsPeriod]);
 
     const recentOrders = useMemo(() => nonCommsOrders.filter(o => !isLxrtsOrder(o)).slice(0, recentOrdersCount), [nonCommsOrders, recentOrdersCount]);
 
@@ -1130,14 +970,7 @@ export default function AdminDashboard() {
                 }
             });
         }
-        if (filters.dateFrom || filters.dateTo) {
-            result = result.filter(order => {
-                const orderDate = new Date(order.created_at);
-                if (filters.dateFrom && orderDate < new Date(filters.dateFrom)) return false;
-                if (filters.dateTo && orderDate > new Date(filters.dateTo + "T23:59:59")) return false;
-                return true;
-            });
-        }
+        if (ordersPeriodRange) result = result.filter(order => inOrdersPeriod(order.created_at));
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
             result = result.filter(order => {
                 const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
@@ -1166,7 +999,7 @@ export default function AdminDashboard() {
             }
         });
         return result;
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy]);
+    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
 
     const orderTabCounts = useMemo(() => {
         const validOrders = nonCommsOrders.filter(o => !isLxrtsOrder(o));
@@ -1187,9 +1020,8 @@ export default function AdminDashboard() {
 
     const appliedFilters = useMemo(() => {
         const chips = [];
-        if (filters.dateFrom || filters.dateTo) {
-            const label = filters.dateFrom && filters.dateTo ? `${filters.dateFrom} to ${filters.dateTo}` : filters.dateFrom ? `From ${filters.dateFrom}` : `Until ${filters.dateTo}`;
-            chips.push({ type: "date", label });
+        if (ordersTimeline !== "all") {
+            chips.push({ type: "date", label: periodLabel(ordersTimeline) });
         }
         if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `₹${(filters.minPrice / 1000).toFixed(0)}K - ₹${(filters.maxPrice / 1000).toFixed(0)}K` });
         filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
@@ -1198,16 +1030,19 @@ export default function AdminDashboard() {
         filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
         if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
         return chips;
-    }, [filters]);
+    }, [filters, ordersTimeline]);
 
     const removeFilter = (type, value) => {
-        if (type === "date") setFilters(prev => ({ ...prev, dateFrom: "", dateTo: "" }));
+        if (type === "date") clearOrdersPeriod();
         else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
         else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
-    const clearAllFilters = () => setFilters({ dateFrom: "", dateTo: "", minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+    const clearAllFilters = () => {
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
+        clearOrdersPeriod();
+    };
 
     const toggleFilter = (category, value) => setFilters(prev => ({
         ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value]
@@ -1348,13 +1183,12 @@ export default function AdminDashboard() {
             result = result.filter(item => item.order_no?.toLowerCase().includes(q) || item.client_name?.toLowerCase().includes(q) ||
                 item.product_name?.toLowerCase().includes(q) || item.sa_name?.toLowerCase().includes(q));
         }
-        if (accountsDateFrom) result = result.filter(item => new Date(item.order_date) >= new Date(accountsDateFrom));
-        if (accountsDateTo) result = result.filter(item => new Date(item.order_date) <= new Date(accountsDateTo + "T23:59:59"));
+        if (accountsPeriodRange) result = result.filter(item => inAccountsPeriod(item.order_date));
         if (accountsStatus) result = result.filter(item => (item.status === "pending" ? "order_received" : item.status) === accountsStatus);
         if (accountsStore) result = result.filter(item => item.store === accountsStore);
         if (accountsSA) result = result.filter(item => item.sa_name === accountsSA);
         return result;
-    }, [accountsLineItems, accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
+    }, [accountsLineItems, accountsSearch, accountsPeriodRange, inAccountsPeriod, accountsStatus, accountsStore, accountsSA]);
 
     // Unique stores and SAs for account filter dropdowns
     const accountsStoreOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.store).filter(s => s && s !== "-"))].sort(), [accountsLineItems]);
@@ -1378,11 +1212,7 @@ export default function AdminDashboard() {
     // NEW: ENHANCED DASHBOARD STATS (Channel breakdown, AOV)
     // ═══════════════════════════════════════════════════════════
     const enhancedDashboardStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const validOrders = nonCommsOrders.filter(o => {
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const validOrders = nonCommsOrders.filter(o => inPeriod(o.created_at));
 
         const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = validOrders.length;
@@ -1406,17 +1236,13 @@ export default function AdminDashboard() {
         }));
 
         return { avgOrderValue, totalItems, channelBreakdown, revenueMix };
-    }, [orders, timeline, customDateFrom, customDateTo]);
+    }, [nonCommsOrders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: ORDER VALUE TREND (Daily line chart)
     // ═══════════════════════════════════════════════════════════
     const orderValueTrend = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const validOrders = nonCommsOrders.filter(o => {
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const validOrders = nonCommsOrders.filter(o => inPeriod(o.created_at));
         const buckets = {};
         validOrders.forEach(o => {
             const d = new Date(o.created_at);
@@ -1428,18 +1254,13 @@ export default function AdminDashboard() {
         return Object.values(buckets)
             .sort((a, b) => a.fullDate.localeCompare(b.fullDate))
             .map(b => ({ ...b, aov: b.orders > 0 ? Math.round(b.revenue / b.orders) : 0 }));
-    }, [orders, timeline, customDateFrom, customDateTo]);
+    }, [nonCommsOrders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: ENHANCED ANALYTICS (bottom products, colors, flagged)
     // ═══════════════════════════════════════════════════════════
     const enhancedAnalytics = useMemo(() => {
-        const dateRange = getAnalyticsDateRange(analyticsTimeline);
-        const validOrders = nonCommsOrders.filter(o => {
-            if (!isRevenueOrder(o)) return false;
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const validOrders = nonCommsOrders.filter(o => isRevenueOrder(o) && inAnalyticsPeriod(o.created_at));
 
         // Products (net of proportional order discount)
         const productSales = {};
@@ -1477,11 +1298,7 @@ export default function AdminDashboard() {
         const bottomColors = [...sortedColors].sort((a, b) => a.sales - b.sales).slice(0, 5);
 
         // Alterations: flagged + avg per outfit
-        const alterationOrders = nonCommsOrders.filter(o => {
-            if (!o.is_alteration) return false;
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const alterationOrders = nonCommsOrders.filter(o => o.is_alteration && inAnalyticsPeriod(o.created_at));
 
         const outfitAlterations = {};
         alterationOrders.forEach(order => {
@@ -1497,7 +1314,7 @@ export default function AdminDashboard() {
         const flaggedAlterations = Object.values(outfitAlterations).filter(a => a.count >= 3).sort((a, b) => b.count - a.count);
 
         return { bottomProducts, bottomColors, avgAlterationsPerOutfit, flaggedAlterations, totalAlterations };
-    }, [orders, analyticsTimeline, analyticsCustomFrom, analyticsCustomTo]);
+    }, [nonCommsOrders, inAnalyticsPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: CLIENT ANALYTICS
@@ -1543,11 +1360,7 @@ export default function AdminDashboard() {
         const repeatClients = clients.filter(c => c.orderCount > 1);
         const repeatRate = totalClients > 0 ? ((repeatClients.length / totalClients) * 100) : 0;
 
-        const dateRange = getDateRange(timeline);
-        const newClients = clients.filter(c => {
-            const first = new Date(c.firstOrder);
-            return first >= dateRange.start && first <= dateRange.end;
-        });
+        const newClients = clients.filter(c => inPeriod(c.firstOrder));
 
         // Apply store filter
         let sortedClients = [...clients];
@@ -1597,7 +1410,7 @@ export default function AdminDashboard() {
             topClients: [...clients].sort((a, b) => b.totalSpend - a.totalSpend).slice(0, 10),
             storeList,
         };
-    }, [nonCommsOrders, timeline, customDateFrom, customDateTo, clientsSearch, clientsPage, clientsSortBy, clientsStoreFilter]);
+    }, [nonCommsOrders, inPeriod, clientsSearch, clientsPage, clientsSortBy, clientsStoreFilter]);
 
     // ═══════════════════════════════════════════════════════════
     // CLIENT BOOK — flat directory using PROFILES as source of truth, joined
@@ -1745,12 +1558,7 @@ export default function AdminDashboard() {
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
         const allB2bOrders = nonCommsOrders.filter(o => getOrderChannel(o) === "B2B");
-
-        const dateRange = getDateRange(timeline);
-        let currentB2b = allB2bOrders.filter(o => {
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        let currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
 
         // Merchandiser filter
         const merchandiserList = salespersonTable.filter(s => s.role === "merchandiser").map(s => s.saleperson).sort();
@@ -1782,13 +1590,9 @@ export default function AdminDashboard() {
         });
 
         // MOM growth: compare current period vs previous same-length period
-        const periodMs = dateRange.end - dateRange.start;
-        const prevStart = new Date(dateRange.start.getTime() - periodMs);
-        const prevEnd = new Date(dateRange.start);
-        const prevB2b = allB2bOrders.filter(o => {
-            const d = new Date(o.created_at);
-            return d >= prevStart && d < prevEnd;
-        });
+        // (no growth figure when the period is unbounded / "All time").
+        const prevRange = comparisonPeriodRange(periodRangeValue, "previous_period");
+        const prevB2b = prevRange ? allB2bOrders.filter(o => inRange(prevRange, o.created_at)) : [];
         const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const revenueGrowth = prevRevenue > 0 ? ((totalB2bRevenue - prevRevenue) / prevRevenue * 100) : 0;
@@ -1803,10 +1607,7 @@ export default function AdminDashboard() {
                 allClientFirstOrders[client] = o.created_at;
             }
         });
-        const newClientsCount = Object.entries(allClientFirstOrders).filter(([, firstOrder]) => {
-            const d = new Date(firstOrder);
-            return d >= dateRange.start && d <= dateRange.end;
-        }).length;
+        const newClientsCount = Object.entries(allClientFirstOrders).filter(([, firstOrder]) => inPeriod(firstOrder)).length;
 
         // Product analysis from B2B orders
         const productSales = {};
@@ -1844,7 +1645,7 @@ export default function AdminDashboard() {
             advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
             merchandiserList, topB2bProducts,
         };
-    }, [orders, timeline, customDateFrom, customDateTo, b2bSearch, b2bPage, b2bMerchandiserFilter, salespersonTable, vendors]);
+    }, [nonCommsOrders, inPeriod, periodRangeValue, b2bSearch, b2bPage, b2bMerchandiserFilter, salespersonTable, vendors]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: ENHANCED INVENTORY (Delayed deliveries)
@@ -1880,11 +1681,7 @@ export default function AdminDashboard() {
     // NEW: FINANCIAL STATS (Discounts by channel, salesperson)
     // ═══════════════════════════════════════════════════════════
     const financialStats = useMemo(() => {
-        const dateRange = getDateRange(timeline);
-        const validOrders = nonCommsOrders.filter(o => {
-            const d = new Date(o.created_at);
-            return d >= dateRange.start && d <= dateRange.end;
-        });
+        const validOrders = nonCommsOrders.filter(o => inPeriod(o.created_at));
 
         const totalDiscount = validOrders.reduce((s, o) => s + Number(o.discount_amount || 0), 0);
         const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
@@ -1904,7 +1701,7 @@ export default function AdminDashboard() {
             totalDiscount, discountPercent,
             channelDiscounts: Object.values(channelDiscounts).sort((a, b) => b.discount - a.discount),
         };
-    }, [orders, timeline, customDateFrom, customDateTo]);
+    }, [nonCommsOrders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // NEW: TARGETS PLACEHOLDER DATA
@@ -1930,19 +1727,14 @@ export default function AdminDashboard() {
             isFuture: i > currentMonth,
         }));
 
-        // Store-wise growth (compare current period to previous)
-        const dateRange = getDateRange(timeline);
-        const prevRange = {
-            start: new Date(dateRange.start.getTime() - (dateRange.end - dateRange.start)),
-            end: new Date(dateRange.start.getTime() - 1),
-        };
+        // Store-wise growth (compare current period to previous; skipped on "All time")
+        const prevRange = comparisonPeriodRange(periodRangeValue, "previous_period");
         const storeGrowth = {};
         nonCommsOrders.forEach(o => {
             const store = getOrderChannel(o);
-            const d = new Date(o.created_at);
             if (!storeGrowth[store]) storeGrowth[store] = { name: store, current: 0, previous: 0 };
-            if (d >= dateRange.start && d <= dateRange.end) storeGrowth[store].current += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            else if (d >= prevRange.start && d <= prevRange.end) storeGrowth[store].previous += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (inPeriod(o.created_at)) storeGrowth[store].current += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            else if (prevRange && inRange(prevRange, o.created_at)) storeGrowth[store].previous += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const storeGrowthList = Object.values(storeGrowth).map(s => ({
             ...s,
@@ -1950,7 +1742,7 @@ export default function AdminDashboard() {
         })).sort((a, b) => Number(b.growth) - Number(a.growth));
 
         return { monthlyData, storeGrowthList };
-    }, [nonCommsOrders, timeline, customDateFrom, customDateTo]);
+    }, [nonCommsOrders, inPeriod, periodRangeValue]);
 
     const handleGeneratePdf = async (order, type = "customer") => {
         setPdfLoading(order.id);
@@ -1963,8 +1755,8 @@ export default function AdminDashboard() {
 
     // Reset pages
     useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy]);
-    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsDateFrom, accountsDateTo, accountsStatus, accountsStore, accountsSA]);
+    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy, ordersPeriodRange]);
+    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsPeriodRange, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setClientsPage(1); }, [clientsSearch, clientsSortBy, clientsStoreFilter]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
 
@@ -1974,11 +1766,6 @@ export default function AdminDashboard() {
             if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
         }
     }, [activeTab, products]);
-
-    const handleTimelineChange = (value) => {
-        setTimeline(value);
-        setShowCustomDatePicker(value === "custom");
-    };
 
     if (loading) {
         return (
@@ -2063,28 +1850,11 @@ export default function AdminDashboard() {
                             {/* Clean filter bar */}
                             <div className="cmo-tab-header">
                                 <h2 className="admin-section-title">Overall Brand Performance</h2>
-                                <div className="cmo-filters-row">
-                                    <div className="cmo-timeline-pills">
-                                        {TIMELINE_OPTIONS.map(opt => (
-                                            <button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`}
-                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="cmo-filters-right">
-                                        {showCustomDatePicker && (
-                                            <div className="cmo-date-range">
-                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                                <span className="cmo-date-sep">→</span>
-                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                            </div>
-                                        )}
-                                        <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
-                                            {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
+                                <PeriodFilter {...periodProps} variant="pills">
+                                    <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
+                                        {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                    </select>
+                                </PeriodFilter>
                             </div>
 
                             {/* 1. Cumulative Sales (website + stores + B2B + exhibitions) */}
@@ -2270,28 +2040,11 @@ export default function AdminDashboard() {
                         <div className="admin-dashboard-tab">
                             <div className="cmo-tab-header">
                                 <h2 className="admin-section-title">Revenue & Business Drivers</h2>
-                                <div className="cmo-filters-row">
-                                    <div className="cmo-timeline-pills">
-                                        {TIMELINE_OPTIONS.map(opt => (
-                                            <button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`}
-                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="cmo-filters-right">
-                                        {showCustomDatePicker && (
-                                            <div className="cmo-date-range">
-                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                                <span className="cmo-date-sep">→</span>
-                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                            </div>
-                                        )}
-                                        <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
-                                            {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
+                                <PeriodFilter {...periodProps} variant="pills">
+                                    <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
+                                        {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                    </select>
+                                </PeriodFilter>
                             </div>
 
                             {/* 1. Total Revenue (multi-channel) */}
@@ -2430,25 +2183,7 @@ export default function AdminDashboard() {
                         <div className="admin-analytics-tab">
                             <div className="cmo-tab-header">
                                 <h2 className="admin-section-title">Product, Style & Design Performance</h2>
-                                <div className="cmo-filters-row">
-                                    <div className="cmo-timeline-pills">
-                                        {TIMELINE_OPTIONS.map(opt => (
-                                            <button key={opt.value} className={`cmo-pill ${analyticsTimeline === opt.value ? "active" : ""}`}
-                                                onClick={() => handleAnalyticsTimelineChange(opt.value)}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="cmo-filters-right">
-                                        {showAnalyticsCustomPicker && (
-                                            <div className="cmo-date-range">
-                                                <input type="date" value={analyticsCustomFrom} onChange={(e) => setAnalyticsCustomFrom(e.target.value)} />
-                                                <span className="cmo-date-sep">→</span>
-                                                <input type="date" value={analyticsCustomTo} onChange={(e) => setAnalyticsCustomTo(e.target.value)} />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                <PeriodFilter {...analyticsPeriodProps} variant="pills" />
                             </div>
 
                             <div className="analytics-charts-grid">
@@ -3079,29 +2814,12 @@ export default function AdminDashboard() {
                         <div className="admin-b2b-tab">
                             <div className="cmo-tab-header">
                                 <h2 className="admin-section-title">B2B & Vendor Overview</h2>
-                                <div className="cmo-filters-row">
-                                    <div className="cmo-timeline-pills">
-                                        {TIMELINE_OPTIONS.map(opt => (
-                                            <button key={opt.value} className={`cmo-pill ${timeline === opt.value ? "active" : ""}`}
-                                                onClick={() => { setTimeline(opt.value); setShowCustomDatePicker(opt.value === "custom"); }}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="cmo-filters-right">
-                                        {showCustomDatePicker && (
-                                            <div className="cmo-date-range">
-                                                <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
-                                                <span className="cmo-date-sep">→</span>
-                                                <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
-                                            </div>
-                                        )}
-                                        <select className="cmo-compare-select" value={b2bMerchandiserFilter} onChange={(e) => { setB2bMerchandiserFilter(e.target.value); setB2bPage(1); }}>
-                                            <option value="">All Merchandisers</option>
-                                            {b2bStats.merchandiserList.map(m => <option key={m} value={m}>{m}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
+                                <PeriodFilter {...periodProps} variant="pills">
+                                    <select className="cmo-compare-select" value={b2bMerchandiserFilter} onChange={(e) => { setB2bMerchandiserFilter(e.target.value); setB2bPage(1); }}>
+                                        <option value="">All Merchandisers</option>
+                                        {b2bStats.merchandiserList.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                </PeriodFilter>
                             </div>
 
                             {/* Summary stat cards */}
@@ -3365,15 +3083,11 @@ export default function AdminDashboard() {
 
                             <div className="admin-filter-bar" ref={dropdownRef}>
                                 <div className="filter-dropdown">
-                                    <button className={`filter-btn ${(filters.dateFrom || filters.dateTo) ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range ▾</button>
+                                    <button className={`filter-btn ${ordersTimeline !== "all" ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range ▾</button>
                                     {openDropdown === "date" && (
                                         <div className="dropdown-panel">
-                                            <div className="dropdown-title">Select Date Range</div>
-                                            <div className="date-inputs">
-                                                <input type="date" value={filters.dateFrom} onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))} />
-                                                <span>to</span>
-                                                <input type="date" value={filters.dateTo} onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))} />
-                                            </div>
+                                            <div className="dropdown-title">Select Period</div>
+                                            <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
                                             <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
                                         </div>
                                     )}
@@ -3502,11 +3216,7 @@ export default function AdminDashboard() {
                                     <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
                                     <input type="text" placeholder="Search Order, Customer..." value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} className="admin-search-input" />
                                 </div>
-                                <div className="cmo-date-range">
-                                    <input type="date" value={accountsDateFrom} onChange={(e) => setAccountsDateFrom(e.target.value)} />
-                                    <span className="cmo-date-sep">→</span>
-                                    <input type="date" value={accountsDateTo} onChange={(e) => setAccountsDateTo(e.target.value)} />
-                                </div>
+                                {accountsPeriodControl}
                                 <select className="cmo-compare-select" value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
                                     <option value="">All Status</option>
                                     <option value="order_received">Order Received</option><option value="completed">Completed</option>
@@ -3520,8 +3230,8 @@ export default function AdminDashboard() {
                                     <option value="">All Salespersons</option>
                                     {accountsSAOptions.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
-                                {(accountsDateFrom || accountsDateTo || accountsStatus || accountsStore || accountsSA) && (
-                                    <button className="cmo-pill" onClick={() => { setAccountsDateFrom(""); setAccountsDateTo(""); setAccountsStatus(""); setAccountsStore(""); setAccountsSA(""); }}
+                                {(accountsTimeline !== "all" || accountsStatus || accountsStore || accountsSA) && (
+                                    <button className="cmo-pill" onClick={() => { accountsPeriodProps.setTimeline("all"); accountsPeriodProps.setCustomFrom(""); accountsPeriodProps.setCustomTo(""); setAccountsStatus(""); setAccountsStore(""); setAccountsSA(""); }}
                                         style={{ color: '#c62828', borderColor: '#c62828' }}>Clear</button>
                                 )}
                             </div>

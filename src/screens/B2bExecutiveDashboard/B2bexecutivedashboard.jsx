@@ -11,7 +11,7 @@ import NotificationBell from "../../components/NotificationBell";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
-import { usePeriodFilter } from "../../components/PeriodFilter";
+import { usePeriodFilter, usePeriodFilterParam } from "../../components/PeriodFilter";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
@@ -35,11 +35,16 @@ export default function B2bExecutiveDashboard() {
     const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
     const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
     // One navigation, or the five setters clobber each other (see the hook).
-    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "from", "to"]);
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "period", "from", "to"]);
+    // Order-date scope — URL-persisted PeriodFilter.
+    const {
+        control: ordersPeriodControl, timeline: ordersTimeline,
+        inPeriod: inOrdersPeriod, range: ordersPeriodRange,
+    } = usePeriodFilterParam("all", { variant: "select", label: "Order date:" });
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { setCurrentPage(1); }, [ordersPeriodRange]);
 
     // ==================== FETCH DATA ====================
     useEffect(() => {
@@ -142,12 +147,7 @@ export default function B2bExecutiveDashboard() {
         if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter);
         if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
-        if (dateFrom) filtered = filtered.filter(o => o.created_at >= new Date(dateFrom).toISOString());
-        if (dateTo) {
-            const endDate = new Date(dateTo);
-            endDate.setHours(23, 59, 59, 999);
-            filtered = filtered.filter(o => o.created_at <= endDate.toISOString());
-        }
+        if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
 
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
@@ -161,7 +161,7 @@ export default function B2bExecutiveDashboard() {
         }
 
         return filtered;
-    }, [orders, orderSearch, vendors, statusFilter, typeFilter, merchandiserFilter, dateFrom, dateTo]);
+    }, [orders, orderSearch, vendors, statusFilter, typeFilter, merchandiserFilter, ordersPeriodRange, inOrdersPeriod]);
 
     const paginatedOrders = useMemo(() => {
         const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -407,9 +407,8 @@ export default function B2bExecutiveDashboard() {
                                 <option value="all">All Merchandisers</option>
                                 {uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
-                            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }} title="From date" />
-                            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }} title="To date" />
-                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || dateFrom || dateTo) && (
+                            {ordersPeriodControl}
+                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || ordersTimeline !== "all") && (
                                 <button onClick={() => { clearOrderFilters(); setCurrentPage(1); }} className="b2b-clear-filters-btn">
                                     Clear Filters
                                 </button>
