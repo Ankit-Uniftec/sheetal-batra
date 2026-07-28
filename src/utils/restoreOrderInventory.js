@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import config from "../config/config";
+import { getOrderChannelKey } from "./barcodeService";
 
 // ============================================================
 // Restore the inventory an order reserved at placement, when it is
@@ -22,6 +23,12 @@ export async function restoreOrderInventory(order) {
     // customer's item), so they never decremented sellable inventory at
     // placement — restoring on their cancel would wrongly inflate counts. Skip.
     if (order.is_stock_order === true) return;
+    // Shopify (website) orders never decremented anything from here: Shopify
+    // decremented its OWN stock at checkout, and ingestion deliberately skips
+    // the placement decrement (it mirrors Shopify's numbers down instead).
+    // Shopify also restocks its own cancellations. Restoring here would push a
+    // second increase and inflate the storefront's stock. Skip entirely.
+    if (getOrderChannelKey(order) === "shopify") return;
     try {
         for (const item of order.items) {
             if (!item?.product_id) continue;

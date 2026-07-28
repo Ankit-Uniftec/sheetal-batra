@@ -131,11 +131,20 @@ const StatCard = ({ title, value, subtitle, highlight, icon, onClick }) => (
 // exhaustive (website included) so a breakdown's parts always sum to the total.
 // Channel comes from the order-number prefix (see getOrderChannelKey). The two
 // physical stores share the "offline" channel, so they still split on the store
-// name. There is no Website/LXRTS option: LXRTS is an order type, not a
-// channel — those orders sit under whichever channel they were placed in.
+// name.
+//
+// There is no LXRTS option: LXRTS is an order TYPE (Shopify-synced product),
+// not a channel — those orders sit under whichever channel they were placed in.
+// "Shopify" here is different: it is the real channel for orders the CUSTOMER
+// placed on the website (prefix SB-SHOP-). See CHANNEL_BY_ORDER_PREFIX.
+//
+// Keep this list in step with CHANNEL_SEGMENTS in barcodeService.js — it is
+// hand-written rather than derived, so a channel added there is silently
+// missing here (and a breakdown's parts would stop summing to the total).
 const STORE_FILTER_OPTIONS = [
     { value: "Delhi Store", label: "Delhi Store", color: "#2e7d32", match: (o) => getOrderChannelLabel(o) === "Delhi Store" },
     { value: "Ludhiana Store", label: "Ludhiana Store", color: "#00897b", match: (o) => getOrderChannelLabel(o) === "Ludhiana Store" },
+    { value: "Shopify", label: "Shopify", color: "#0288d1", match: (o) => getOrderChannelKey(o) === "shopify" },
     { value: "B2B", label: "B2B", color: "#d5b85a", match: (o) => getOrderChannelKey(o) === "b2b" },
     { value: "Private", label: "Private", color: "#8e24aa", match: (o) => getOrderChannelKey(o) === "private" },
     { value: "Comms", label: "Comms", color: "#1565c0", match: (o) => getOrderChannelKey(o) === "comms" },

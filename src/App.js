@@ -47,6 +47,7 @@ const CommsDashboard = lazy(() => import("./screens/CommsDashboard/CommsDashboar
 const WalkInDashboard = lazy(() => import("./screens/WalkInDashboard/WalkInDashboard"));
 const CommsOrderForm = lazy(() => import("./screens/CommsDashboard/CommsOrderForm"));
 const CommsReviewOrder = lazy(() => import("./screens/CommsDashboard/CommsReviewOrder"));
+const ShopifyOrdersDashboard = lazy(() => import("./screens/ShopifyOrdersDashboard/ShopifyOrdersDashboard"));
 
 const routeFallback = (
   <div
@@ -115,6 +116,7 @@ function App() {
         <Route path="/walkin-dashboard" element={<PrivateRoute><WalkInDashboard /></PrivateRoute>} />
         <Route path="/comms-order-form" element={<PrivateRoute><CommsOrderForm /></PrivateRoute>} />
         <Route path="/comms-review-order" element={<PrivateRoute><CommsReviewOrder /></PrivateRoute>} />
+        <Route path="/shopify-orders-dashboard" element={<PrivateRoute><ShopifyOrdersDashboard /></PrivateRoute>} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/login" replace />} />

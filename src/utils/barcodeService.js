@@ -196,10 +196,27 @@ export function getStageTextColor() {
 // and never drifts afterwards. Flags (is_b2b, is_comms…) and salesperson_store
 // are only a fallback for rows with a missing/unknown prefix.
 //
-// There is deliberately NO "website" channel: LXRTS orders sync from Shopify
-// but are PLACED in a store (or B2B, or any channel), so LXRTS is an order
-// TYPE, not a channel — such an order badges and reports as whatever channel
-// it was placed through. Do not reintroduce a sync_enabled → website rule.
+// TWO SEPARATE THINGS, easily confused — read both before editing:
+//
+//   1. LXRTS (items[].sync_enabled) is an order TYPE, not a channel. It means
+//      "the product is Shopify-synced". Such a product can be sold by an SA in
+//      Delhi, through B2B, at an exhibition — the order reports under whichever
+//      channel it was PLACED in. There is still deliberately NO
+//      sync_enabled → channel rule, and none must be reintroduced.
+//
+//   2. SHOP is a real channel: an order the CUSTOMER placed on
+//      sheetalbatraindia.com, ingested by the shopify-order-sync edge function.
+//      It is a genuine sales channel like the stores or B2B, so it gets its own
+//      prefix (SB-SHOP-MMYY-NNNNNN), label and revenue segment.
+//
+// These are orthogonal. A Shopify web order is BOTH LXRTS-type (its products
+// are synced) AND SHOP-channel (that's where it was placed). Collapsing them
+// would either hide website revenue inside store revenue (if SHOP were dropped)
+// or misreport an in-store LXRTS sale as a website sale (if rule 1 returned).
+//
+// Once ingested, a SHOP order is an ordinary order — same production flow,
+// warehouse stages, dispatch and delivery as every other channel. Only its
+// arrival path is different.
 const CHANNEL_BY_ORDER_PREFIX = {
   DLC: "offline",     // Delhi store
   LDHC: "offline",    // Ludhiana store
@@ -207,6 +224,7 @@ const CHANNEL_BY_ORDER_PREFIX = {
   PVT: "private",
   B2B: "b2b",
   COM: "comms",
+  SHOP: "shopify",    // customer-placed website orders (Shopify)
   STOCK: "stock",     // internal stock orders, not a customer channel
 };
 
@@ -256,6 +274,7 @@ export function getOrderChannelLabel(order) {
   if (key === "comms") return "Comms";
   if (key === "private") return "Private";
   if (key === "exhibition") return "Exhibition";
+  if (key === "shopify") return "Shopify";
   if (key === "stock") return "Stock";
   // offline with an unknown/missing prefix — try the store name.
   const store = (order?.salesperson_store || "").trim().toLowerCase();
@@ -268,6 +287,7 @@ export function getOrderChannelLabel(order) {
 export const CHANNEL_SEGMENTS = [
   { label: "Delhi Store", color: "#2e7d32" },
   { label: "Ludhiana Store", color: "#00897b" },
+  { label: "Shopify", color: "#0288d1" },
   { label: "B2B", color: "#d5b85a" },
   { label: "Private", color: "#8e24aa" },
   { label: "Comms", color: "#1565c0" },
@@ -292,6 +312,9 @@ export function getOrderChannelKey(order) {
   if (store === "COMMS" || order.is_comms) return "comms";
   if (store === "B2B" || order.is_b2b) return "b2b";
   if (store === "Private" || order.is_private_order) return "private";
+  // A web order always carries a shopify_order_id, so it stays classified even
+  // if order_no were somehow missing.
+  if (store === "Shopify" || order.shopify_order_id) return "shopify";
   return "offline";
 }
 
