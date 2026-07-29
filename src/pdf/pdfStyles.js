@@ -513,6 +513,14 @@ export const styles = StyleSheet.create({
     borderColor: "#DDD",
     // marginRight: 6,
   },
+  // The colour NAME beside the swatch. A swatch alone loses the information
+  // whenever the hex is unknown (a colour not in the `colors` table) — the
+  // work order then showed the garment with no colour at all.
+  colorName: {
+    fontSize: 8,
+    color: "#444",
+    marginLeft: 4,
+  },
 
   /* =========================
      PRICING

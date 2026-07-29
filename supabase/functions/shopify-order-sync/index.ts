@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { mapShopifyOrder, SHOPIFY_STORE_KEY, toE164 } from "./mapper.ts";
+import {
+  buildOrderComponents,
+  mapShopifyOrder,
+  normalizeColorKey,
+  SHOPIFY_STORE_KEY,
+} from "./mapper.ts";
 
 // ============================================================
 // shopify-order-sync — ingest website orders into `orders`.
@@ -93,12 +98,40 @@ const ORDER_FIELDS = `
             bottomStyle:  metafield(namespace: "custom", key: "bottom_style")      { value }
             shipTimeline: metafield(namespace: "custom", key: "shipping_timeline") { value }
             readyToShip:  metafield(namespace: "custom", key: "ready_to_ship")     { value }
+            # Whether the product includes a dupatta, for the ~108 products that
+            # have no With/Without-Dupatta Style option (Set products, where it
+            # is always included so no choice was ever offered). Not yet
+            # populated: until it is, those lines quarantine as DUPATTA_UNKNOWN
+            # rather than being guessed from the product name.
+            hasDupatta:   metafield(namespace: "custom", key: "has_dupatta")       { value }
           }
         }
       }
     }
   }
 `;
+
+/**
+ * name → hex from the app's `colors` table, keyed on a normalised name so
+ * Shopify's spelling still matches ("Rosepink" → "rosepink" → "Rose Pink").
+ *
+ * Loaded once per invocation and passed into the mapper, which stays pure.
+ * A colour that isn't in the table keeps its NAME with an empty hex — the name
+ * is real information from Shopify and belongs on the work order; only the
+ * swatch is missing. We never invent a hex.
+ */
+async function loadColorHexMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data, error } = await supabase.from("colors").select("name, hex");
+  if (error) {
+    console.error("loadColorHexMap failed (colours will have no hex):", error.message);
+    return map;
+  }
+  for (const c of data || []) {
+    if (c?.name && c?.hex) map.set(normalizeColorKey(c.name), c.hex);
+  }
+  return map;
+}
 
 async function shopifyGraphql(query: string) {
   const res = await fetch(SHOPIFY_GRAPHQL_URL, {
@@ -222,7 +255,7 @@ async function resolveProfileId(
 
 // ─── Ingest one order ───────────────────────────────────────
 
-async function ingestOrder(node: any) {
+async function ingestOrder(node: any, colorMap?: Map<string, string>) {
   const gid = String(node?.id || "");
   if (!gid) return { gid: "", outcome: "skipped", reason: "no id" };
 
@@ -239,7 +272,7 @@ async function ingestOrder(node: any) {
     return { gid, outcome: "already_exists", order_no: existing.order_no, id: existing.id };
   }
 
-  const { orderRow, blockers } = mapShopifyOrder(node);
+  const { orderRow, blockers } = mapShopifyOrder(node, colorMap);
 
   // ── Customer
   const userId = await resolveProfileId(
@@ -305,14 +338,64 @@ async function ingestOrder(node: any) {
     return { gid, outcome: "failed", reason: "INSERT_FAILED", detail: insertErr.message };
   }
 
+  // ── Components (the scannable pieces). Only for orders that mapped cleanly:
+  // a needs_review order is missing the garment breakdown, and minting from
+  // that would produce a single mislabelled barcode for what may be a
+  // multi-piece garment. Those mint on approval instead.
+  let componentCount = 0;
+  if (inserted.web_order_status !== "needs_review") {
+    componentCount = await ensureComponents({ ...row, id: inserted.id });
+  }
+
   return {
     gid,
     outcome: "inserted",
     id: inserted.id,
     order_no: inserted.order_no,
     web_order_status: inserted.web_order_status,
+    components: componentCount,
     blockers: blockers.length ? blockers : undefined,
   };
+}
+
+/**
+ * Mint order_components for an order, idempotently.
+ *
+ * Mirrors ensureOrderComponents() in barcodeService.js: a no-op when rows
+ * already exist, so it is safe against webhook retries, a re-run of the
+ * reconcile poll, and manual re-approval.
+ *
+ * Components are inserted INACTIVE — a Production Head activates them through
+ * the activate_components RPC, exactly like every other channel.
+ */
+async function ensureComponents(order: any): Promise<number> {
+  // Count rather than limit(1): the caller reports this number, and a
+  // truncated "1" for an already-minted order reads as though components were
+  // lost. `head: true` fetches no rows.
+  const { count, error: checkErr } = await supabase
+    .from("order_components")
+    .select("id", { count: "exact", head: true })
+    .eq("order_id", order.id);
+  if (checkErr) {
+    console.error("ensureComponents: check failed", checkErr.message);
+    return 0;
+  }
+  if ((count || 0) > 0) return count as number;
+
+  const components = buildOrderComponents(order);
+  if (components.length === 0) return 0;
+
+  const { data, error } = await supabase
+    .from("order_components")
+    .insert(components)
+    .select("id");
+  if (error) {
+    // Non-fatal: the order itself is already saved and correct. Losing the
+    // components is recoverable (re-run the sync); losing the order is not.
+    console.error(`ensureComponents: insert failed for ${order.order_no}`, error.message);
+    return 0;
+  }
+  return data?.length || 0;
 }
 
 // ─── HTTP ───────────────────────────────────────────────────
@@ -332,6 +415,78 @@ serve(async (req) => {
 
     const mode = body?.mode || "sync-now";
     const dryRun = body?.dryRun === true;
+
+    // ── backfill-components: mint components for SHOP orders that were
+    // ingested before component minting existed. Idempotent, so it is safe to
+    // re-run; it touches no Shopify API at all.
+    if (mode === "backfill-components") {
+      const { data: rows, error } = await supabase
+        .from("orders")
+        .select("id, order_no, items, web_order_status")
+        .like("order_no", "SB-SHOP-%")
+        .neq("web_order_status", "needs_review")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+
+      const out = [];
+      for (const o of rows || []) {
+        const n = await ensureComponents(o);
+        out.push({ order_no: o.order_no, components: n });
+      }
+      return json({
+        success: true,
+        mode,
+        orders: out.length,
+        components: out.reduce((s, r) => s + r.components, 0),
+        results: out,
+      });
+    }
+
+    // Colour name → hex, loaded once and shared by every order in this run.
+    const colorMap = await loadColorHexMap();
+
+    // ── remap: re-run the mapper over shopify_raw for orders already ingested,
+    // and rewrite items[]. Uses the STORED raw node, so it touches no Shopify
+    // API and cannot change money, dates or identity — only the derived item
+    // fields. For rolling out a mapper fix (e.g. colours as {hex,name}) without
+    // deleting and re-ingesting.
+    if (mode === "remap-items") {
+      const { data: rows, error } = await supabase
+        .from("orders")
+        .select("id, order_no, shopify_raw")
+        .like("order_no", "SB-SHOP-%")
+        .not("shopify_raw", "is", null)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+
+      const out = [];
+      for (const o of rows || []) {
+        const { orderRow, items } = mapShopifyOrder(o.shopify_raw, colorMap);
+
+        // Re-derive the REVIEW STATE too, not just items[]. A mapper fix can
+        // newly discover that something is unknown (e.g. DUPATTA_UNKNOWN), and
+        // leaving a stale 'ready' would let an order enter production on data
+        // we no longer trust.
+        const { error: upErr } = await supabase
+          .from("orders")
+          .update({
+            items,
+            web_order_status: orderRow.web_order_status,
+            web_order_issues: orderRow.web_order_issues,
+          })
+          .eq("id", o.id);
+
+        out.push({
+          order_no: o.order_no,
+          items: items.length,
+          status: orderRow.web_order_status,
+          ...(upErr ? { error: upErr.message } : {}),
+        });
+      }
+
+      const flagged = out.filter((r) => r.status === "needs_review").length;
+      return json({ success: true, mode, orders: out.length, flagged, results: out });
+    }
 
     // Gather the orders to process.
     let nodes: any[] = [];
@@ -354,7 +509,7 @@ serve(async (req) => {
     // orders before letting anything touch the database.
     if (dryRun) {
       const preview = nodes.map((n) => {
-        const { orderRow, items, blockers } = mapShopifyOrder(n);
+        const { orderRow, items, blockers } = mapShopifyOrder(n, colorMap);
         return {
           shopify_name: n?.name,
           shopify_order_id: orderRow.shopify_order_id,
@@ -384,7 +539,7 @@ serve(async (req) => {
     const results = [];
     for (const node of nodes) {
       try {
-        results.push(await ingestOrder(node));
+        results.push(await ingestOrder(node, colorMap));
       } catch (e) {
         results.push({ gid: node?.id, outcome: "failed", detail: (e as Error).message });
       }

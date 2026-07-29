@@ -8,11 +8,17 @@ import Paginator from "../../components/Paginator";
 import Badge from "../../components/Badge";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
+import ComponentStageBadge from "../../components/ComponentStageBadge";
+import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import useTabParam from "../../hooks/useTabParam";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import StoreCalendarTab from "../StoreManagerDashboard/StoreCalendarTab";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
-import { getOrderStatusLabel, normalizeOrderStatus } from "../../utils/barcodeService";
+import { downloadWarehousePdf } from "../../utils/pdfLazy";
+import {
+  enrichComponentsWithMovements,
+  getOrderStatusLabel,
+  normalizeOrderStatus,
+} from "../../utils/barcodeService";
 import formatDate from "../../utils/formatDate";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import Logo from "../../images/logo.png";
@@ -70,6 +76,34 @@ const ORDER_LIST_COLUMNS = [
 const money = (o) =>
   Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
 
+// A colour swatch + name, matching OrderDetailPage.jsx:33 and the B2B/Comms
+// cards. Colours are stored as { hex, name } objects; tolerate a bare string
+// (legacy rows) and a missing hex (a Shopify colour absent from the `colors`
+// table still has a real NAME worth showing — just no swatch).
+function ColorDot({ color }) {
+  if (!color) return null;
+  let hex = "";
+  let name = "";
+  if (typeof color === "string") {
+    // Legacy rows store a bare string — either a hex or a name.
+    if (color.startsWith("#")) hex = color;
+    else name = color;
+  } else if (typeof color === "object") {
+    name = color.name || "";
+    hex = color.hex || "";
+  }
+  if (!name && !hex) return null;
+  return (
+    <span className="sho-color">
+      {/* Only draw a swatch when the hex is KNOWN. Falling back to grey made a
+          "Happy Mustard" garment look grey — a wrong colour on a production
+          screen is worse than no colour. The name always shows. */}
+      {hex && <span className="sho-color-dot" style={{ backgroundColor: hex }} />}
+      {name && <span className="sho-color-name">{name}</span>}
+    </span>
+  );
+}
+
 // Map an order status onto one of Badge's semantic variants.
 const statusVariant = (status) => {
   const s = normalizeOrderStatus(status);
@@ -86,10 +120,11 @@ export default function ShopifyOrdersDashboard() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [componentsByOrder, setComponentsByOrder] = useState({});
+  const [journeyOrder, setJourneyOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [syncing, setSyncing] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(null);
   const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
   const [activeTab, setActiveTab] = useTabParam("overview");
   const [showSidebar, setShowSidebar] = useState(false);
@@ -142,6 +177,33 @@ export default function ShopifyOrdersDashboard() {
       if (error) throw error;
       setOrders(data || []);
       setLoadError(null);
+
+      // Components for those orders — the scannable pieces, one barcode each.
+      // Chunked .in() because a single huge id list can silently 400 on URL
+      // length (same reason the other dashboards chunk).
+      const ids = (data || []).map((o) => o.id);
+      if (ids.length) {
+        let comps = [];
+        for (let i = 0; i < ids.length; i += 100) {
+          const { data: chunk, error: compErr } = await supabase
+            .from("order_components")
+            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, re_journey_count, stage_pass_counts")
+            .in("order_id", ids.slice(i, i + 100));
+          if (compErr) { console.error("Shopify component fetch failed:", compErr); break; }
+          comps = comps.concat(chunk || []);
+        }
+        // Attach stages_outside so the stage badge can read "Out to Vendor (…)"
+        // — the one shared helper every dashboard uses for that.
+        const enriched = await enrichComponentsWithMovements(comps);
+        setComponentsByOrder(
+          enriched.reduce((acc, c) => {
+            (acc[c.order_id] ||= []).push(c);
+            return acc;
+          }, {})
+        );
+      } else {
+        setComponentsByOrder({});
+      }
     } catch (e) {
       console.error("ShopifyOrdersDashboard: order load failed", e);
       setLoadError(e?.message || "Unknown error");
@@ -184,14 +246,6 @@ export default function ShopifyOrdersDashboard() {
     } finally {
       setSyncing(false);
     }
-  };
-
-  const handleCustomerPdf = async (e, order) => {
-    e.stopPropagation();
-    setPdfLoading(order.id);
-    try { await downloadCustomerPdf(order); }
-    catch (err) { showPopup({ title: "PDF failed", message: err.message, type: "error" }); }
-    finally { setPdfLoading(null); }
   };
 
   const handleWarehousePdf = async (e, order) => {
@@ -276,6 +330,7 @@ export default function ShopifyOrdersDashboard() {
     const extra = (order.items?.length || 0) - 1;
     const isCod = (order.payment_mode || "").toUpperCase() === "COD";
     const flagged = order.web_order_status === "needs_review";
+    const components = componentsByOrder[order.id] || [];
 
     return (
       <div
@@ -292,14 +347,11 @@ export default function ShopifyOrdersDashboard() {
             {isCod && <Badge variant="info">COD</Badge>}
             {flagged && <Badge variant="warning">Needs Review</Badge>}
           </div>
+          {/* No Customer PDF for website orders: Shopify already sends the
+              customer their own order confirmation, so a second invoice from
+              us would be a duplicate (and could disagree with theirs). Only the
+              Warehouse work order is ours to produce. */}
           <div className="sho-order-actions">
-            <button
-              className="sho-ghost-btn"
-              onClick={(e) => handleCustomerPdf(e, order)}
-              disabled={pdfLoading === order.id}
-            >
-              {pdfLoading === order.id ? "…" : "Customer PDF"}
-            </button>
             <button
               className="sho-ghost-btn"
               onClick={(e) => handleWarehousePdf(e, order)}
@@ -330,9 +382,21 @@ export default function ShopifyOrdersDashboard() {
               <div><label>Amount</label><span>₹{formatIndianNumber(money(order))}</span></div>
               <div><label>Qty</label><span>{order.total_quantity || 0}</span></div>
               <div><label>Size</label><span>{item.size || "—"}</span></div>
-              <div><label>Top</label><span>{item.top || "—"}</span></div>
-              <div><label>Bottom</label><span>{item.bottom || "—"}</span></div>
-              <div><label>Dupatta</label><span>{item.includes_dupatta ? "Yes" : "No"}</span></div>
+              <div>
+                <label>Top</label>
+                <span>{item.top || "—"}<ColorDot color={item.top_color} /></span>
+              </div>
+              <div>
+                <label>Bottom</label>
+                <span>{item.bottom || "—"}<ColorDot color={item.bottom_color} /></span>
+              </div>
+              <div>
+                <label>Dupatta</label>
+                <span>
+                  {item.includes_dupatta ? "Yes" : "No"}
+                  {item.includes_dupatta && <ColorDot color={item.dupatta_color} />}
+                </span>
+              </div>
             </div>
             {isCod && Number(order.remaining_payment) > 0 && (
               <div className="sho-cod-line">
@@ -341,6 +405,37 @@ export default function ShopifyOrdersDashboard() {
             )}
           </div>
         </div>
+
+        {/* Production pieces — one barcode per physical component. These run
+            the same stage pipeline as every other channel. */}
+        {components.length > 0 && (
+          <>
+            <div className="sho-comp-journey">
+              {components.map((comp) => (
+                <div key={comp.id} className="sho-comp-card">
+                  <div className="sho-comp-info">
+                    <span className="sho-comp-barcode">{comp.barcode}</span>
+                    <span className="sho-comp-label">
+                      {comp.component_label || comp.component_type}
+                    </span>
+                  </div>
+                  <ComponentStageBadge comp={comp} />
+                </div>
+              ))}
+            </div>
+            <div className="sho-comp-actions">
+              <button
+                className="sho-ghost-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setJourneyOrder({ order_no: order.order_no, components });
+                }}
+              >
+                View Journey
+              </button>
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -348,6 +443,14 @@ export default function ShopifyOrdersDashboard() {
   return (
     <div className="sho-page">
       {PopupComponent}
+
+      {journeyOrder && (
+        <ComponentJourneyModal
+          orderNo={journeyOrder.order_no}
+          components={journeyOrder.components}
+          onClose={() => setJourneyOrder(null)}
+        />
+      )}
 
       {/* HEADER */}
       <header className="sho-header">

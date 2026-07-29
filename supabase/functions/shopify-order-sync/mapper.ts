@@ -78,19 +78,57 @@ const resolveSize = (variant: any): string =>
  *
  * So: only consider a Style value that mentions a dupatta (however spelled),
  * then decide on the with/without prefix. Never compare === "With Dupatta".
+ *
+ * Resolution order — Style option, then metafield, then give up:
+ *
+ *   1. The variant's Style option. AUTHORITATIVE: it is what the customer
+ *      actually chose at checkout. 142 of 250 live products have one.
+ *   2. The product's `custom.has_dupatta` metafield, for the 108 products with
+ *      no Style option (almost all "Set" products — Lehenga Set, Anarkali Set —
+ *      where the dupatta is always included so no choice was ever offered).
+ *   3. Neither → we do not know. The caller quarantines (DUPATTA_UNKNOWN).
+ *
+ * NOTHING is inferred from the product NAME. A name is marketing copy: it is
+ * re-worded for SEO, carries live misspellings ("Dupataa") and synonyms
+ * ("Odhni"), and any such drift would silently drop a barcode with no error.
+ * Production data must come from a field, never from prose.
  */
-const resolveDupatta = (variant: any): boolean => {
+const resolveDupatta = (variant: any, product: any): boolean => {
   const style = opt(variant, "Style").toLowerCase();
-  if (!style) return false;
-  // "dupatta" | "dupataa" | "dupatt…" — tolerate the misspellings in the data.
-  if (!/dupat/.test(style)) return false; // e.g. "With Pants" → not a dupatta
-  // NB: check "without" FIRST — "without".startsWith("with") is true, so a
-  // naive with-check silently marks every Without-Dupatta variant as having
-  // one, minting a phantom DUP barcode that blocks packaging (every active
-  // component must clear Final QC).
-  if (/\bwithout\b/.test(style)) return false;
-  return /\bwith\b/.test(style);
+
+  // 1. Explicit customer choice.
+  if (style && /dupat/.test(style)) {
+    // NB: check "without" FIRST — "without".startsWith("with") is true, so a
+    // naive with-check silently marks every Without-Dupatta variant as having
+    // one, minting a phantom DUP barcode that blocks packaging (every active
+    // component must clear Final QC).
+    if (/\bwithout\b/.test(style)) return false;
+    return /\bwith\b/.test(style);
+  }
+
+  // 2. Product-level metafield. Shopify returns metafield values as strings,
+  //    so a boolean metafield arrives as "true"/"false".
+  return isTruthyMetafield(mf(product, "hasDupatta"));
 };
+
+/** Shopify metafield values are strings — "true"/"1"/"yes" all mean true. */
+const isTruthyMetafield = (v: string): boolean =>
+  ["true", "1", "yes", "y"].includes(clean(v).toLowerCase());
+
+/**
+ * True when nothing tells us whether this line includes a dupatta: no dupatta
+ * Style option AND no `custom.has_dupatta` metafield.
+ *
+ * Assuming "no" would lose a real piece from production; assuming "yes" would
+ * mint a phantom component that blocks packaging. So the order is flagged for
+ * a human instead. Populating `custom.has_dupatta` on the ~108 products that
+ * need it retires this path with no code change.
+ */
+export function isDupattaUnknown(variant: any, product: any): boolean {
+  const style = opt(variant, "Style").toLowerCase();
+  if (style && /dupat/.test(style)) return false;        // explicit choice exists
+  return clean(mf(product, "hasDupatta")) === "";        // no metafield either
+}
 
 /** The Heavy/Light qualifier, so the distinction isn't lost. "" when plain. */
 const dupattaQualifier = (variant: any): string => {
@@ -133,7 +171,12 @@ const addDays = (iso: string, days: number): string => {
 
 // ─── Line items ─────────────────────────────────────────────
 
-function mapLineItem(node: any, deliveryDate: string | null, blockers: Blocker[]) {
+function mapLineItem(
+  node: any,
+  deliveryDate: string | null,
+  blockers: Blocker[],
+  hexByColorName?: Map<string, string>
+) {
   const variant = node?.variant || {};
   const product = variant?.product || {};
 
@@ -156,10 +199,21 @@ function mapLineItem(node: any, deliveryDate: string | null, blockers: Blocker[]
     });
   }
 
+  // Neither a Style option nor the name tells us about a dupatta. Guessing
+  // either way is wrong: assume none and a real piece never gets a barcode;
+  // assume one and a phantom component blocks packaging. Flag it instead.
+  if (isDupattaUnknown(variant, product)) {
+    blockers.push({
+      code: "DUPATTA_UNKNOWN",
+      detail: `No Style option and no custom.has_dupatta metafield on "${clean(node?.title)}" — confirm before production`,
+    });
+  }
+
   const size = resolveSize(variant);
   const color = opt(variant, "Color");
+  const colorObj = toColorObject(color, hexByColorName);
   const qualifier = dupattaQualifier(variant);
-  const includesDupatta = resolveDupatta(variant);
+  const includesDupatta = resolveDupatta(variant, product);
 
   // Per-unit price. discountedUnitPriceSet reflects line discounts; fall back
   // to the original when absent.
@@ -188,7 +242,7 @@ function mapLineItem(node: any, deliveryDate: string | null, blockers: Blocker[]
     shopify_sku: clean(node?.sku) || null,
 
     product_name: clean(node?.title),
-    color: color || null,
+    color: colorObj,
 
     // Production-critical four.
     top: isPresent(top) ? top : "",
@@ -196,12 +250,15 @@ function mapLineItem(node: any, deliveryDate: string | null, blockers: Blocker[]
     includes_dupatta: includesDupatta,
     extras: [],
 
-    // Shopify carries ONE colour per variant, while the app models a colour per
-    // component. Attribute it to the garment we know exists rather than
-    // inventing per-piece colours.
-    top_color: isPresent(top) && color ? color : null,
-    bottom_color: null,
-    dupatta_color: null,
+    // Shopify carries ONE colour per variant ("Blush Pink"), while the app
+    // models a colour per component. The whole garment is that colour, so
+    // apply it to every piece the order actually contains — a tailor reading
+    // the work order needs the colour beside each piece, not only the top.
+    // These MUST be { hex, name } objects: WarehouseOrderPdf.js:523 reads
+    // `item.top_color.hex` and renders nothing for a bare string.
+    top_color: isPresent(top) ? colorObj : null,
+    bottom_color: isPresent(bottom) ? colorObj : null,
+    dupatta_color: includesDupatta ? colorObj : null,
 
     additionals: [],
     size: size || null,
@@ -278,7 +335,122 @@ function resolveDeliveryDate(
 
 // ─── Main ───────────────────────────────────────────────────
 
-export function mapShopifyOrder(node: any) {
+// ============================================================
+// COMPONENTS — one row per physical garment piece (the scannable unit)
+// ============================================================
+// Mirrors generateOrderComponents() in src/utils/barcodeService.js:676-776.
+// Kept in step with it deliberately: barcode format, the "NA" skip rule and
+// the index suffixes must match, or a web order's pieces won't scan like every
+// other channel's.
+//
+// Components are created INACTIVE (no is_active / current_stage set here) —
+// exactly as the JS does. A Production Head activates them via the
+// activate_components RPC, which is what moves them to 'cloth_issued' and
+// starts the SLA clock. Web orders must not jump that queue.
+export function buildOrderComponents(order: any) {
+  const components: Record<string, unknown>[] = [];
+  const orderNo: string = order?.order_no || "";
+  // "SB-SHOP-0726-000123" → "SHOP" (4 chars, same class as the existing LDHC)
+  const storeCode = orderNo.split("-")[1] || "SB";
+  const seqPart = orderNo.split("-").pop() || "000000";
+
+  const items = Array.isArray(order?.items) ? order.items : [order?.items];
+
+  items.forEach((item: any, itemIndex: number) => {
+    const suffix = itemIndex > 0 ? String(itemIndex + 1) : "";
+
+    // An item that names no piece at all still needs one row to track, so the
+    // product_name fallback stays for that case — but only then. Minting a
+    // phantom piece would block packaging, which requires every ACTIVE
+    // component to clear Final QC.
+    const namesNoPiece =
+      !isPresent(clean(item?.top)) &&
+      !isPresent(clean(item?.bottom)) &&
+      !item?.includes_dupatta;
+
+    if (isPresent(clean(item?.top)) || (namesNoPiece && item?.product_name)) {
+      components.push({
+        order_id: order.id,
+        order_no: orderNo,
+        barcode: `${storeCode}-${seqPart}-TOP${suffix}`,
+        component_type: "top",
+        component_label: isPresent(clean(item?.top)) ? item.top : (item?.product_name || "Top"),
+        item_index: itemIndex,
+        extra_index: null,
+      });
+    }
+
+    if (isPresent(clean(item?.bottom))) {
+      components.push({
+        order_id: order.id,
+        order_no: orderNo,
+        barcode: `${storeCode}-${seqPart}-BTM${suffix}`,
+        component_type: "bottom",
+        component_label: item.bottom || "Bottom",
+        item_index: itemIndex,
+        extra_index: null,
+      });
+    }
+
+    if (item?.includes_dupatta) {
+      components.push({
+        order_id: order.id,
+        order_no: orderNo,
+        barcode: `${storeCode}-${seqPart}-DUP${suffix}`,
+        component_type: "dupatta",
+        component_label: "Dupatta",
+        item_index: itemIndex,
+        extra_index: null,
+      });
+    }
+
+    if (Array.isArray(item?.extras)) {
+      item.extras.forEach((extra: any, extraIndex: number) => {
+        components.push({
+          order_id: order.id,
+          order_no: orderNo,
+          barcode: `${storeCode}-${seqPart}-EX${extraIndex + 1}${itemIndex > 0 ? "-" + (itemIndex + 1) : ""}`,
+          component_type: "extra",
+          component_label: extra?.name || `Extra ${extraIndex + 1}`,
+          item_index: itemIndex,
+          extra_index: extraIndex,
+        });
+      });
+    }
+  });
+
+  return components;
+}
+
+/**
+ * The app stores garment colours as **objects**, not strings:
+ *   { hex: "#F7DCCD", name: "Carnation Pink" }
+ * Every consumer reads `item.top_color.hex` to draw the swatch —
+ * WarehouseOrderPdf.js:523 and the dashboard cards both do. A bare string has
+ * no `.hex`, so the swatch silently disappears. This shape is required.
+ *
+ * `hexByColorName` is the app's `colors` table (name → hex), passed in by
+ * index.ts so this module stays pure. Shopify's names are close but not exact
+ * ("Rosepink" vs "Rose Pink"), so match on a normalised key.
+ *
+ * When a colour isn't in the table we still return the NAME with an empty hex:
+ * the name is real information from Shopify and belongs on the work order; only
+ * the swatch is unavailable. Never invent a hex.
+ */
+export const normalizeColorKey = (s: unknown): string =>
+  String(s ?? "").toLowerCase().replace(/[^a-z]/g, "");
+
+export function toColorObject(
+  name: string,
+  hexByColorName?: Map<string, string>
+): { hex: string; name: string } | null {
+  const clean_ = clean(name);
+  if (!clean_) return null;
+  const hex = hexByColorName?.get(normalizeColorKey(clean_)) || "";
+  return { hex, name: clean_ };
+}
+
+export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>) {
   const blockers: Blocker[] = [];
 
   const lineNodes = (node?.lineItems?.edges || []).map((e: any) => e.node);
@@ -289,7 +461,8 @@ export function mapShopifyOrder(node: any) {
   const createdAt: string = clean(node?.createdAt) || new Date().toISOString();
   const { date: deliveryDate, basis } = resolveDeliveryDate(createdAt, lineNodes, blockers);
 
-  const items = lineNodes.map((n: any) => mapLineItem(n, deliveryDate, blockers));
+  const items = lineNodes.map((n: any) =>
+    mapLineItem(n, deliveryDate, blockers, hexByColorName));
 
   // ── Payment. Half of real orders are COD, so this is not an edge case.
   // COD lands as PENDING with gateway "cash_on_delivery". Existing COD orders
