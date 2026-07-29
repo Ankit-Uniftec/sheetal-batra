@@ -13,6 +13,7 @@ import {
   PRODUCTION_STAGES,
   REJOURNEY_STAGES,
   getStageLabel,
+  getComponentStageLabel,
   getStageColor,
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
@@ -352,7 +353,7 @@ const ProductionOverrides = ({ currentUserEmail }) => {
                       className="pm-comp-card-stage"
                       style={{ backgroundColor: getStageColor(comp.current_stage) }}
                     >
-                      {getStageLabel(comp.current_stage)}
+                      {getComponentStageLabel(comp)}
                     </span>
                   )}
                 </div>
@@ -389,7 +390,7 @@ const ProductionOverrides = ({ currentUserEmail }) => {
                 </span>
               ) : (
                 <span className="pm-comp-card-stage" style={{ backgroundColor: getStageColor(component.current_stage) }}>
-                  {getStageLabel(component.current_stage)}
+                  {getComponentStageLabel(component)}
                 </span>
               )}
             </div>

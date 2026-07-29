@@ -20,6 +20,8 @@ import {
     SCAN_STATIONS,
     REJOURNEY_STAGES,
     getStageLabel,
+    getComponentStageLabel,
+    CLOTH_ISSUE_PENDING_LABEL,
     getStageColor,
     getStageTextColor,
     fetchApprovedVendors,
@@ -27,6 +29,16 @@ import {
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
 import { fetchQcRecords } from "../utils/qcHistory";
+
+// Pieces that are out of the normal production flow. Used to keep them out of
+// scan scopes (packaging, bulk cloth-issue activation).
+//
+// NOTE: being listed here does NOT mean "can never be scanned again". Only
+// 'dispatched' is truly terminal. A DISPOSED piece restarts by being scanned
+// at Cloth Issue, which re-issues its cloth and returns it to production
+// (advance_component_stage, migration 52). 'scrapped' is retired — no new ones
+// can be created — but legacy rows are recoverable the same way.
+const TERMINAL_STAGES = ["disposed", "scrapped", "dispatched"];
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
 // labels (e.g. "Embroidery In-Progress") so RPC error messages read
@@ -79,6 +91,13 @@ const buildFriendlyScanError = (rawMsg, toStage) => {
     // scan) or the retry exhausted on a transient hiccup. Show plain English.
     if (/coerce.*single json object/i.test(rawMsg) || /pgrst116/i.test(rawMsg)) {
         return "Couldn't read this barcode. Check the tag and scan again — if it keeps failing, report it to the Production Head.";
+    }
+    // A disposed piece is not stuck — it restarts at Cloth Issue (migration 52).
+    // Return the RPC's instruction verbatim: the generic handling below would
+    // point the worker at the "next station after disposed", which is nonsense,
+    // and Cloth Issue is the one and only place this piece may be scanned.
+    if (/disposed\. scan it at cloth issue/i.test(rawMsg)) {
+        return rawMsg;
     }
     // toStage (optional): the stage the worker was TRYING to scan into. Lets us
     // tell the two very different "cannot move" cases apart.
@@ -419,7 +438,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 // immediately and keeps the piece out of the scanned list.
                 // Reachable in normal use since per-product dispatch: an order
                 // stays open with some pieces already dispatched.
-                if (["dispatched", "disposed", "scrapped"].includes(component.current_stage)) {
+                if (TERMINAL_STAGES.includes(component.current_stage)) {
                     setScanResult({
                         success: false,
                         error: "COMPONENT_TERMINATED",
@@ -435,7 +454,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     // Already-dispatched pieces are done — exclude them, or a
                     // partially-dispatched order would demand re-scanning pieces
                     // that already shipped.
-                    const isPackable = (c) => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage);
+                    const isPackable = (c) => c.is_active && !TERMINAL_STAGES.includes(c.current_stage);
                     const activeCount = allComponents.filter(isPackable).length;
 
                     // An order can hold several products, each with its own
@@ -497,7 +516,15 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     if (orders && orders.length > 0) {
                         const order = orders[0];
                         const components = await fetchOrderComponents(order.id);
-                        const inactiveComponents = components.filter(c => !c.is_active);
+                        // Terminal pieces never belong in a bulk activation. A
+                        // disposed piece restarts by being scanned individually
+                        // at this station (advance_component_stage's restart
+                        // branch) — never as a pre-ticked checkbox in a
+                        // master-barcode sweep, which would restart it by
+                        // accident along with its healthy siblings.
+                        const inactiveComponents = components.filter(
+                            c => !c.is_active && !TERMINAL_STAGES.includes(c.current_stage)
+                        );
 
                         if (inactiveComponents.length === 0) {
                             setScanResult({
@@ -525,11 +552,17 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     return;
                 }
 
-                // If component barcode at cloth issue and not active, auto-open activation
+                // If component barcode at cloth issue and not active, auto-open activation.
+                // A DISPOSED piece is deliberately not handled here: dispose leaves
+                // is_active = TRUE, so it falls through to the standard scan path
+                // below, where advance_component_stage's restart branch re-issues
+                // its cloth and puts it back into production.
                 const component = await fetchComponentByBarcode(barcode);
-                if (!component.is_active) {
+                if (!component.is_active && !TERMINAL_STAGES.includes(component.current_stage)) {
                     const allComponents = await fetchOrderComponents(component.order_id);
-                    const inactiveComponents = allComponents.filter(c => !c.is_active);
+                    const inactiveComponents = allComponents.filter(
+                        c => !c.is_active && !TERMINAL_STAGES.includes(c.current_stage)
+                    );
 
                     if (inactiveComponents.length > 0) {
                         setActivationPopup({
@@ -598,7 +631,20 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             if (result.success) {
                 setScanResult({
                     success: true,
-                    message: `${getStageLabel(result.from_stage)} → ${getStageLabel(result.to_stage)}`,
+                    // A disposed piece scanned at Cloth Issue is a RESTART, not an
+                    // ordinary transition — say so plainly, or the worker sees a
+                    // bare "Disposed → Cloth Issued" and can't tell whether the
+                    // piece is genuinely back in production.
+                    // The re-issue scan (from_stage === to_stage === cloth_issued)
+                    // would otherwise toast "Cloth Issued → Cloth Issued", which
+                    // reads as a no-op. Name the waiting side, matching the
+                    // journey timeline. Checked AFTER `restarted` so a disposed
+                    // piece keeps its own restart message.
+                    message: result.restarted
+                        ? (result.message || "Restarted — new cloth issued. This piece is back in production.")
+                        : (result.from_stage === "cloth_issued" && result.to_stage === "cloth_issued")
+                            ? `${CLOTH_ISSUE_PENDING_LABEL} → ${getStageLabel(result.to_stage)}`
+                            : `${getStageLabel(result.from_stage)} → ${getStageLabel(result.to_stage)}`,
                     data: result,
                 });
 
@@ -739,9 +785,14 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             });
 
             if (result.success) {
+                // Dispose is not the end of the piece — it goes back for new
+                // cloth. Say so here, where the decision is made, so the piece
+                // isn't set aside as finished.
                 const msg = qcPopup.outcome === "rejourney"
                     ? `QC FAILED — Re-journey to ${getStageLabel(qcPopup.rejourneyStage)}`
-                    : `QC FAILED — ${qcPopup.outcome.toUpperCase()}`;
+                    : qcPopup.outcome === "dispose"
+                        ? "QC FAILED — DISPOSED. Scan this piece at Cloth Issue to restart it with new cloth."
+                        : `QC FAILED — ${qcPopup.outcome.toUpperCase()}`;
 
                 setScanResult({
                     success: false,
@@ -915,7 +966,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         setPackagingPopup(prev => {
             const inScope = (c) =>
                 c.is_active &&
-                !["disposed", "scrapped", "dispatched"].includes(c.current_stage) &&
+                !TERMINAL_STAGES.includes(c.current_stage) &&
                 (itemIndex === null || (c.item_index ?? 0) === itemIndex);
             const scoped = (prev.allComponents || []).filter(inScope);
             const allowed = new Set(scoped.map(c => c.barcode));
@@ -1288,7 +1339,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                         className="wd-stage-badge"
                                         style={{ backgroundColor: getStageColor(selectedComponent.current_stage), color: getStageTextColor(selectedComponent.current_stage) }}
                                     >
-                                        {getStageLabel(selectedComponent.current_stage)}
+                                        {getComponentStageLabel(selectedComponent)}
                                     </span>
                                 )}
                             </div>
@@ -1352,7 +1403,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                                     className="wd-stage-badge wd-stage-badge-sm"
                                                     style={{ backgroundColor: getStageColor(comp.current_stage), color: getStageTextColor(comp.current_stage) }}
                                                 >
-                                                    {getStageLabel(comp.current_stage)}
+                                                    {getComponentStageLabel(comp)}
                                                 </span>
                                             )}
                                         </div>
@@ -1638,12 +1689,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                         real item_index values, not 0..n — once a product ships,
                                         the remaining indexes no longer start at 0. */}
                                     {[...new Set((packagingPopup.allComponents || [])
-                                        .filter(c => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage))
+                                        .filter(c => c.is_active && !TERMINAL_STAGES.includes(c.current_stage))
                                         .map(c => c.item_index ?? 0))]
                                         .sort((a, b) => a - b)
                                         .map((idx) => {
                                             const count = (packagingPopup.allComponents || []).filter(
-                                                c => c.is_active && !["disposed", "scrapped", "dispatched"].includes(c.current_stage) && (c.item_index ?? 0) === idx
+                                                c => c.is_active && !TERMINAL_STAGES.includes(c.current_stage) && (c.item_index ?? 0) === idx
                                             ).length;
                                             return (
                                                 <button

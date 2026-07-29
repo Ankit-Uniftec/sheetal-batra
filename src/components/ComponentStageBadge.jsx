@@ -1,6 +1,6 @@
 import React from "react";
 import Badge from "./Badge";
-import { getStageLabel, getStageColor, getStagesOutsideLabel } from "../utils/barcodeService";
+import { getComponentStageLabel, getStageColor, getStagesOutsideLabel } from "../utils/barcodeService";
 
 // The ONE badge used everywhere to show a component's production status.
 // When the piece is out at an external vendor (is_outside_wh), it reads
@@ -50,9 +50,12 @@ export default function ComponentStageBadge({ comp, className }) {
     );
   }
 
+  // getComponentStageLabel (not getStageLabel) so a piece QC re-journeyed to
+  // Cloth Issue reads "Cloth Issue In-Progress" until its cloth is actually
+  // re-issued. Needs previous_stage + stage_pass_counts in the component select.
   return (
     <Badge color={getStageColor(comp.current_stage)} className={className}>
-      {getStageLabel(comp.current_stage)}{passSuffix(comp, comp.current_stage)}
+      {getComponentStageLabel(comp)}{passSuffix(comp, comp.current_stage)}
     </Badge>
   );
 }

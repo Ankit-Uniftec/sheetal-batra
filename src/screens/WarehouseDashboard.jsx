@@ -382,7 +382,7 @@ const WarehouseDashboard = () => {
     try {
       const { data, error } = await supabase
         .from("order_components")
-        .select("id, barcode, component_type, component_label, current_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, stage_pass_counts, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
+        .select("id, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, stage_pass_counts, is_outside_wh, vendor_name, vendor_location, vendor_exit_at")
         .eq("order_id", orderId)
         .order("component_type", { ascending: true });
       if (error) throw error;
@@ -1076,90 +1076,9 @@ const WarehouseDashboard = () => {
   //   }
   // };
 
-  // Handle QC Fail popup submission
-  // const handleQcFailSubmit = async () => {
-  //   const { orderId, reason, outcome, rejourneyStage } = qcFailPopup;
-
-  //   if (!reason.trim()) {
-  //     showPopup({ title: "Required", message: "Please enter a reason for QC failure", type: "warning", confirmText: "OK" });
-  //     return;
-  //   }
-  //   if (!outcome) {
-  //     showPopup({ title: "Required", message: "Please select an outcome (Dispose, Scrap, or Re-journey)", type: "warning", confirmText: "OK" });
-  //     return;
-  //   }
-  //   if (outcome === "rejourney" && !rejourneyStage) {
-  //     showPopup({ title: "Required", message: "Please select which stage to restart from", type: "warning", confirmText: "OK" });
-  //     return;
-  //   }
-
-  //   setStageUpdating(orderId);
-  //   try {
-  //     // Get current order to check rejourney count
-  //     const { data: currentOrder } = await supabase
-  //       .from("orders")
-  //       .select("rejourney_count")
-  //       .eq("id", orderId)
-  //       .single();
-
-  //     const currentCount = currentOrder?.rejourney_count || 0;
-
-  //     let updateData = {
-  //       qc_fail_reason: reason,
-  //       qc_fail_outcome: outcome,
-  //       warehouse_stage_updated_at: new Date().toISOString(),
-  //     };
-
-  //     if (outcome === "dispose") {
-  //       updateData.warehouse_stage = "disposed";
-  //     } else if (outcome === "scrap") {
-  //       updateData.warehouse_stage = "scrapped";
-  //     } else if (outcome === "rejourney") {
-  //       const newCount = currentCount + 1;
-  //       updateData.warehouse_stage = rejourneyStage;
-  //       updateData.rejourney_count = newCount;
-  //       updateData.is_rework = true;
-
-  //       // Alert on 3rd re-journey
-  //       if (newCount >= 3) {
-  //         // We'll show alert after update
-  //       }
-  //     }
-
-  //     const { error } = await supabase
-  //       .from("orders")
-  //       .update(updateData)
-  //       .eq("id", orderId);
-
-  //     if (!error) {
-  //       fetchOrders();
-  //       setQcFailPopup({ isOpen: false, orderId: null, orderNo: "", reason: "", outcome: "", rejourneyStage: "" });
-
-  //       if (outcome === "rejourney" && currentCount + 1 >= 3) {
-  //         showPopup({
-  //           title: "⚠ Re-journey Alert",
-  //           message: `This order has been sent for re-journey ${currentCount + 1} times. Please alert Manish Batra.`,
-  //           type: "warning",
-  //           confirmText: "OK",
-  //         });
-  //       } else if (outcome === "dispose") {
-  //         showPopup({ title: "Disposed", message: "Component marked as disposed.", type: "info", confirmText: "OK" });
-  //       } else if (outcome === "scrap") {
-  //         showPopup({ title: "Scrapped", message: "Component moved to scrap.", type: "info", confirmText: "OK" });
-  //       } else {
-  //         const stageLabel = REJOURNEY_STAGES.find(s => s.value === rejourneyStage)?.label || rejourneyStage;
-  //         showPopup({ title: "Re-journey Started", message: `Order sent back to ${stageLabel} stage.`, type: "success", confirmText: "OK" });
-  //       }
-  //     } else {
-  //       showPopup({ title: "Error", message: "Failed to update QC status", type: "error", confirmText: "OK" });
-  //     }
-  //   } catch (err) {
-  //     console.error("QC fail update error:", err);
-  //     showPopup({ title: "Error", message: "Something went wrong", type: "error", confirmText: "OK" });
-  //   } finally {
-  //     setStageUpdating(null);
-  //   }
-  // };
+  // QC-fail handling REMOVED (migration 52): it wrote the retired
+  // orders.warehouse_stage model and supported a Scrap outcome that no
+  // longer exists. Live QC fail/dispose is in ScanStation.jsx.
 
   // // Get stage label and color for display
   // const getStageInfo = (stageValue) => {
@@ -2143,91 +2062,10 @@ const WarehouseDashboard = () => {
         </div>
       </div>
 
-      {/* QC Fail Popup */}
-      {/* {qcFailPopup.isOpen && (
-        <div className="popup-overlay" onClick={(e) => { if (e.target === e.currentTarget) setQcFailPopup(prev => ({ ...prev, isOpen: false })); }}>
-          <div className="popup-box popup-warning" style={{ maxWidth: 480 }}>
-            <div className="popup-header">
-              <span className="popup-icon popup-icon-error">✕</span>
-              <h3 className="popup-title">QC Failed — {qcFailPopup.orderNo}</h3>
-            </div>
-
-            <div className="popup-body"> */}
-      {/* Reason Field */}
-      {/* <div className="wd-qc-field">
-                <label className="wd-qc-label">Reason for QC Failure *</label>
-                <textarea
-                  className="wd-qc-textarea"
-                  placeholder="Describe why QC failed..."
-                  value={qcFailPopup.reason}
-                  onChange={(e) => setQcFailPopup(prev => ({ ...prev, reason: e.target.value }))}
-                  rows={3}
-                />
-              </div> */}
-
-      {/* Outcome Selection */}
-      {/* <div className="wd-qc-field">
-                <label className="wd-qc-label">Select Outcome *</label>
-                <div className="wd-qc-outcome-btns">
-                  <button
-                    className={`wd-qc-outcome-btn wd-qc-dispose ${qcFailPopup.outcome === "dispose" ? "active" : ""}`}
-                    onClick={() => setQcFailPopup(prev => ({ ...prev, outcome: "dispose", rejourneyStage: "" }))}
-                  >
-                    Dispose
-                  </button>
-                  <button
-                    className={`wd-qc-outcome-btn wd-qc-scrap ${qcFailPopup.outcome === "scrap" ? "active" : ""}`}
-                    onClick={() => setQcFailPopup(prev => ({ ...prev, outcome: "scrap", rejourneyStage: "" }))}
-                  >
-                    Scrap
-                  </button>
-                  <button
-                    className={`wd-qc-outcome-btn wd-qc-rejourney ${qcFailPopup.outcome === "rejourney" ? "active" : ""}`}
-                    onClick={() => setQcFailPopup(prev => ({ ...prev, outcome: "rejourney" }))}
-                  >
-                    Re-journey
-                  </button>
-                </div>
-              </div> */}
-
-      {/* Re-journey Stage Dropdown (only if rejourney selected) */}
-      {/* {qcFailPopup.outcome === "rejourney" && (
-                <div className="wd-qc-field">
-                  <label className="wd-qc-label">Restart from Stage *</label>
-                  <select
-                    className="wd-qc-rejourney-select"
-                    value={qcFailPopup.rejourneyStage}
-                    onChange={(e) => setQcFailPopup(prev => ({ ...prev, rejourneyStage: e.target.value }))}
-                  >
-                    <option value="">— Select Stage —</option>
-                    {REJOURNEY_STAGES.map((stage) => (
-                      <option key={stage.value} value={stage.value}>
-                        {stage.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="popup-actions">
-              <button
-                className="popup-btn popup-btn-cancel"
-                onClick={() => setQcFailPopup({ isOpen: false, orderId: null, orderNo: "", reason: "", outcome: "", rejourneyStage: "" })}
-              >
-                Cancel
-              </button>
-              <button
-                className="popup-btn popup-btn-confirm"
-                onClick={handleQcFailSubmit}
-                disabled={stageUpdating === qcFailPopup.orderId}
-              >
-                {stageUpdating === qcFailPopup.orderId ? "Saving..." : "Confirm"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )} */}
+      {/* QC Fail Popup — REMOVED (migration 52).
+          Dead code: it drove the retired orders.warehouse_stage model and
+          offered a Scrap outcome that no longer exists. QC fail/dispose now
+          lives in ScanStation.jsx against order_components. */}
 
       {/* Image Viewer Modal */}
       {viewingImages && (

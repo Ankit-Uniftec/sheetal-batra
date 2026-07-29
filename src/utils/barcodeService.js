@@ -51,8 +51,14 @@ export const PRODUCTION_STAGES = [
   { value: "production_complete", label: "Completed", step: 10, color: "#388e3c", mandatory: true },
   { value: "packaging_dispatch", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", maxDays: 1, mandatory: true },
   { value: "dispatched", label: "Dispatched", step: 10, color: "#1b5e20", mandatory: true },
+  // Disposed is NOT terminal: the piece restarts by being scanned at Cloth
+  // Issue, which re-issues its cloth and returns it to production (see
+  // db/…/v2/52_dispose_restarts_at_cloth_issue.sql). step 0 because it sits
+  // outside the numbered flow while it waits, not because it is finished.
   { value: "disposed", label: "Disposed", step: 0, color: "#424242" },
-  { value: "scrapped", label: "Scrapped", step: 0, color: "#616161" },
+  // RETIRED (52): Scrap is no longer an outcome — record_qc_result rejects it.
+  // Kept only so pre-52 scrapped rows still render. Do not reintroduce.
+  { value: "scrapped", label: "Scrapped", step: 0, color: "#616161", legacy: true },
   // ── Legacy (removed from active flow; kept for historical rendering) ──
   { value: "pattern_printing_in_progress", label: "Pattern Printing In-Progress", step: 0, color: "#673ab7", maxDays: 1, legacy: true },
   { value: "pattern_printing_completed", label: "Pattern Printing Completed", step: 0, color: "#673ab7", legacy: true },
@@ -196,10 +202,27 @@ export function getStageTextColor() {
 // and never drifts afterwards. Flags (is_b2b, is_comms…) and salesperson_store
 // are only a fallback for rows with a missing/unknown prefix.
 //
-// There is deliberately NO "website" channel: LXRTS orders sync from Shopify
-// but are PLACED in a store (or B2B, or any channel), so LXRTS is an order
-// TYPE, not a channel — such an order badges and reports as whatever channel
-// it was placed through. Do not reintroduce a sync_enabled → website rule.
+// TWO SEPARATE THINGS, easily confused — read both before editing:
+//
+//   1. LXRTS (items[].sync_enabled) is an order TYPE, not a channel. It means
+//      "the product is Shopify-synced". Such a product can be sold by an SA in
+//      Delhi, through B2B, at an exhibition — the order reports under whichever
+//      channel it was PLACED in. There is still deliberately NO
+//      sync_enabled → channel rule, and none must be reintroduced.
+//
+//   2. SHOP is a real channel: an order the CUSTOMER placed on
+//      sheetalbatraindia.com, ingested by the shopify-order-sync edge function.
+//      It is a genuine sales channel like the stores or B2B, so it gets its own
+//      prefix (SB-SHOP-MMYY-NNNNNN), label and revenue segment.
+//
+// These are orthogonal. A Shopify web order is BOTH LXRTS-type (its products
+// are synced) AND SHOP-channel (that's where it was placed). Collapsing them
+// would either hide website revenue inside store revenue (if SHOP were dropped)
+// or misreport an in-store LXRTS sale as a website sale (if rule 1 returned).
+//
+// Once ingested, a SHOP order is an ordinary order — same production flow,
+// warehouse stages, dispatch and delivery as every other channel. Only its
+// arrival path is different.
 const CHANNEL_BY_ORDER_PREFIX = {
   DLC: "offline",     // Delhi store
   LDHC: "offline",    // Ludhiana store
@@ -207,6 +230,7 @@ const CHANNEL_BY_ORDER_PREFIX = {
   PVT: "private",
   B2B: "b2b",
   COM: "comms",
+  SHOP: "shopify",    // customer-placed website orders (Shopify)
   STOCK: "stock",     // internal stock orders, not a customer channel
 };
 
@@ -256,6 +280,7 @@ export function getOrderChannelLabel(order) {
   if (key === "comms") return "Comms";
   if (key === "private") return "Private";
   if (key === "exhibition") return "Exhibition";
+  if (key === "shopify") return "Shopify";
   if (key === "stock") return "Stock";
   // offline with an unknown/missing prefix — try the store name.
   const store = (order?.salesperson_store || "").trim().toLowerCase();
@@ -268,6 +293,7 @@ export function getOrderChannelLabel(order) {
 export const CHANNEL_SEGMENTS = [
   { label: "Delhi Store", color: "#2e7d32" },
   { label: "Ludhiana Store", color: "#00897b" },
+  { label: "Shopify", color: "#0288d1" },
   { label: "B2B", color: "#d5b85a" },
   { label: "Private", color: "#8e24aa" },
   { label: "Comms", color: "#1565c0" },
@@ -292,6 +318,9 @@ export function getOrderChannelKey(order) {
   if (store === "COMMS" || order.is_comms) return "comms";
   if (store === "B2B" || order.is_b2b) return "b2b";
   if (store === "Private" || order.is_private_order) return "private";
+  // A web order always carries a shopify_order_id, so it stays classified even
+  // if order_no were somehow missing.
+  if (store === "Shopify" || order.shopify_order_id) return "shopify";
   return "offline";
 }
 
@@ -352,6 +381,42 @@ export function getStageColor(stageValue) {
   return getStageInfo(stageValue)?.color || "#9e9e9e";
 }
 
+// ============================================================
+// HELPER: "waiting for cloth" vs "cloth issued"
+// ============================================================
+// Cloth Issue is the one SINGLE-SCAN stage: cloth_issued IS its completed
+// state, so unlike every other stage there is no cloth_issued_in_progress enum
+// value to sit in while the piece waits. That left two genuinely different
+// situations rendering the identical "Cloth Issued" label:
+//
+//   QC re-journeyed it here, cloth NOT yet re-issued  -> was "Cloth Issued (2)"
+//   worker actually re-issued the cloth               -> also "Cloth Issued (2)"
+//
+// previous_stage tells them apart, and both writers already set it:
+//   * re-journey  (record_qc_result)        previous_stage = the QC stage
+//   * re-issue    (advance_component_stage) previous_stage = current_stage,
+//                                           i.e. 'cloth_issued' itself
+//
+// stage_pass_counts scopes this to RE-JOURNEYS ONLY — it is non-zero only for a
+// stage QC explicitly sent the piece back to — so a first-pass piece awaiting
+// its very first cloth is untouched and still reads "Order Received".
+export const CLOTH_ISSUE_PENDING_LABEL = "Cloth Issue In-Progress";
+
+export function isAwaitingClothReissue(comp) {
+  if (!comp || comp.current_stage !== "cloth_issued") return false;
+  if (comp.previous_stage === "cloth_issued") return false;
+  return Number(comp.stage_pass_counts?.cloth_issued) > 0;
+}
+
+// Stage label for a COMPONENT (needs the row, not just the stage value).
+// Prefer this over getStageLabel(comp.current_stage) anywhere a component
+// object is in hand, so the cloth-issue distinction is never re-implemented.
+export function getComponentStageLabel(comp) {
+  return isAwaitingClothReissue(comp)
+    ? CLOTH_ISSUE_PENDING_LABEL
+    : getStageLabel(comp?.current_stage);
+}
+
 // Allowed days for a stage (its SLA). Used to derive an expected return/
 // due-back date for components sent out to a vendor (exit date + maxDays).
 // Returns null when the stage has no defined SLA.
@@ -408,11 +473,27 @@ export function describeTransition(t, movements) {
     stageForTrip = mov ? getStagesOutsideLabel(mov.stages_outside) : null;
   }
 
+  // Cloth Issue is single-scan, so a piece waiting for re-issued cloth and one
+  // whose cloth IS issued both sit at 'cloth_issued'. Rendering the raw values
+  // produced "Cloth Issued → Cloth Issued", which reads as a no-op. Name the
+  // waiting side "Cloth Issue In-Progress" on the two rows where it occurs.
+  //
+  // Deliberately narrow — cloth issue only. A general same-stage rule would
+  // also rewrite legitimate X → X rows (e.g. the security gate, which doesn't
+  // change the stage); those are handled by the isExit/isEntry branches above.
+  const clothIn = t.from_stage === "cloth_issued" && t.to_stage === "cloth_issued";
+  const clothRejourney = t.to_stage === "cloth_issued"
+    && t.from_stage !== "cloth_issued"
+    && t.transition_type === "rejourney";
+
+  const fromLabel = clothIn ? CLOTH_ISSUE_PENDING_LABEL : getStageLabel(t.from_stage);
+  const toLabel = clothRejourney ? CLOTH_ISSUE_PENDING_LABEL : getStageLabel(t.to_stage);
+
   const headline = isExit
     ? `Sent to Vendor${stageForTrip ? ` (${stageForTrip})` : ""}`
     : isEntry
       ? `Returned to Warehouse${stageForTrip ? ` (${stageForTrip})` : ""}`
-      : `${t.from_stage ? `${getStageLabel(t.from_stage)} → ` : ""}${getStageLabel(t.to_stage)}`;
+      : `${t.from_stage ? `${fromLabel} → ` : ""}${toLabel}`;
 
   return {
     kind: external ? "external" : "internal",

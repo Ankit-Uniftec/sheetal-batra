@@ -30,6 +30,18 @@ const safeString = (value, fallback = "—") => {
   return String(value) || fallback;
 };
 
+// A colour's display NAME, whatever shape it is stored in.
+// Colours are normally { hex, name } objects, but older rows hold a bare
+// string. Returns "" when there is nothing to show, so callers can guard.
+// NOTE safeString() must never be used on a colour: on an object it yields
+// the literal "[object Object]".
+const colorName = (color) => {
+  if (!color) return "";
+  if (typeof color === "string") return color.trim();
+  if (typeof color === "object") return String(color.name || "").trim();
+  return "";
+};
+
 // Helper to format date
 const formatDate = (dateStr) => {
   if (!dateStr) return "—";
@@ -528,6 +540,11 @@ const ProductItem = ({ item }) => {
                     ]}
                   />
                 )}
+                {/* Print the NAME too: the swatch alone disappears whenever the
+                    hex is unknown, leaving the tailor no colour at all. */}
+                {colorName(item?.top_color) && (
+                  <Text style={warehouseStyles.colorName}>{colorName(item.top_color)}</Text>
+                )}
               </View>
             </View>
           )}
@@ -545,6 +562,9 @@ const ProductItem = ({ item }) => {
                     ]}
                   />
                 )}
+                {colorName(item?.bottom_color) && (
+                  <Text style={warehouseStyles.colorName}>{colorName(item.bottom_color)}</Text>
+                )}
               </View>
             </View>
           )}
@@ -552,9 +572,21 @@ const ProductItem = ({ item }) => {
           {hasDupatta && (
             <View style={warehouseStyles.productField}>
               <Text style={warehouseStyles.fieldLabel}>Dupatta</Text>
-              <Text style={warehouseStyles.fieldValue}>
-                {item?.dupatta_color ? safeString(item.dupatta_color) : "Included"}
-              </Text>
+              {/* dupatta_color is a { hex, name } object like the others —
+                  safeString() on it printed "[object Object]". */}
+              <View style={warehouseStyles.colorRow}>
+                <Text style={warehouseStyles.fieldValue}>
+                  {colorName(item?.dupatta_color) || "Included"}
+                </Text>
+                {item?.dupatta_color?.hex && (
+                  <View
+                    style={[
+                      warehouseStyles.colorSwatch,
+                      { backgroundColor: item.dupatta_color.hex },
+                    ]}
+                  />
+                )}
+              </View>
             </View>
           )}
 

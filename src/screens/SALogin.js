@@ -99,6 +99,9 @@ export default function SALogin() {
         navigate("/walkin-dashboard")
       } else if (userRecord.role === "store_manager") {
         navigate("/store-manager-dashboard");
+      } else if (userRecord.role === "shopify_orders") {
+        // Website (Shopify) orders login: lands on the Shopify orders dashboard.
+        navigate("/shopify-orders-dashboard");
       } else if (userRecord.role === "executive") {
         const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
         sessionStorage.setItem("currentSalesperson", JSON.stringify({
