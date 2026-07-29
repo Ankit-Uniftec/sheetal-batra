@@ -19,21 +19,41 @@ import {
 // neither of which the browser's anon key can do (and the Shopify token must
 // never reach the client).
 //
-// Modes (all share ONE mapper + ONE idempotent write path):
-//   { mode: "sync-now",  sinceDays?: n, first?: n }  manual pull (dashboard button)
-//   { mode: "reconcile", sinceMinutes?: n }          pg_cron safety net (Phase 5)
-//   { mode: "order",     id: "gid://..." }           single order (webhook trigger, Phase 5)
+// Two ways in, ONE mapper and ONE idempotent write path, so a duplicate
+// delivery is a harmless no-op:
 //
-// Phase 2 implements sync-now/order; reconcile shares the same code path and is
-// wired to cron in Phase 5.
+//   A. WEBHOOK  — Shopify POSTs on orders/create|updated|cancelled. Identified
+//      by the X-Shopify-Hmac-Sha256 header (no `mode` in the body). Verified
+//      against SHOPIFY_WEBHOOK_SECRET, then used as a TRIGGER ONLY: we take the
+//      order id and re-fetch through the same GraphQL query as every other
+//      mode. Near-instant.
+//
+//   B. RECONCILE POLL — pg_cron every 15 min over a 30 min window (deliberate
+//      overlap so nothing falls between runs). This is the safety net:
+//      webhooks are silently dropped during a deploy, a cold start, or after
+//      Shopify exhausts its retries, and a lost paid order is not an
+//      acceptable failure mode.
+//
+// Manual modes:
+//   { mode: "sync-now",  sinceDays?, first? }   dashboard "Sync now" button
+//   { mode: "order",     id: "gid://..." }      re-ingest one order
+//   { mode: "remap-items" }                     re-run the mapper over stored
+//                                               shopify_raw (no Shopify call)
+//   { mode: "backfill-components" }             mint components for older rows
+//   Add "dryRun": true to any pull mode to map without writing.
 //
 // Secrets (Supabase function config):
-//   SHOPIFY_ACCESS_TOKEN   Admin API token (read_orders, read_products)
+//   SHOPIFY_ACCESS_TOKEN    Admin API token (read_orders, read_products)
+//   SHOPIFY_WEBHOOK_SECRET  webhook signing secret, from the Shopify admin
 // ============================================================
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SHOPIFY_ACCESS_TOKEN = Deno.env.get("SHOPIFY_ACCESS_TOKEN")!;
+// Shopify's webhook signing secret. Shown once when the webhook is created in
+// the Shopify admin (Settings → Notifications → Webhooks). Without it the
+// webhook path rejects every request rather than trusting unverified payloads.
+const SHOPIFY_WEBHOOK_SECRET = Deno.env.get("SHOPIFY_WEBHOOK_SECRET") || "";
 
 const SHOPIFY_STORE = "sheetalbatraindia.myshopify.com";
 const SHOPIFY_API_VERSION = "2024-01"; // match shopify-inventory
@@ -149,12 +169,32 @@ async function shopifyGraphql(query: string) {
   return json.data;
 }
 
-/** Fetch a page of orders, newest first, optionally filtered by updated_at. */
-async function fetchOrders(first: number, sinceIso: string | null) {
-  const filter = sinceIso ? `, query: "updated_at:>=${sinceIso}"` : "";
+/**
+ * Fetch a page of orders, newest first.
+ *
+ * `dateField` decides BOTH the filter and the sort, and they must agree:
+ *
+ *   created_at — the reconcile poll. We want orders PLACED in the window.
+ *   updated_at — a catch-up sweep, for orders edited after ingestion.
+ *
+ * Getting this wrong is subtle and dangerous. Filtering on `updated_at` while
+ * sorting by CREATED_AT means an old order that was merely re-touched (a
+ * fulfilment, a tag, a payment capture) occupies a slot in the page, and a
+ * genuinely NEW order can fall off the end of `first` — silently never
+ * ingested. Measured on the live store, a 30-minute `updated_at` window
+ * returned orders spanning #26663…#26946 and hit the 50 cap, so the risk was
+ * real, not theoretical.
+ */
+async function fetchOrders(
+  first: number,
+  sinceIso: string | null,
+  dateField: "created_at" | "updated_at" = "created_at",
+) {
+  const filter = sinceIso ? `, query: "${dateField}:>=${sinceIso}"` : "";
+  const sortKey = dateField === "updated_at" ? "UPDATED_AT" : "CREATED_AT";
   const data = await shopifyGraphql(`
     query {
-      orders(first: ${first}, sortKey: CREATED_AT, reverse: true${filter}) {
+      orders(first: ${first}, sortKey: ${sortKey}, reverse: true${filter}) {
         edges { node { ${ORDER_FIELDS} } }
       }
     }
@@ -398,6 +438,38 @@ async function ensureComponents(order: any): Promise<number> {
   return data?.length || 0;
 }
 
+// ─── Webhook verification ───────────────────────────────────
+
+/**
+ * Verify Shopify's HMAC over the RAW request body.
+ *
+ * Must run on the exact bytes Shopify signed — re-serialising a parsed object
+ * changes key order and whitespace and the signature will never match. Uses a
+ * timing-safe comparison so a wrong signature leaks nothing about the right one.
+ */
+async function verifyShopifyHmac(rawBody: string, header: string | null): Promise<boolean> {
+  if (!header || !SHOPIFY_WEBHOOK_SECRET) return false;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(SHOPIFY_WEBHOOK_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  if (expected.length !== header.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ header.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Best-effort audit row. Never throws — logging must not break ingestion. */
+async function logSync(entry: Record<string, unknown>) {
+  const { error } = await supabase.from("shopify_sync_log").insert(entry);
+  if (error) console.error("shopify_sync_log insert failed:", error.message);
+}
+
 // ─── HTTP ───────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -406,15 +478,84 @@ serve(async (req) => {
   try {
     if (!SHOPIFY_ACCESS_TOKEN) throw new Error("SHOPIFY_ACCESS_TOKEN not configured");
 
+    // Read the body ONCE as text — the webhook path needs the raw bytes for
+    // HMAC, and a Request body can only be consumed a single time.
+    const rawBody = await req.text();
     let body: any = {};
     try {
-      body = await req.json();
+      body = rawBody ? JSON.parse(rawBody) : {};
     } catch {
-      /* empty body is fine */
+      /* empty or non-JSON body is fine for the manual modes */
+    }
+
+    // ── WEBHOOK. Shopify sends its own payload shape (REST-ish, no `mode`),
+    // identified by the HMAC header. We treat it as a TRIGGER ONLY: take the
+    // order id and re-fetch that order through the same GraphQL query every
+    // other mode uses, so there is one field shape to reason about and no
+    // REST/GraphQL drift.
+    const hmacHeader = req.headers.get("X-Shopify-Hmac-Sha256");
+    if (hmacHeader) {
+      const topic = req.headers.get("X-Shopify-Topic") || "unknown";
+
+      if (!await verifyShopifyHmac(rawBody, hmacHeader)) {
+        // 401 and stop. Do not process unverified payloads.
+        await logSync({ mode: `webhook:${topic}`, outcome: "rejected", error: "HMAC verification failed" });
+        return json({ success: false, error: "HMAC verification failed" }, 401);
+      }
+
+      // Shopify's REST payload carries a numeric id; GraphQL wants the GID.
+      const numericId = body?.admin_graphql_api_id || body?.id;
+      const gid = String(numericId || "").startsWith("gid://")
+        ? String(numericId)
+        : `gid://shopify/Order/${numericId}`;
+
+      if (!numericId) {
+        await logSync({ mode: `webhook:${topic}`, outcome: "failed", error: "no order id in payload" });
+        return json({ success: true, note: "no order id — ignored" });
+      }
+
+      try {
+        const colorMap = await loadColorHexMap();
+        const node = await fetchOrderById(gid);
+        if (!node) {
+          await logSync({ shopify_order_id: gid, mode: `webhook:${topic}`, outcome: "failed", error: "order not found on re-fetch" });
+          return json({ success: true, note: "order not found" });
+        }
+        const result = await ingestOrder(node, colorMap);
+        await logSync({
+          shopify_order_id: gid,
+          mode: `webhook:${topic}`,
+          outcome: result.outcome,
+          error: (result as any).detail || null,
+        });
+        return json({ success: true, mode: `webhook:${topic}`, result });
+      } catch (e) {
+        // Answer 200 even on a mapping failure. Shopify retries any non-2xx
+        // for ~48h, and a PERMANENT failure would just generate two days of
+        // retry noise. The reconcile poll is the real safety net, and the log
+        // row above makes the failure visible.
+        await logSync({ shopify_order_id: gid, mode: `webhook:${topic}`, outcome: "failed", error: (e as Error).message });
+        console.error(`webhook ${topic} failed for ${gid}:`, (e as Error).message);
+        return json({ success: false, handled: true, error: (e as Error).message });
+      }
     }
 
     const mode = body?.mode || "sync-now";
     const dryRun = body?.dryRun === true;
+
+    // Reject an unrecognised mode rather than silently falling through to
+    // sync-now. The default is a REAL ingest, so a typo'd or made-up mode
+    // would quietly write live orders — which is exactly what a caller
+    // experimenting with an unknown mode does not expect.
+    const KNOWN_MODES = [
+      "sync-now", "order", "reconcile", "remap-items", "backfill-components",
+    ];
+    if (!KNOWN_MODES.includes(mode)) {
+      return json({
+        success: false,
+        error: `Unknown mode "${mode}". Expected one of: ${KNOWN_MODES.join(", ")}`,
+      }, 400);
+    }
 
     // ── backfill-components: mint components for SHOP orders that were
     // ingested before component minting existed. Idempotent, so it is safe to
@@ -495,9 +636,12 @@ serve(async (req) => {
       const node = await fetchOrderById(String(body.id));
       if (node) nodes = [node];
     } else if (mode === "reconcile") {
+      // Orders PLACED in the window — created_at, not updated_at. See
+      // fetchOrders: filtering on updated_at while sorting by CREATED_AT lets
+      // a re-touched old order push a genuinely new one off the page.
       const mins = Number(body?.sinceMinutes) || 30;
       const since = new Date(Date.now() - mins * 60_000).toISOString();
-      nodes = await fetchOrders(Math.min(Number(body?.first) || 50, 100), since);
+      nodes = await fetchOrders(Math.min(Number(body?.first) || 50, 100), since, "created_at");
     } else {
       // sync-now
       const days = Number(body?.sinceDays) || 0;
@@ -549,6 +693,23 @@ serve(async (req) => {
       acc[r.outcome] = (acc[r.outcome] || 0) + 1;
       return acc;
     }, {});
+
+    // Log only what the reconcile poll actually RECOVERED. It runs every 15
+    // minutes and almost always finds nothing new (the webhook got there
+    // first), so logging every run would bury the real signal — an order that
+    // only arrived because the webhook was missed.
+    if (mode === "reconcile") {
+      for (const r of results as any[]) {
+        if (r.outcome === "inserted" || r.outcome === "failed") {
+          await logSync({
+            shopify_order_id: r.gid,
+            mode: "reconcile",
+            outcome: r.outcome,
+            error: r.detail || null,
+          });
+        }
+      }
+    }
 
     return json({ success: true, mode, fetched: nodes.length, summary, results });
   } catch (error) {
