@@ -223,6 +223,16 @@ export function getStageTextColor() {
 // Once ingested, a SHOP order is an ordinary order — same production flow,
 // warehouse stages, dispatch and delivery as every other channel. Only its
 // arrival path is different.
+// INTERNAL STOCK IS PER-CHANNEL. Stock is an order for warehouse inventory (no
+// customer, no pricing) and each channel raises its own, with its own prefix so
+// the printed barcode says which channel it belongs to:
+//   STOCK    — retail/SA stock, raised from the Associate dashboard
+//   B2BSTOCK — B2B stock, raised by the merchandiser
+// Both map to the ONE 'stock' key: they are the same thing for reporting, and
+// keeping a single key means channel breakdowns/revenue charts (CHANNEL_SEGMENTS
+// below) don't grow a segment per channel. Where B2B stock must be told apart —
+// the B2B dashboards, the Inventory stock tabs — the is_b2b flag does it.
+// A future SHOPSTOCK slots in the same way; see db/barcode_system/v2/54_b2b_stock_orders.sql.
 const CHANNEL_BY_ORDER_PREFIX = {
   DLC: "offline",     // Delhi store
   LDHC: "offline",    // Ludhiana store
@@ -232,6 +242,7 @@ const CHANNEL_BY_ORDER_PREFIX = {
   COM: "comms",
   SHOP: "shopify",    // customer-placed website orders (Shopify)
   STOCK: "stock",     // internal stock orders, not a customer channel
+  B2BSTOCK: "stock",  // B2B internal stock — same channel key as STOCK (see above)
 };
 
 // "SB-DLC-0726-003625" → "DLC"

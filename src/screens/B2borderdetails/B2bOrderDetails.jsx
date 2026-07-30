@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "../Screen4.css";
 import "./B2bOrderDetails.css";
@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
+import { isB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -14,7 +15,13 @@ const DETAILS_SESSION_KEY = "b2bOrderDetailsData";
 
 export default function B2bOrderDetails() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { showPopup, PopupComponent } = usePopup();
+
+    // B2B STOCK ORDER: no vendor, no pricing. The vendor-data guards below must
+    // not fire, and the delivery destination is the fixed internal one rather
+    // than a vendor's shipping address. See src/utils/b2bStockOrder.js.
+    const isStockOrder = isB2bStockOrder(location.state);
 
     const [vendorData, setVendorData] = useState(null);
     const [productData, setProductData] = useState(null);
@@ -57,7 +64,15 @@ export default function B2bOrderDetails() {
                 } catch (e) { console.error("Error loading details data:", e); }
             }
 
-            if (!vendorSaved || !productSaved) {
+            // A stock order has no vendor step, so only the product data is
+            // required; missing products sends it back to the product form
+            // rather than to vendor selection it never visited.
+            if (isStockOrder) {
+                if (!productSaved) {
+                    showPopup({ title: "Missing Data", message: "Please add products first.", type: "warning" });
+                    setTimeout(() => navigate("/b2b-product-form"), 1500);
+                }
+            } else if (!vendorSaved || !productSaved) {
                 showPopup({ title: "Missing Data", message: "Please complete previous steps first.", type: "warning" });
                 setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
             }
@@ -69,10 +84,12 @@ export default function B2bOrderDetails() {
     // Save to session
     useEffect(() => {
         const vendor = vendorData?.vendor;
-        const deliveryAddress = vendor?.shipping_address || vendor?.location || "N/A";
+        const deliveryAddress = isStockOrder
+            ? B2B_STOCK_DELIVERY.delivery_address
+            : (vendor?.shipping_address || vendor?.location || "N/A");
         const data = { deliveryAddress, orderNotes };
         sessionStorage.setItem(DETAILS_SESSION_KEY, JSON.stringify(data));
-    }, [vendorData, orderNotes]);
+    }, [vendorData, orderNotes, isStockOrder]);
 
     // Derived data
     const vendor = vendorData?.vendor;
@@ -92,9 +109,14 @@ export default function B2bOrderDetails() {
     const orderType = vendorData?.orderType || "Buyout";
     const projectedCredit = (vendor?.current_credit_used || 0) + (orderType === "Buyout" ? finalTotal : 0);
     const creditLimit = vendor?.credit_limit || 0;
-    const exceedsCredit = orderType === "Buyout" && projectedCredit > creditLimit;
+    // Stock orders draw against no vendor credit at all. Without this guard the
+    // check would compare against creditLimit 0 (no vendor row) and warn on any
+    // non-zero total — it only stays quiet today because stock totals are zeroed.
+    const exceedsCredit = !isStockOrder && orderType === "Buyout" && projectedCredit > creditLimit;
 
-    const deliveryAddress = vendor?.shipping_address || vendor?.location || "N/A";
+    const deliveryAddress = isStockOrder
+        ? B2B_STOCK_DELIVERY.delivery_address
+        : (vendor?.shipping_address || vendor?.location || "N/A");
 
     const handleContinue = () => {
         const detailsData = { deliveryAddress, orderNotes };
@@ -104,7 +126,9 @@ export default function B2bOrderDetails() {
 
     const handleBack = () => navigate("/b2b-product-form");
 
-    if (!vendorData || !productData) {
+    // A stock order has no vendorData at all, so gating the render on it would
+    // hang on "Loading..." forever — only the product data is required.
+    if (!productData || (!isStockOrder && !vendorData)) {
         return <div className="b2b-od-loading">Loading...</div>;
     }
 
@@ -114,8 +138,13 @@ export default function B2bOrderDetails() {
 
             <header className="pf-header">
                 <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
-                <h1 className="pf-header-title">Order Details</h1>
-                {vendor && (
+                <h1 className="pf-header-title">{isStockOrder ? "B2B Stock Order Details" : "Order Details"}</h1>
+                {isStockOrder ? (
+                    <div className="b2b-vendor-badge">
+                        <span className="vendor-name">Internal Stock</span>
+                        <span className="vendor-code">{B2B_STOCK_DELIVERY.delivery_address}</span>
+                    </div>
+                ) : vendor && (
                     <div className="b2b-vendor-badge">
                         <span className="vendor-name">{vendor.store_brand_name}</span>
                         <span className="vendor-code">{vendor.vendor_code}</span>
@@ -127,19 +156,30 @@ export default function B2bOrderDetails() {
                 {/* Order Summary */}
                 <div className="b2b-od-section">
                     <h3>Order Summary</h3>
-                    <div className="b2b-od-row3">
-                        <div className="b2b-od-field"><label>Vendor:</label><span>{vendor?.store_brand_name} ({vendor?.vendor_code})</span></div>
-                        <div className="b2b-od-field"><label>PO Number:</label><span>{vendorData?.poNumber}</span></div>
-                        <div className="b2b-od-field"><label>Merchandiser:</label><span>{vendorData?.merchandiser}</span></div>
-                    </div>
-                    <div className="b2b-od-row3">
-                        <div className="b2b-od-field">
-                            <label>Order Type:</label>
-                            <span className={`b2b-od-badge ${orderType === "Consignment" ? "badge-purple" : "badge-blue"}`}>{orderType}</span>
+                    {/* Stock orders have no vendor, PO, order type or markdown — the
+                        whole commercial half of this summary is meaningless for them. */}
+                    {isStockOrder ? (
+                        <div className="b2b-od-row3">
+                            <div className="b2b-od-field"><label>Order For:</label><span>Internal Stock</span></div>
+                            <div className="b2b-od-field"><label>Products:</label><span>{items.length} item(s), {totalQuantity} unit(s)</span></div>
                         </div>
-                        <div className="b2b-od-field"><label>Products:</label><span>{items.length} item(s), {totalQuantity} unit(s)</span></div>
-                        <div className="b2b-od-field"><label>Markdown:</label><span>{discountPercent}%</span></div>
-                    </div>
+                    ) : (
+                        <>
+                            <div className="b2b-od-row3">
+                                <div className="b2b-od-field"><label>Vendor:</label><span>{vendor?.store_brand_name} ({vendor?.vendor_code})</span></div>
+                                <div className="b2b-od-field"><label>PO Number:</label><span>{vendorData?.poNumber}</span></div>
+                                <div className="b2b-od-field"><label>Merchandiser:</label><span>{vendorData?.merchandiser}</span></div>
+                            </div>
+                            <div className="b2b-od-row3">
+                                <div className="b2b-od-field">
+                                    <label>Order Type:</label>
+                                    <span className={`b2b-od-badge ${orderType === "Consignment" ? "badge-purple" : "badge-blue"}`}>{orderType}</span>
+                                </div>
+                                <div className="b2b-od-field"><label>Products:</label><span>{items.length} item(s), {totalQuantity} unit(s)</span></div>
+                                <div className="b2b-od-field"><label>Markdown:</label><span>{discountPercent}%</span></div>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Products List */}
@@ -154,7 +194,7 @@ export default function B2bOrderDetails() {
                                     {item.top}{item.top_color?.name && ` (${item.top_color.name})`} / {item.bottom}{item.bottom_color?.name && ` (${item.bottom_color.name})`} | Size: {item.size} | Qty: {item.quantity}
                                 </span>
                             </div>
-                            <span className="b2b-od-product-price">₹{formatIndianNumber(item.price * item.quantity)}</span>
+                            {!isStockOrder && <span className="b2b-od-product-price">₹{formatIndianNumber(item.price * item.quantity)}</span>}
                         </div>
                     ))}
                 </div>
@@ -180,7 +220,10 @@ export default function B2bOrderDetails() {
                     </div>
                 </div>
 
-                {/* Order Totals */}
+                {/* Order Totals — a stock order has none (no charge, no vendor
+                    credit to draw against), so the whole block is omitted rather
+                    than rendered as a column of zeros. */}
+                {!isStockOrder && (
                 <div className="b2b-od-section">
                     <h3>Order Totals</h3>
                     <div className="b2b-od-payment-rows">
@@ -197,6 +240,7 @@ export default function B2bOrderDetails() {
                         <div className="b2b-od-field-inline"><label>Available Credit:</label><span style={{ color: availableCredit <= 0 ? "#c62828" : "#2e7d32" }}>{"\u20B9"}{formatIndianNumber(availableCredit)}</span></div>
                     </div>
                 </div>
+                )}
 
                 {/* Credit Warning */}
                 {exceedsCredit && (

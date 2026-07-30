@@ -360,7 +360,7 @@ export default function AdminDashboard() {
             const [ordersRes, productsRes, spRes, vendorsRes, profilesRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
-                supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders, assigned_stations"),
+                supabase.from("salesperson").select("id, saleperson, email, phone, role, designation, store_name, can_place_stock_orders, can_place_b2b_stock_orders, assigned_stations"),
                 supabase.from("vendors").select("*"),
                 // Paginate past Supabase's 1000-row cap — the client book is
                 // built from profiles, so a cap here silently dropped clients.
@@ -1115,21 +1115,25 @@ export default function AdminDashboard() {
         setStationsSavingId(null);
     };
 
-    // Toggle a single SA's permission to place stock orders.
-    // Optimistic update: flip in local state first, revert on error.
-    const toggleStockOrderPermission = async (sp) => {
+    // Toggle a single SA's stock-order permission. Takes the column so the two
+    // independent permissions share one implementation:
+    //   can_place_stock_orders     — retail/SA stock (SB-STOCK-…)
+    //   can_place_b2b_stock_orders — B2B stock (SB-B2BSTOCK-…), merchandiser only
+    // They are deliberately separate columns: granting B2B stock must not also
+    // grant retail stock. Optimistic update: flip in local state first, revert on error.
+    const toggleStockOrderPermission = async (sp, column = "can_place_stock_orders") => {
         if (!sp?.id) return;
-        const next = !sp.can_place_stock_orders;
+        const next = !sp[column];
         setStockTogglingId(sp.id);
         // optimistic
-        setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, can_place_stock_orders: next } : s));
+        setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, [column]: next } : s));
         const { error } = await supabase
             .from("salesperson")
-            .update({ can_place_stock_orders: next })
+            .update({ [column]: next })
             .eq("id", sp.id);
         if (error) {
             // revert
-            setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, can_place_stock_orders: !next } : s));
+            setSalespersonTable(prev => prev.map(s => s.id === sp.id ? { ...s, [column]: !next } : s));
             showPopup({ title: "Update Failed", message: error.message || "Could not change stock-order permission.", type: "error", confirmText: "OK" });
         }
         setStockTogglingId(null);
@@ -3402,14 +3406,19 @@ export default function AdminDashboard() {
                             "gm",
                             "assistant_cmo",
                         ]);
+                        // Roles eligible for B2B stock-order permission — only the
+                        // merchandiser dashboard has the "B2B Stock Order" item
+                        // wired up. A separate permission from retail stock above.
+                        const B2B_STOCK_ELIGIBLE_ROLES = new Set(["merchandiser"]);
                         // Roles that get scan-station assignment (the people who scan).
                         const STATION_ELIGIBLE_ROLES = new Set(["warehouse", "scan_station"]);
-                        // Show anyone eligible for EITHER feature; each control is
-                        // guarded per row (stock toggle vs station dropdown).
+                        // Show anyone eligible for ANY feature; each control is
+                        // guarded per row (stock toggles vs station dropdown).
                         const teamList = salespersonTable.filter(
-                            sp => STOCK_ELIGIBLE_ROLES.has(sp.role) || STATION_ELIGIBLE_ROLES.has(sp.role)
+                            sp => STOCK_ELIGIBLE_ROLES.has(sp.role) || B2B_STOCK_ELIGIBLE_ROLES.has(sp.role) || STATION_ELIGIBLE_ROLES.has(sp.role)
                         );
                         const canHaveStockPermission = (r) => STOCK_ELIGIBLE_ROLES.has(r);
+                        const canHaveB2bStockPermission = (r) => B2B_STOCK_ELIGIBLE_ROLES.has(r);
                         return (
                         <div className="admin-clients-tab">
                             <h2 className="admin-section-title">Team & Permissions</h2>
@@ -3426,6 +3435,13 @@ export default function AdminDashboard() {
                                         {teamList.filter(s => s.can_place_stock_orders).length}
                                     </span>
                                     <span className="admin-stat-sub">Members with stock-order permission</span>
+                                </div>
+                                <div className="admin-stat-card">
+                                    <span className="admin-stat-label">B2B Stock Order Permission</span>
+                                    <span className="admin-stat-value">
+                                        {teamList.filter(s => s.can_place_b2b_stock_orders).length}
+                                    </span>
+                                    <span className="admin-stat-sub">Merchandisers who can raise B2B stock</span>
                                 </div>
                             </div>
 
@@ -3450,6 +3466,7 @@ export default function AdminDashboard() {
                                             <th>Phone</th>
                                             <th>Email</th>
                                             <th style={{ textAlign: 'center' }}>Place Stock Orders</th>
+                                            <th style={{ textAlign: 'center' }}>Place B2B Stock Orders</th>
                                             <th>Assigned Stations</th>
                                         </tr>
                                     </thead>
@@ -3463,10 +3480,11 @@ export default function AdminDashboard() {
                                                     .some(v => String(v).toLowerCase().includes(q));
                                             }).sort((a, b) => (a.saleperson || "").localeCompare(b.saleperson || ""));
                                             if (list.length === 0) {
-                                                return <tr><td colSpan="8" className="no-data">No salespersons found</td></tr>;
+                                                return <tr><td colSpan="9" className="no-data">No salespersons found</td></tr>;
                                             }
                                             return list.map(sp => {
                                                 const checked = !!sp.can_place_stock_orders;
+                                                const b2bChecked = !!sp.can_place_b2b_stock_orders;
                                                 const saving = stockTogglingId === sp.id;
                                                 const stations = sp.assigned_stations || [];
                                                 const stationsSaving = stationsSavingId === sp.id;
@@ -3490,6 +3508,24 @@ export default function AdminDashboard() {
                                                                             checked={checked}
                                                                             disabled={saving}
                                                                             onChange={() => toggleStockOrderPermission(sp)}
+                                                                        />
+                                                                        <span className="admin-stock-toggle-slider" />
+                                                                    </label>
+                                                                    {saving && <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>saving…</span>}
+                                                                </>
+                                                            ) : (
+                                                                <span style={{ fontSize: 11, color: '#bbb' }}>—</span>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            {canHaveB2bStockPermission(sp.role) ? (
+                                                                <>
+                                                                    <label className="admin-stock-toggle" title={b2bChecked ? "Click to revoke" : "Click to grant"}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={b2bChecked}
+                                                                            disabled={saving}
+                                                                            onChange={() => toggleStockOrderPermission(sp, "can_place_b2b_stock_orders")}
                                                                         />
                                                                         <span className="admin-stock-toggle-slider" />
                                                                     </label>

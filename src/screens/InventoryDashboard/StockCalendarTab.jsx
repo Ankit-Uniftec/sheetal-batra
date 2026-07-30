@@ -36,8 +36,11 @@ export default function StockCalendarTab({ onOpenOrder }) {
   useEffect(() => {
     (async () => {
       setLoading(true);
+      // RETAIL stock only — B2B stock orders carry is_stock_order = true too but
+      // are a B2B-channel concern. Same filter as StockOrdersTab; see the note
+      // there on why `.not(is_b2b, is, true)` and not `.eq(is_b2b, false)`.
       const { data, error } = await fetchAllRows("orders", (q) =>
-        q.select("*").eq("is_stock_order", true).order("delivery_date", { ascending: true })
+        q.select("*").eq("is_stock_order", true).not("is_b2b", "is", true).order("delivery_date", { ascending: true })
       );
       if (error) {
         console.error("Stock calendar fetch error:", error);

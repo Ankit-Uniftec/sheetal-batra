@@ -21,6 +21,7 @@ import CompletePicker from "../../components/CompletePicker";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange } from "../../components/PeriodFilter";
 import { runManualCompleteWithOverride } from "../../utils/manualComplete";
+import { startB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -239,13 +240,24 @@ export default function B2bMerchandiserDashboard() {
         const pending = orders.filter(o => o.approval_status === "pending" && !isTerminalOrder(o));
         const approved = periodOrders.filter(o => o.approval_status === "approved");
         const rejected = periodOrders.filter(o => o.approval_status === "rejected");
-        const salesOrders = periodOrders.filter(o => o.b2b_order_type !== "Consignment");
-        const consignmentOrders = periodOrders.filter(o => o.b2b_order_type === "Consignment");
+        // Internal stock is not vendor business: zero value, no b2b_order_type.
+        // It must be excluded from every commercial figure below — note that
+        // `b2b_order_type !== "Consignment"` would otherwise sweep stock (whose
+        // type is NULL) into salesOrders and inflate the sales count with ₹0 rows.
+        const commercialOrders = periodOrders.filter(o => !o.is_stock_order);
+        const salesOrders = commercialOrders.filter(o => o.b2b_order_type !== "Consignment");
+        const consignmentOrders = commercialOrders.filter(o => o.b2b_order_type === "Consignment");
         const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const buyoutValue = periodOrders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const clientOrderValue = periodOrders.filter(o => o.b2b_order_type === "Client Order").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const buyoutValue = commercialOrders.filter(o => o.b2b_order_type === "Buyout").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const clientOrderValue = commercialOrders.filter(o => o.b2b_order_type === "Client Order").reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        return { salesRevenue, totalOrders: periodOrders.length, salesCount: salesOrders.length, pending, approved, rejected, buyoutValue, clientOrderValue, consignmentValue, consignmentCount: consignmentOrders.length };
+        const stockCount = periodOrders.filter(o => o.is_stock_order).length;
+        // Achieved-vs-target must count real business only — a zero-value stock
+        // order would otherwise pad the approved count behind the progress bar.
+        const approvedValue = approved
+            .filter(o => !o.is_stock_order)
+            .reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        return { salesRevenue, totalOrders: periodOrders.length, salesCount: salesOrders.length, pending, approved, rejected, buyoutValue, clientOrderValue, consignmentValue, consignmentCount: consignmentOrders.length, stockCount, approvedValue };
     }, [orders, periodOrders]);
 
     const ordersByDate = useMemo(() => {
@@ -316,7 +328,10 @@ export default function B2bMerchandiserDashboard() {
         // "pending" additionally hides finished orders — a delivered order is not
         // awaiting anything (legacy B2B orders keep approval_status='pending').
         else if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter && (o.status || "").toLowerCase() !== "cancelled" && !(statusFilter === "pending" && isTerminalOrder(o)));
-        if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
+        // "stock" is not a b2b_order_type — internal stock orders carry a NULL
+        // type and are identified by the flag, so they get their own filter case.
+        if (typeFilter === "stock") filtered = filtered.filter(o => o.is_stock_order === true);
+        else if (typeFilter !== "all") filtered = filtered.filter(o => !o.is_stock_order && o.b2b_order_type?.toLowerCase() === typeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
@@ -764,7 +779,26 @@ export default function B2bMerchandiserDashboard() {
     };
 
     // ==================== HELPERS ====================
-    const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+    // Clear the stock flag on logout so it can't leak into the next session and
+    // make a normal B2B order behave as stock.
+    const handleLogout = async () => { clearB2bStockOrder(); await supabase.auth.signOut(); navigate("/login"); };
+
+    // B2B stock-order entry — the B2B twin of the SA "Stock Order" button.
+    // Gated on salesperson.can_place_b2b_stock_orders (a separate permission
+    // from the retail can_place_stock_orders). Skips vendor selection entirely
+    // — internal stock has no vendor — and goes straight to the product form.
+    const handleStartB2bStockOrder = () => {
+        if (!profile?.can_place_b2b_stock_orders) {
+            showPopup({
+                title: "Not Permitted",
+                message: "You don't have permission to place B2B stock orders. Ask an admin to enable it.",
+                type: "error",
+            });
+            return;
+        }
+        startB2bStockOrder();
+        navigate("/b2b-product-form", { state: { isB2bStockOrder: true } });
+    };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
     const handleViewVendorOrders = (vendorId) => {
         const vendor = vendorMap[vendorId] || vendors.find(v => v.id === vendorId);
@@ -867,6 +901,12 @@ export default function B2bMerchandiserDashboard() {
                         <a className={`merch-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`merch-menu-item ${activeTab === "consignment" ? "active" : ""}`} onClick={() => { setActiveTab("consignment"); setShowSidebar(false); }}>Consignment</a>
                         <a className={`merch-menu-item ${activeTab === "analytics" ? "active" : ""}`} onClick={() => { setActiveTab("analytics"); setShowSidebar(false); }}>Analytics</a>
+                        {profile?.can_place_b2b_stock_orders && (
+                            <a
+                                className="merch-menu-item"
+                                onClick={() => { setShowSidebar(false); handleStartB2bStockOrder(); }}
+                            >B2B Stock Order</a>
+                        )}
                         <a className="merch-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
@@ -915,19 +955,19 @@ export default function B2bMerchandiserDashboard() {
                                         </div>
                                         <div className="merch-target-item">
                                             <span className="merch-target-label">Achieved</span>
-                                            <span className="merch-target-val merch-green">{`\u20B9${formatIndianNumber(stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0))}`}</span>
+                                            <span className="merch-target-val merch-green">{`\u20B9${formatIndianNumber(stats.approvedValue)}`}</span>
                                         </div>
                                         <div className="merch-target-item">
                                             <span className="merch-target-label">Remaining</span>
-                                            <span className={`merch-target-val ${((profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0)) > 0 ? "merch-red" : "merch-green"}`}>
-                                                {`\u20B9${formatIndianNumber(Math.max(0, (profile?.sales_target || 0) - stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0)))}`}
+                                            <span className={`merch-target-val ${((profile?.sales_target || 0) - stats.approvedValue) > 0 ? "merch-red" : "merch-green"}`}>
+                                                {`\u20B9${formatIndianNumber(Math.max(0, (profile?.sales_target || 0) - stats.approvedValue))}`}
                                             </span>
                                         </div>
                                     </div>
                                     <div className="merch-target-bar">
-                                        <div className="merch-target-fill" style={{ width: `${Math.min(100, (profile?.sales_target > 0 ? (stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0) / profile.sales_target) * 100 : 0))}%` }}></div>
+                                        <div className="merch-target-fill" style={{ width: `${Math.min(100, (profile?.sales_target > 0 ? (stats.approvedValue / profile.sales_target) * 100 : 0))}%` }}></div>
                                     </div>
-                                    <p className="merch-target-pct">{profile?.sales_target > 0 ? ((stats.approved.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0) / profile.sales_target) * 100).toFixed(1) : 0}% achieved</p>
+                                    <p className="merch-target-pct">{profile?.sales_target > 0 ? ((stats.approvedValue / profile.sales_target) * 100).toFixed(1) : 0}% achieved</p>
                                 </div>
                             </div>
                         </div>
@@ -945,7 +985,7 @@ export default function B2bMerchandiserDashboard() {
                                         <div key={order.id} className="merch-pending-item">
                                             <div className="merch-pending-top">
                                                 <b className="merch-gold-text">{order.order_no}</b>
-                                                <span className={`merch-type-tag ${order.b2b_order_type === "Buyout" ? "merch-tag-buyout" : "merch-tag-consignment"}`}>{order.b2b_order_type || "\u2014"}</span>
+                                                <span className={`merch-type-tag ${order.is_stock_order ? "merch-tag-stock" : order.b2b_order_type === "Buyout" ? "merch-tag-buyout" : "merch-tag-consignment"}`}>{order.is_stock_order ? "Stock" : (order.b2b_order_type || "\u2014")}</span>
                                             </div>
                                             <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>PO: {order.po_number || "\u2014"} {"\u00B7"} {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</p>
                                             <div className="merch-pending-btns">
@@ -1004,7 +1044,9 @@ export default function B2bMerchandiserDashboard() {
                                                 </div>
                                                 <div className="merch-appr-badges">
                                                     <div className="merch-order-status-badge merch-status-pending">Pending</div>
-                                                    {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
+                                                    {order.is_stock_order
+                                                        ? (<div className="merch-order-type-badge merch-type-stock">Stock</div>)
+                                                        : order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
                                                     {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"\u26A0"} Urgent</div>)}
                                                     {order.credit_exceeded && (<div className="merch-credit-badge">Credit Exceeded</div>)}
                                                 </div>
@@ -1051,7 +1093,7 @@ export default function B2bMerchandiserDashboard() {
                         <div className="merch-filters-row" style={{ flexWrap: "wrap" }}>
                             <input type="text" placeholder="Search order #, PO, vendor, merchandiser..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="merch-search-input" />
                             <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>
-                            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option></select>
+                            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option><option value="stock">Stock</option></select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Merchandisers</option>{uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}</select>
                             {ordersPeriodControl}
                             {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || ordersTimeline !== "all") && (
@@ -1074,7 +1116,9 @@ export default function B2bMerchandiserDashboard() {
                                             </div>
                                             <div className="merch-ocard-badges">
                                                 <div className={`merch-order-status-badge ${orderBadgeClass(order)}`}>{orderBadgeLabel(order)}</div>
-                                                {order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
+                                                {order.is_stock_order
+                                                        ? (<div className="merch-order-type-badge merch-type-stock">Stock</div>)
+                                                        : order.b2b_order_type && (<div className={`merch-order-type-badge ${order.b2b_order_type === "Buyout" ? "merch-type-buyout" : "merch-type-consignment"}`}>{order.b2b_order_type}</div>)}
                                                 {order.order_flag === "Urgent" && (<div className="merch-urgent-badge">{"\u26A0"} Urgent</div>)}
                                                 {order.credit_exceeded && (<div className="merch-credit-badge">Credit Exceeded</div>)}
                                                 <button className="merch-pdf-btn" onClick={(e) => handleDownloadPdf(e, order)} disabled={pdfLoading === order.id}>

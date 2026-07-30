@@ -321,12 +321,24 @@ const warehouseStyles = StyleSheet.create({
   colorRow: {
     flexDirection: "row",
     alignItems: "center",
+    // The garment name, swatch and colour name share a 25%-wide grid cell.
+    // Without wrapping, a long colour ("Carnation Pink") overflowed the cell and
+    // printed on top of the neighbouring column.
+    flexWrap: "wrap",
   },
   colorSwatch: {
     width: 24,
     height: 16,
     borderRadius: 2,
     marginLeft: 8,
+  },
+  // Was referenced but never defined, so the colour name rendered unstyled at
+  // @react-pdf's default font size (~18pt) — the real cause of the overlap.
+  // Matches fieldValue, with room to wrap onto its own line.
+  colorName: {
+    fontSize: 9,
+    color: COLORS.gray,
+    marginLeft: 6,
   },
 
   extrasContainer: {
@@ -541,7 +553,8 @@ const ProductItem = ({ item }) => {
                   />
                 )}
                 {/* Print the NAME too: the swatch alone disappears whenever the
-                    hex is unknown, leaving the tailor no colour at all. */}
+                    hex is unknown, leaving the tailor no colour at all. Kept
+                    directly after the swatch so the two read as one unit. */}
                 {colorName(item?.top_color) && (
                   <Text style={warehouseStyles.colorName}>{colorName(item.top_color)}</Text>
                 )}
