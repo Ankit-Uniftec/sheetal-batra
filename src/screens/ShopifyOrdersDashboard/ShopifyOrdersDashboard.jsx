@@ -20,31 +20,51 @@ import {
   normalizeOrderStatus,
 } from "../../utils/barcodeService";
 import formatDate from "../../utils/formatDate";
-import formatIndianNumber from "../../utils/formatIndianNumber";
 import Logo from "../../images/logo.png";
 import "./ShopifyOrdersDashboard.css";
 
 /**
- * ShopifyOrdersDashboard — website orders placed on sheetalbatraindia.com.
+ * ShopifyOrdersDashboard — Shopify orders placed on sheetalbatraindia.com.
  *
  * A Shopify order is an ORDINARY order that happens to arrive from the website:
  * once ingested it runs the same production flow, warehouse stages, dispatch
- * and delivery as a store / B2B / exhibition order. This screen is just the
- * window onto that channel — order history cards, a delivery calendar, order
- * detail and the two PDFs.
+ * and delivery as a store / B2B / exhibition order. Ingestion is done by the
+ * `shopify-order-sync` edge function (webhook + a reconciliation poll); "Sync
+ * now" here triggers the same function manually.
  *
- * Ingestion is done by the `shopify-order-sync` edge function (webhook + a
- * reconciliation poll); "Sync now" here triggers the same function manually.
+ * ═══ THIS IS A WAREHOUSE-FACING SCREEN ═══════════════════════════════════
+ * Its readers are production staff. They need the order number, the garment
+ * breakdown and the state of each physical piece — NOT who bought it or what
+ * they paid. So, deliberately:
  *
- * Orders are identified by their SB-SHOP- prefix — the order-number prefix is
- * the authoritative channel signal app-wide (see barcodeService.js).
+ *   • NO client identity — no name, phone, email or address. Not rendered, and
+ *     not even SELECTED (see ORDER_LIST_COLUMNS): data that never reaches the
+ *     browser cannot leak through devtools or a later well-meaning edit.
+ *   • NO money — no amount, no COD balance, no revenue stat.
+ *   • NO order-detail navigation — cards are inert. /order/:id shows the full
+ *     customer-facing record, so this screen must not link to it.
+ *   • The Calendar passes showClient={false} / showSalesperson={false} to the
+ *     shared StoreCalendarTab, whose Client column would otherwise leak a name.
  *
- * Layout mirrors CommsDashboard / StoreManagerDashboard: sticky header with the
- * notification bell, a sidebar nav, and the shared Badge / SearchByDropdown /
- * Paginator / PeriodFilter components.
+ * If you are about to add an Amount or Client row here, that is the thing this
+ * screen exists to not have. Same convention as RetailManagerDashboard's
+ * "no PII" orders tab.
+ *
+ * Layout/naming follow the retail order card (AssociateDashboard) — uppercase
+ * header strip, Title-case "Label:" detail rows — minus those two fields.
+ * Orders are identified by their order-number prefix, which is the
+ * authoritative channel signal app-wide (see barcodeService.js).
  */
 
 const ORDERS_PER_PAGE = 10;
+
+// Shopify orders now mint SB-SHOPIFY-; they used to mint SB-SHOP-, and orders
+// already SCANNED under the old prefix deliberately keep it (renaming a scanned
+// barcode orphans its history and voids printed labels — see
+// db/barcode_system/v2/56_rename_shop_orders.sql). So both must be matched, or
+// those orders silently vanish from this screen.
+const ORDER_NO_PREFIX_FILTER =
+  "order_no.like.SB-SHOPIFY-%,order_no.like.SB-SHOP-%";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -53,28 +73,35 @@ const TABS = [
   { key: "calendar", label: "Calendar" },
 ];
 
+// Warehouse-relevant lookups only. Client Name and Phone are deliberately NOT
+// offered: finding an order by customer is exactly the lookup this screen must
+// not provide. Barcode is here because matching a physical tag to an order is
+// the floor's real need.
 const SEARCH_FIELDS = [
   { value: "order_no", label: "Order Number" },
-  { value: "client_name", label: "Client Name" },
-  { value: "phone", label: "Phone" },
+  { value: "shopify_order_name", label: "Shopify Order No" },
   { value: "product", label: "Product" },
+  { value: "barcode", label: "Barcode" },
 ];
 
-// Only the columns this screen reads. The PDF generators re-fetch the full row
-// by id on click (pdfUtils.fetchFullOrder), so a trimmed list is correct here
-// and keeps the payload small — same approach as AssociateDashboard.
+// Only the columns this screen reads.
+//
+// Every customer-identity and money column is deliberately absent —
+// delivery_name/email/phone/city, grand_total, net_total,
+// grand_total_after_discount, advance_payment, remaining_payment, payment_mode.
+// This is the substantive half of "hide the client details": not selecting them
+// means they never reach the client at all.
+//
+// (The warehouse PDF re-fetches the full row by id on click via
+// pdfUtils.fetchFullOrder, so it still gets everything IT needs — the PDF is a
+// production document and prints no money.)
 const ORDER_LIST_COLUMNS = [
   "id", "order_no", "created_at", "delivery_date", "status",
-  "delivery_name", "delivery_email", "delivery_phone", "delivery_city",
-  "grand_total", "net_total", "grand_total_after_discount",
-  "advance_payment", "remaining_payment", "payment_mode",
   "total_quantity", "items", "warehouse_stage",
-  "customer_url", "warehouse_urls",
-  "shopify_order_id", "shopify_synced_at", "web_order_status", "web_order_issues",
+  "warehouse_urls",
+  "shopify_order_id", "shopify_order_name", "shopify_synced_at",
+  "web_order_status", "web_order_issues",
 ].join(", ");
-
-const money = (o) =>
-  Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
 
 // A colour swatch + name, matching OrderDetailPage.jsx:33 and the B2B/Comms
 // cards. Colours are stored as { hex, name } objects; tolerate a bare string
@@ -112,6 +139,23 @@ const statusVariant = (status) => {
   return "info";
 };
 
+// ─── Needs Review: a SHORT label per mapper blocker code ───────────────────
+// One line each, deliberately. An earlier version explained what each code
+// blocked and who fixes it in full prose; nobody reads a wall of text on a
+// production screen. The mapper's own `detail` already names the offending
+// product, so the label only has to say what is missing.
+const ISSUE_LABELS = {
+  DUPATTA_UNKNOWN: "Dupatta unknown — needs custom.has_dupatta in Shopify",
+  PRODUCT_STYLE_MISSING: "Garment breakdown missing — needs custom.top_style / bottom_style",
+  DELIVERY_DATE_UNRESOLVED: "No delivery date — needs custom.shipping_timeline",
+  NO_LINE_ITEMS: "No products on the order",
+  CUSTOMER_UNRESOLVED: "No contact details on the order",
+};
+
+// Informational, not a blocker: every cleanly-mapped order carries it. Shown
+// inside the modal as provenance for the delivery date, never as a problem.
+const DERIVED_CODE = "DELIVERY_DATE_DERIVED";
+
 export default function ShopifyOrdersDashboard() {
   const navigate = useNavigate();
   const { showPopup, PopupComponent } = usePopup();
@@ -131,6 +175,14 @@ export default function ShopifyOrdersDashboard() {
   const [searchField, setSearchField] = useState("order_no");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  // Needs Review has its OWN search + issue filter + paging, kept separate from
+  // the Orders tab's. Sharing them meant switching tabs silently carried a
+  // search across and showed an unexplained empty list.
+  const [reviewSearchField, setReviewSearchField] = useState("order_no");
+  const [reviewSearch, setReviewSearch] = useState("");
+  const [issueFilter, setIssueFilter] = useState("all");
+  const [reviewPage, setReviewPage] = useState(1);
 
   const { control: periodControl, inPeriod } = usePeriodFilter("month", { variant: "pills" });
 
@@ -168,10 +220,10 @@ export default function ShopifyOrdersDashboard() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      // The SB-SHOP- prefix is the authoritative channel signal.
+      // The order-number prefix is the authoritative channel signal.
       const { data, error } = await fetchAllRows("orders", (q) =>
         q.select(ORDER_LIST_COLUMNS)
-          .like("order_no", "SB-SHOP-%")
+          .or(ORDER_NO_PREFIX_FILTER)
           .order("created_at", { ascending: false })
       );
       if (error) throw error;
@@ -276,36 +328,51 @@ export default function ShopifyOrdersDashboard() {
     [orders, inPeriod]
   );
 
+  // Production-shaped stats only. No revenue, no COD — see the header note.
   const stats = useMemo(() => {
-    const cod = periodOrders.filter((o) => (o.payment_mode || "").toUpperCase() === "COD");
+    // "In production" = at least one piece has moved past order_received. That
+    // is the honest signal on this screen: components are minted inactive and a
+    // Production Head activates them, so an order can sit ready for a while.
+    const inProduction = periodOrders.filter((o) =>
+      (componentsByOrder[o.id] || []).some(
+        (c) => c.current_stage && c.current_stage !== "order_received"
+      )
+    ).length;
     return {
       count: periodOrders.length,
-      revenue: periodOrders.reduce((s, o) => s + money(o), 0),
       units: periodOrders.reduce((s, o) => s + (o.total_quantity || 0), 0),
-      codCount: cod.length,
-      codOutstanding: cod.reduce((s, o) => s + Number(o.remaining_payment || 0), 0),
+      inProduction,
     };
-  }, [periodOrders]);
+  }, [periodOrders, componentsByOrder]);
 
   const lastSynced = useMemo(() => {
     const ts = orders.map((o) => o.shopify_synced_at).filter(Boolean).sort();
     return ts.length ? ts[ts.length - 1] : null;
   }, [orders]);
 
-  const filteredOrders = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter((o) => {
-      switch (searchField) {
-        case "client_name": return (o.delivery_name || "").toLowerCase().includes(q);
-        case "phone": return (o.delivery_phone || "").toLowerCase().includes(q);
-        case "product":
-          return (o.items || []).some((i) =>
-            (i.product_name || "").toLowerCase().includes(q));
-        default: return (o.order_no || "").toLowerCase().includes(q);
-      }
-    });
-  }, [orders, search, searchField]);
+  // One search predicate, used by both the Orders and Needs Review tabs.
+  const matchesSearch = useCallback((o, field, query) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    switch (field) {
+      case "shopify_order_name":
+        // Tolerate the "#" being typed or not.
+        return (o.shopify_order_name || "").toLowerCase().replace("#", "")
+          .includes(q.replace("#", ""));
+      case "product":
+        return (o.items || []).some((i) =>
+          (i.product_name || "").toLowerCase().includes(q));
+      case "barcode":
+        return (componentsByOrder[o.id] || []).some((c) =>
+          (c.barcode || "").toLowerCase().includes(q));
+      default: return (o.order_no || "").toLowerCase().includes(q);
+    }
+  }, [componentsByOrder]);
+
+  const filteredOrders = useMemo(
+    () => orders.filter((o) => matchesSearch(o, searchField, search)),
+    [orders, search, searchField, matchesSearch]
+  );
 
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
   const paginated = useMemo(
@@ -315,7 +382,45 @@ export default function ShopifyOrdersDashboard() {
 
   useEffect(() => { setPage(1); }, [search, searchField]);
 
-  const openOrder = (order) => navigate(`/order/${order.id}`);
+  // ── Needs Review tab: search + filter by which blocker the order has.
+  // Only codes actually PRESENT in the current data become options, so the
+  // dropdown never offers a filter that returns nothing.
+  const issueCodeOptions = useMemo(() => {
+    const codes = new Set();
+    needsReview.forEach((o) =>
+      (o.web_order_issues || []).forEach((i) => {
+        if (i.code !== DERIVED_CODE) codes.add(i.code);
+      })
+    );
+    return [...codes].sort();
+  }, [needsReview]);
+
+  const filteredReview = useMemo(
+    () => needsReview.filter((o) => {
+      if (!matchesSearch(o, reviewSearchField, reviewSearch)) return false;
+      if (issueFilter === "all") return true;
+      return (o.web_order_issues || []).some((i) => i.code === issueFilter);
+    }),
+    [needsReview, reviewSearch, reviewSearchField, issueFilter, matchesSearch]
+  );
+
+  const reviewTotalPages = Math.ceil(filteredReview.length / ORDERS_PER_PAGE);
+  const paginatedReview = useMemo(
+    () => filteredReview.slice((reviewPage - 1) * ORDERS_PER_PAGE, reviewPage * ORDERS_PER_PAGE),
+    [filteredReview, reviewPage]
+  );
+
+  useEffect(() => { setReviewPage(1); }, [reviewSearch, reviewSearchField, issueFilter]);
+
+  // Jump from a flagged card on the Orders tab to that order on the Needs
+  // Review tab. Searching by its order number is what actually isolates it —
+  // switching tabs alone would just show the whole list.
+  const goToReview = (order) => {
+    setReviewSearchField("order_no");
+    setReviewSearch(order.order_no || "");
+    setIssueFilter("all");
+    setActiveTab("needs-review");
+  };
 
   if (!authChecked) return null;
 
@@ -325,33 +430,68 @@ export default function ShopifyOrdersDashboard() {
     return tab.label;
   };
 
-  const renderCard = (order) => {
+  // ── The order card.
+  //
+  // Structure and field naming follow the retail order card
+  // (AssociateDashboard.js:1584) — an uppercase header strip over Title-case
+  // "Label:" detail rows — with its Client Name and Amount rows removed, and
+  // the production pieces appended. NOT clickable: see the header note.
+  //
+  // `context` is "orders" or "needs-review". On the Orders tab a flagged card is
+  // clickable and jumps to the Needs Review tab; on that tab itself it is not
+  // (it would link to where you already are) and instead lists its issues
+  // inline underneath.
+  const renderCard = (order, context = "orders") => {
     const item = order.items?.[0] || {};
     const extra = (order.items?.length || 0) - 1;
-    const isCod = (order.payment_mode || "").toUpperCase() === "COD";
     const flagged = order.web_order_status === "needs_review";
     const components = componentsByOrder[order.id] || [];
+    const imgSrc = item.image_url || "";
+    const onReviewTab = context === "needs-review";
+    const linkToReview = flagged && !onReviewTab;
 
     return (
       <div
         key={order.id}
-        className={`sho-order-card ${flagged ? "flagged" : ""}`}
-        onClick={() => openOrder(order)}
+        className={`sho-order-card ${flagged ? "flagged" : ""} ${linkToReview ? "sho-clickable" : ""}`}
+        onClick={linkToReview ? () => goToReview(order) : undefined}
+        title={linkToReview ? "Open in Needs Review" : undefined}
       >
         <div className="sho-order-header">
-          <div className="sho-order-headline">
-            <span className="sho-order-no">{order.order_no}</span>
-            <Badge variant={statusVariant(order.status)}>
-              {getOrderStatusLabel(order.status)}
-            </Badge>
-            {isCod && <Badge variant="info">COD</Badge>}
-            {flagged && <Badge variant="warning">Needs Review</Badge>}
+          <div className="sho-header-info">
+            <div className="sho-header-item">
+              <span className="sho-header-label">ORDER NO:</span>
+              <span className="sho-header-value">{order.order_no || "—"}</span>
+            </div>
+            {/* Shopify's own number. The warehouse and the catalogue team refer
+                to these by this number, so it sits beside ours on the card and
+                on the warehouse PDF. */}
+            <div className="sho-header-item">
+              <span className="sho-header-label">SHOPIFY ORDER NO:</span>
+              <span className="sho-header-value">{order.shopify_order_name || "—"}</span>
+            </div>
+            <div className="sho-header-item">
+              <span className="sho-header-label">ORDER DATE:</span>
+              <span className="sho-header-value">{formatDate(order.created_at) || "—"}</span>
+            </div>
+            <div className="sho-header-item">
+              <span className="sho-header-label">DELIVERY:</span>
+              <span className="sho-header-value">
+                {order.delivery_date ? formatDate(order.delivery_date) : "—"}
+              </span>
+            </div>
           </div>
           {/* No Customer PDF for website orders: Shopify already sends the
               customer their own order confirmation, so a second invoice from
               us would be a duplicate (and could disagree with theirs). Only the
-              Warehouse work order is ours to produce. */}
-          <div className="sho-order-actions">
+              Warehouse work order is ours to produce.
+              NO COD badge and NO amount here either — this is a warehouse
+              screen; payment is not its business. */}
+          <div className="sho-header-actions">
+            <Badge variant={statusVariant(order.status)}>
+              {getOrderStatusLabel(order.status)}
+            </Badge>
+            {flagged && <Badge variant="warning">Needs Review</Badge>}
             <button
               className="sho-ghost-btn"
               onClick={(e) => handleWarehousePdf(e, order)}
@@ -362,53 +502,71 @@ export default function ShopifyOrdersDashboard() {
           </div>
         </div>
 
-        <div className="sho-order-body">
-          {item.image_url ? (
-            <img className="sho-thumb" src={item.image_url} alt="" />
-          ) : (
-            <div className="sho-thumb sho-thumb-empty">SB</div>
-          )}
-          <div className="sho-order-main">
-            <div className="sho-product">
-              {item.product_name || "—"}
-              {extra > 0 && <span className="sho-more"> +{extra} more</span>}
+        <div className="sho-order-content">
+          {/* Render a real placeholder tile when there is no image rather than
+              pointing <img> at a file that may not exist: a BROKEN image shows
+              its alt text, and a long product name then stretched the thumb to
+              full width and wrecked the card layout. alt="" because the product
+              name is already the next thing on the card. */}
+          <div className="sho-product-thumb">
+            {imgSrc ? (
+              <img src={imgSrc} alt="" />
+            ) : (
+              <div className="sho-thumb-empty">SB</div>
+            )}
+          </div>
+          <div className="sho-product-details">
+            <div className="sho-product-row">
+              <span className="sho-order-label">Product Name:</span>
+              <span className="sho-value">
+                {item.product_name || "—"}
+                {extra > 0 && <span className="sho-more"> +{extra} more</span>}
+              </span>
             </div>
-            <div className="sho-meta">
-              <span><label>Client</label>{order.delivery_name || "—"}</span>
-              <span><label>Ordered</label>{formatDate(order.created_at)}</span>
-              <span><label>Delivery</label>{order.delivery_date ? formatDate(order.delivery_date) : "—"}</span>
+            <div className="sho-product-row">
+              <span className="sho-order-label">Category:</span>
+              <span className="sho-value">{item.isKids ? "Kids" : "Women"}</span>
             </div>
-            <div className="sho-detail-grid">
-              <div><label>Amount</label><span>₹{formatIndianNumber(money(order))}</span></div>
-              <div><label>Qty</label><span>{order.total_quantity || 0}</span></div>
-              <div><label>Size</label><span>{item.size || "—"}</span></div>
-              <div>
-                <label>Top</label>
-                <span>{item.top || "—"}<ColorDot color={item.top_color} /></span>
+            <div className="sho-details-grid">
+              <div className="sho-detail-item">
+                <span className="sho-order-label">Qty:</span>
+                <span className="sho-value">{order.total_quantity || 1}</span>
               </div>
-              <div>
-                <label>Bottom</label>
-                <span>{item.bottom || "—"}<ColorDot color={item.bottom_color} /></span>
+              <div className="sho-detail-item">
+                <span className="sho-order-label">Size:</span>
+                <span className="sho-value">{item.size || "—"}</span>
               </div>
-              <div>
-                <label>Dupatta</label>
-                <span>
+              <div className="sho-detail-item">
+                <span className="sho-order-label">Top:</span>
+                <span className="sho-value">
+                  {item.top || "—"}<ColorDot color={item.top_color} />
+                </span>
+              </div>
+              <div className="sho-detail-item">
+                <span className="sho-order-label">Bottom:</span>
+                <span className="sho-value">
+                  {item.bottom || "—"}<ColorDot color={item.bottom_color} />
+                </span>
+              </div>
+              <div className="sho-detail-item">
+                <span className="sho-order-label">Dupatta:</span>
+                <span className="sho-value">
                   {item.includes_dupatta ? "Yes" : "No"}
                   {item.includes_dupatta && <ColorDot color={item.dupatta_color} />}
                 </span>
               </div>
             </div>
-            {isCod && Number(order.remaining_payment) > 0 && (
-              <div className="sho-cod-line">
-                To collect on delivery: <strong>₹{formatIndianNumber(order.remaining_payment)}</strong>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Production pieces — one barcode per physical component. These run
-            the same stage pipeline as every other channel. */}
-        {components.length > 0 && (
+            the same stage pipeline as every other channel.
+            Hidden on the Needs Review tab: that tab is about what is MISSING,
+            and the pieces (plus a View Journey button) are noise there. Note a
+            flagged order can still HAVE components — one minted while it mapped
+            cleanly, then re-flagged by a later remap-items — so this is a
+            display choice, not an assumption that the list is empty. */}
+        {!onReviewTab && components.length > 0 && (
           <>
             <div className="sho-comp-journey">
               {components.map((comp) => (
@@ -419,7 +577,14 @@ export default function ShopifyOrdersDashboard() {
                       {comp.component_label || comp.component_type}
                     </span>
                   </div>
-                  <ComponentStageBadge comp={comp} />
+                  <div className="sho-comp-right">
+                    {comp.re_journey_count > 0 && (
+                      <span className="sho-comp-rework-tag">
+                        Rework {comp.re_journey_count}
+                      </span>
+                    )}
+                    <ComponentStageBadge comp={comp} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -427,6 +592,8 @@ export default function ShopifyOrdersDashboard() {
               <button
                 className="sho-ghost-btn"
                 onClick={(e) => {
+                  // The card itself may be a link to Needs Review — don't let a
+                  // button click bubble up and navigate away.
                   e.stopPropagation();
                   setJourneyOrder({ order_no: order.order_no, components });
                 }}
@@ -435,6 +602,22 @@ export default function ShopifyOrdersDashboard() {
               </button>
             </div>
           </>
+        )}
+
+        {/* On the Needs Review tab, list what is missing right under the card —
+            one line per blocker. No modal: this is the whole point of the tab,
+            so it should be readable without another click. */}
+        {onReviewTab && (
+          <ul className="sho-issues">
+            {(order.web_order_issues || [])
+              .filter((i) => i.code !== DERIVED_CODE)
+              .map((i, n) => (
+                <li key={n}>
+                  <strong>{ISSUE_LABELS[i.code] || i.code}</strong>
+                  {i.detail ? <span className="sho-issue-detail"> — {i.detail}</span> : null}
+                </li>
+              ))}
+          </ul>
         )}
       </div>
     );
@@ -509,17 +692,11 @@ export default function ShopifyOrdersDashboard() {
                 <>
                   <h2 className="sho-section-title">Overview</h2>
                   {periodControl}
+                  {/* NO Revenue card, NO COD card — production counts only. */}
                   <div className="sho-cards-row">
                     <StatCard title="Orders" value={stats.count} />
-                    <StatCard title="Revenue" value={`₹${formatIndianNumber(stats.revenue)}`} />
                     <StatCard title="Units" value={stats.units} />
-                    <StatCard
-                      title="COD Orders"
-                      value={stats.codCount}
-                      subtitle={stats.codOutstanding > 0
-                        ? `₹${formatIndianNumber(stats.codOutstanding)} to collect`
-                        : null}
-                    />
+                    <StatCard title="In Production" value={stats.inProduction} />
                     <StatCard
                       title="Needs Review"
                       value={needsReview.length}
@@ -528,7 +705,7 @@ export default function ShopifyOrdersDashboard() {
                   </div>
                   <p className="sho-synced">
                     {lastSynced ? `Last synced ${formatDate(lastSynced)}` : "Not synced yet"}
-                    {" · "}{orders.length} website orders in total
+                    {" · "}{orders.length} Shopify orders in total
                   </p>
                 </>
               )}
@@ -551,7 +728,11 @@ export default function ShopifyOrdersDashboard() {
                     <div className="sho-empty">No orders match this search.</div>
                   ) : (
                     <>
-                      <div className="sho-order-cards">{paginated.map(renderCard)}</div>
+                      {/* Arrow fn, not a bare reference: .map passes the INDEX
+                          as the second arg, which would land in `context`. */}
+                      <div className="sho-order-cards">
+                        {paginated.map((o) => renderCard(o, "orders"))}
+                      </div>
                       <Paginator page={page} totalPages={totalPages} onChange={setPage} />
                     </>
                   )}
@@ -568,23 +749,56 @@ export default function ShopifyOrdersDashboard() {
                   ) : (
                     <>
                       <p className="sho-hint">
-                        These orders are missing something production needs, so nothing
-                        was guessed. Open an order to fill in the details.
+                        These orders are missing something production needs, so
+                        nothing was guessed and no barcodes were minted. What's
+                        missing is listed under each order.
                       </p>
-                      <div className="sho-order-cards">
-                        {needsReview.map((o) => (
-                          <div key={o.id}>
-                            {renderCard(o)}
-                            <ul className="sho-issues">
-                              {(o.web_order_issues || [])
-                                .filter((i) => i.code !== "DELIVERY_DATE_DERIVED")
-                                .map((i, n) => (
-                                  <li key={n}><strong>{i.code}</strong> — {i.detail}</li>
-                                ))}
-                            </ul>
-                          </div>
-                        ))}
+                      <div className="sho-toolbar">
+                        <SearchByDropdown
+                          fields={SEARCH_FIELDS}
+                          selectedField={reviewSearchField}
+                          onFieldChange={setReviewSearchField}
+                          query={reviewSearch}
+                          onQueryChange={setReviewSearch}
+                          placeholder="Type to search..."
+                        />
+                        {/* Only codes present in the current data are offered. */}
+                        <select
+                          className="sho-select"
+                          value={issueFilter}
+                          onChange={(e) => setIssueFilter(e.target.value)}
+                        >
+                          <option value="all">All issues</option>
+                          {issueCodeOptions.map((code) => (
+                            <option key={code} value={code}>
+                              {ISSUE_LABELS[code] || code}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="sho-count">{filteredReview.length} orders</span>
+                        {(reviewSearch || issueFilter !== "all") && (
+                          <button
+                            className="sho-ghost-btn"
+                            onClick={() => { setReviewSearch(""); setIssueFilter("all"); }}
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
+                      {paginatedReview.length === 0 ? (
+                        <div className="sho-empty">No orders match this search.</div>
+                      ) : (
+                        <>
+                          <div className="sho-order-cards">
+                            {paginatedReview.map((o) => renderCard(o, "needs-review"))}
+                          </div>
+                          <Paginator
+                            page={reviewPage}
+                            totalPages={reviewTotalPages}
+                            onChange={setReviewPage}
+                          />
+                        </>
+                      )}
                     </>
                   )}
                 </>
@@ -593,13 +807,16 @@ export default function ShopifyOrdersDashboard() {
               {activeTab === "calendar" && (
                 <>
                   <h2 className="sho-section-title">Delivery Calendar</h2>
+                  {/* showClient/showSalesperson off: this shared component's
+                      day-detail table renders delivery_name, which this screen
+                      must not show. The SA on a website order is always the
+                      constant "Website", so that column carries nothing either.
+                      No onOpenOrder — cards and rows open nothing here. */}
                   <StoreCalendarTab
                     orders={readyOrders}
                     storeLabel="Shopify"
-                    onOpenOrder={(orderNo) => {
-                      const match = orders.find((o) => o.order_no === orderNo);
-                      if (match) openOrder(match);
-                    }}
+                    showClient={false}
+                    showSalesperson={false}
                   />
                 </>
               )}

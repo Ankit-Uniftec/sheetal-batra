@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "../Screen4.css";
 import "./B2bReviewOrder.css";
@@ -8,6 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
+import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -36,7 +37,14 @@ function ColorDotDisplay({ colorObject }) {
 
 export default function B2bReviewOrder() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { showPopup, PopupComponent } = usePopup();
+
+    // B2B STOCK ORDER: internal inventory — no vendor, no customer, no pricing,
+    // no approval counterparty. Gets the SB-B2BSTOCK-… order number (so the
+    // barcode identifies the channel) and is auto-approved regardless of role.
+    // See src/utils/b2bStockOrder.js and db/barcode_system/v2/54_b2b_stock_orders.sql.
+    const isStockOrder = isB2bStockOrder(location.state);
 
     const [user, setUser] = useState(null);
     const [userRole, setUserRole] = useState(null);
@@ -122,14 +130,17 @@ export default function B2bReviewOrder() {
         const productSaved = sessionStorage.getItem(PRODUCT_SESSION_KEY);
         const detailsSaved = sessionStorage.getItem(DETAILS_SESSION_KEY);
 
-        if (!vendorSaved || !productSaved || !detailsSaved) {
+        // A stock order skipped vendor selection, so vendorSaved is legitimately
+        // absent — require only the product and details steps, and send an
+        // incomplete one back to the product form instead of vendor selection.
+        if (isStockOrder ? (!productSaved || !detailsSaved) : (!vendorSaved || !productSaved || !detailsSaved)) {
             showPopup({ title: "Missing Data", message: "Please complete all steps first.", type: "warning" });
-            setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
+            setTimeout(() => navigate(isStockOrder ? "/b2b-product-form" : "/b2b-vendor-selection"), 1500);
             return;
         }
 
         try {
-            setVendorData(JSON.parse(vendorSaved));
+            if (vendorSaved) setVendorData(JSON.parse(vendorSaved));
             setProductData(JSON.parse(productSaved));
             setDetailsData(JSON.parse(detailsSaved));
         } catch (e) {
@@ -164,7 +175,9 @@ export default function B2bReviewOrder() {
 
     const projectedCredit = (vendor?.current_credit_used || 0) + (orderType === "Buyout" ? finalTotal : 0);
     const creditLimit = vendor?.credit_limit || 0;
-    const exceedsCredit = orderType === "Buyout" && projectedCredit > creditLimit;
+    // Stock orders draw against no vendor credit — see the same guard in
+    // B2bOrderDetails.jsx. Without it, creditLimit 0 (no vendor) would flag them.
+    const exceedsCredit = !isStockOrder && orderType === "Buyout" && projectedCredit > creditLimit;
 
     // Submit Order (INSERT for new, UPDATE for edit)
     const handleSubmit = async () => {
@@ -193,36 +206,50 @@ export default function B2bReviewOrder() {
 
             const isMerchandiser = userRole?.toLowerCase().includes("merchandiser");
 
+            // Internal stock has no counterparty to approve against, so it is
+            // always auto-approved and never creates a b2b_approvals row —
+            // otherwise every stock order would sit in the merchandiser's own
+            // approval queue waiting for them to approve their own order.
+            const autoApprove = isMerchandiser || isStockOrder;
+
             const orderPayload = {
                 // Set explicitly: omitting it let the DB column default write
                 // "Pending" — a legacy duplicate of order_received that every
                 // dashboard then had to normalise on display (594 rows on prod,
                 // still growing). Retail and Comms placement already do this.
                 status: "order_received",
-                vendor_id: vendor?.id,
-                po_number: poNumber,
-                b2b_order_type: orderType,
+                // Stock orders have no vendor, no PO and no commercial type
+                // (Buyout/Consignment/Client Order are all vendor-facing). Write
+                // NULL rather than a misleading default — a "Buyout" stock order
+                // would be counted as vendor business by the dashboards.
+                vendor_id: isStockOrder ? null : vendor?.id,
+                po_number: isStockOrder ? null : poNumber,
+                b2b_order_type: isStockOrder ? null : orderType,
                 merchandiser_name: merchandiser,
                 salesperson_store: salespersonStore,
                 salesperson: salespersonName || "",
                 salesperson_email: user?.email || "",
                 salesperson_phone: salespersonPhone || "",
-                markdown_percent: discountPercent,
-                markdown_amount: markdownAmount,
-                discount_percent: collectorDiscount,
-                discount_amount: Math.round(collectorDiscountAmount),
-                discount_code: collectorCode || null,
-                grand_total_after_discount: Math.round(finalTotal),
+                // Money: forced to 0 for stock orders. The item prices are already
+                // zeroed in the product form, so these all compute to 0 anyway —
+                // setting them explicitly means a stock order can never carry a
+                // value into revenue reporting even if an upstream step changes.
+                markdown_percent: isStockOrder ? 0 : discountPercent,
+                markdown_amount: isStockOrder ? 0 : markdownAmount,
+                discount_percent: isStockOrder ? 0 : collectorDiscount,
+                discount_amount: isStockOrder ? 0 : Math.round(collectorDiscountAmount),
+                discount_code: isStockOrder ? null : (collectorCode || null),
+                grand_total_after_discount: isStockOrder ? 0 : Math.round(finalTotal),
                 delivery_date: earliestDeliveryDate,
                 delivery_address: deliveryAddress,
                 items: items,
                 comments: [remarks, orderNotes].filter(Boolean).join("\n\n"),
                 delivery_notes: orderNotes || "",
-                subtotal: subtotal,
-                taxes: taxes,
-                grand_total: grandTotal,
+                subtotal: isStockOrder ? 0 : subtotal,
+                taxes: isStockOrder ? 0 : taxes,
+                grand_total: isStockOrder ? 0 : grandTotal,
                 total_quantity: totalQuantity,
-                mode_of_delivery: productData?.modeOfDelivery || "B2B Store",
+                mode_of_delivery: isStockOrder ? B2B_STOCK_DELIVERY.mode_of_delivery : (productData?.modeOfDelivery || "B2B Store"),
                 order_flag: productData?.orderFlag || "Normal",
                 urgent_reason: productData?.urgentReason || null,
                 attachments: productData?.attachments || [],
@@ -235,7 +262,9 @@ export default function B2bReviewOrder() {
 
             if (editingOrderId) {
                 // ===== EDIT MODE: UPDATE existing order =====
-                if (isMerchandiser) {
+                // autoApprove (not isMerchandiser) so that if stock orders ever
+                // become editable they don't fall into the re-approval branch.
+                if (autoApprove) {
                     // Merchandiser edits skip re-approval
                     orderPayload.approval_status = "approved";
                 } else {
@@ -258,7 +287,7 @@ export default function B2bReviewOrder() {
                 // Merchandiser edits stay approved, so the order is in the
                 // warehouse — make sure barcode components exist. Idempotent:
                 // a no-op if they were already generated. Non-blocking.
-                if (isMerchandiser) {
+                if (autoApprove) {
                     try {
                         const { ensureOrderComponents } = await import("../../utils/barcodeService");
                         await ensureOrderComponents({
@@ -272,7 +301,7 @@ export default function B2bReviewOrder() {
                 }
 
                 // Update approval record if executive re-submits
-                if (!isMerchandiser) {
+                if (!autoApprove) {
                     await supabase.from("b2b_approvals").upsert([{
                         order_id: editingOrderId,
                         status: "pending",
@@ -284,20 +313,45 @@ export default function B2bReviewOrder() {
             } else {
                 // ===== NEW ORDER: INSERT =====
                 // salespersonStore is guaranteed non-empty by the guard at handleSubmit entry.
+                //
+                // A stock order asks the RPC for the 'B2B Internal' namespace,
+                // which returns SB-B2BSTOCK-MMYY-NNNNNN directly (see migration
+                // 54). Everything else keeps the existing behaviour.
                 const { data: orderNo, error: orderNoError } = await supabase.rpc(
                     "generate_order_no",
-                    { p_store: salespersonStore }
+                    { p_store: isStockOrder ? "B2B Internal" : salespersonStore }
                 );
                 if (orderNoError) throw orderNoError;
                 if (!orderNo) throw new Error("Failed to generate order number.");
 
-                orderPayload.order_no = orderNo.replace("DLC", "B2B");
+                // The DLC->B2B rewrite is only for the normal path (where the RPC
+                // is asked for the user's STORE and the number has to be moved
+                // into the B2B namespace). A stock number already carries the
+                // right prefix, and running the replace on it would be a
+                // confusing no-op.
+                const finalOrderNo = isStockOrder ? orderNo : orderNo.replace("DLC", "B2B");
+
+                orderPayload.order_no = finalOrderNo;
                 orderPayload.user_id = user?.id;
                 orderPayload.is_b2b = true;
+
+                // Both flags: is_b2b keeps it in the B2B dashboards, is_stock_order
+                // gives it stock semantics (and is what getOrderChannelKey reads
+                // first). The internal delivery fields mirror what the retail stock
+                // flow writes, so both kinds of stock land in one place for the
+                // warehouse.
+                if (isStockOrder) {
+                    orderPayload.is_stock_order = true;
+                    orderPayload.delivery_name = B2B_STOCK_DELIVERY.delivery_name;
+                    orderPayload.advance_payment = 0;
+                    orderPayload.remaining_payment = 0;
+                    orderPayload.net_total = 0;
+                }
+
                 orderPayload.submitted_for_approval_at = new Date().toISOString();
 
-                // If merchandiser creates order, skip approval
-                if (isMerchandiser) {
+                // Merchandiser-created orders — and all stock orders — skip approval.
+                if (autoApprove) {
                     orderPayload.approval_status = "approved";
                     orderPayload.approved_by = user?.email || "unknown";
                     orderPayload.approved_at = new Date().toISOString();
@@ -313,12 +367,13 @@ export default function B2bReviewOrder() {
                 if (orderError) throw orderError;
                 insertedOrderId = insertedOrderData.id;
 
-                // Merchandiser-created orders are auto-approved, so they enter
-                // the warehouse immediately — generate barcode components now.
-                // (Non-merchandiser orders are pending; their components are
-                // generated when a merchandiser approves them.) Non-blocking:
-                // a barcode failure must not stop order placement.
-                if (isMerchandiser) {
+                // Auto-approved orders (merchandiser-created, and all stock orders)
+                // enter the warehouse immediately — generate barcode components
+                // now. Stock components mint as B2BSTOCK-NNNNNN-TOP etc., derived
+                // from the new order-number prefix. (Pending orders get theirs when
+                // a merchandiser approves.) Non-blocking: a barcode failure must
+                // not stop order placement.
+                if (autoApprove) {
                     try {
                         const { ensureOrderComponents } = await import("../../utils/barcodeService");
                         await ensureOrderComponents(insertedOrderData);
@@ -327,9 +382,9 @@ export default function B2bReviewOrder() {
                     }
                 }
 
-                resultOrderNo = orderNo.replace("DLC", "B2B");
+                resultOrderNo = finalOrderNo;
 
-                if (!isMerchandiser) {
+                if (!autoApprove) {
                     const { error: approvalError } = await supabase
                         .from("b2b_approvals")
                         .insert([{
@@ -341,8 +396,9 @@ export default function B2bReviewOrder() {
                 }
             }
 
-            // Send notification for approval awaited (non-merchandiser orders)
-            if (!isMerchandiser) {
+            // Send notification for approval awaited (non-merchandiser orders).
+            // Stock orders are auto-approved, so there is nothing to await.
+            if (!autoApprove) {
                 const notifOrderId = editingOrderId || insertedOrderId;
                 if (notifOrderId) {
                     sendNotification(NOTIFICATION_TYPES.B2B_APPROVAL_AWAITED, {
@@ -357,22 +413,26 @@ export default function B2bReviewOrder() {
                 }
             }
 
-            // Clear all session data
+            // Clear all session data. The stock flag goes too, so the next order
+            // raised in this session doesn't silently inherit stock behaviour.
             sessionStorage.removeItem(VENDOR_SESSION_KEY);
             sessionStorage.removeItem(PRODUCT_SESSION_KEY);
             sessionStorage.removeItem(DETAILS_SESSION_KEY);
             sessionStorage.removeItem("b2bEditingOrderId");
+            clearB2bStockOrder();
 
             const isEdit = !!editingOrderId;
             const dashboardPath = isMerchandiser ? "/b2b-merchandiser-dashboard" : userRole?.toLowerCase().includes("production") ? "/b2b-production-dashboard" : "/b2b-executive-dashboard";
 
             showPopup({
-                title: isEdit ? "Order Updated!" : "Order Submitted!",
+                title: isEdit ? "Order Updated!" : isStockOrder ? "Stock Order Created!" : "Order Submitted!",
                 message: isEdit
-                    ? `Order #${resultOrderNo} has been updated${isMerchandiser ? "." : " and resubmitted for approval."}`
-                    : isMerchandiser
-                        ? `Order #${resultOrderNo} has been created and auto-approved.`
-                        : `Order #${resultOrderNo} has been submitted for approval.`,
+                    ? `Order #${resultOrderNo} has been updated${autoApprove ? "." : " and resubmitted for approval."}`
+                    : isStockOrder
+                        ? `Stock order #${resultOrderNo} has been created.`
+                        : autoApprove
+                            ? `Order #${resultOrderNo} has been created and auto-approved.`
+                            : `Order #${resultOrderNo} has been submitted for approval.`,
                 type: "success",
                 onConfirm: () => navigate(dashboardPath),
             });
@@ -386,7 +446,9 @@ export default function B2bReviewOrder() {
 
     const handleBack = () => navigate("/b2b-order-details");
 
-    if (!vendorData || !productData || !detailsData) {
+    // A stock order has no vendorData at all, so gating the render on it would
+    // hang on "Loading..." forever.
+    if (!productData || !detailsData || (!isStockOrder && !vendorData)) {
         return <div className="b2b-ro-loading">Loading...</div>;
     }
 
@@ -403,8 +465,13 @@ export default function B2bReviewOrder() {
 
             <header className="pf-header">
                 <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
-                <h1 className="pf-header-title">Review Order</h1>
-                {vendor && (
+                <h1 className="pf-header-title">{isStockOrder ? "Review Stock Order" : "Review Order"}</h1>
+                {isStockOrder ? (
+                    <div className="b2b-vendor-badge">
+                        <span className="vendor-name">Internal Stock</span>
+                        <span className="vendor-code">{B2B_STOCK_DELIVERY.delivery_address}</span>
+                    </div>
+                ) : vendor && (
                     <div className="b2b-vendor-badge">
                         <span className="vendor-name">{vendor.store_brand_name}</span>
                         <span className="vendor-code">{vendor.vendor_code}</span>
@@ -420,7 +487,9 @@ export default function B2bReviewOrder() {
                     </div>
                 )}
 
-                {/* Vendor Details */}
+                {/* Vendor Details — omitted for stock orders: there is no vendor,
+                    and a section of "N/A" rows only invites the question. */}
+                {!isStockOrder && (
                 <div className="b2b-ro-section">
                     <h3>Vendor Details</h3>
                     <div className="b2b-ro-row3">
@@ -433,10 +502,19 @@ export default function B2bReviewOrder() {
                         <div className="b2b-ro-field"><label>Payment Terms:</label><span>{vendor?.payment_terms || "N/A"}</span></div>
                     </div>
                 </div>
+                )}
 
                 {/* Order Information */}
                 <div className="b2b-ro-section">
                     <h3>Order Information</h3>
+                    {isStockOrder ? (
+                        <div className="b2b-ro-row3">
+                            <div className="b2b-ro-field"><label>Order For:</label><span>Internal Stock</span></div>
+                            <div className="b2b-ro-field"><label>Raised By:</label><span>{salespersonName || user?.email}</span></div>
+                            <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{B2B_STOCK_DELIVERY.mode_of_delivery}</span></div>
+                        </div>
+                    ) : (
+                    <>
                     <div className="b2b-ro-row3">
                         <div className="b2b-ro-field"><label>PO Number:</label><span>{poNumber}</span></div>
                         <div className="b2b-ro-field">
@@ -452,13 +530,15 @@ export default function B2bReviewOrder() {
                         )}
                         <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "B2B Store"}</span></div>
                     </div>
+                    </>
+                    )}
                     {deliveryAddress && (
                         <div className="b2b-ro-field b2b-ro-field-wide" style={{ marginTop: 12 }}>
                             <label>Delivery Address:</label>
                             <span>{deliveryAddress}</span>
                         </div>
                     )}
-                    {vendorData?.primaryContact && (
+                    {!isStockOrder && vendorData?.primaryContact && (
                         <div className="b2b-ro-field b2b-ro-field-wide" style={{ marginTop: 8 }}>
                             <label>Vendor Contact:</label>
                             <span>
@@ -522,7 +602,7 @@ export default function B2bReviewOrder() {
                                         <div className="b2b-ro-extras">
                                             {item.extras.map((extra, idx) => (
                                                 <div key={idx} className="b2b-ro-extra-item">
-                                                    <span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price || 0)})</span>
+                                                    <span>{extra.name}{!isStockOrder && ` (\u20B9${formatIndianNumber(extra.price || 0)})`}</span>
                                                     {extra.color && extra.color.name && <ColorDotDisplay colorObject={extra.color} />}
                                                 </div>
                                             ))}
@@ -534,7 +614,17 @@ export default function B2bReviewOrder() {
                     ))}
                 </div>
 
-                {/* Payment Details */}
+                {/* Payment Details \u2014 a stock order is not a sale: no charge, no
+                    GST, no vendor credit. Showing a column of zeros here reads as
+                    a pricing bug, so the block is omitted entirely. */}
+                {isStockOrder ? (
+                    <div className="b2b-ro-section">
+                        <h3>Payment Details</h3>
+                        <div className="b2b-ro-payment-rows">
+                            <div className="b2b-ro-field-inline"><label>Internal Stock</label><span>No charge</span></div>
+                        </div>
+                    </div>
+                ) : (
                 <div className="b2b-ro-section">
                     <h3>Payment Details</h3>
                     <div className="b2b-ro-payment-rows">
@@ -550,6 +640,7 @@ export default function B2bReviewOrder() {
                         <div className="b2b-ro-final-total-inline"><label>Final Total:</label><span>{"\u20B9"}{formatIndianNumber(Math.round(finalTotal))}</span></div>
                     </div>
                 </div>
+                )}
 
                 {/* Notes */}
                 {(remarks || orderNotes) && (
@@ -581,20 +672,28 @@ export default function B2bReviewOrder() {
                     </div>
                 )}
 
-                {/* Approval Notice */}
+                {/* Approval Notice — internal stock has no counterparty to approve
+                    against, so it goes straight into production. */}
                 <div className="b2b-ro-approval-notice">
                     <span>ℹ️</span>
-                    <div>
-                        <strong>Approval Required</strong>
-                        <p>This order will be submitted for approval. You will be notified once it's approved.</p>
-                    </div>
+                    {isStockOrder ? (
+                        <div>
+                            <strong>Internal Stock Order</strong>
+                            <p>This stock order needs no approval and goes straight into production. Barcodes are generated on submit.</p>
+                        </div>
+                    ) : (
+                        <div>
+                            <strong>Approval Required</strong>
+                            <p>This order will be submitted for approval. You will be notified once it's approved.</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Action Buttons */}
                 <div className="footer-btns">
                     <button className="draftBtn" onClick={handleBack} disabled={isSubmitting}>Back to Edit</button>
                     <button className="continueBtn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: isSubmitting ? "#ccc" : "#4caf50" }}>
-                        {isSubmitting ? "Submitting..." : editingOrderId ? (userRole?.toLowerCase().includes("merchandiser") ? "Update Order" : "Resubmit for Approval") : (userRole?.toLowerCase().includes("merchandiser") ? "Create Order (Auto-Approved)" : "Submit for Approval")}
+                        {isSubmitting ? "Submitting..." : isStockOrder ? "Create Stock Order" : editingOrderId ? (userRole?.toLowerCase().includes("merchandiser") ? "Update Order" : "Resubmit for Approval") : (userRole?.toLowerCase().includes("merchandiser") ? "Create Order (Auto-Approved)" : "Submit for Approval")}
                     </button>
                 </div>
             </div>

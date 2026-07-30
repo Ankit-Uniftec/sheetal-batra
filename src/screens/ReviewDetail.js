@@ -647,6 +647,10 @@ export default function ReviewDetail() {
           is_urgent: normalizedOrder.is_urgent || false,
           source,
           store: normalizedOrder.salesperson_store,
+          // Pass the flag rather than leaving the template to infer stock from
+          // the order number — the flag is authoritative (a stock order can
+          // carry a store prefix; see migration 42).
+          is_stock_order: insertedOrder.is_stock_order === true,
         },
         attachments: notifAttachments,
       });

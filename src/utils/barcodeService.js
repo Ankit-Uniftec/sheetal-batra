@@ -210,19 +210,35 @@ export function getStageTextColor() {
 //      channel it was PLACED in. There is still deliberately NO
 //      sync_enabled → channel rule, and none must be reintroduced.
 //
-//   2. SHOP is a real channel: an order the CUSTOMER placed on
+//   2. SHOPIFY is a real channel: an order the CUSTOMER placed on
 //      sheetalbatraindia.com, ingested by the shopify-order-sync edge function.
 //      It is a genuine sales channel like the stores or B2B, so it gets its own
-//      prefix (SB-SHOP-MMYY-NNNNNN), label and revenue segment.
+//      prefix (SB-SHOPIFY-MMYY-NNNNNN), label and revenue segment.
 //
 // These are orthogonal. A Shopify web order is BOTH LXRTS-type (its products
-// are synced) AND SHOP-channel (that's where it was placed). Collapsing them
-// would either hide website revenue inside store revenue (if SHOP were dropped)
-// or misreport an in-store LXRTS sale as a website sale (if rule 1 returned).
+// are synced) AND SHOPIFY-channel (that's where it was placed). Collapsing them
+// would either hide website revenue inside store revenue (if SHOPIFY were
+// dropped) or misreport an in-store LXRTS sale as a website sale (if rule 1
+// returned).
 //
-// Once ingested, a SHOP order is an ordinary order — same production flow,
+// Once ingested, a Shopify order is an ordinary order — same production flow,
 // warehouse stages, dispatch and delivery as every other channel. Only its
 // arrival path is different.
+// INTERNAL STOCK IS PER-CHANNEL. Stock is an order for warehouse inventory (no
+// customer, no pricing) and each channel raises its own, with its own prefix so
+// the printed barcode says which channel it belongs to:
+//   STOCK    — retail/SA stock, raised from the Associate dashboard
+//   B2BSTOCK — B2B stock, raised by the merchandiser
+// Both map to the ONE 'stock' key: they are the same thing for reporting, and
+// keeping a single key means channel breakdowns/revenue charts (CHANNEL_SEGMENTS
+// below) don't grow a segment per channel. Where B2B stock must be told apart —
+// the B2B dashboards, the Inventory stock tabs — the is_b2b flag does it.
+// A future SHOPIFYSTOCK slots in the same way; see db/barcode_system/v2/54_b2b_stock_orders.sql.
+//
+// Only the SEGMENT COUNT matters to the parsers here — getOrderPrefix and
+// generateOrderComponents read order_no by dash position, never by character
+// offset — so a store code may be any length as long as it contains no dash.
+// SHOPIFY (7) and B2BSTOCK (8) both work for exactly that reason.
 const CHANNEL_BY_ORDER_PREFIX = {
   DLC: "offline",     // Delhi store
   LDHC: "offline",    // Ludhiana store
@@ -230,8 +246,17 @@ const CHANNEL_BY_ORDER_PREFIX = {
   PVT: "private",
   B2B: "b2b",
   COM: "comms",
-  SHOP: "shopify",    // customer-placed website orders (Shopify)
+  SHOPIFY: "shopify", // customer-placed website orders (Shopify)
+  // LEGACY ALIAS — DO NOT REMOVE. Website orders were minted as SB-SHOP- before
+  // the code was renamed to SHOPIFY (db/barcode_system/v2/55, 56). Orders that
+  // had already been SCANNED were deliberately left on the old prefix, because
+  // rewriting a scanned barcode orphans its stage history and makes the printed
+  // label unscannable. Drop this line and every such order falls through to
+  // "offline" and reports as Delhi/Ludhiana STORE revenue — the GEN trap
+  // described in db/website_orders.sql.
+  SHOP: "shopify",
   STOCK: "stock",     // internal stock orders, not a customer channel
+  B2BSTOCK: "stock",  // B2B internal stock — same channel key as STOCK (see above)
 };
 
 // "SB-DLC-0726-003625" → "DLC"

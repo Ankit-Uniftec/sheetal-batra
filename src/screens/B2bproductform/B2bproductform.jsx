@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "../Screen4.css";
 import "./B2bProductForm.css";
@@ -10,6 +10,7 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 import ExtrasPopup from "../../components/ExtrasPopup";
 import { B2B_SIZE_OPTIONS, SIZE_CHART_US, resolveSizeChart, chartValueSet } from "../../utils/b2bSizeChart";
+import { isB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
 
 /**
  * Session Storage Keys
@@ -150,7 +151,14 @@ const KIDS_MEASUREMENT_FIELDS = {
 
 export default function B2bProductForm() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { showPopup, PopupComponent } = usePopup();
+
+    // B2B STOCK ORDER: internal inventory, no vendor and no pricing. Reached
+    // from the merchandiser dashboard's "B2B Stock Order" item, which skips
+    // vendor selection — so the vendor guard below must not bounce it back, and
+    // every monetary field is zeroed. See src/utils/b2bStockOrder.js.
+    const isStockOrder = isB2bStockOrder(location.state);
 
     // Vendor data from session
     const [vendorData, setVendorData] = useState(null);
@@ -265,7 +273,9 @@ export default function B2bProductForm() {
                 }
             }
 
-            if (!saved) {
+            // A stock order legitimately has no vendor — it never went through
+            // vendor selection — so don't bounce it back there.
+            if (!saved && !isStockOrder) {
                 showPopup({ title: "No Vendor Selected", message: "Please select a vendor first.", type: "warning" });
                 setTimeout(() => navigate("/b2b-vendor-selection"), 1500);
             }
@@ -449,6 +459,11 @@ export default function B2bProductForm() {
     };
     const getBasePrice = () => {
         if (!selectedProduct) return 0;
+        // Stock orders carry no value — internal inventory is not a sale. Zeroing
+        // at the single pricing entry point keeps the item payload, the live
+        // preview and every total consistent (the retail flow zeroes the same way
+        // in ProductForm.js).
+        if (isStockOrder) return 0;
         let price = Number(selectedProduct.base_price || 0);
         // Kids discount
         if (isKidsProduct && selectedSize && KIDS_DISCOUNT_PERCENT[selectedSize]) {
@@ -579,6 +594,20 @@ export default function B2bProductForm() {
         }
         if (finalItems.length === 0) { showPopup({ title: "No Products", message: "Please add at least one product.", type: "warning" }); return; }
 
+        // STOCK ORDER: zero every monetary field on each line item. getBasePrice()
+        // already returns 0 for `price`, but extras and additionals carry their own
+        // prices from the catalogue, so they must be zeroed here too — otherwise a
+        // "free" stock order would still total up its extras. Mirrors the retail
+        // flow's zeroing block in ProductForm.js.
+        if (isStockOrder) {
+            finalItems = finalItems.map((it) => ({
+                ...it,
+                price: 0,
+                extras: Array.isArray(it.extras) ? it.extras.map((e) => ({ ...e, price: 0 })) : it.extras,
+                additionals: Array.isArray(it.additionals) ? it.additionals.map((a) => ({ ...a, price: 0 })) : it.additionals,
+            }));
+        }
+
         // Calculate totals
         const finalSubtotal = finalItems.reduce((a, b) => { let t = b.price * b.quantity; b.extras?.forEach(e => { t += Number(e.price || 0); }); return a + t; }, 0);
         const finalQuantity = finalItems.reduce((a, b) => a + b.quantity, 0);
@@ -600,7 +629,17 @@ export default function B2bProductForm() {
         navigate("/b2b-order-details");
     };
 
-    const handleBack = () => navigate("/b2b-vendor-selection");
+    // A stock order never visited vendor selection, so Back returns to the
+    // dashboard it started from. Clear the flag on the way out — an abandoned
+    // stock order must not leave the session in stock mode for the next order.
+    const handleBack = () => {
+        if (isStockOrder) {
+            clearB2bStockOrder();
+            navigate("/b2b-merchandiser-dashboard");
+            return;
+        }
+        navigate("/b2b-vendor-selection");
+    };
 
     return (
         <div className="screen4-bg b2b-pf-page">
@@ -608,8 +647,13 @@ export default function B2bProductForm() {
 
             <header className="pf-header">
                 <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
-                <h1 className="pf-header-title">B2B Order Form</h1>
-                {vendor && <div className="b2b-vendor-badge"><span className="vendor-name">{vendor.store_brand_name}</span><span className="vendor-code">{vendor.vendor_code}</span></div>}
+                <h1 className="pf-header-title">{isStockOrder ? "B2B Stock Order" : "B2B Order Form"}</h1>
+                {/* Stock orders have no vendor — show the internal destination in the
+                    badge slot instead, so the screen is never ambiguous about what
+                    kind of order is being raised. */}
+                {isStockOrder
+                    ? <div className="b2b-vendor-badge"><span className="vendor-name">Internal Stock</span><span className="vendor-code">WH Delhi</span></div>
+                    : vendor && <div className="b2b-vendor-badge"><span className="vendor-name">{vendor.store_brand_name}</span><span className="vendor-code">{vendor.vendor_code}</span></div>}
             </header>
 
             <div className="screen4-card">
@@ -798,7 +842,13 @@ export default function B2bProductForm() {
                             <div className="field"><label>Attachments</label><div className="custom-file-upload"><label className="upload-btn">Upload Files<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx" multiple onChange={handleFileUpload} /></label></div>{attachments.length > 0 && <div className="attachment-preview">{attachments.map((url, idx) => <span key={idx} className="file-item">{url.split("/").pop()}<button type="button" className="remove-attachment-btn" onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}>×</button></span>)}</div>}</div>
                         </div>
 
-                        <div className="summary-box-fixed"><h3>Order Summary</h3><p>Total Quantity: <strong>{formatIndianNumber(totalQty)}</strong></p><p>Subtotal: <strong>₹{formatIndianNumber(subtotal.toFixed(2))}</strong></p><p>Taxes (18%): <strong>₹{formatIndianNumber(taxes.toFixed(2))}</strong></p><p className="grand-total">Total: <strong>₹{formatIndianNumber(totalOrder.toFixed(2))}</strong></p></div>
+                        {/* Stock orders carry no value, so the money lines would all read
+                            ₹0.00 — show only the quantity that actually means something. */}
+                        {isStockOrder ? (
+                            <div className="summary-box-fixed"><h3>Order Summary</h3><p>Total Quantity: <strong>{formatIndianNumber(totalQty)}</strong></p><p className="grand-total">Internal Stock — no charge</p></div>
+                        ) : (
+                            <div className="summary-box-fixed"><h3>Order Summary</h3><p>Total Quantity: <strong>{formatIndianNumber(totalQty)}</strong></p><p>Subtotal: <strong>₹{formatIndianNumber(subtotal.toFixed(2))}</strong></p><p>Taxes (18%): <strong>₹{formatIndianNumber(taxes.toFixed(2))}</strong></p><p className="grand-total">Total: <strong>₹{formatIndianNumber(totalOrder.toFixed(2))}</strong></p></div>
+                        )}
 
                         <div className="footer-btns"><button className="productBtn" onClick={handleAddProduct}>Add Product</button><button className="continueBtn" onClick={handleContinue}>Continue</button></div>
                     </div>

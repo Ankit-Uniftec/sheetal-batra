@@ -734,6 +734,9 @@
 .pm-channel-private { background: #f3e5f5; color: #8e24aa; }
 .pm-channel-exhibition { background: #efebe9; color: #6d4c41; }
 .pm-channel-stock { background: #eceff1; color: #546e7a; }
+/* Shopify (website) orders. Teal rather than CHANNEL_SEGMENTS' #0288d1, which
+   is too close to Comms' #1565c0 to tell apart at 10px on a busy card. */
+.pm-channel-shopify { background: #e0f7fa; color: #00838f; border: 1px solid #b2ebf2; }
 
 /* Sub-tab bar — pill row inside a merged section (Delivery Report, Vendors). */
 .pm-subtab-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }

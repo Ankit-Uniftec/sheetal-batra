@@ -1305,11 +1305,13 @@ export default function ProductionManagerDashboard() {
 
     // Channel badge — the full channel model, not the old binary B2B/Store
     // (Comms, Private and Website orders all read as "Store" before).
-    const CHANNEL_LABELS = {
-        b2b: "B2B", comms: "Comms", private: "Private",
-        exhibition: "Exhibition", stock: "Stock", offline: "Store",
-    };
-    const getChannelLabel = (order) => CHANNEL_LABELS[getOrderChannelKey(order)] || "Store";
+    // Use the SHARED label helper rather than a local map. The map this replaced
+    // had no `shopify` entry, so its `|| "Store"` default silently tagged every
+    // Shopify order as a store order — the failure mode of duplicating a
+    // channel list: a new channel is not a missing case, it is a WRONG one.
+    // getOrderChannelLabel also splits offline into Delhi/Ludhiana, which is
+    // more precise than the flat "Store" this used to show.
+    const getChannelLabel = (order) => getOrderChannelLabel(order) || "Store";
     const getChannelClass = (order) => {
         const key = getOrderChannelKey(order);
         return `pm-channel-${key === "offline" ? "store" : key}`;
@@ -2169,7 +2171,10 @@ export default function ProductionManagerDashboard() {
                                                     <div className="pm-product-details">
                                                         <div className="pm-product-name"><span className="pm-order-label">Product:</span><span className="pm-ovalue">{item.product_name || "—"}</span></div>
                                                         <div className="pm-product-name"><span className="pm-order-label">Client:</span><span className="pm-ovalue">{getClientName(order) || "—"}</span></div>
-                                                        <div className="pm-product-name"><span className="pm-order-label">SA Name:</span><span className="pm-ovalue">{order.salesperson || "—"}{order.salesperson_store ? ` (${order.salesperson_store})` : ""}</span></div>
+                                                        {/* Skip the store suffix when it just repeats the name. A Shopify
+                                                            order has no human SA, so both fields read "Shopify" and the
+                                                            row rendered "Shopify (Shopify)". */}
+                                                        <div className="pm-product-name"><span className="pm-order-label">SA Name:</span><span className="pm-ovalue">{order.salesperson || "—"}{order.salesperson_store && order.salesperson_store !== order.salesperson ? ` (${order.salesperson_store})` : ""}</span></div>
                                                         <div className="pm-odetails-grid">
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Amount:</span><span className="pm-ovalue">₹{formatIndianNumber(order.grand_total || 0)}</span></div>
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Qty:</span><span className="pm-ovalue">{order.total_quantity || 1}</span></div>

@@ -196,10 +196,17 @@ const RECIPIENT_MAP = {
 // ==========================================
 const TEMPLATES = {
     [NOTIFICATION_TYPES.ORDER_PLACED]: (meta) => {
-        // Stock orders bypass the customer flow entirely (no real client),
-        // so the trailing "client" suffix doesn't apply. Detect via the
-        // order_no prefix so we don't need every caller to pass a flag.
-        const isStock = typeof meta.order_no === "string" && meta.order_no.includes("-STOCK-");
+        // Stock orders bypass the customer flow entirely (no real client), so the
+        // trailing "client" suffix doesn't apply.
+        //
+        // Prefer an explicit flag from the caller; fall back to the order number
+        // only for callers that don't pass one. The string check alone was wrong
+        // twice over: it missed stock orders carrying a STORE prefix (the legacy
+        // SB-LDHC-… rows that migration 42 flagged), and it misses B2B stock
+        // (SB-B2BSTOCK-…, no dash before STOCK). Matching on "STOCK-" rather than
+        // "-STOCK-" covers both prefixes for the fallback path.
+        const isStock = meta.is_stock_order === true ||
+            (typeof meta.order_no === "string" && meta.order_no.includes("STOCK-"));
         const trailer = isStock ? "" : " client";
         return {
             title: "New Order Placed",
