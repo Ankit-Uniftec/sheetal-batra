@@ -139,38 +139,17 @@ const statusVariant = (status) => {
   return "info";
 };
 
-// ─── Needs Review: the mapper's blocker codes in plain language ────────────
-// The mapper refuses to guess when Shopify doesn't tell us something, and
-// records a {code, detail} blocker instead. Raw codes are meaningless to the
-// person reading this screen, so each is explained here: what it means, what it
-// blocks, and who can fix it. `detail` from the mapper is shown underneath as
-// the specific instance.
-const ISSUE_GUIDE = {
-  DUPATTA_UNKNOWN: {
-    title: "We can't tell if this product includes a dupatta",
-    blocks: "No dupatta barcode was minted, so a dupatta that does exist would go untracked through production.",
-    fix: "The catalogue team needs to set custom.has_dupatta on this product in Shopify, or add a With/Without Dupatta option to it. Once set, a re-sync clears this on its own.",
-  },
-  PRODUCT_STYLE_MISSING: {
-    title: "The garment breakdown is missing",
-    blocks: "Without a top/bottom we cannot mint the right pieces, so no barcodes were created for this order.",
-    fix: "The catalogue team needs to set custom.top_style and custom.bottom_style on this product in Shopify.",
-  },
-  DELIVERY_DATE_UNRESOLVED: {
-    title: "No delivery date could be worked out",
-    blocks: "The production deadline, the delivery calendar and delay escalation all key off this date. Rather than invent one, the order is held here.",
-    fix: "The catalogue team needs to set custom.shipping_timeline on the product in Shopify.",
-  },
-  NO_LINE_ITEMS: {
-    title: "The order has no products on it",
-    blocks: "There is nothing to make.",
-    fix: "Check the order in the Shopify admin — this usually means it was cancelled or edited to empty.",
-  },
-  CUSTOMER_UNRESOLVED: {
-    title: "The order has no contact details",
-    blocks: "An order cannot be filed without a customer record.",
-    fix: "Check the order in the Shopify admin. (This blocker normally prevents the order being written at all, so it should not appear here.)",
-  },
+// ─── Needs Review: a SHORT label per mapper blocker code ───────────────────
+// One line each, deliberately. An earlier version explained what each code
+// blocked and who fixes it in full prose; nobody reads a wall of text on a
+// production screen. The mapper's own `detail` already names the offending
+// product, so the label only has to say what is missing.
+const ISSUE_LABELS = {
+  DUPATTA_UNKNOWN: "Dupatta unknown — needs custom.has_dupatta in Shopify",
+  PRODUCT_STYLE_MISSING: "Garment breakdown missing — needs custom.top_style / bottom_style",
+  DELIVERY_DATE_UNRESOLVED: "No delivery date — needs custom.shipping_timeline",
+  NO_LINE_ITEMS: "No products on the order",
+  CUSTOMER_UNRESOLVED: "No contact details on the order",
 };
 
 // Informational, not a blocker: every cleanly-mapped order carries it. Shown
@@ -187,7 +166,6 @@ export default function ShopifyOrdersDashboard() {
   const [orders, setOrders] = useState([]);
   const [componentsByOrder, setComponentsByOrder] = useState({});
   const [journeyOrder, setJourneyOrder] = useState(null);
-  const [reviewOrder, setReviewOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -197,6 +175,14 @@ export default function ShopifyOrdersDashboard() {
   const [searchField, setSearchField] = useState("order_no");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  // Needs Review has its OWN search + issue filter + paging, kept separate from
+  // the Orders tab's. Sharing them meant switching tabs silently carried a
+  // search across and showed an unexplained empty list.
+  const [reviewSearchField, setReviewSearchField] = useState("order_no");
+  const [reviewSearch, setReviewSearch] = useState("");
+  const [issueFilter, setIssueFilter] = useState("all");
+  const [reviewPage, setReviewPage] = useState(1);
 
   const { control: periodControl, inPeriod } = usePeriodFilter("month", { variant: "pills" });
 
@@ -364,25 +350,29 @@ export default function ShopifyOrdersDashboard() {
     return ts.length ? ts[ts.length - 1] : null;
   }, [orders]);
 
-  const filteredOrders = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter((o) => {
-      switch (searchField) {
-        case "shopify_order_name":
-          // Tolerate the "#" being typed or not.
-          return (o.shopify_order_name || "").toLowerCase().replace("#", "")
-            .includes(q.replace("#", ""));
-        case "product":
-          return (o.items || []).some((i) =>
-            (i.product_name || "").toLowerCase().includes(q));
-        case "barcode":
-          return (componentsByOrder[o.id] || []).some((c) =>
-            (c.barcode || "").toLowerCase().includes(q));
-        default: return (o.order_no || "").toLowerCase().includes(q);
-      }
-    });
-  }, [orders, search, searchField, componentsByOrder]);
+  // One search predicate, used by both the Orders and Needs Review tabs.
+  const matchesSearch = useCallback((o, field, query) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    switch (field) {
+      case "shopify_order_name":
+        // Tolerate the "#" being typed or not.
+        return (o.shopify_order_name || "").toLowerCase().replace("#", "")
+          .includes(q.replace("#", ""));
+      case "product":
+        return (o.items || []).some((i) =>
+          (i.product_name || "").toLowerCase().includes(q));
+      case "barcode":
+        return (componentsByOrder[o.id] || []).some((c) =>
+          (c.barcode || "").toLowerCase().includes(q));
+      default: return (o.order_no || "").toLowerCase().includes(q);
+    }
+  }, [componentsByOrder]);
+
+  const filteredOrders = useMemo(
+    () => orders.filter((o) => matchesSearch(o, searchField, search)),
+    [orders, search, searchField, matchesSearch]
+  );
 
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
   const paginated = useMemo(
@@ -391,6 +381,46 @@ export default function ShopifyOrdersDashboard() {
   );
 
   useEffect(() => { setPage(1); }, [search, searchField]);
+
+  // ── Needs Review tab: search + filter by which blocker the order has.
+  // Only codes actually PRESENT in the current data become options, so the
+  // dropdown never offers a filter that returns nothing.
+  const issueCodeOptions = useMemo(() => {
+    const codes = new Set();
+    needsReview.forEach((o) =>
+      (o.web_order_issues || []).forEach((i) => {
+        if (i.code !== DERIVED_CODE) codes.add(i.code);
+      })
+    );
+    return [...codes].sort();
+  }, [needsReview]);
+
+  const filteredReview = useMemo(
+    () => needsReview.filter((o) => {
+      if (!matchesSearch(o, reviewSearchField, reviewSearch)) return false;
+      if (issueFilter === "all") return true;
+      return (o.web_order_issues || []).some((i) => i.code === issueFilter);
+    }),
+    [needsReview, reviewSearch, reviewSearchField, issueFilter, matchesSearch]
+  );
+
+  const reviewTotalPages = Math.ceil(filteredReview.length / ORDERS_PER_PAGE);
+  const paginatedReview = useMemo(
+    () => filteredReview.slice((reviewPage - 1) * ORDERS_PER_PAGE, reviewPage * ORDERS_PER_PAGE),
+    [filteredReview, reviewPage]
+  );
+
+  useEffect(() => { setReviewPage(1); }, [reviewSearch, reviewSearchField, issueFilter]);
+
+  // Jump from a flagged card on the Orders tab to that order on the Needs
+  // Review tab. Searching by its order number is what actually isolates it —
+  // switching tabs alone would just show the whole list.
+  const goToReview = (order) => {
+    setReviewSearchField("order_no");
+    setReviewSearch(order.order_no || "");
+    setIssueFilter("all");
+    setActiveTab("needs-review");
+  };
 
   if (!authChecked) return null;
 
@@ -406,15 +436,27 @@ export default function ShopifyOrdersDashboard() {
   // (AssociateDashboard.js:1584) — an uppercase header strip over Title-case
   // "Label:" detail rows — with its Client Name and Amount rows removed, and
   // the production pieces appended. NOT clickable: see the header note.
-  const renderCard = (order) => {
+  //
+  // `context` is "orders" or "needs-review". On the Orders tab a flagged card is
+  // clickable and jumps to the Needs Review tab; on that tab itself it is not
+  // (it would link to where you already are) and instead lists its issues
+  // inline underneath.
+  const renderCard = (order, context = "orders") => {
     const item = order.items?.[0] || {};
     const extra = (order.items?.length || 0) - 1;
     const flagged = order.web_order_status === "needs_review";
     const components = componentsByOrder[order.id] || [];
-    const imgSrc = item.image_url || "/placeholder.png";
+    const imgSrc = item.image_url || "";
+    const onReviewTab = context === "needs-review";
+    const linkToReview = flagged && !onReviewTab;
 
     return (
-      <div key={order.id} className={`sho-order-card ${flagged ? "flagged" : ""}`}>
+      <div
+        key={order.id}
+        className={`sho-order-card ${flagged ? "flagged" : ""} ${linkToReview ? "sho-clickable" : ""}`}
+        onClick={linkToReview ? () => goToReview(order) : undefined}
+        title={linkToReview ? "Open in Needs Review" : undefined}
+      >
         <div className="sho-order-header">
           <div className="sho-header-info">
             <div className="sho-header-item">
@@ -450,11 +492,6 @@ export default function ShopifyOrdersDashboard() {
               {getOrderStatusLabel(order.status)}
             </Badge>
             {flagged && <Badge variant="warning">Needs Review</Badge>}
-            {flagged && (
-              <button className="sho-ghost-btn" onClick={() => setReviewOrder(order)}>
-                Review
-              </button>
-            )}
             <button
               className="sho-ghost-btn"
               onClick={(e) => handleWarehousePdf(e, order)}
@@ -466,8 +503,17 @@ export default function ShopifyOrdersDashboard() {
         </div>
 
         <div className="sho-order-content">
+          {/* Render a real placeholder tile when there is no image rather than
+              pointing <img> at a file that may not exist: a BROKEN image shows
+              its alt text, and a long product name then stretched the thumb to
+              full width and wrecked the card layout. alt="" because the product
+              name is already the next thing on the card. */}
           <div className="sho-product-thumb">
-            <img src={imgSrc} alt={item.product_name || "Product"} />
+            {imgSrc ? (
+              <img src={imgSrc} alt="" />
+            ) : (
+              <div className="sho-thumb-empty">SB</div>
+            )}
           </div>
           <div className="sho-product-details">
             <div className="sho-product-row">
@@ -514,8 +560,13 @@ export default function ShopifyOrdersDashboard() {
         </div>
 
         {/* Production pieces — one barcode per physical component. These run
-            the same stage pipeline as every other channel. */}
-        {components.length > 0 && (
+            the same stage pipeline as every other channel.
+            Hidden on the Needs Review tab: that tab is about what is MISSING,
+            and the pieces (plus a View Journey button) are noise there. Note a
+            flagged order can still HAVE components — one minted while it mapped
+            cleanly, then re-flagged by a later remap-items — so this is a
+            display choice, not an assumption that the list is empty. */}
+        {!onReviewTab && components.length > 0 && (
           <>
             <div className="sho-comp-journey">
               {components.map((comp) => (
@@ -540,12 +591,33 @@ export default function ShopifyOrdersDashboard() {
             <div className="sho-comp-actions">
               <button
                 className="sho-ghost-btn"
-                onClick={() => setJourneyOrder({ order_no: order.order_no, components })}
+                onClick={(e) => {
+                  // The card itself may be a link to Needs Review — don't let a
+                  // button click bubble up and navigate away.
+                  e.stopPropagation();
+                  setJourneyOrder({ order_no: order.order_no, components });
+                }}
               >
                 View Journey
               </button>
             </div>
           </>
+        )}
+
+        {/* On the Needs Review tab, list what is missing right under the card —
+            one line per blocker. No modal: this is the whole point of the tab,
+            so it should be readable without another click. */}
+        {onReviewTab && (
+          <ul className="sho-issues">
+            {(order.web_order_issues || [])
+              .filter((i) => i.code !== DERIVED_CODE)
+              .map((i, n) => (
+                <li key={n}>
+                  <strong>{ISSUE_LABELS[i.code] || i.code}</strong>
+                  {i.detail ? <span className="sho-issue-detail"> — {i.detail}</span> : null}
+                </li>
+              ))}
+          </ul>
         )}
       </div>
     );
@@ -561,10 +633,6 @@ export default function ShopifyOrdersDashboard() {
           components={journeyOrder.components}
           onClose={() => setJourneyOrder(null)}
         />
-      )}
-
-      {reviewOrder && (
-        <ReviewIssuesModal order={reviewOrder} onClose={() => setReviewOrder(null)} />
       )}
 
       {/* HEADER */}
@@ -660,7 +728,11 @@ export default function ShopifyOrdersDashboard() {
                     <div className="sho-empty">No orders match this search.</div>
                   ) : (
                     <>
-                      <div className="sho-order-cards">{paginated.map(renderCard)}</div>
+                      {/* Arrow fn, not a bare reference: .map passes the INDEX
+                          as the second arg, which would land in `context`. */}
+                      <div className="sho-order-cards">
+                        {paginated.map((o) => renderCard(o, "orders"))}
+                      </div>
                       <Paginator page={page} totalPages={totalPages} onChange={setPage} />
                     </>
                   )}
@@ -678,13 +750,55 @@ export default function ShopifyOrdersDashboard() {
                     <>
                       <p className="sho-hint">
                         These orders are missing something production needs, so
-                        nothing was guessed and no barcodes were minted. Open
-                        <strong> Review</strong> on a card to see what's missing
-                        and who can fix it.
+                        nothing was guessed and no barcodes were minted. What's
+                        missing is listed under each order.
                       </p>
-                      <div className="sho-order-cards">
-                        {needsReview.map(renderCard)}
+                      <div className="sho-toolbar">
+                        <SearchByDropdown
+                          fields={SEARCH_FIELDS}
+                          selectedField={reviewSearchField}
+                          onFieldChange={setReviewSearchField}
+                          query={reviewSearch}
+                          onQueryChange={setReviewSearch}
+                          placeholder="Type to search..."
+                        />
+                        {/* Only codes present in the current data are offered. */}
+                        <select
+                          className="sho-select"
+                          value={issueFilter}
+                          onChange={(e) => setIssueFilter(e.target.value)}
+                        >
+                          <option value="all">All issues</option>
+                          {issueCodeOptions.map((code) => (
+                            <option key={code} value={code}>
+                              {ISSUE_LABELS[code] || code}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="sho-count">{filteredReview.length} orders</span>
+                        {(reviewSearch || issueFilter !== "all") && (
+                          <button
+                            className="sho-ghost-btn"
+                            onClick={() => { setReviewSearch(""); setIssueFilter("all"); }}
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
+                      {paginatedReview.length === 0 ? (
+                        <div className="sho-empty">No orders match this search.</div>
+                      ) : (
+                        <>
+                          <div className="sho-order-cards">
+                            {paginatedReview.map((o) => renderCard(o, "needs-review"))}
+                          </div>
+                          <Paginator
+                            page={reviewPage}
+                            totalPages={reviewTotalPages}
+                            onChange={setReviewPage}
+                          />
+                        </>
+                      )}
                     </>
                   )}
                 </>
@@ -723,88 +837,6 @@ function StatCard({ title, value, subtitle, highlight }) {
       <p className="sho-stat-title">{title}</p>
       <p className="sho-stat-value">{value}</p>
       {subtitle && <p className="sho-stat-subtitle">{subtitle}</p>}
-    </div>
-  );
-}
-
-// ─── Needs Review modal ───────────────────────────────────────────────────
-// Explains, in plain language, what the mapper could not determine. Read-only:
-// it says what is missing and who fixes it, rather than offering to guess here.
-// Most of these clear themselves once the catalogue data lands and the order is
-// re-synced, so there is nothing to "resolve" on this screen.
-function ReviewIssuesModal({ order, onClose }) {
-  const issues = order.web_order_issues || [];
-  const blockers = issues.filter((i) => i.code !== DERIVED_CODE);
-  const derived = issues.find((i) => i.code === DERIVED_CODE);
-
-  return (
-    <div className="sho-modal-overlay" onClick={onClose}>
-      <div className="sho-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="sho-modal-head">
-          <div>
-            <h3 className="sho-modal-title">Needs Review</h3>
-            <p className="sho-modal-sub">
-              {order.order_no}
-              {order.shopify_order_name ? ` · ${order.shopify_order_name}` : ""}
-            </p>
-          </div>
-          <button className="sho-modal-close" onClick={onClose} aria-label="Close">×</button>
-        </div>
-
-        <div className="sho-modal-body">
-          <p className="sho-modal-lead">
-            Shopify didn't tell us everything production needs for this order.
-            Nothing was guessed, and no barcodes were minted — so the order is
-            held here rather than entering production on data we don't trust.
-          </p>
-
-          {blockers.length === 0 ? (
-            <p className="sho-modal-lead">
-              No outstanding blockers are recorded. It may already have been
-              fixed at the catalogue end — run <strong>Sync now</strong> to
-              re-check.
-            </p>
-          ) : (
-            <ul className="sho-issue-list">
-              {blockers.map((issue, n) => {
-                const guide = ISSUE_GUIDE[issue.code];
-                return (
-                  <li key={n} className="sho-issue">
-                    <p className="sho-issue-title">
-                      {guide?.title || issue.code}
-                    </p>
-                    {guide?.blocks && (
-                      <p className="sho-issue-line">
-                        <span className="sho-issue-tag">What it blocks</span>
-                        {guide.blocks}
-                      </p>
-                    )}
-                    {guide?.fix && (
-                      <p className="sho-issue-line">
-                        <span className="sho-issue-tag">How to fix</span>
-                        {guide.fix}
-                      </p>
-                    )}
-                    {issue.detail && (
-                      <p className="sho-issue-detail">{issue.detail}</p>
-                    )}
-                    <p className="sho-issue-code">{issue.code}</p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {derived && (
-            <p className="sho-modal-note">
-              <strong>Delivery date:</strong> {derived.detail}
-              <br />
-              Shopify carries no delivery date on an order, so it is worked out
-              from the slowest item's shipping timeline.
-            </p>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

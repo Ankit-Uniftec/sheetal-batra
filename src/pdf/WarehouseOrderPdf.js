@@ -304,10 +304,21 @@ const warehouseStyles = StyleSheet.create({
   productField: {
     width: "25%",
     marginBottom: 8,
+    paddingRight: 8,
+  },
+  // A garment piece + swatch + colour name needs more room than a bare value
+  // like Quantity. At 25% ("Long Choga" + swatch + "Deep Blue") the colour was
+  // forced onto a second line under the garment, which read as though the colour
+  // belonged to the row below. A third of the width keeps each piece on ONE line.
+  productFieldGarment: {
+    width: "33.33%",
+    marginBottom: 8,
+    paddingRight: 8,
   },
   productFieldWide: {
     width: "50%",
     marginBottom: 8,
+    paddingRight: 8,
   },
   fieldLabel: {
     fontSize: 9,
@@ -321,16 +332,22 @@ const warehouseStyles = StyleSheet.create({
   colorRow: {
     flexDirection: "row",
     alignItems: "center",
-    // The garment name, swatch and colour name share a 25%-wide grid cell.
-    // Without wrapping, a long colour ("Carnation Pink") overflowed the cell and
-    // printed on top of the neighbouring column.
+    // The garment name, swatch and colour name share one grid cell. Wrapping
+    // stays on as a safety net: a very long colour ("Carnation Pink" on a
+    // narrow piece name) would otherwise overflow and print on top of the
+    // neighbouring column. With productFieldGarment's wider cell it should not
+    // normally need to.
     flexWrap: "wrap",
   },
   colorSwatch: {
-    width: 24,
-    height: 16,
+    // Small enough to sit INLINE between the garment name and its colour name.
+    // At 24x16 the swatch dominated the row and pushed the colour name onto a
+    // second line.
+    width: 12,
+    height: 12,
     borderRadius: 2,
-    marginLeft: 8,
+    marginLeft: 6,
+    marginRight: 4,
   },
   // Was referenced but never defined, so the colour name rendered unstyled at
   // @react-pdf's default font size (~18pt) — the real cause of the overlap.
@@ -506,6 +523,70 @@ const SectionBar = ({ title, isAlteration = false }) => (
 );
 
 // Info Row Component
+/**
+ * The header info rows for an order, as DATA rather than JSX.
+ *
+ * These used to be two hardcoded columns — 6 rows on the left, 3 on the right —
+ * which looked lopsided, and got worse as rows appeared or vanished: PO NUMBER
+ * is B2B-only, GIFT RECIPIENT gifting-only and SHOPIFY ORDER NO Shopify-only,
+ * so the real count swings between 7 and 10. Returning a flat list lets the
+ * caller split it down the middle, so the two columns stay even whatever
+ * combination of optional rows this particular order has.
+ */
+const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration }) => {
+  const rows = [
+    { label: "Order ID:", value: order.order_no || order.order_id },
+  ];
+
+  // Shopify's own order number (e.g. "#26946"). The warehouse and the catalogue
+  // team refer to these by this number rather than our SB- one, so the work
+  // order carries both. NULL on every other channel.
+  if (order.shopify_order_name) {
+    rows.push({ label: "SHOPIFY ORDER NO:", value: order.shopify_order_name, highlight: true });
+  }
+
+  rows.push(
+    { label: "DELIVERY TO:", value: order.delivery_location || order.delivery_city || order.mode_of_delivery },
+    { label: "CLIENT NAME:", value: clientNameForHeader },
+    { label: "DELIVERY DATE:", value: getWarehouseDate(itemDeliveryDate, order.created_at), highlight: !isUrgent, urgent: isUrgent },
+    { label: "ORDER PRIORITY:", value: isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL"), urgent: isUrgent },
+    { label: "ORDER DATE:", value: formatDate(order.created_at) },
+  );
+
+  // PO number is a B2B-only field — gate on is_b2b like WarehouseDashboard does.
+  if (order.is_b2b && order.po_number) {
+    rows.push({ label: "PO NUMBER:", value: order.po_number });
+  }
+  if (order.is_gifting && order.gift_recipient_name) {
+    rows.push({
+      label: "GIFT RECIPIENT:",
+      value: `${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`,
+    });
+  }
+
+  rows.push(
+    { label: "SALES ASSOCIATE:", value: order.salesperson },
+    { label: "ORDER TYPE:", value: isAlteration ? "ALTERATION" : (item?.order_type || order.order_type || "Standard") },
+  );
+
+  return rows;
+};
+
+// Two even columns from one list. Ceil so an odd count puts the extra row on the
+// LEFT, which reads better than a left column shorter than the right.
+const InfoGrid = ({ rows }) => {
+  const split = Math.ceil(rows.length / 2);
+  return (
+    <View style={warehouseStyles.infoGrid}>
+      {[rows.slice(0, split), rows.slice(split)].map((col, i) => (
+        <View key={i} style={warehouseStyles.infoColumn}>
+          {col.map((r) => <InfoRow key={r.label} {...r} />)}
+        </View>
+      ))}
+    </View>
+  );
+};
+
 const InfoRow = ({ label, value, highlight = false, urgent = false }) => (
   <View style={warehouseStyles.infoRow}>
     <Text style={warehouseStyles.infoLabel}>{label}</Text>
@@ -538,9 +619,11 @@ const ProductItem = ({ item }) => {
       <View style={warehouseStyles.productDetails}>
         <Text style={warehouseStyles.productName}>{safeString(item?.product_name)}</Text>
 
+        {/* Row 1 — the garment pieces, each in a wider cell so the piece name,
+            its swatch and its colour name stay on ONE line. Three across. */}
         <View style={warehouseStyles.productGrid}>
           {hasTop && (
-            <View style={warehouseStyles.productField}>
+            <View style={warehouseStyles.productFieldGarment}>
               <Text style={warehouseStyles.fieldLabel}>Top</Text>
               <View style={warehouseStyles.colorRow}>
                 <Text style={warehouseStyles.fieldValue}>{safeString(item.top)}</Text>
@@ -563,7 +646,7 @@ const ProductItem = ({ item }) => {
           )}
 
           {hasBottom && (
-            <View style={warehouseStyles.productField}>
+            <View style={warehouseStyles.productFieldGarment}>
               <Text style={warehouseStyles.fieldLabel}>Bottom</Text>
               <View style={warehouseStyles.colorRow}>
                 <Text style={warehouseStyles.fieldValue}>{safeString(item.bottom)}</Text>
@@ -583,7 +666,7 @@ const ProductItem = ({ item }) => {
           )}
 
           {hasDupatta && (
-            <View style={warehouseStyles.productField}>
+            <View style={warehouseStyles.productFieldGarment}>
               <Text style={warehouseStyles.fieldLabel}>Dupatta</Text>
               {/* dupatta_color is a { hex, name } object like the others —
                   safeString() on it printed "[object Object]". */}
@@ -603,17 +686,11 @@ const ProductItem = ({ item }) => {
             </View>
           )}
 
-          <View style={warehouseStyles.productField}>
-            <Text style={warehouseStyles.fieldLabel}>Category</Text>
-            <Text style={warehouseStyles.fieldValue}>{safeString(category)}</Text>
-          </View>
-
-          <View style={warehouseStyles.productField}>
-            <Text style={warehouseStyles.fieldLabel}>Quantity</Text>
-            <Text style={warehouseStyles.fieldValue}>{item?.quantity || 1}</Text>
-          </View>
         </View>
 
+        {/* Row 2 — the plain scalars. Kept OUT of the garment row above: mixed
+            in, they made the pieces and their colours wrap unpredictably
+            depending on how many pieces the garment has. */}
         <View style={warehouseStyles.productGrid}>
           {hasSize && (
             <View style={warehouseStyles.productField}>
@@ -621,6 +698,16 @@ const ProductItem = ({ item }) => {
               <Text style={warehouseStyles.fieldValue}>{safeString(item.size)}</Text>
             </View>
           )}
+
+          <View style={warehouseStyles.productField}>
+            <Text style={warehouseStyles.fieldLabel}>Quantity</Text>
+            <Text style={warehouseStyles.fieldValue}>{item?.quantity || 1}</Text>
+          </View>
+
+          <View style={warehouseStyles.productField}>
+            <Text style={warehouseStyles.fieldLabel}>Category</Text>
+            <Text style={warehouseStyles.fieldValue}>{safeString(category)}</Text>
+          </View>
 
           {hasExtras && (
             <View style={warehouseStyles.productFieldWide}>
@@ -848,34 +935,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             {isAlteration && <AlterationInfoBox order={order} />}
 
             {/* Order Info Grid */}
-            <View style={warehouseStyles.infoGrid}>
-              <View style={warehouseStyles.infoColumn}>
-                <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
-                {/* Shopify's own order number (e.g. "#26925"), for Shopify
-                    orders only. The warehouse and the catalogue team refer to
-                    these by this number rather than our SB- one, so the work
-                    order has to carry both. NULL on every other channel, so the
-                    row simply does not render there. */}
-                {order.shopify_order_name && (
-                  <InfoRow label="SHOPIFY ORDER NO:" value={order.shopify_order_name} highlight />
-                )}
-                <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
-                <InfoRow label="CLIENT NAME:" value={clientNameForHeader} />
-                <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />
-                <InfoRow label="ORDER PRIORITY:" value={isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL")} urgent={isUrgent} />
-              </View>
-              <View style={warehouseStyles.infoColumn}>
-                <InfoRow label="ORDER DATE:" value={formatDate(order.created_at)} />
-                {order.is_b2b && order.po_number && (
-                  <InfoRow label="PO NUMBER:" value={order.po_number} />
-                )}
-                {order.is_gifting && order.gift_recipient_name && (
-                  <InfoRow label="GIFT RECIPIENT:" value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`} />
-                )}
-                <InfoRow label="SALES ASSOCIATE:" value={order.salesperson} />
-                <InfoRow label="ORDER TYPE:" value={isAlteration ? "ALTERATION" : (item.order_type || order.order_type || "Standard")} />
-              </View>
-            </View>
+            <InfoGrid rows={buildInfoRows({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration })} />
 
             {/* Product Details Section */}
             <SectionBar title="Product Details" isAlteration={isAlteration} />
@@ -969,35 +1029,12 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
           {/* Alteration Info Box */}
           {isAlteration && <AlterationInfoBox order={order} />}
 
-          {/* Order Info Grid */}
-          <View style={warehouseStyles.infoGrid}>
-            <View style={warehouseStyles.infoColumn}>
-              <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
-              {/* Shopify's own order number — see the identical block in the
-                  per-component branch above. This header grid is duplicated
-                  across both Document branches; any field added to one MUST be
-                  added to the other or it silently appears only on orders that
-                  do (or don't) have component barcodes. */}
-              {order.shopify_order_name && (
-                <InfoRow label="WEBSITE ORDER:" value={order.shopify_order_name} highlight />
-              )}
-              <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
-              <InfoRow label="CLIENT NAME:" value={clientNameForHeader} />
-              <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />
-              <InfoRow label="ORDER PRIORITY:" value={isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL")} urgent={isUrgent} />
-            </View>
-            <View style={warehouseStyles.infoColumn}>
-              <InfoRow label="ORDER DATE:" value={formatDate(order.created_at)} />
-              {order.is_b2b && order.po_number && (
-                <InfoRow label="PO NUMBER:" value={order.po_number} />
-              )}
-              {order.is_gifting && order.gift_recipient_name && (
-                <InfoRow label="GIFT RECIPIENT:" value={`${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`} />
-              )}
-              <InfoRow label="SALES ASSOCIATE:" value={order.salesperson} />
-              <InfoRow label="ORDER TYPE:" value={isAlteration ? "ALTERATION" : (item.order_type || order.order_type || "Standard")} />
-            </View>
-          </View>
+          {/* Order Info Grid — the SAME component as the per-component branch
+              above. This block used to be duplicated verbatim across both
+              Document branches, and had already drifted (one said "SHOPIFY
+              ORDER NO:", the other still "WEBSITE ORDER:"). One shared
+              InfoGrid/buildInfoRows makes that drift impossible. */}
+          <InfoGrid rows={buildInfoRows({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration })} />
 
           {/* Product Details */}
           <SectionBar title="Product Details" isAlteration={isAlteration} />

@@ -649,7 +649,10 @@ export default function B2bMerchandiserDashboard() {
     };
 
     // ==================== CANCEL ORDER (24h, any channel, no approval) ====================
-    const CHANNEL_LABELS = { comms: "Comms", b2b: "B2B", private: "Private", exhibition: "Exhibition", stock: "Stock", offline: "Store" };
+    // Keep every channel key that getOrderChannelKey can return, or the || fallback
+    // shows a raw key ("shopify") to the user. See getOrderChannelLabel in
+    // barcodeService for the shared version of this map.
+    const CHANNEL_LABELS = { comms: "Comms", b2b: "B2B", private: "Private", exhibition: "Exhibition", stock: "Stock", shopify: "Shopify", offline: "Store" };
     const hoursSince = (ts) => (ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : Infinity);
     const orderAmount = (o) => Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
 
