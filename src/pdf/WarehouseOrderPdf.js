@@ -851,6 +851,14 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             <View style={warehouseStyles.infoGrid}>
               <View style={warehouseStyles.infoColumn}>
                 <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
+                {/* Shopify's own order number (e.g. "#26925"), for Shopify
+                    orders only. The warehouse and the catalogue team refer to
+                    these by this number rather than our SB- one, so the work
+                    order has to carry both. NULL on every other channel, so the
+                    row simply does not render there. */}
+                {order.shopify_order_name && (
+                  <InfoRow label="SHOPIFY ORDER NO:" value={order.shopify_order_name} highlight />
+                )}
                 <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
                 <InfoRow label="CLIENT NAME:" value={clientNameForHeader} />
                 <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />
@@ -965,6 +973,14 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
           <View style={warehouseStyles.infoGrid}>
             <View style={warehouseStyles.infoColumn}>
               <InfoRow label="Order ID:" value={order.order_no || order.order_id} />
+              {/* Shopify's own order number — see the identical block in the
+                  per-component branch above. This header grid is duplicated
+                  across both Document branches; any field added to one MUST be
+                  added to the other or it silently appears only on orders that
+                  do (or don't) have component barcodes. */}
+              {order.shopify_order_name && (
+                <InfoRow label="WEBSITE ORDER:" value={order.shopify_order_name} highlight />
+              )}
               <InfoRow label="DELIVERY TO:" value={order.delivery_location || order.delivery_city || order.mode_of_delivery} />
               <InfoRow label="CLIENT NAME:" value={clientNameForHeader} />
               <InfoRow label="DELIVERY DATE:" value={getWarehouseDate(itemDeliveryDate, order.created_at)} highlight={!isUrgent} urgent={isUrgent} />

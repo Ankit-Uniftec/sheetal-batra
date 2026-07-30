@@ -61,6 +61,24 @@ const SHOPIFY_GRAPHQL_URL = `https://${SHOPIFY_STORE}/admin/api/${SHOPIFY_API_VE
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+// ─── Shopify-order prefixes ─────────────────────────────────
+// Orders now mint SB-SHOPIFY-MMYY-NNNNNN. They used to mint SB-SHOP-, and some
+// existing orders KEEP that old prefix permanently: renaming an order whose
+// barcode has already been scanned would orphan its stage history and make the
+// printed label unscannable, so 56_rename_shop_orders.sql deliberately skips
+// those. Every query that selects Shopify orders must therefore match BOTH.
+//
+// Matched as full segments ('SB-SHOP-' / 'SB-SHOPIFY-', each with its trailing
+// dash) rather than a loose 'SB-SHOP%', which would also swallow a future
+// SHOPIFYSTOCK — a different channel with different semantics.
+const ORDER_NO_PREFIXES = ["SB-SHOPIFY-", "SB-SHOP-"];
+const ORDER_NO_PREFIX_FILTER = ORDER_NO_PREFIXES
+  .map((p) => `order_no.like.${p}%`)
+  .join(",");
+
+const hasShopifyPrefix = (orderNo: string) =>
+  ORDER_NO_PREFIXES.some((p) => orderNo.startsWith(p));
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -331,14 +349,15 @@ async function ingestOrder(node: any, colorMap?: Map<string, string>) {
     };
   }
 
-  // ── Order number. 'Shopify' → SB-SHOP-MMYY-NNNNNN (db/website_orders.sql).
+  // ── Order number. 'Shopify' → SB-SHOPIFY-MMYY-NNNNNN
+  // (db/barcode_system/v2/55_shopify_prefix_rename.sql).
   const { data: orderNo, error: rpcErr } = await supabase.rpc("generate_order_no", {
     p_store: SHOPIFY_STORE_KEY,
   });
   if (rpcErr || !orderNo) {
     return { gid, outcome: "failed", reason: "ORDER_NO_FAILED", detail: rpcErr?.message };
   }
-  if (!String(orderNo).includes("-SHOP-")) {
+  if (!hasShopifyPrefix(String(orderNo))) {
     // The generate_order_no 'Shopify' branch is missing, so this fell through
     // to GEN. GEN is not in CHANNEL_BY_ORDER_PREFIX, so the order would report
     // as STORE revenue forever. Refuse to write rather than corrupt reporting.
@@ -346,7 +365,7 @@ async function ingestOrder(node: any, colorMap?: Map<string, string>) {
       gid,
       outcome: "failed",
       reason: "CHANNEL_PREFIX_MISSING",
-      detail: `generate_order_no('Shopify') returned ${orderNo} — apply db/website_orders.sql section 4`,
+      detail: `generate_order_no('Shopify') returned ${orderNo} — apply db/barcode_system/v2/55_shopify_prefix_rename.sql`,
     };
   }
 
@@ -557,14 +576,14 @@ serve(async (req) => {
       }, 400);
     }
 
-    // ── backfill-components: mint components for SHOP orders that were
+    // ── backfill-components: mint components for website orders that were
     // ingested before component minting existed. Idempotent, so it is safe to
     // re-run; it touches no Shopify API at all.
     if (mode === "backfill-components") {
       const { data: rows, error } = await supabase
         .from("orders")
         .select("id, order_no, items, web_order_status")
-        .like("order_no", "SB-SHOP-%")
+        .or(ORDER_NO_PREFIX_FILTER)
         .neq("web_order_status", "needs_review")
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -595,7 +614,7 @@ serve(async (req) => {
       const { data: rows, error } = await supabase
         .from("orders")
         .select("id, order_no, shopify_raw")
-        .like("order_no", "SB-SHOP-%")
+        .or(ORDER_NO_PREFIX_FILTER)
         .not("shopify_raw", "is", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -608,10 +627,16 @@ serve(async (req) => {
         // newly discover that something is unknown (e.g. DUPATTA_UNKNOWN), and
         // leaving a stale 'ready' would let an order enter production on data
         // we no longer trust.
+        //
+        // shopify_order_name comes along so this mode also backfills Shopify's
+        // own order number onto orders ingested before that column existed —
+        // from the STORED raw node, with no Shopify call. (55_…sql backfills it
+        // too; both are idempotent, so either or both is fine.)
         const { error: upErr } = await supabase
           .from("orders")
           .update({
             items,
+            shopify_order_name: orderRow.shopify_order_name,
             web_order_status: orderRow.web_order_status,
             web_order_issues: orderRow.web_order_issues,
           })

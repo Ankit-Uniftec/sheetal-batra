@@ -12,6 +12,14 @@ import "./StoreCalendarTab.css";
  * @param {Array}    orders      store-scoped orders (have order_no, delivery_date, salesperson)
  * @param {string}   storeLabel  "Delhi" | "Ludhiana" — shown in the header
  * @param {Function} onOpenOrder (orderNo) => void — jump to this order in the Orders tab
+ * @param {boolean}  showClient      show the Client column. Default TRUE.
+ * @param {boolean}  showSalesperson show the Assigned SA column. Default TRUE.
+ *
+ * Both flags default to true so the store dashboards keep their existing
+ * columns unchanged. They exist for WAREHOUSE-facing reuse: the Shopify orders
+ * dashboard is read by production staff who must not see who bought the
+ * garment, and a Shopify order has no human SA (`salesperson` is a constant
+ * stand-in), so that column carries no information there either.
  */
 
 const todayISO = () => {
@@ -31,7 +39,13 @@ const dayKey = (value) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-export default function StoreCalendarTab({ orders, storeLabel, onOpenOrder }) {
+export default function StoreCalendarTab({
+  orders,
+  storeLabel,
+  onOpenOrder,
+  showClient = true,
+  showSalesperson = true,
+}) {
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(todayISO());
 
@@ -127,8 +141,8 @@ export default function StoreCalendarTab({ orders, storeLabel, onOpenOrder }) {
               <thead>
                 <tr>
                   <th>Order No</th>
-                  <th>Client</th>
-                  <th>Assigned SA</th>
+                  {showClient && <th>Client</th>}
+                  {showSalesperson && <th>Assigned SA</th>}
                   <th>Status</th>
                 </tr>
               </thead>
@@ -141,8 +155,8 @@ export default function StoreCalendarTab({ orders, storeLabel, onOpenOrder }) {
                     title={onOpenOrder ? "Open this order in the Orders tab" : undefined}
                   >
                     <td><span className="scal-mono scal-order-link">{o.order_no || "—"}</span></td>
-                    <td>{o.delivery_name || "—"}</td>
-                    <td>{o.salesperson || "—"}</td>
+                    {showClient && <td>{o.delivery_name || "—"}</td>}
+                    {showSalesperson && <td>{o.salesperson || "—"}</td>}
                     <td>{o.status === "pending_approval" ? "Pending Approval" : (o.status || "—")}</td>
                   </tr>
                 ))}

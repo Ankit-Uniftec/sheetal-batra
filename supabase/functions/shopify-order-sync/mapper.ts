@@ -22,8 +22,14 @@ export type Blocker = { code: string; detail: string };
 
 // ─── Constants ──────────────────────────────────────────────
 
-export const SHOPIFY_STORE_KEY = "Shopify"; // generate_order_no(p_store) key → SHOP prefix
-const SALESPERSON_LABEL = "Website";
+export const SHOPIFY_STORE_KEY = "Shopify"; // generate_order_no(p_store) key → SHOPIFY prefix
+
+// There is no human SA on a Shopify order, so this stands in wherever the app
+// shows one — including "SALES ASSOCIATE:" on the warehouse work order.
+// Display only: nothing branches on this string (checked), so it is safe to
+// reword. Existing rows keep the older "Website" value unless remapped; both
+// read as "not a person", which is all this field has to convey here.
+const SALESPERSON_LABEL = "Shopify";
 
 // "NA"-style markers the app treats as "no such garment piece". Mirrors
 // hasGarmentOption() in src/utils/barcodeService.js so we never mint a phantom
@@ -279,7 +285,7 @@ function mapLineItem(
 
     // Much of the app keys off items[0].sync_enabled — set it explicitly.
     // NOTE this makes the order LXRTS-TYPE, which is separate from its
-    // SHOP channel. Both are true. See barcodeService.js.
+    // SHOPIFY channel. Both are true. See barcodeService.js.
     sync_enabled: true,
   };
 }
@@ -350,7 +356,9 @@ function resolveDeliveryDate(
 export function buildOrderComponents(order: any) {
   const components: Record<string, unknown>[] = [];
   const orderNo: string = order?.order_no || "";
-  // "SB-SHOP-0726-000123" → "SHOP" (4 chars, same class as the existing LDHC)
+  // "SB-SHOPIFY-0726-000123" → "SHOPIFY". Read by dash position, so the code's
+  // LENGTH is irrelevant — only that it contains no dash. Legacy orders still on
+  // the old "SHOP" code work identically here.
   const storeCode = orderNo.split("-")[1] || "SB";
   const seqPart = orderNo.split("-").pop() || "000000";
 
@@ -500,6 +508,11 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
 
   const orderRow: Record<string, unknown> = {
     shopify_order_id: clean(node?.id),
+    // Shopify's own human-facing number, e.g. "#26925". Warehouse staff and the
+    // catalogue team refer to orders by THIS, not our SB- number, so it shows on
+    // the order card and the warehouse work order. Display only — idempotency is
+    // on shopify_order_id (the GID), which is what is actually unique.
+    shopify_order_name: clean(node?.name) || null,
     created_at: createdAt,
     status: "order_received",
 
@@ -557,7 +570,9 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
     is_split_payment: false,
 
     // Placer + channel marker. salesperson_store must match the
-    // generate_order_no key so the SHOP prefix is minted.
+    // generate_order_no key so the SHOPIFY prefix is minted. (The KEY is the
+    // string 'Shopify' and did NOT change in the rename — only the store code
+    // the function emits did.)
     salesperson: SALESPERSON_LABEL,
     salesperson_store: SHOPIFY_STORE_KEY,
 

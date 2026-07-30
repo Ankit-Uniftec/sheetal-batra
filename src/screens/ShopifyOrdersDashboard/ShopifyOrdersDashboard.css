@@ -373,17 +373,19 @@
     gap: 16px;
 }
 
+/* ─── Order card ──────────────────────────────────────────────
+   Structure and naming mirror the retail order card
+   (AssociateDashboard.css .ad-order-*): an uppercase label-over-value header
+   strip, then a thumb + Title-case "Label:" detail rows.
+
+   NOT clickable — no cursor:pointer and no hover lift. This screen is
+   warehouse-facing and deliberately opens no order-detail page, so the card
+   must not look interactive. The buttons inside it are the only controls. */
 .sho-order-card {
     background: #fff;
     border: 1px solid #D4D4D4;
     border-radius: 12px;
     padding: 16px 18px;
-    cursor: pointer;
-    transition: box-shadow 0.15s;
-}
-
-.sho-order-card:hover {
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
 }
 
 .sho-order-card.flagged {
@@ -401,65 +403,88 @@
     margin-bottom: 14px;
 }
 
-.sho-order-headline {
+.sho-header-info {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    gap: 24px;
     flex-wrap: wrap;
+    align-items: flex-start;
 }
 
-.sho-order-no {
-    font-size: 14px;
+.sho-header-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sho-header-label {
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.sho-header-value {
+    font-size: 13px;
     font-weight: 600;
     color: #333;
     font-variant-numeric: tabular-nums;
 }
 
-.sho-order-actions {
+.sho-header-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
 }
 
-.sho-order-body {
+.sho-order-content {
     display: flex;
-    gap: 16px;
+    gap: 20px;
     align-items: flex-start;
 }
 
-.sho-thumb {
-    flex: 0 0 110px;
-    width: 110px;
-    height: 130px;
-    border-radius: 8px;
+.sho-product-thumb {
+    flex-shrink: 0;
+}
+
+.sho-product-thumb img {
+    width: 120px;
+    height: 150px;
     object-fit: cover;
-    background: #faf6e8;
+    border-radius: 8px;
     border: 1px solid #f0e8d4;
+    background: #faf6e8;
 }
 
-.sho-thumb-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #d5b85a;
-    font-weight: 700;
-    letter-spacing: 1px;
-    font-size: 18px;
-}
-
-.sho-order-main {
+.sho-product-details {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
-.sho-product {
-    font-size: 14px;
+.sho-product-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Gold label, matching .ad-order-label's colour (but at a sane size — the
+   retail one is 28px, which is a bug there, not a style to copy). */
+.sho-order-label {
+    font-size: 12px;
     font-weight: 600;
+    color: #c9a34a;
+    white-space: nowrap;
+}
+
+.sho-value {
+    font-size: 13px;
     color: #333;
+    font-weight: 500;
 }
 
 .sho-more {
@@ -468,55 +493,21 @@
     color: #8B7355;
 }
 
-.sho-meta {
+.sho-details-grid {
     display: flex;
+    gap: 32px;
     flex-wrap: wrap;
-    gap: 18px;
+    margin-top: 2px;
 }
 
-.sho-meta span {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 13px;
-    color: #333;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-}
-
-.sho-meta label {
-    font-size: 10px;
-    font-weight: 600;
-    color: #888;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-.sho-detail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-    gap: 8px 14px;
-    margin-top: 4px;
-}
-
-.sho-detail-grid > div {
+.sho-detail-item {
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
-.sho-detail-grid label {
-    font-size: 10px;
-    font-weight: 600;
-    color: #888;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-.sho-detail-grid span {
-    font-size: 13px;
-    color: #333;
-    font-weight: 500;
+.sho-detail-item .sho-value {
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
 }
 
@@ -544,24 +535,15 @@
     font-weight: 400;
 }
 
-.sho-cod-line {
-    margin-top: 6px;
-    padding: 6px 12px;
-    background: #e3f2fd;
-    color: #1565c0;
-    border-radius: 6px;
-    font-size: 12px;
-    display: inline-block;
-    align-self: flex-start;
-}
-
 /* ─── Production components (one chip per scannable piece) ───── */
 .sho-comp-journey {
     display: grid;
-    /* Wide enough for a full SHOP-000119-TOP barcode plus its stage badge —
-       at 220px the barcode ellipsised to "SHOP-00011…", which is unusable
-       when someone is matching a chip against a physical tag. */
-    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    /* Wide enough for a full SHOPIFY-000119-TOP barcode plus its stage badge.
+       At 220px the barcode ellipsised to "SHOP-00011…", which is unusable when
+       someone is matching a chip against a physical tag; 290px fitted the old
+       15-char SHOP- barcode, and the rename to SHOPIFY- added 3 characters, so
+       this grew again. Keep it ahead of the longest barcode. */
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
     gap: 8px;
     margin-top: 14px;
     padding-top: 14px;
@@ -606,6 +588,26 @@
     text-overflow: ellipsis;
 }
 
+.sho-comp-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* A piece QC sent back to an earlier stage. Same treatment as
+   WarehouseDashboard's .wd-comp-rework-tag so the floor reads it identically
+   on either screen. */
+.sho-comp-rework-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #c62828;
+    background: #ffebee;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
 .sho-comp-actions {
     display: flex;
     flex-wrap: wrap;
@@ -616,19 +618,148 @@
     border-top: 1px solid #f0f0f0;
 }
 
-.sho-issues {
-    margin: -8px 0 0;
-    padding: 12px 18px 12px 38px;
-    background: #fff8e1;
-    border: 1px solid #ffe082;
-    border-top: none;
-    border-radius: 0 0 10px 10px;
-    font-size: 12px;
-    color: #8B7355;
+/* ─── Needs Review modal ─────────────────────────────────────── */
+.sho-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
 }
 
-.sho-issues li {
-    margin: 3px 0;
+.sho-modal {
+    background: #fff;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 620px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.sho-modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 22px;
+    border-bottom: 1px solid #f0e8d4;
+}
+
+.sho-modal-title {
+    font-family: "Athleas", "Futura", serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: #d5b85a;
+    margin: 0;
+}
+
+.sho-modal-sub {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #888;
+    font-variant-numeric: tabular-nums;
+}
+
+.sho-modal-close {
+    background: none;
+    border: none;
+    font-size: 26px;
+    line-height: 1;
+    color: #999;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.sho-modal-close:hover {
+    color: #333;
+}
+
+.sho-modal-body {
+    padding: 18px 22px 22px;
+    overflow-y: auto;
+}
+
+.sho-modal-lead {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.55;
+}
+
+.sho-issue-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sho-issue {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+.sho-issue-title {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #8a6d1f;
+}
+
+.sho-issue-line {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.sho-issue-tag {
+    display: inline-block;
+    min-width: 92px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #a08a3c;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 6px;
+}
+
+/* The mapper's own message — the specific product/field at fault. */
+.sho-issue-detail {
+    margin: 8px 0 0;
+    padding: 6px 8px;
+    background: #fffdf5;
+    border-left: 3px solid #ffe082;
+    font-size: 11px;
+    color: #6b5a2a;
+    line-height: 1.45;
+}
+
+/* Raw enum, kept small for support conversations. */
+.sho-issue-code {
+    margin: 6px 0 0;
+    font-family: "Courier New", monospace;
+    font-size: 10px;
+    color: #b3a678;
+}
+
+.sho-modal-note {
+    margin: 16px 0 0;
+    padding: 12px 14px;
+    background: #f7f7f7;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #555;
+    line-height: 1.55;
 }
 
 /* ─── Responsive ─────────────────────────────────────────────── */
@@ -674,14 +805,25 @@
 }
 
 @media (max-width: 720px) {
-    .sho-order-body {
+    .sho-order-content {
         flex-direction: column;
     }
 
-    .sho-thumb {
+    .sho-product-thumb {
+        width: 100%;
+    }
+
+    .sho-product-thumb img {
         width: 100%;
         height: 200px;
-        flex: 0 0 auto;
+    }
+
+    .sho-header-info {
+        gap: 14px;
+    }
+
+    .sho-details-grid {
+        gap: 8px 20px;
     }
 
     .sho-user-name {
