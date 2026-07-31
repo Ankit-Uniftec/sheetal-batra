@@ -1,0 +1,709 @@
+/* ============================================================================
+   Stock tabs — Warehouses + Stock Exchange
+   ----------------------------------------------------------------------------
+   Styles for the two shared components in this folder (WarehouseTab,
+   StockExchangeTab). These tabs originally lived inside InventoryDashboard and
+   relied on InventoryDashboard.css; they are now mountable from any dashboard
+   (Inventory, B2B Merchandiser, …), so their styles travel with them.
+
+   Class names keep the `inv-` prefix so the JSX did not need to change. The
+   prefix does not collide with any other dashboard stylesheet (`merch-`, etc.).
+
+   A handful of rules below are intentionally DUPLICATED from
+   InventoryDashboard.css (search box, SKU chip, spinner, expand column) — the
+   Inventory tab body still uses them there, so they could not simply be moved.
+   Keep the two copies in sync if either changes.
+   ========================================================================== */
+
+/* ==================== TAB ROOTS ==================== */
+
+/* Both roots must be able to scroll inside a fixed-height flex column (the
+   merchandiser dashboard's .merch-tab-wrapper). Inside InventoryDashboard's
+   plain-block .inv-content this is a no-op. */
+.inv-warehouse-tab,
+.inv-exchange-tab {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ==================== TAB SHARED STYLES ==================== */
+
+.inv-tab-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+  color: #666;
+}
+
+.inv-tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.inv-tab-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.inv-create-btn {
+  background: linear-gradient(135deg, #d5b85a 0%, #c4a94d 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(213, 184, 90, 0.3);
+}
+
+.inv-create-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(213, 184, 90, 0.4);
+}
+
+.inv-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ==================== WAREHOUSE TAB ==================== */
+
+.inv-warehouse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inv-warehouse-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.inv-warehouse-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.inv-warehouse-card.expanded {
+  box-shadow: 0 4px 20px rgba(213, 184, 90, 0.15);
+}
+
+.inv-warehouse-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  transition: background 0.15s;
+}
+
+.inv-warehouse-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.inv-warehouse-info:hover .inv-warehouse-name {
+  color: #d5b85a;
+}
+
+.inv-edit-btn {
+  background: transparent;
+  border: 1px solid #d5b85a;
+  color: #d5b85a;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inv-edit-btn:hover {
+  background: #d5b85a;
+  color: white;
+}
+
+.inv-form-empty-items {
+  font-size: 13px;
+  color: #999;
+  font-style: italic;
+  margin: 0 0 10px;
+  padding: 10px;
+  background: #fafaf7;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.inv-warehouse-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.inv-warehouse-location {
+  font-size: 13px;
+  color: #888;
+}
+
+.inv-warehouse-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inv-warehouse-stock-badge {
+  font-size: 13px;
+  color: #666;
+  background: #f5f0e8;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.inv-warehouse-arrow {
+  font-size: 12px;
+  color: #999;
+  width: 20px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.inv-warehouse-stock {
+  padding: 0 20px 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.inv-stock-empty {
+  text-align: center;
+  color: #999;
+  padding: 20px;
+  font-size: 14px;
+}
+
+.inv-stock-search {
+  width: 100%;
+  max-width: 320px;
+  margin: 12px 0 8px;
+  padding: 7px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.inv-stock-search:focus {
+  border-color: #d5b85a;
+}
+
+.inv-stock-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.inv-stock-table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 2px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.inv-stock-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+/* ==================== MODAL ==================== */
+
+.inv-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.inv-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.inv-modal-lg {
+  max-width: 600px;
+}
+
+.inv-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 20px;
+}
+
+.inv-modal-field {
+  margin-bottom: 16px;
+}
+
+.inv-modal-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.inv-modal-field input,
+.inv-modal-field select,
+.inv-modal-field textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #eee;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.inv-modal-field input:focus,
+.inv-modal-field select:focus,
+.inv-modal-field textarea:focus {
+  border-color: #d5b85a;
+}
+
+.inv-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.inv-modal-cancel {
+  padding: 10px 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.inv-modal-cancel:hover {
+  background: #f5f5f5;
+}
+
+.inv-modal-submit {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #d5b85a 0%, #c4a94d 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(213, 184, 90, 0.3);
+}
+
+.inv-modal-submit:hover {
+  transform: translateY(-1px);
+}
+
+.inv-modal-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ==================== TRANSFER FORM ==================== */
+
+.inv-transfer-warehouses {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.inv-transfer-warehouses .inv-modal-field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.inv-transfer-arrow {
+  font-size: 24px;
+  color: #d5b85a;
+  font-weight: 700;
+  padding-bottom: 10px;
+}
+
+.inv-transfer-products {
+  margin-bottom: 16px;
+}
+
+.inv-transfer-products > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 10px;
+}
+
+.inv-transfer-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.inv-transfer-product-select {
+  flex: 1;
+  padding: 10px 14px;
+  border: 2px solid #eee;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.inv-transfer-product-select:focus {
+  border-color: #d5b85a;
+}
+
+.inv-transfer-qty {
+  width: 80px;
+  padding: 10px 14px;
+  border: 2px solid #eee;
+  border-radius: 8px;
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+}
+
+.inv-transfer-qty:focus {
+  border-color: #d5b85a;
+}
+
+.inv-transfer-remove {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: #ffebee;
+  color: #c62828;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.inv-transfer-remove:hover {
+  background: #ffcdd2;
+}
+
+.inv-transfer-add {
+  background: none;
+  border: 1px dashed #d5b85a;
+  color: #d5b85a;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: all 0.2s;
+}
+
+.inv-transfer-add:hover {
+  background: #fdf8ed;
+}
+
+/* ==================== STOCK EXCHANGE TABLE ==================== */
+
+.inv-exchange-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.inv-exchange-filter {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  font-family: inherit;
+  outline: none;
+}
+
+.inv-exchange-filter:focus {
+  border-color: #d5b85a;
+}
+
+.inv-exchange-filter-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+}
+
+.inv-exchange-table-wrapper {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.inv-exchange-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.inv-exchange-table thead {
+  background: #fafafa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.inv-exchange-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #777;
+}
+
+.inv-exchange-table th.inv-th-expand {
+  width: 36px;
+  padding: 10px 4px;
+}
+
+.inv-exchange-row {
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.inv-exchange-row:hover {
+  background: #fafafa;
+}
+
+.inv-exchange-row.expanded {
+  background: #fff8e1;
+}
+
+.inv-exchange-row td {
+  padding: 12px 14px;
+  vertical-align: middle;
+}
+
+.inv-exchange-expand-cell {
+  width: 36px;
+  padding: 12px 4px !important;
+  text-align: center;
+}
+
+.inv-exchange-chevron {
+  display: inline-block;
+  font-size: 18px;
+  color: #999;
+  transition: transform 0.15s;
+  line-height: 1;
+}
+
+.inv-exchange-chevron.open {
+  transform: rotate(90deg);
+  color: #d5b85a;
+}
+
+.inv-exchange-date-cell,
+.inv-exchange-by-cell {
+  color: #777;
+  white-space: nowrap;
+}
+
+.inv-exchange-notes-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #555;
+}
+
+.inv-exchange-detail-row td {
+  padding: 0;
+  background: #faf6e8;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.inv-exchange-items-panel {
+  padding: 14px 36px;
+}
+
+.inv-exchange-status {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.inv-exchange-status.completed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.inv-exchange-status.pending {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.inv-exchange-status.cancelled {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* ==================== DUPLICATED FROM InventoryDashboard.css ====================
+   These are also used by the Inventory tab body, so they stay defined there too.
+   Kept here so the tabs render correctly on dashboards that never load
+   InventoryDashboard.css. Keep both copies in sync.
+   ============================================================================ */
+
+.inv-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #d5b85a;
+  border-radius: 50%;
+  /* Prefixed keyframe — the unprefixed `spin` is a global name declared by
+     several dashboard stylesheets and may not be loaded on the host page. */
+  animation: inv-spin 1s linear infinite;
+}
+
+@keyframes inv-spin {
+  to { transform: rotate(360deg); }
+}
+
+.inv-search-wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
+.inv-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+}
+
+.inv-search-input {
+  width: 100%;
+  padding: 12px 40px 12px 44px;
+  border: 2px solid #eee;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: white;
+}
+
+.inv-search-input:focus {
+  border-color: #d5b85a;
+  box-shadow: 0 0 0 3px rgba(213, 184, 90, 0.1);
+}
+
+.inv-search-clear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #eee;
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inv-search-clear:hover {
+  background: #ddd;
+}
+
+.inv-sku {
+  font-family: "SF Mono", Monaco, monospace;
+  font-size: 12px;
+  color: #666;
+  background: #f5f5f5;
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.inv-th-expand {
+  width: 36px;
+  min-width: 36px;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 900px) {
+  .inv-transfer-warehouses {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .inv-transfer-arrow {
+    text-align: center;
+    padding: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .inv-search-wrapper {
+    max-width: 100%;
+  }
+}
