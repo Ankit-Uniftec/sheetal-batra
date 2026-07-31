@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { usePopup } from "../../components/Popup";
-import { usePeriodFilter } from "../../components/PeriodFilter";
+import { usePopup } from "../Popup";
+import { usePeriodFilter } from "../PeriodFilter";
+import "./StockTabs.css";
 
 export default function WarehouseTab() {
   const { showPopup, PopupComponent } = usePopup();

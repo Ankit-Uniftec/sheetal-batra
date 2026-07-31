@@ -22,6 +22,8 @@ import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange } from "../../components/PeriodFilter";
 import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 import { startB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
+import WarehouseTab from "../../components/stock/WarehouseTab";
+import StockExchangeTab from "../../components/stock/StockExchangeTab";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -904,6 +906,8 @@ export default function B2bMerchandiserDashboard() {
                         <a className={`merch-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`merch-menu-item ${activeTab === "consignment" ? "active" : ""}`} onClick={() => { setActiveTab("consignment"); setShowSidebar(false); }}>Consignment</a>
                         <a className={`merch-menu-item ${activeTab === "analytics" ? "active" : ""}`} onClick={() => { setActiveTab("analytics"); setShowSidebar(false); }}>Analytics</a>
+                        <a className={`merch-menu-item ${activeTab === "warehouses" ? "active" : ""}`} onClick={() => { setActiveTab("warehouses"); setShowSidebar(false); }}>Warehouses</a>
+                        <a className={`merch-menu-item ${activeTab === "exchanges" ? "active" : ""}`} onClick={() => { setActiveTab("exchanges"); setShowSidebar(false); }}>Stock Exchange</a>
                         {profile?.can_place_b2b_stock_orders && (
                             <a
                                 className="merch-menu-item"
@@ -1570,6 +1574,17 @@ export default function B2bMerchandiserDashboard() {
                             <div className="merch-profile-row"><span className="merch-plabel">Store</span><span className="merch-pvalue">{profile?.store_name || "N/A"}</span></div>
                         </div>
                     </div>
+                )}
+
+                {/* ===== WAREHOUSES TAB ===== */}
+                {/* Shared with the Inventory dashboard — see src/components/stock/. */}
+                {activeTab === "warehouses" && (
+                    <div className="merch-tab-wrapper"><WarehouseTab /></div>
+                )}
+
+                {/* ===== STOCK EXCHANGE TAB ===== */}
+                {activeTab === "exchanges" && (
+                    <div className="merch-tab-wrapper"><StockExchangeTab /></div>
                 )}
             </div>
 
