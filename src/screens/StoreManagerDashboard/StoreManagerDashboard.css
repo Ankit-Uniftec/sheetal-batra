@@ -500,13 +500,19 @@
     text-transform: capitalize;
 }
 
+/* Keys from getOrderProgressStatusKey (shared order-status ladder). */
+.sm-status-badge.received { background: #fff3e0; color: #ef6c00 !important; }
+.sm-status-badge.inprod { background: #e3f2fd; color: #1565c0 !important; }
+.sm-status-badge.completed { background: #e8f5e9; color: #2e7d32 !important; }
+.sm-status-badge.dispatched { background: #ede7f6; color: #4527a0 !important; }
+.sm-status-badge.delivered { background: #f3e5f5; color: #7b1fa2 !important; }
+.sm-status-badge.cancelled { background: #ffebee; color: #c62828 !important; }
+.sm-status-badge.exchange { background: #eceff1; color: #455a64 !important; }
+/* Legacy keys still referenced by older markup on this screen. */
 .sm-status-badge.pending { background: #fff3e0; color: #ef6c00 !important; }
+.sm-status-badge.order_received { background: #fff3e0; color: #ef6c00 !important; }
 .sm-status-badge.in_production { background: #e3f2fd; color: #1565c0 !important; }
 .sm-status-badge.ready { background: #e8f5e9; color: #2e7d32 !important; }
-.sm-status-badge.dispatched { background: #f3e5f5; color: #7b1fa2 !important; }
-.sm-status-badge.delivered,
-.sm-status-badge.completed { background: #e8f5e9; color: #388e3c !important; }
-.sm-status-badge.cancelled { background: #ffebee; color: #c62828 !important; }
 
 .sm-flagged-row { background: #fff8e1 !important; }
 

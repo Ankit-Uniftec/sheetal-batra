@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import "./ProductionManagerDashboard.css";
 import Logo from "../../../images/logo.png";
@@ -27,15 +27,15 @@ import { fetchScanReport, scanReportCsv } from "../../../utils/scanReport";
 import useTabParam from "../../../hooks/useTabParam";
 import useFilterParam from "../../../hooks/useFilterParam";
 import Paginator from "../../../components/Paginator";
-import Badge from "../../../components/Badge";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../../../components/PeriodFilter";
 import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfLazy";
-import { PRODUCTION_STAGES, getStageLabel, getStageColor, getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_SEGMENTS, getOrderStatusLabel } from "../../../utils/barcodeService";
-import { computeChannelBreakdown, computeStatusStats, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady } from "../../../utils/productionMetrics";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_SEGMENTS, getOrderStatusLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../../utils/barcodeService";
+import { computeChannelBreakdown, computeStatusStats, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady, isOrderStillRunning } from "../../../utils/productionMetrics";
+import downloadCsv from "../../../utils/downloadCsv";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
@@ -123,20 +123,25 @@ const StatCard = ({ title, value, subtitle, highlight, icon, onClick }) => (
     </div>
 );
 
-// ==================== STORE / CHANNEL FILTER OPTIONS ====================
-// Every channel the client operates — the single source of truth for both the
-// "Store" order filter and the channel breakdowns. Delhi, Ludhiana and
-// Exhibitions all resolve to the "offline" channel key, so they're disambiguated
-// by salesperson_store; the rest match on getOrderChannelKey. The set is
-// exhaustive (website included) so a breakdown's parts always sum to the total.
-// Channel comes from the order-number prefix (see getOrderChannelKey). The two
-// physical stores share the "offline" channel, so they still split on the store
-// name.
+// ==================== CHANNEL BREAKDOWN OPTIONS ====================
+// Every channel the client operates — the source of truth for the Overview's
+// channel breakdowns (Currently Running Late by Channel, Orders vs Late).
+// Delhi, Ludhiana and Exhibition all resolve to the "offline" channel key, so
+// they're disambiguated by salesperson_store; the rest match on
+// getOrderChannelKey. The set is exhaustive (website included) so a breakdown's
+// parts always sum to the total. Channel comes from the order-number prefix
+// (see getOrderChannelKey). The two physical stores share the "offline"
+// channel, so they still split on the store name.
+//
+// The All Orders list does NOT filter through this — it uses the single "All
+// Channels" <select>, which matches on getOrderChannelLabel. `value` here must
+// therefore stay identical to that label (note the SINGULAR "Exhibition"), so
+// clicking a by-channel row drills into the matching orders.
 //
 // There is no LXRTS option: LXRTS is an order TYPE (Shopify-synced product),
 // not a channel — those orders sit under whichever channel they were placed in.
 // "Shopify" here is different: it is the real channel for orders the CUSTOMER
-// placed on the website (prefix SB-SHOP-). See CHANNEL_BY_ORDER_PREFIX.
+// placed on the website (prefix SB-SHOPIFY-). See CHANNEL_BY_ORDER_PREFIX.
 //
 // Keep this list in step with CHANNEL_SEGMENTS in barcodeService.js — it is
 // hand-written rather than derived, so a channel added there is silently
@@ -148,11 +153,9 @@ const STORE_FILTER_OPTIONS = [
     { value: "B2B", label: "B2B", color: "#d5b85a", match: (o) => getOrderChannelKey(o) === "b2b" },
     { value: "Private", label: "Private", color: "#8e24aa", match: (o) => getOrderChannelKey(o) === "private" },
     { value: "Comms", label: "Comms", color: "#1565c0", match: (o) => getOrderChannelKey(o) === "comms" },
-    { value: "Exhibitions", label: "Exhibitions", color: "#6d4c41", match: (o) => getOrderChannelKey(o) === "exhibition" },
+    { value: "Exhibition", label: "Exhibition", color: "#6d4c41", match: (o) => getOrderChannelKey(o) === "exhibition" },
     { value: "Stock", label: "Stock", color: "#546e7a", match: (o) => getOrderChannelKey(o) === "stock" },
 ];
-const matchesStoreFilter = (order, selected) =>
-    STORE_FILTER_OPTIONS.some((opt) => selected.includes(opt.value) && opt.match(order));
 
 // "Currently running late" — the single source of truth for every delayed
 // figure on this dashboard (the In-Progress/Delayed card, the Currently
@@ -161,12 +164,34 @@ const matchesStoreFilter = (order, selected) =>
 // counts as done (out of production), same as delivered/completed/cancelled, so
 // the number drops the moment an order is dispatched/finished. Past its
 // customer delivery date is the "late" test.
+// Heading suffix for the QC History tab, describing the panel's LIVE result
+// filter. Keyed by the panel's own filter values ('' = unscoped, no suffix).
+const QC_RESULT_SUFFIX = {
+    fail: "showing failures",
+    pass: "showing passes",
+    override: "showing overrides",
+};
+
 const DONE_STATUSES = new Set(["delivered", "completed", "dispatched", "cancelled"]);
 const isOrderRunningLate = (o, now = new Date()) => {
     const s = (o.status || "").toLowerCase();
     if (DONE_STATUSES.has(s) || o.warehouse_stage === "dispatched") return false;
     return o.delivery_date && new Date(o.delivery_date) < now;
 };
+
+// Component stages that mean "production is finished with this piece — it is
+// waiting to go out". This is the Dispatch Queue's source set.
+//
+// Verified against PROD (Aug 2026): `packaging_dispatch` has ZERO rows — the
+// floor scans pieces from production straight to `dispatched`, so a queue keyed
+// on packaging_dispatch alone is permanently empty while ~600 pieces really are
+// awaiting dispatch. packaging_dispatch is kept in the set so nothing breaks if
+// that scan step is adopted later.
+//
+// Ordered most-finished first, so a piece is labelled by the furthest point it
+// has reached.
+const READY_TO_DISPATCH_ORDER = ["packaging_dispatch", "final_qc_passed", "production_complete"];
+const READY_TO_DISPATCH = new Set(READY_TO_DISPATCH_ORDER);
 
 // The distinct products (item_index) still dispatchable in an order's component
 // list. An order can hold several products, each with its own pieces; >1 here
@@ -211,6 +236,11 @@ export default function ProductionManagerDashboard() {
     // the tab the user was on, and browser Back moves between tabs. The hook
     // still honours location.state?.activeTab for the flows that push it.
     const [activeTab, setActiveTab] = useTabParam("overview");
+    // Direct search-param access, for handlers that must set the tab AND several
+    // filters in ONE navigation (see goToOrder). Calling the individual setters
+    // in sequence loses all but the last, because useTabParam pushes while
+    // useFilterParam replaces.
+    const [, setSearchParams] = useSearchParams();
     // Sub-tab within a merged section (Delivery Report → dispatch/report,
     // Vendors → directory/external). Plain state, NOT a second useTabParam —
     // two hooks both writing searchParams with functional updaters clobber
@@ -219,6 +249,25 @@ export default function ProductionManagerDashboard() {
     const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
+    // Fetched-once guard: QC History and Production both read qcHistory, so the
+    // paged fetch must not re-run every time the user switches between them.
+    const [qcHistoryLoaded, setQcHistoryLoaded] = useState(false);
+    // Preselected Pass/Fail scope for the QC History panel, set when the user
+    // drills in from the QC Failures KPI card ("fail") vs opening the tab from
+    // the menu (""). Kept in the URL so Back/refresh preserve the drill-down,
+    // the same reason tab state lives there.
+    const [qcResultFilter, setQcResultFilter] = useFilterParam("qcr", "");
+    // What the QC History panel is ACTUALLY showing right now — the panel owns
+    // the filters and reports its live scope up. Display-only; the panel stays
+    // the source of truth for the filtering itself.
+    //
+    // Must not be derived from qcResultFilter: that URL param only SEEDS the
+    // panel (initialResult) and never changes again, so a heading driven by it
+    // kept saying "showing failures" after the user switched the dropdown to
+    // Pass.
+    const [qcScope, setQcScope] = useState({ channelLabel: null, result: "" });
+    // Same for the Re-journeys panel — heading reports the live channel scope.
+    const [rjScope, setRjScope] = useState({ channelLabel: null });
     const [reJourneys, setReJourneys] = useState([]);
     const [reJourneysLoading, setReJourneysLoading] = useState(false);
     const [extMovements, setExtMovements] = useState([]);
@@ -254,13 +303,13 @@ export default function ProductionManagerDashboard() {
     const [channelFilter, setChannelFilter] = useFilterParam("channel", "all");
     const [statusTab, setStatusTab] = useFilterParam("status", "all");
     const [sortBy, setSortBy] = useFilterParam("sort", "newest");
-    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false });
+    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false, orderIdSet: null, orderIdSetLabel: "" });
     // Order-date scope for the orders list — shared PeriodFilter (select),
-    // rendered inside the Date Range dropdown panel.
+    // rendered inline in the filter bar as the "Date Range" dropdown.
     const {
         timeline: ordersTimeline, inPeriod: inOrdersPeriod,
         range: ordersPeriodRange, props: ordersPeriodProps,
-    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    } = usePeriodFilter("all", { variant: "select", label: "Date Range:" });
     const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
     // Overview period filter — shared PeriodFilter (scopes the stage cards + business metrics).
     const { control: overviewPeriodControl, timeline: overviewTimeline, inPeriod: inOverviewPeriod } = usePeriodFilter("all", { variant: "pills" });
@@ -286,15 +335,58 @@ export default function ProductionManagerDashboard() {
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
     const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+    // Calendar scope. A month can hold 400+ deliveries (Aug 2026: 471, 154 of
+    // them on one day), so the list is capped and grown on demand — it used to
+    // render every row at once, which was the tab's main lag source.
+    const [calChannel, setCalChannel] = useState("all");
+    const [calLimit, setCalLimit] = useState(25);
+    useEffect(() => { setCalLimit(25); }, [calendarMonth, calendarYear, calChannel, selectedCalendarDate]);
     const [warehousePdfLoading, setWarehousePdfLoading] = useState(null);
 
-    // Delivery Report state — period via the shared PeriodFilter (default:
-    // last 30 days, matching the report's old preset range).
-    const { control: drPeriodControl, range: drPeriodRange } = usePeriodFilter("30d", { variant: "select", label: "Period:" });
+    // Delivery Report state — same pills + channel-in-slot arrangement as the
+    // Dispatch tab, so both sub-tabs filter identically.
+    const { props: drPeriodProps, range: drPeriodRange, timeline: drTimeline } =
+        usePeriodFilter("30d", { variant: "pills" });
+    const drPeriodLabel = periodLabel(drTimeline);
     const [drChannel, setDrChannel] = useState("all");
     const [drStatus, setDrStatus] = useState("all");
     const [drBucket, setDrBucket] = useState("all");
     const [drSearch, setDrSearch] = useState("");
+    // Row caps, grown on demand — the report can hold thousands of rows and the
+    // old hard slice(0, 50) silently hid the rest behind a jump-to-All-Orders
+    // button, so the table could never show what its own count claimed.
+    const [drOpenLimit, setDrOpenLimit] = useState(25);
+    const [drDoneLimit, setDrDoneLimit] = useState(25);
+    useEffect(() => { setDrOpenLimit(25); setDrDoneLimit(25); }, [drPeriodRange, drChannel, drStatus, drBucket, drSearch]);
+
+    // Production tab: same pills + channel bar as Dispatch / Delivery Report.
+    // Default "all" — the Production tab is a live view of what is on the floor
+    // right now, so defaulting to a window would hide long-running work.
+    const { props: prodPeriodProps, inPeriod: inProdPeriod } =
+        usePeriodFilter("all", { variant: "pills" });
+    const [prodChannel, setProdChannel] = useState("all");
+
+    // Dispatch sub-tab: date + channel scope (the same two filters the Delivery
+    // Report offers, via the shared PeriodFilter so every dashboard's time
+    // control looks and behaves identically). Default "all" — the dispatch
+    // queue is a live worklist, so hiding older packed-but-unshipped orders
+    // behind a default window would bury exactly the ones that need chasing.
+    const { props: dispatchPeriodProps, range: dispatchPeriodRange, timeline: dispatchTimeline } =
+        usePeriodFilter("all", { variant: "pills" });
+    // Human label for the selection, so period-scoped cards can name their own
+    // window instead of claiming a hardcoded one.
+    const dispatchPeriodLabel = periodLabel(dispatchTimeline);
+    const [dispatchChannel, setDispatchChannel] = useState("all");
+    // Urgency filter (all | overdue | today | partial), free-text search, and
+    // how many queue rows are rendered. The list is capped and grown on demand
+    // rather than rendered whole — the queue can hold hundreds of orders and
+    // this tab must stay light.
+    const [dispatchFilter, setDispatchFilter] = useState("all");
+    const [dispatchSearch, setDispatchSearch] = useState("");
+    const [dispatchLimit, setDispatchLimit] = useState(50);
+    // Narrowing the queue must restart the row cap — otherwise a limit grown on
+    // the full list carries over and the filtered view renders in one go.
+    useEffect(() => { setDispatchLimit(50); }, [dispatchFilter, dispatchSearch, dispatchChannel, dispatchPeriodRange]);
 
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
@@ -413,17 +505,22 @@ export default function ProductionManagerDashboard() {
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
 
-    // Load QC records (all channels) when the QC History tab opens.
+    // Load QC records (all channels) when a tab that needs them opens.
+    // The Production tab needs them too: qc_records is the ONLY real signal for
+    // the QC Failures and Avg Lead Time cards (orders.qc_fail_reason /
+    // in_production_at are dead columns nothing writes). Fetched once and
+    // reused by both tabs — switching tabs must not refetch ~1000s of rows.
     useEffect(() => {
-        if (activeTab !== "qc_history") return;
+        if (activeTab !== "qc_history" && activeTab !== "production") return;
+        if (qcHistoryLoaded) return;
         let cancelled = false;
         (async () => {
             setQcHistoryLoading(true);
             const recs = await fetchQcRecords({ paged: true });
-            if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+            if (!cancelled) { setQcHistory(recs); setQcHistoryLoaded(true); setQcHistoryLoading(false); }
         })();
         return () => { cancelled = true; };
-    }, [activeTab]);
+    }, [activeTab, qcHistoryLoaded]);
 
     // Load live re-journeys (all channels) when the Re-journeys tab opens.
     useEffect(() => {
@@ -513,25 +610,44 @@ export default function ProductionManagerDashboard() {
         else if (type === "delayedOnly") setFilters(prev => ({ ...prev, delayedOnly: false }));
         else if (type === "dispatchedOnly") setFilters(prev => ({ ...prev, dispatchedOnly: false }));
         else if (type === "dispatchReadyOnly") setFilters(prev => ({ ...prev, dispatchReadyOnly: false }));
+        else if (type === "orderIdSet") setFilters(prev => ({ ...prev, orderIdSet: null, orderIdSetLabel: "" }));
         else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
     };
 
     const clearAllFilters = () => {
-        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], store: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false });
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false, orderIdSet: null, orderIdSetLabel: "" });
         clearOrdersPeriod();
     };
 
-    // Jump from a QC-history / re-journey / external-vendor row to that order's
-    // card in All Orders: switch tab, search by order #, highlight + scroll, then
-    // auto-clear the highlight. Same flow the notification bell uses. Resets other
-    // filters so nothing hides the target (channel/status view is "all" for PM).
+    // Jump from any reporting row to that order's card in All Orders: switch
+    // tab, search by order #, highlight + scroll, then auto-clear the highlight.
+    // Resets the other filters so nothing hides the target.
+    //
+    // Used by QC History, Re-journeys, External Vendors, the notification bell,
+    // and (via openOrderInList) every row on the Production, Dispatch, Delivery
+    // Report and Calendar tabs.
     const goToOrder = (orderId, orderNo) => {
-        setActiveTab("orders");
-        setStatusTab("all");
-        setChannelFilter("all");
-        clearAllFilters();
-        setOrderSearchField("order_no");
-        setOrderSearch(orderNo || "");
+        // ONE navigation for every URL-backed value. activeTab, statusTab,
+        // channelFilter, orderSearchField and orderSearch are all search params;
+        // calling their setters in sequence used to leave the user on the
+        // current tab, because useTabParam PUSHES while useFilterParam REPLACES
+        // — the replace landed last and discarded the pushed tab entry. Writing
+        // the params together is the same fix useClearFilterParams applies.
+        setSearchParams((prev) => {
+            const p = new URLSearchParams(prev);
+            p.set("tab", "orders");
+            p.delete("status");        // "all"       — default, keep the URL clean
+            p.delete("channel");       // "all"       — default
+            p.delete("qf");            // "order_no"  — default
+            if (orderNo) p.set("q", orderNo); else p.delete("q");
+            return p;
+        });
+        // Plain useState — unaffected by the search-param batching above, so
+        // these still need their own setters. The orders period is one of them
+        // (usePeriodFilter holds state locally); it must be cleared or an order
+        // outside the current window lands on an empty list.
+        clearOrdersPeriod();
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false, orderIdSet: null, orderIdSetLabel: "" });
         setCurrentPage(1);
         setHighlightOrderId(orderId);
         setTimeout(() => {
@@ -545,7 +661,7 @@ export default function ProductionManagerDashboard() {
     // jump to the All Orders tab (status reset to "all" so nothing else hides it).
     // kind: 'both' (whole card), 'internal' (in-house sub-count), 'external' (vendor).
     const handleStageCardClick = (stageKey, kind = "both") => {
-        setFilters(prev => ({ ...prev, stage: [stageKey], stageKind: kind }));
+        setFilters(prev => ({ ...prev, stage: [stageKey], stageKind: kind, orderIdSet: null, orderIdSetLabel: "" }));
         setStatusTab("all");
         setActiveTab("orders");
     };
@@ -559,12 +675,12 @@ export default function ProductionManagerDashboard() {
     const showAllFromReport = (which) => {
         setChannelFilter(drChannel);
         setStatusTab(which === "open" ? "unfulfilled" : "completed");
-        setFilters(prev => ({ ...prev, delayedOnly: which === "open" }));
+        setFilters(prev => ({ ...prev, delayedOnly: which === "open", orderIdSet: null, orderIdSetLabel: "" }));
         setActiveTab("orders");
     };
 
     const handleDisposedClick = () => {
-        setFilters(prev => ({ ...prev, disposedOnly: true }));
+        setFilters(prev => ({ ...prev, disposedOnly: true, orderIdSet: null, orderIdSetLabel: "" }));
         setStatusTab("all");
         setActiveTab("orders");
     };
@@ -582,10 +698,34 @@ export default function ProductionManagerDashboard() {
     };
 
     // Drill from a "Currently Running Late by Channel" row into that channel's
-    // late orders: the delayed filter plus the store filter for just that channel.
-    const handleDelayedChannelClick = (storeValue) => {
-        setFilters(prev => ({ ...prev, delayedOnly: true, store: [storeValue] }));
+    // late orders: the delayed filter, scoped by the All Orders channel select.
+    // The row's key is a STORE_FILTER_OPTIONS `value`, which is kept identical
+    // to getOrderChannelLabel so it feeds channelFilter directly.
+    const handleDelayedChannelClick = (channelValue) => {
+        setFilters(prev => ({ ...prev, delayedOnly: true }));
         setStatusTab("unfulfilled");
+        setChannelFilter(channelValue);
+        setActiveTab("orders");
+    };
+
+    // Drill from the "QC Failures" KPI card into the QC History tab, already
+    // scoped to failures. Overrides are excluded there too, so the row count
+    // reconciles with the card.
+    const handleQcFailuresClick = () => {
+        setQcResultFilter("fail");
+        setActiveTab("qc_history");
+    };
+
+    // Drill from the "Delayed" KPI card into the delayed orders list — the same
+    // delayedOnly filter every other delayed figure on this dashboard uses, so
+    // the list length matches the card.
+    const handleDelayedClick = () => {
+        setFilters(prev => ({
+            ...prev,
+            delayedOnly: true, disposedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false,
+            stage: [], stageKind: "both", orderIdSet: null, orderIdSetLabel: "",
+        }));
+        setStatusTab("all");
         setChannelFilter("all");
         setActiveTab("orders");
     };
@@ -593,9 +733,85 @@ export default function ProductionManagerDashboard() {
     // Drill from the "Dispatch Backlog" card into orders that have a component
     // ready at the packaging_dispatch stage.
     const handleDispatchBacklogClick = () => {
-        setFilters(prev => ({ ...prev, dispatchReadyOnly: true }));
+        setFilters(prev => ({ ...prev, dispatchReadyOnly: true, orderIdSet: null, orderIdSetLabel: "" }));
         setStatusTab("all");
         setChannelFilter("all");
+        setActiveTab("orders");
+    };
+
+    // Production tab export — every order still ON THE FLOOR in the current
+    // period + channel scope, one row each, with where it is sitting and how
+    // late it is. That is the list a PM actually chases; the bottleneck table
+    // above it is a summary OF this list, so exporting the underlying orders is
+    // strictly more useful than exporting the five summary rows.
+    const handleProductionExport = () => {
+        const rows = prodOrders.filter(isOrderStillRunning);
+        if (rows.length === 0) {
+            showPopup({ type: "info", title: "Nothing to export", message: "No orders are currently in production for this period and channel." });
+            return;
+        }
+        const now = new Date();
+        // Pieces per order, so the export shows how much work each row carries.
+        const pieceCount = {};
+        prodComponents.forEach((c) => {
+            if (["disposed", "scrapped"].includes(c.current_stage)) return;
+            pieceCount[c.order_id] = (pieceCount[c.order_id] || 0) + 1;
+        });
+        downloadCsv({
+            filename: `production_wip_${prodChannel === "all" ? "all_channels" : prodChannel.toLowerCase().replace(/\s+/g, "_")}`,
+            headers: [
+                "Order No", "Customer", "SA", "Store", "Channel", "Product", "Pieces",
+                "Current Stage", "Days at Stage", "Order Date", "Dispatch By",
+                "Customer Delivery", "Days Late", "Priority", "Status",
+            ],
+            rows: rows.map((o) => {
+                const due = getWarehouseDateObj(o.delivery_date, o.created_at);
+                const daysLate = due
+                    ? Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                        - new Date(due.getFullYear(), due.getMonth(), due.getDate())) / 86400000)
+                    : null;
+                const since = o.warehouse_stage_updated_at || o.created_at;
+                const daysAtStage = since ? Math.floor((now - new Date(since)) / 86400000) : null;
+                return [
+                    o.order_no || "",
+                    getClientName(o) || "",
+                    o.salesperson || "",
+                    o.salesperson_store || "",
+                    getChannelLabel(o),
+                    o.items?.[0]?.product_name || "",
+                    pieceCount[o.id] ?? 0,
+                    getStageLabel(o.warehouse_stage) || o.warehouse_stage || "Order Received",
+                    daysAtStage ?? "",
+                    o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
+                    due ? due.toLocaleDateString("en-GB") : "",
+                    formatDate(o.delivery_date) || "",
+                    // Negative = still has time. Only positive values are "late".
+                    daysLate == null ? "" : daysLate > 0 ? daysLate : "On time",
+                    o.priority || "Normal",
+                    getOrderStatusLabel(o.status),
+                ];
+            }),
+        });
+    };
+
+    // Drill from a Production Stage Bottlenecks row into the orders behind it.
+    // `which` picks the column that was clicked: "overdue" = only the orders
+    // past their T-2 deadline at that stage, "total" = everything sitting there.
+    // The row hands over the exact ids it counted (row.orderIds /
+    // row.overdueOrderIds), so the list length always equals the number clicked.
+    const handleBottleneckClick = (row, which = "overdue") => {
+        const ids = which === "overdue" ? row.overdueOrderIds : row.orderIds;
+        if (!ids || ids.length === 0) return;
+        setChannelFilter("all");
+        setStatusTab("all");
+        setFilters(prev => ({
+            ...prev,
+            delayedOnly: false, disposedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false,
+            stage: [], stageKind: "both",
+            orderIdSet: new Set(ids),
+            orderIdSetLabel: `${which === "overdue" ? "Overdue at" : "At"} ${row.name}`,
+        }));
+        setCurrentPage(1);
         setActiveTab("orders");
     };
 
@@ -609,7 +825,7 @@ export default function ProductionManagerDashboard() {
             delayedOnly: false, disposedOnly: false, dispatchReadyOnly: false,
             dispatchedOnly: key === "dispatched",
             stage: key === "order_received" ? ["order_received"] : [],
-            stageKind: "both",
+            stageKind: "both", orderIdSet: null, orderIdSetLabel: "",
         }));
         switch (key) {
             case "order_received": setStatusTab("unfulfilled"); break;
@@ -630,7 +846,6 @@ export default function ProductionManagerDashboard() {
         if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `₹${(filters.minPrice / 1000).toFixed(0)}K - ₹${(filters.maxPrice / 1000).toFixed(0)}K` });
         filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p === "unpaid" ? "Unpaid (COD)" : p.charAt(0).toUpperCase() + p.slice(1) }));
         filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
-        filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
         filters.stage.forEach(k => {
             const base = STAGE_GROUPS.find(g => g.key === k)?.label || k;
             const suffix = filters.stageKind === "internal" ? " · In-house" : filters.stageKind === "external" ? " · Vendor" : "";
@@ -641,6 +856,9 @@ export default function ProductionManagerDashboard() {
         if (filters.delayedOnly) chips.push({ type: "delayedOnly", label: "Currently running late" });
         if (filters.dispatchedOnly) chips.push({ type: "dispatchedOnly", label: "Dispatched" });
         if (filters.dispatchReadyOnly) chips.push({ type: "dispatchReadyOnly", label: "Ready for dispatch" });
+        // Bottleneck drill-down — the chip carries its own label ("Stuck at
+        // Dyeing", "Overdue at Dyeing") set by handleBottleneckClick.
+        if (filters.orderIdSet) chips.push({ type: "orderIdSet", label: filters.orderIdSetLabel || "Selected orders" });
         return chips;
     }, [filters, ordersTimeline]);
 
@@ -845,12 +1063,10 @@ export default function ProductionManagerDashboard() {
     };
 
 
-    // Channel + status counts are computed by the same logic over either the
-    // full order set (shared with the Production tab) or the Overview
-    // period-filtered set (overviewOrders). computeStatusStats /
-    // computeProductionMetrics now come from the shared util (src/utils/
-    // productionMetrics.js) so every dashboard shares ONE implementation.
-    const statusStats = useMemo(() => computeStatusStats(orders), [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Status counts come from the shared util (src/utils/productionMetrics.js)
+    // so every dashboard shares ONE implementation. Each tab computes its own
+    // scope: statusStatsOv (Overview period) and statusStatsProd (Production
+    // period + channel). There is no unscoped copy — nothing renders one.
 
     // Human label for the current Overview period (used in the revenue card etc.).
     const overviewPeriodLabel = periodLabel(overviewTimeline);
@@ -907,6 +1123,7 @@ export default function ProductionManagerDashboard() {
         components.forEach((c) => { if (c.current_stage === "packaging_dispatch") s.add(c.order_id); });
         return s;
     }, [components]);
+
 
     const stageStats = useMemo(() => {
         const counts = {};
@@ -979,19 +1196,210 @@ export default function ProductionManagerDashboard() {
         return m;
     }, [orders]);
 
-    // Piece-level opts for computeProductionMetrics (full-orders scope, for the
-    // Production tab). Re-journey % is (live re-journey pieces / active pieces),
-    // matching the Re-journeys tab; Dispatch Backlog is pieces at
-    // packaging_dispatch. Both come from the real order_components signals — the
-    // old orders.is_rework / orders.ready_for_dispatch_at fields are never written.
-    const productionOpts = useMemo(() => ({
-        reJourneyActive: computeReJourneyCount(components),
-        reJourneyDenom: countActiveComponents(components),
-        dispatchReady: computeDispatchReady(components, orderById),
-    }), [components, orderById]);
-    const productionMetrics = useMemo(() => computeProductionMetrics(orders, statusStats, productionOpts), [orders, statusStats, productionOpts]); // eslint-disable-line react-hooks/exhaustive-deps
+    // ==================== DISPATCH TAB DATA ====================
+    // Everything the Dispatch sub-tab shows, derived from the REAL scan signal.
+    //
+    // This whole tab used to read orders.ready_for_dispatch_at / dispatched_at —
+    // dead columns no RPC ever writes (same dead pair called out on the metrics
+    // opts below). Every KPI therefore read 0 and both tables never rendered.
+    // The truth lives in order_components.current_stage.
+    //
+    // QUEUE = READY_TO_DISPATCH, not packaging_dispatch alone. Verified against
+    // PROD (Aug 2026): the floor scans pieces straight from production into
+    // `dispatched` and NEVER uses `packaging_dispatch` — that stage has zero
+    // rows, while 321 pieces sit at final_qc_passed and 281 at
+    // production_complete. Keying the queue on packaging_dispatch alone made it
+    // permanently empty and hid ~600 pieces genuinely awaiting dispatch.
+    // packaging_dispatch stays in the set so the tab keeps working unchanged if
+    // that scan step is adopted later.
+    //
+    // An order joins the queue when ANY of its pieces is ready, because that is
+    // the unit a PM dispatches. The per-stage split is carried through so a
+    // part-ready order can't masquerade as fully packed.
+    //
+    // PERIOD + CHANNEL SCOPE. Both are applied INSIDE this memo, so the KPI
+    // cards and the tables always describe the same set — cards computed over
+    // the full data while the tables showed a filtered slice would contradict
+    // each other on screen.
+    //
+    // The period deliberately applies to a DIFFERENT date per list, because
+    // "when did this happen" means something different on each side:
+    //   queue      -> when the piece was PACKED (readySince)
+    //   dispatched -> when it actually SHIPPED (at)
+    // Filtering the queue by order-creation date would hide exactly the old,
+    // urgent orders the queue exists to surface.
+    const dispatchData = useMemo(() => {
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const from = dispatchPeriodRange ? dispatchPeriodRange.start.getTime() : null;
+        const to = dispatchPeriodRange ? dispatchPeriodRange.end.getTime() : null;
+        // A row with no usable timestamp can't be placed in a bounded window, so
+        // a date-bounded view drops it rather than guessing (never invent a date).
+        const inWindow = (t) => {
+            if (from == null && to == null) return true;
+            if (t == null) return false;
+            return t >= from && t <= to;
+        };
+        const channelOk = (o) => dispatchChannel === "all" || getOrderChannelLabel(o) === dispatchChannel;
 
-    const recentOrders = useMemo(() => orders.slice(0, 10), [orders]);
+        // Pieces grouped per order, tagged by which side of the line they're on.
+        // `inProduction` = still upstream of ready, which is what makes an order
+        // only PARTLY ready. Disposed/scrapped pieces are out of the flow and
+        // must not count as outstanding work.
+        const OUT_OF_FLOW = new Set(["disposed", "scrapped"]);
+        const byOrder = new Map();
+        components.forEach((c) => {
+            if (OUT_OF_FLOW.has(c.current_stage)) return;
+            let g = byOrder.get(c.order_id);
+            if (!g) { g = { ready: [], dispatched: [], inProduction: 0 }; byOrder.set(c.order_id, g); }
+            if (READY_TO_DISPATCH.has(c.current_stage)) g.ready.push(c);
+            else if (c.current_stage === "dispatched") g.dispatched.push(c);
+            else g.inProduction++;
+        });
+
+        // Waiting to go out: the actionable queue.
+        //
+        // Built in TWO scopes, because the date filter is not meaningful for
+        // every figure on this tab:
+        //   pendingAll — channel-filtered only. Deadline figures (Overdue, Due
+        //                Today) are about WHEN AN ORDER IS DUE, so scoping them
+        //                by when a piece became ready is wrong: picking "Today"
+        //                would drop an order that turned ready last week and is
+        //                due today — the exact order that needs dispatching.
+        //   pending    — additionally date-filtered; drives the queue table and
+        //                the wait-time figures, which ARE about the ready date.
+        const pendingAll = [];
+        const pending = [];
+        byOrder.forEach((g, orderId) => {
+            if (g.ready.length === 0) return;
+            const o = orderById[orderId];
+            if (!o || o.status === "cancelled") return;
+            if (!channelOk(o)) return;
+            // Ready-since = the most recent ready-stage scan among its pieces
+            // (stage_updated_at is stamped by advance_component_stage).
+            const readySince = g.ready.reduce((latest, c) => {
+                const t = c.stage_updated_at ? new Date(c.stage_updated_at).getTime() : NaN;
+                return Number.isFinite(t) && (latest == null || t > latest) ? t : latest;
+            }, null);
+            const waitDays = readySince != null ? Math.floor((now - readySince) / 86400000) : null;
+            // Where the ready pieces actually sit. Because the floor skips
+            // packaging_dispatch, "ready" spans several stages — the table shows
+            // which, so the PM knows whether a piece cleared Final QC or merely
+            // finished production.
+            const stageCounts = {};
+            g.ready.forEach((c) => { stageCounts[c.current_stage] = (stageCounts[c.current_stage] || 0) + 1; });
+            const readyStages = READY_TO_DISPATCH_ORDER
+                .filter((k) => stageCounts[k])
+                .map((k) => ({ stage: k, label: getStageLabel(k), count: stageCounts[k] }));
+            const warehouseDue = getWarehouseDateObj(o.delivery_date, o.created_at);
+            // Overdue is measured against the T-2 WAREHOUSE deadline, the date
+            // production actually works to — every other figure on this
+            // dashboard uses T-2, and the old code used the raw customer date.
+            const overdue = warehouseDue ? warehouseDue < startOfToday : false;
+            const daysToDue = warehouseDue
+                ? Math.round((new Date(warehouseDue.getFullYear(), warehouseDue.getMonth(), warehouseDue.getDate()) - startOfToday) / 86400000)
+                : null;
+            const row = {
+                order: o,
+                readyCount: g.ready.length,
+                dispatchedCount: g.dispatched.length,
+                inProductionCount: g.inProduction,
+                partial: g.inProduction > 0,
+                readyStages,
+                readySince,
+                waitDays,
+                warehouseDue,
+                daysToDue,
+                overdue,
+            };
+            pendingAll.push(row);
+            if (inWindow(readySince)) pending.push(row);   // date scope = when it became ready
+        });
+        // Most urgent first: overdue, then nearest deadline, then longest waiting.
+        const byUrgency = (a, b) =>
+            (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0) ||
+            (a.daysToDue ?? 9999) - (b.daysToDue ?? 9999) ||
+            (b.waitDays ?? -1) - (a.waitDays ?? -1);
+        pendingAll.sort(byUrgency);
+        pending.sort(byUrgency);
+
+        // Recently dispatched: orders whose pieces have actually left. Ordered by
+        // the real scan time, never updated_at (any later edit rewrites that and
+        // it reads as a fresh dispatch on a months-old order).
+        const dispatched = [];
+        byOrder.forEach((g, orderId) => {
+            if (g.dispatched.length === 0) return;
+            const o = orderById[orderId];
+            if (!o) return;
+            if (!channelOk(o)) return;
+            const at = g.dispatched.reduce((latest, c) => {
+                const t = c.stage_updated_at ? new Date(c.stage_updated_at).getTime() : NaN;
+                return Number.isFinite(t) && (latest == null || t > latest) ? t : latest;
+            }, null);
+            if (!inWindow(at)) return;              // period = when it shipped
+            const warehouseDue = getWarehouseDateObj(o.delivery_date, o.created_at);
+            // Was the dispatch itself on time against T-2?
+            let daysLate = null;
+            if (at != null && warehouseDue) {
+                const atMid = new Date(new Date(at).getFullYear(), new Date(at).getMonth(), new Date(at).getDate());
+                const dueMid = new Date(warehouseDue.getFullYear(), warehouseDue.getMonth(), warehouseDue.getDate());
+                daysLate = Math.round((atMid - dueMid) / 86400000);
+            }
+            dispatched.push({
+                order: o,
+                pieces: g.dispatched.length,
+                stillPending: g.ready.length,
+                at,
+                daysLate,
+            });
+        });
+        dispatched.sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+
+        // KPI figures — all over the pending queue, the set a PM can act on.
+        //
+        // "Due" is a DEADLINE window, so it reads pendingAll (channel-scoped)
+        // and is bounded by the selected period's dates rather than by when a
+        // piece became ready. The period control IS the window — there is no
+        // hardcoded "today" card, so a PM picks Today / Yesterday / This month
+        // and the card follows. With no period set it means "due at any point"
+        // (everything still waiting), which is the honest unbounded reading.
+        const overdueCount = pendingAll.filter(p => p.overdue).length;
+        const partialCount = pendingAll.filter(p => p.partial).length;
+        const dueCount = pendingAll.filter((p) => {
+            if (!p.warehouseDue) return false;
+            if (from == null && to == null) return true;
+            const t = p.warehouseDue.getTime();
+            return t >= from && t <= to;
+        }).length;
+        // Wait-time figures stay on the date-scoped set — they ARE about when a
+        // piece became ready, so the period filter is meaningful for them.
+        const readyPieces = pending.reduce((n, p) => n + p.readyCount, 0);
+        const waits = pending.map(p => p.waitDays).filter(d => d != null);
+        const avgWait = waits.length > 0 ? (waits.reduce((a, b) => a + b, 0) / waits.length).toFixed(1) : null;
+        const oldestWait = waits.length > 0 ? Math.max(...waits) : null;
+
+        // Throughput + on-time rate: `dispatched` is already period-filtered by
+        // ship date, so both are simply "in the selected period". No hardcoded
+        // today/7d/30d windows — the period control is the only window.
+        const periodScoped = dispatchPeriodRange != null;
+        const dispatchedInScope = dispatched.length;
+        const rated = dispatched.filter(d => d.daysLate != null);
+        const onTimeRated = rated.filter(d => d.daysLate <= 0).length;
+        const onTimePct = rated.length > 0 ? Math.round((onTimeRated / rated.length) * 100) : null;
+
+        return {
+            pending, pendingAll, dispatched,
+            overdueCount, dueCount, partialCount, readyPieces, avgWait, oldestWait,
+            dispatchedInScope, periodScoped,
+            onTimePct, onTimeSample: rated.length, onTimeOrders: onTimeRated,
+        };
+    }, [components, orderById, dispatchPeriodRange, dispatchChannel]);
+
+    // NOTE: the full-scope productionMetrics/productionOpts/visibleQcRecords
+    // memos that used to live here are gone. The Production tab now has its own
+    // period+channel scope (productionMetricsProd below) and the Overview has
+    // productionMetricsOv, so nothing consumed the unscoped set any more — and
+    // computing it meant walking every component on each render for no reader.
 
     // ==================== SALES & REVENUE METRICS (Overview, period-scoped) ====================
     // Computed over the selected Overview period (overviewOrders — orders PLACED
@@ -1102,13 +1510,67 @@ export default function ProductionManagerDashboard() {
         overviewOrders.forEach(o => { m[o.id] = o; });
         return m;
     }, [overviewOrders]);
+    // QC records for the period's orders only, so the Overview's QC figures move
+    // with the period filter like every other card on that tab.
+    const overviewQcRecords = useMemo(() => {
+        if (!qcHistoryLoaded) return null;
+        return qcHistory.filter(r => overviewOrderById[r.order_id]);
+    }, [qcHistory, qcHistoryLoaded, overviewOrderById]);
+
     const productionOptsOv = useMemo(() => ({
         reJourneyActive: computeReJourneyCount(overviewComponents),
         reJourneyDenom: countActiveComponents(overviewComponents),
         dispatchReady: computeDispatchReady(overviewComponents, overviewOrderById),
-    }), [overviewComponents, overviewOrderById]);
+        qcRecords: overviewQcRecords,
+    }), [overviewComponents, overviewOrderById, overviewQcRecords]);
     const productionMetricsOv = useMemo(() => computeProductionMetrics(overviewOrders, statusStatsOv, productionOptsOv), [overviewOrders, statusStatsOv, productionOptsOv]); // eslint-disable-line react-hooks/exhaustive-deps
     const recentOrdersOv = useMemo(() => overviewOrders.slice(0, 10), [overviewOrders]);
+
+    // ==================== PRODUCTION TAB SCOPE ====================
+    // Period + channel scoped copies of the same shared metrics, so every figure
+    // on the Production tab moves with its own filter bar. Mirrors the Overview
+    // block above exactly — one implementation (productionMetrics.js), three
+    // scopes (full / overview / production).
+    //
+    // Orders are scoped by created_at (when the order was placed) and components
+    // by their own scan time (stage_updated_at), the same split the Overview
+    // uses: a scan today on an old order belongs in "Today" for stage-activity
+    // figures, but that order belongs to the month it was placed.
+    const prodOrders = useMemo(
+        () => orders.filter((o) =>
+            inProdPeriod(o.created_at) &&
+            (prodChannel === "all" || getOrderChannelLabel(o) === prodChannel)
+        ),
+        [orders, inProdPeriod, prodChannel]
+    );
+    const prodOrderById = useMemo(() => {
+        const m = {};
+        prodOrders.forEach(o => { m[o.id] = o; });
+        return m;
+    }, [prodOrders]);
+    // Components scoped by scan time AND restricted to the visible orders, so a
+    // channel filter can't leak pieces from orders the tab is no longer showing.
+    const prodComponents = useMemo(
+        () => components.filter((c) =>
+            inProdPeriod(c.stage_updated_at || c.created_at) && prodOrderById[c.order_id]
+        ),
+        [components, inProdPeriod, prodOrderById]
+    );
+    const prodQcRecords = useMemo(() => {
+        if (!qcHistoryLoaded) return null;
+        return qcHistory.filter(r => prodOrderById[r.order_id]);
+    }, [qcHistory, qcHistoryLoaded, prodOrderById]);
+    const statusStatsProd = useMemo(() => computeStatusStats(prodOrders), [prodOrders]); // eslint-disable-line react-hooks/exhaustive-deps
+    const productionOptsProd = useMemo(() => ({
+        reJourneyActive: computeReJourneyCount(prodComponents),
+        reJourneyDenom: countActiveComponents(prodComponents),
+        dispatchReady: computeDispatchReady(prodComponents, prodOrderById),
+        qcRecords: prodQcRecords,
+    }), [prodComponents, prodOrderById, prodQcRecords]);
+    const productionMetricsProd = useMemo(
+        () => computeProductionMetrics(prodOrders, statusStatsProd, productionOptsProd),
+        [prodOrders, statusStatsProd, productionOptsProd]
+    ); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ==================== TOP PRODUCT / COLOR / SIZE BY STORE (period-scoped) ====================
     const topByStore = useMemo(() => {
@@ -1222,6 +1684,11 @@ export default function ProductionManagerDashboard() {
                         return (o.delivery_phone || "").toLowerCase().includes(q);
                     case "po_number":
                         return (o.po_number || "").toLowerCase().includes(q);
+                    case "shopify_order_name":
+                        // Tolerate the "#" being typed or not — same rule as the
+                        // Shopify dashboard's search.
+                        return (o.shopify_order_name || "").toLowerCase().replace("#", "")
+                            .includes(q.replace("#", ""));
                     case "order_no":
                     default:
                         return (o.order_no || "").toLowerCase().includes(q);
@@ -1234,7 +1701,6 @@ export default function ProductionManagerDashboard() {
         }
         if (filters.payment.length > 0) result = result.filter(o => filters.payment.includes(getPaymentStatus(o)));
         if (filters.priority.length > 0) result = result.filter(o => filters.priority.includes(getPriority(o)));
-        if (filters.store.length > 0) result = result.filter(o => matchesStoreFilter(o, filters.store));
         if (filters.salesperson) result = result.filter(o => o.salesperson === filters.salesperson);
         if (filters.stage.length > 0) result = result.filter(o => {
             const byStage = orderStageGroups[o.id];
@@ -1262,6 +1728,11 @@ export default function ProductionManagerDashboard() {
         // Ready-for-dispatch drill-down: from the "Dispatch Backlog" card —
         // orders with ≥1 component at the packaging_dispatch stage.
         if (filters.dispatchReadyOnly) result = result.filter(o => dispatchReadyOrderIds.has(o.id));
+        // Exact-set drill-down: the Production Stage Bottlenecks table hands over
+        // the very order ids it counted, so the list can never disagree with the
+        // number that was clicked. (The Stage filter above buckets by COMPONENT
+        // stage groups, a different population — re-deriving there would drift.)
+        if (filters.orderIdSet) result = result.filter(o => filters.orderIdSet.has(o.id));
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
             const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
@@ -1317,26 +1788,17 @@ export default function ProductionManagerDashboard() {
         return `pm-channel-${key === "offline" ? "store" : key}`;
     };
 
-    // completed / dispatched / delivered are DIFFERENT events (client model).
-    // Delivered only when the SA marked it; everything the old fused flow
-    // called "Dispatched" (stage/production_status) reads as Completed until
-    // Aryadeep's packaging & dispatch flow introduces a real dispatched status.
-    const getStatusLabel = (order) => {
-        if (order.status === "delivered") return "Delivered";
-        if (order.status === "completed" || order.production_status === "dispatched" || order.warehouse_stage === "dispatched") return "Completed";
-        if (order.production_status === "ready_for_dispatch") return "Ready";
-        if (order.production_status === "in_production" || order.status === "prepared") return "In Production";
-        if (order.status === "cancelled") return "Cancelled";
-        return "Pending";
-    };
+    // Order status = the shared 5-step ladder, derived from the order's PIECES:
+    //   Order Received -> In Production -> Completed -> Dispatched -> Delivered
+    //
+    // Replaces a local map that branched on orders.production_status — a column
+    // no RPC writes. Every check against it failed, so real in-production orders
+    // fell through to a literal "Pending", a status this system does not have.
+    // The pieces are the truth: the moment one is scanned past Order Received,
+    // the order IS in production.
+    const getStatusLabel = (order) => getOrderProgressStatus(order, componentsByOrder[order.id]);
 
-    const getStatusClass = (status) => {
-        switch (status) { case "Delivered": case "Completed": case "Dispatched": return "pm-status-dispatched"; case "Ready": return "pm-status-ready"; case "In Production": return "pm-status-inprod"; case "Cancelled": return "pm-status-cancelled"; default: return "pm-status-pending"; }
-    };
-
-    const getStatusBadgeClass = (status) => {
-        switch (status?.toLowerCase()) { case "delivered": return "pm-badge-delivered"; case "cancelled": return "pm-badge-cancelled"; case "prepared": return "pm-badge-prepared"; case "confirmed": return "pm-badge-confirmed"; default: return "pm-badge-pending"; }
-    };
+    const getStatusClass = (status) => `pm-status-${getOrderProgressStatusKey(status)}`;
 
     // ==================== MEASUREMENT HELPERS ====================
     const editCategoryKey = CATEGORY_KEY_MAP[editActiveCategory];
@@ -1493,6 +1955,16 @@ export default function ProductionManagerDashboard() {
     const viewOrderDetails = (order) => {
         navigate(`/order/${order.id}`, { state: { fromProductionManager: true } });
     };
+
+    // Row click on the REPORTING tabs (Production, Dispatch, Delivery Report,
+    // Calendar). These lists are for scanning and acting, so a click hands the
+    // order to All Orders — where the full card, its component journey and every
+    // action already live — instead of pushing the read-only Order Details page
+    // and dropping the user out of the dashboard.
+    //
+    // goToOrder resets the period + filters, so the target can never land
+    // outside the current All Orders scope and render an empty list.
+    const openOrderInList = (order) => goToOrder(order.id, order.order_no);
 
     if (loading) return <p className="loading-text">Loading Dashboard...</p>;
 
@@ -1698,7 +2170,9 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "overview" ? "active" : ""}`} onClick={() => { setActiveTab("overview"); setShowSidebar(false); }}>Overview</a>
                             <a className={`pm-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders <span className="pm-badge-count">{orders.length}</span></a>
                             <a className={`pm-menu-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</a>
-                            <a className={`pm-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
+                            {/* Opening QC History from the menu shows ALL records —
+                                clear any Fail scope left by the KPI drill-down. */}
+                            <a className={`pm-menu-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setQcResultFilter(""); setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</a>
                             <a className={`pm-menu-item ${activeTab === "rejourneys" ? "active" : ""}`} onClick={() => { setActiveTab("rejourneys"); setShowSidebar(false); }}>Re-journeys</a>
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setSubTab("dispatch"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
@@ -1779,8 +2253,8 @@ export default function ProductionManagerDashboard() {
                                     <StatCard title="Production Load" value={`${productionMetricsOv.productionLoad.percentage}%`} subtitle={`${productionMetricsOv.productionLoad.active} in production`} icon={Icons.gear} />
                                 </div>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Bottlenecks" value={productionMetricsOv.bottlenecks.count} subtitle={productionMetricsOv.bottlenecks.count > 0 ? `${productionMetricsOv.bottlenecks.topBottleneck} · ${productionMetricsOv.bottlenecks.topOverdue} overdue · avg ${productionMetricsOv.bottlenecks.topAvgDays}d late` : "No overdue stages"} highlight={productionMetricsOv.bottlenecks.count > 0} icon={Icons.warning} />
-                                    <StatCard title="Delayed Orders" value={productionMetricsOv.delayed} subtitle={`Delay rate: ${productionMetricsOv.delayRate}%`} highlight={productionMetricsOv.delayed > 0} icon={Icons.clock} />
+                                    <StatCard title="Bottlenecks" value={productionMetricsOv.bottlenecks.count} subtitle={productionMetricsOv.bottlenecks.count > 0 ? `${productionMetricsOv.bottlenecks.topBottleneck} · ${productionMetricsOv.bottlenecks.topOverdue} overdue · avg ${productionMetricsOv.bottlenecks.topAvgDays}d at stage` : "No overdue stages"} highlight={productionMetricsOv.bottlenecks.count > 0} icon={Icons.warning} />
+                                    <StatCard title="Delayed Orders" value={productionMetricsOv.delayed} subtitle={productionMetricsOv.delayed > 0 ? `Delay rate: ${productionMetricsOv.delayRate}% ${"·"} View delayed orders` : `Delay rate: ${productionMetricsOv.delayRate}%`} highlight={productionMetricsOv.delayed > 0} icon={Icons.clock} onClick={productionMetricsOv.delayed > 0 ? handleDelayedClick : undefined} />
                                     <StatCard title="Re-journey %" value={`${productionMetricsOv.rework.percentage}%`} subtitle={`${productionMetricsOv.rework.totalReworks} piece${productionMetricsOv.rework.totalReworks === 1 ? "" : "s"} in rework ${"\u00B7"} View re-journeys`} highlight={productionMetricsOv.rework.totalReworks > 0} icon={Icons.refresh} onClick={() => setActiveTab("rejourneys")} />
                                 </div>
                                 <div className="pm-stats-row-3">
@@ -1971,6 +2445,7 @@ export default function ProductionManagerDashboard() {
                                                 { value: "client_name", label: "Client Name" },
                                                 { value: "phone", label: "Phone" },
                                                 { value: "po_number", label: "PO Number" },
+                                                { value: "shopify_order_name", label: "Shopify Order No" },
                                             ]}
                                             selectedField={orderSearchField}
                                             onFieldChange={setOrderSearchField}
@@ -1979,9 +2454,13 @@ export default function ProductionManagerDashboard() {
                                             placeholder="Type to search..."
                                         />
                                     </div>
+                                    {/* The one channel filter for this list (Shopify included).
+                                        CHANNEL_SEGMENTS ends with a bare "Store" fallback used
+                                        only to label orders whose prefix is unknown — it is not a
+                                        real channel, so it is dropped from the picker. */}
                                     <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="pm-filter-select" style={{ flex: "0 0 auto" }}>
                                         <option value="all">All Channels</option>
-                                        {CHANNEL_SEGMENTS.map(seg => (
+                                        {CHANNEL_SEGMENTS.filter(seg => seg.label !== "Store").map(seg => (
                                             <option key={seg.label} value={seg.label}>{seg.label}</option>
                                         ))}
                                     </select>
@@ -2005,16 +2484,10 @@ export default function ProductionManagerDashboard() {
 
                                 {/* Row 4: Filter Bar (all inline) */}
                                 <div ref={dropdownRef} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-                                    {/* Date Range */}
-                                    <div style={{ position: "relative" }}>
-                                        <button className={`pm-filter-select ${ordersTimeline !== "all" ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")} style={{ cursor: "pointer" }}>Date Range {"\u25BE"}</button>
-                                        {openDropdown === "date" && (
-                                            <div className="pm-dropdown-panel">
-                                                <div className="pm-dropdown-title">Select Period</div>
-                                                <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
-                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                            </div>
-                                        )}
+                                    {/* Date Range \u2014 one plain dropdown, no nested panel. Picking
+                                        "Custom range" reveals the two date inputs inline. */}
+                                    <div className={`pm-period-inline ${ordersTimeline !== "all" ? "pm-filter-active" : ""}`}>
+                                        <PeriodFilter {...ordersPeriodProps} variant="select" label="Date Range:" />
                                     </div>
 
                                     {/* Price */}
@@ -2067,22 +2540,9 @@ export default function ProductionManagerDashboard() {
                                         )}
                                     </div>
 
-                                    {/* Store */}
-                                    <div style={{ position: "relative" }}>
-                                        <button className={`pm-filter-select ${filters.store.length > 0 ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "store" ? null : "store")} style={{ cursor: "pointer" }}>Store {"\u25BE"}</button>
-                                        {openDropdown === "store" && (
-                                            <div className="pm-dropdown-panel">
-                                                <div className="pm-dropdown-title">Store</div>
-                                                {STORE_FILTER_OPTIONS.map(opt => (
-                                                    <label key={opt.value} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
-                                                        <input type="checkbox" checked={filters.store.includes(opt.value)} onChange={() => toggleFilter("store", opt.value)} />
-                                                        <span>{opt.label}</span>
-                                                    </label>
-                                                ))}
-                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                            </div>
-                                        )}
-                                    </div>
+                                    {/* No "Store" filter here \u2014 the "All Channels" select above is
+                                        the one channel filter (it already covers both stores,
+                                        Shopify, B2B, Private, Comms, Exhibition and Stock). */}
 
                                     {/* Stage (10 V2 stages, by order's warehouse_stage) */}
                                     <div style={{ position: "relative" }}>
@@ -2146,6 +2606,14 @@ export default function ProductionManagerDashboard() {
                                                 <div className="pm-order-header">
                                                     <div className="pm-oheader-info">
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">ORDER NO</span><span className="pm-oheader-value">{order.order_no || "—"}</span></div>
+                                                        {/* Shopify's own number, beside ours — the same pairing the Shopify
+                                                            dashboard and the warehouse PDF show, because the warehouse and
+                                                            catalogue teams refer to website orders by THAT number. Gated on
+                                                            the channel (like PO NUMBER is on is_b2b) so it appears only where
+                                                            it exists; legacy SB-SHOP- orders resolve to the same channel. */}
+                                                        {getOrderChannelKey(order) === "shopify" && (
+                                                            <div className="pm-oheader-item"><span className="pm-oheader-label">SHOPIFY ORDER NO</span><span className="pm-oheader-value">{order.shopify_order_name || "—"}</span></div>
+                                                        )}
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">ORDER DATE</span><span className="pm-oheader-value">{formatDate(order.created_at) || "—"}</span></div>
                                                         <div className="pm-oheader-item"><span className="pm-oheader-label">DELIVERY</span><span className="pm-oheader-value" title={`Warehouse deadline (T-2). Customer date: ${formatDate(order.delivery_date)}`}>{getWarehouseDate(order.delivery_date, order.created_at)}</span></div>
                                                         {/* PO number is a B2B-only field — gate on is_b2b like WarehouseDashboard and the warehouse PDF do. */}
@@ -2153,15 +2621,18 @@ export default function ProductionManagerDashboard() {
                                                     </div>
                                                     <div className="pm-oheader-actions">
                                                         <span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span>
-                                                        {/* Cancelled takes precedence over any stale production stage — a
-                                                            cancelled order must read "Cancelled", not its last stage. */}
-                                                        {order.status === "cancelled" ? (
-                                                            <div className={`pm-order-status-badge ${getStatusBadgeClass("cancelled")}`}>Cancelled</div>
-                                                        ) : getStageGroupKey(order.warehouse_stage) ? (
-                                                            <Badge color={getStageColor(order.warehouse_stage)}>{getStageLabel(order.warehouse_stage)}</Badge>
-                                                        ) : (
-                                                            <div className={`pm-order-status-badge ${getStatusBadgeClass(order.status)}`}>{getOrderStatusLabel(order.status)}</div>
-                                                        )}
+                                                        {/* ORDER status — the shared ladder, never a component stage.
+                                                            This used to render the warehouse_stage badge ("Cloth Issued"),
+                                                            which answers "where is one piece", not "where is the order":
+                                                            the per-component chips below the card already show the stage,
+                                                            and an order whose pieces sit at different stages has no single
+                                                            stage to show. One piece past Order Received = In Production. */}
+                                                        {(() => {
+                                                            const st = getOrderProgressStatus(order, componentsByOrder[order.id]);
+                                                            return (
+                                                                <span className={`pm-status-badge pm-status-${getOrderProgressStatusKey(st)}`}>{st}</span>
+                                                            );
+                                                        })()}
                                                         {order.priority && <span className={`pm-priority-tag pm-priority-${order.priority}`}>{order.priority === "urgent" ? "🔴" : order.priority === "high" ? "🟠" : "🟢"} {order.priority}</span>}
                                                     </div>
                                                 </div>
@@ -2258,6 +2729,27 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "production" && (
                             <div className="pm-orders-tab">
                                 <h2 className="pm-tab-title">Production Tracking</h2>
+                                <p className="pm-muted" style={{ margin: "-6px 0 4px 2px", fontSize: 12 }}>
+                                    What is on the floor right now &mdash; where work is sitting, what is delayed, and where quality is failing.
+                                </p>
+
+                                {/* ===== PERIOD + CHANNEL (same bar as the other tabs) ===== */}
+                                <PeriodFilter {...prodPeriodProps} variant="pills">
+                                    <select
+                                        className="pm-dispatch-channel"
+                                        value={prodChannel}
+                                        onChange={(e) => setProdChannel(e.target.value)}
+                                    >
+                                        <option value="all">All Channels</option>
+                                        {CHANNEL_SEGMENTS.map(seg => (
+                                            <option key={seg.label} value={seg.label}>{seg.label}</option>
+                                        ))}
+                                    </select>
+                                    <button className="pm-dispatch-export" onClick={handleProductionExport}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                        Export
+                                    </button>
+                                </PeriodFilter>
 
                                 {/* TEMP (prod): per-stage component cards (barcode-derived) hidden —
                                     re-enable when scan flow is ready.
@@ -2286,38 +2778,92 @@ export default function ProductionManagerDashboard() {
                                 )}
                                 */}
 
-                                <div className="pm-stats-row-3" style={{ marginTop: 16 }}>
-                                    <StatCard title="In Production" value={statusStats.inProd} icon={Icons.gear} />
-                                    <StatCard title="QC Failures" value={productionMetrics.qcFailed} subtitle={`${productionMetrics.qcFailRate}% fail rate`} highlight={productionMetrics.qcFailed > 0} icon={Icons.xCircle} />
-                                    <StatCard title="Avg Lead Time" value={`${productionMetrics.avgLeadTime}d`} subtitle="Confirmation to QC" icon={Icons.timer} />
+                                <div className="pm-stats-row-3">
+                                    <StatCard title="In Production" value={statusStatsProd.inProd} subtitle={`of ${prodOrders.length} orders received`} icon={Icons.gear} />
+                                    {/* QC Failures / Avg Lead Time read qc_records. While that
+                                        paged fetch is in flight the values are null — show "—"
+                                        rather than a 0 that reads as "no failures". */}
+                                    <StatCard
+                                        title="QC Failures"
+                                        value={productionMetricsProd.qcFailed == null ? "—" : productionMetricsProd.qcFailed}
+                                        subtitle={productionMetricsProd.qcFailed == null
+                                            ? (qcHistoryLoading ? "Loading QC records…" : "No QC data")
+                                            : `${productionMetricsProd.qcFailRate}% of ${productionMetricsProd.qcInspected} inspections ${"·"} View QC report`}
+                                        highlight={productionMetricsProd.qcFailed > 0}
+                                        icon={Icons.xCircle}
+                                        onClick={productionMetricsProd.qcFailed > 0 ? handleQcFailuresClick : undefined}
+                                    />
+                                    <StatCard
+                                        title="Avg Lead Time"
+                                        value={productionMetricsProd.avgLeadTime == null ? "—" : `${productionMetricsProd.avgLeadTime}d`}
+                                        subtitle={productionMetricsProd.avgLeadTime == null
+                                            ? (qcHistoryLoading ? "Loading QC records…" : "No order has reached QC yet")
+                                            : `Order to QC ${"·"} ${productionMetricsProd.leadTimeSample} order${productionMetricsProd.leadTimeSample === 1 ? "" : "s"}`}
+                                        icon={Icons.timer}
+                                    />
                                 </div>
                                 <div className="pm-stats-row-3">
-                                    <StatCard title="Rework" value={productionMetrics.rework.totalReworks} subtitle={`${productionMetrics.rework.percentage}% rate`} icon={Icons.refresh} />
-                                    <StatCard title="Delayed" value={productionMetrics.delayed} subtitle={`${productionMetrics.delayRate}% delay rate`} highlight={productionMetrics.delayed > 0} icon={Icons.warning} />
-                                    <StatCard title="Received (Total)" value={orders.length} icon={Icons.inbox} />
+                                    <StatCard
+                                        title="Re-journey"
+                                        value={productionMetricsProd.rework.totalReworks}
+                                        subtitle={`${productionMetricsProd.rework.percentage}% of active pieces ${"·"} View re-journeys`}
+                                        highlight={productionMetricsProd.rework.totalReworks > 0}
+                                        icon={Icons.refresh}
+                                        onClick={() => setActiveTab("rejourneys")}
+                                    />
+                                    <StatCard
+                                        title="Delayed"
+                                        value={productionMetricsProd.delayed}
+                                        subtitle={`${productionMetricsProd.delayRate}% of orders still running ${"·"} View delayed orders`}
+                                        highlight={productionMetricsProd.delayed > 0}
+                                        icon={Icons.warning}
+                                        onClick={productionMetricsProd.delayed > 0 ? handleDelayedClick : undefined}
+                                    />
+                                    <StatCard
+                                        title="Orders Received"
+                                        value={prodOrders.length}
+                                        subtitle={`${statusStatsProd.dispatched + statusStatsProd.delivered} dispatched ${"·"} ${statusStatsProd.orderReceived} not started`}
+                                        icon={Icons.inbox}
+                                    />
                                 </div>
 
-                                {productionMetrics.stuckByStage.length > 0 && (
+                                {productionMetricsProd.stuckByStage.length > 0 && (
                                     <div className="pm-channel-card" style={{ marginTop: 20 }}>
                                         <p className="pm-card-title">Production Stage Bottlenecks</p>
+                                        <p className="pm-muted" style={{ margin: "0 0 12px", fontSize: 12 }}>
+                                            Where the {productionMetricsProd.stuckByStage.reduce((n, s) => n + s.total, 0)} orders still in production
+                                            are sitting right now. Click any count to see those orders.
+                                        </p>
                                         <div style={{ overflowX: "auto" }}>
                                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                                                 <thead>
                                                     <tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left", background: "#fafafa" }}>
                                                         <th style={{ padding: "10px 12px" }}>Stage</th>
-                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Total Orders</th>
-                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Overdue</th>
-                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Avg Days Late</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }}>Orders Here</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }} title="Past the T-2 warehouse deadline">Overdue</th>
+                                                        <th style={{ padding: "10px 12px", textAlign: "center" }} title="Average time these orders have been parked at this stage">Avg Days at Stage</th>
                                                         <th style={{ padding: "10px 12px", textAlign: "center" }}>Status</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {productionMetrics.stuckByStage.map((s, i) => (
-                                                        <tr key={i} style={{ borderBottom: "1px solid #f0f0f0", background: s.severity === "critical" ? "#fff5f5" : s.severity === "warning" ? "#fffde7" : "#fff" }}>
-                                                            <td style={{ padding: "10px 12px", fontWeight: 600, textTransform: "capitalize" }}>{s.name}</td>
-                                                            <td style={{ padding: "10px 12px", textAlign: "center" }}>{s.total}</td>
-                                                            <td style={{ padding: "10px 12px", textAlign: "center", color: s.overdue > 0 ? "#c62828" : "#666", fontWeight: s.overdue > 0 ? 700 : 400 }}>{s.overdue > 0 ? s.overdue : "—"}</td>
-                                                            <td style={{ padding: "10px 12px", textAlign: "center", color: s.avgOverdueDays > 0 ? "#c62828" : "#666" }}>{s.avgOverdueDays > 0 ? `${s.avgOverdueDays}d` : "—"}</td>
+                                                    {productionMetricsProd.stuckByStage.map((s) => (
+                                                        <tr key={s.key} style={{ borderBottom: "1px solid #f0f0f0", background: s.severity === "critical" ? "#fff5f5" : s.severity === "warning" ? "#fffde7" : "#fff" }}>
+                                                            <td style={{ padding: "10px 12px", fontWeight: 600 }}>
+                                                                <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: s.color, marginRight: 8 }} />
+                                                                {s.name}
+                                                            </td>
+                                                            {/* Both counts drill into exactly the orders they represent. */}
+                                                            <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                                                                <button className="pm-linkish" onClick={() => handleBottleneckClick(s, "total")} title={`View the ${s.total} orders at ${s.name}`}>{s.total}</button>
+                                                            </td>
+                                                            <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                                                                {s.overdue > 0 ? (
+                                                                    <button className="pm-linkish pm-linkish-danger" onClick={() => handleBottleneckClick(s, "overdue")} title={`View the ${s.overdue} overdue orders at ${s.name}`}>
+                                                                        {s.overdue} <span style={{ fontWeight: 400, fontSize: 11 }}>({s.overduePct}%)</span>
+                                                                    </button>
+                                                                ) : <span style={{ color: "#666" }}>—</span>}
+                                                            </td>
+                                                            <td style={{ padding: "10px 12px", textAlign: "center", color: s.avgDaysAtStage > 0 ? "#333" : "#666" }}>{s.avgDaysAtStage > 0 ? `${s.avgDaysAtStage}d` : "—"}</td>
                                                             <td style={{ padding: "10px 12px", textAlign: "center" }}>
                                                                 {s.severity === "critical" && <span style={{ background: "#ffebee", color: "#c62828", borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>🔴 Critical</span>}
                                                                 {s.severity === "warning" && <span style={{ background: "#fffde7", color: "#f57f17", borderRadius: 4, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>🟡 Watch</span>}
@@ -2329,27 +2875,27 @@ export default function ProductionManagerDashboard() {
                                             </table>
                                         </div>
                                         <p style={{ fontSize: 11, color: "#999", marginTop: 10, padding: "0 4px" }}>
-                                            {"🔴 Critical = stage has overdue orders · 🟡 Watch = 3+ orders piling up · 🟢 OK = on track"}
+                                            {"🔴 Critical = orders here are past the T-2 warehouse deadline · 🟡 Watch = 3+ orders piling up · 🟢 OK = on track. Dispatched, delivered, completed and cancelled orders are excluded."}
                                         </p>
                                     </div>
                                 )}
-                                {productionMetrics.stuckByStage.length === 0 && (
+                                {productionMetricsProd.stuckByStage.length === 0 && (
                                     <div className="pm-channel-card" style={{ marginTop: 20, textAlign: "center", padding: 32 }}>
                                         <p style={{ color: "#2e7d32", fontWeight: 600, fontSize: 15 }}>{"✅ No production bottlenecks detected"}</p>
                                         <p className="pm-muted" style={{ marginTop: 6 }}>All in-flow orders are on track</p>
                                     </div>
                                 )}
 
-                                {productionMetrics.exceedingDelivery.length > 0 && (
+                                {productionMetricsProd.exceedingDelivery.length > 0 && (
                                     <div className="pm-channel-card" style={{ marginTop: 20 }}>
-                                        <p className="pm-card-title">{"\u26A0\uFE0F"} Exceeding Delivery Date ({productionMetrics.exceedingDelivery.length})</p>
+                                        <p className="pm-card-title">{"\u26A0\uFE0F"} Exceeding Delivery Date ({productionMetricsProd.exceedingDelivery.length})</p>
                                         <div style={{ overflowX: "auto" }}>
                                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                                                 <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Delivery</th><th style={{ padding: "8px 10px" }}>Overdue</th><th style={{ padding: "8px 10px" }}>Stage</th><th style={{ padding: "8px 10px", textAlign: "center" }}>Actions</th></tr></thead>
-                                                <tbody>{productionMetrics.exceedingDelivery.slice(0, 15).map(o => {
+                                                <tbody>{productionMetricsProd.exceedingDelivery.slice(0, 15).map(o => {
                                                     const overdue = Math.ceil((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
                                                     const isBusy = actionLoading === o.id;
-                                                    return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                    return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => openOrderInList(o)}>
                                                         <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                         <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                         <td style={{ padding: "8px 10px" }} title={`Customer date: ${formatDate(o.delivery_date)}`}>{getWarehouseDate(o.delivery_date, o.created_at)}</td>
@@ -2377,6 +2923,13 @@ export default function ProductionManagerDashboard() {
                                                 })}</tbody>
                                             </table>
                                         </div>
+                                        {/* The table is a top-15 summary; hand the full set to the
+                                            orders list, where paging/search/filters already exist. */}
+                                        {productionMetricsProd.exceedingDelivery.length > 15 && (
+                                            <button className="pm-showall-btn" onClick={handleDelayedClick}>
+                                                View all {productionMetricsProd.exceedingDelivery.length} delayed orders {"→"}
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -2385,16 +2938,23 @@ export default function ProductionManagerDashboard() {
                         {/* ===== QC HISTORY TAB (all channels) ===== */}
                         {activeTab === "qc_history" && (
                             <>
-                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>QC History — All Channels</p>
-                                <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} onOrderClick={goToOrder} />
+                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>
+                                    QC History — {qcScope.channelLabel || "All Channels"}
+                                    {QC_RESULT_SUFFIX[qcScope.result] && (
+                                        <span className="pm-muted" style={{ fontSize: 12, fontWeight: 400 }}> · {QC_RESULT_SUFFIX[qcScope.result]}</span>
+                                    )}
+                                </p>
+                                <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} onOrderClick={goToOrder} onScopeChange={setQcScope} initialResult={qcResultFilter} />
                             </>
                         )}
 
                         {/* ===== RE-JOURNEYS TAB (all channels) ===== */}
                         {activeTab === "rejourneys" && (
                             <>
-                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>Re-journeys — Currently in Rework (All Channels)</p>
-                                <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} onOrderClick={goToOrder} />
+                                <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>
+                                    Re-journeys — Currently in Rework ({rjScope.channelLabel || "All Channels"})
+                                </p>
+                                <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} onOrderClick={goToOrder} onScopeChange={setRjScope} />
                             </>
                         )}
 
@@ -2408,64 +2968,329 @@ export default function ProductionManagerDashboard() {
                         )}
 
                         {/* ===== DISPATCH sub-tab ===== */}
+                        {/* The PM's outbound queue: what is packed and waiting to leave, how
+                            urgent each one is, and what actually went out. Every figure comes
+                            from order_components scans (dispatchData) — the orders.*_at columns
+                            this tab used to read are never written by any RPC. */}
                         {activeTab === "delivery_report" && subTab === "dispatch" && (() => {
-                            const now = new Date();
-                            const readyNotDispatched = orders.filter(o => o.ready_for_dispatch_at && !o.dispatched_at && o.status !== "cancelled");
-                            // An order is dispatched when it actually reached a finished
-                            // state — NOT only when the manual dispatched_at was set (that
-                            // field is written only by the "Mark as Delivered" button, so
-                            // the list used to freeze whenever orders were completed by any
-                            // other path: barcode packaging, warehouse manual-complete, etc.).
-                            const DONE = new Set(["delivered", "completed", "dispatched"]);
-                            const isDispatched = (o) =>
-                                DONE.has((o.status || "").toLowerCase()) || o.warehouse_stage === "dispatched";
-                            // Best available "dispatched on" timestamp. NEVER updated_at: any edit
-                            // (payment change, exchange, a migration) rewrites it, so it reads as a
-                            // recent dispatch for orders finished months ago.
-                            const dispatchedDate = (o) => o.dispatched_at || o.delivered_at ||
-                                (o.warehouse_stage === "dispatched" ? o.warehouse_stage_updated_at : null) || null;
-                            const recentlyDispatched = orders
-                                .filter(isDispatched)
-                                .sort((a, b) => new Date(dispatchedDate(b) || 0) - new Date(dispatchedDate(a) || 0))
-                                .slice(0, 20);
-                            const overdueReady = readyNotDispatched.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
-                            const avgWaitDays = readyNotDispatched.length > 0 ? (readyNotDispatched.reduce((s, o) => s + (now - new Date(o.ready_for_dispatch_at)) / (1000 * 60 * 60 * 24), 0) / readyNotDispatched.length).toFixed(1) : "0";
+                            const d = dispatchData;
+                            const q = dispatchSearch.trim().toLowerCase();
+                            // Is a date/channel scope active? Empty states must say "nothing in
+                            // this period" rather than "everything has shipped" — the two mean
+                            // very different things to a PM.
+                            const scoped = dispatchPeriodRange != null || dispatchChannel !== "all";
+                            const matches = (o) => !q ||
+                                (o.order_no || "").toLowerCase().includes(q) ||
+                                getClientName(o).toLowerCase().includes(q) ||
+                                (o.salesperson || "").toLowerCase().includes(q);
+
+                            // Urgency filter. The deadline views (overdue / due today /
+                            // partially ready) read the date-UNSCOPED set, so clicking a
+                            // chip shows exactly the count on its own label and on the KPI
+                            // card above it. Only the unfiltered "All" view follows the
+                            // date filter, which is what that filter is for.
+                            const urgencySource = dispatchFilter === "all" ? d.pending : d.pendingAll;
+                            // "Due" uses the same deadline window as its KPI card: bounded
+                            // by the selected period, or unbounded when no period is set.
+                            const dueInPeriod = (p) => {
+                                if (!p.warehouseDue) return false;
+                                if (!dispatchPeriodRange) return true;
+                                const t = p.warehouseDue.getTime();
+                                return t >= dispatchPeriodRange.start.getTime() && t <= dispatchPeriodRange.end.getTime();
+                            };
+                            const pendingFiltered = urgencySource.filter(p => {
+                                if (!matches(p.order)) return false;
+                                if (dispatchFilter === "overdue") return p.overdue;
+                                if (dispatchFilter === "due") return dueInPeriod(p);
+                                if (dispatchFilter === "partial") return p.partial;
+                                return true;
+                            });
+                            const dispatchedFiltered = d.dispatched.filter(x => matches(x.order));
+
+                            const handleDispatchExport = () => {
+                                if (pendingFiltered.length === 0) {
+                                    showPopup({ type: "info", title: "Nothing to export", message: "No orders match the current filters." });
+                                    return;
+                                }
+                                const headers = ["Order No", "Customer", "SA", "Channel", "Pieces Ready", "Stage", "Still in Production", "Ready Since", "Waiting (days)", "Dispatch By", "Customer Delivery", "Status"];
+                                const rows = pendingFiltered.map(p => [
+                                    p.order.order_no || "",
+                                    getClientName(p.order) || "",
+                                    p.order.salesperson || "",
+                                    getChannelLabel(p.order),
+                                    p.readyCount,
+                                    p.readyStages.map(s => `${s.label} (${s.count})`).join(" + "),
+                                    p.inProductionCount,
+                                    p.readySince ? new Date(p.readySince).toLocaleDateString("en-GB") : "",
+                                    p.waitDays == null ? "" : p.waitDays,
+                                    p.warehouseDue ? p.warehouseDue.toLocaleDateString("en-GB") : "",
+                                    formatDate(p.order.delivery_date) || "",
+                                    p.overdue ? "Overdue" : p.daysToDue === 0 ? "Due today" : p.partial ? "Partially ready" : "On track",
+                                ].map(v => `"${String(v).replace(/"/g, '""')}"`));
+                                const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+                                const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                // Name the file after the scope it was taken under, so a
+                                // downloaded export is never ambiguous about what it covers.
+                                const scopeTag = dispatchChannel === "all" ? "all_channels" : dispatchChannel.toLowerCase().replace(/\s+/g, "_");
+                                a.download = `dispatch_queue_${scopeTag}_${new Date().toISOString().slice(0, 10)}.csv`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            };
+
                             return (
                                 <div className="pm-orders-tab">
                                     <h2 className="pm-tab-title">Dispatch Management</h2>
-                                    <div className="pm-stats-row-3">
-                                        <StatCard title="Ready for Dispatch" value={readyNotDispatched.length} highlight={readyNotDispatched.length > 0} icon={Icons.package} />
-                                        <StatCard title="Overdue Dispatch" value={overdueReady.length} subtitle="Past delivery date" highlight={overdueReady.length > 0} icon={Icons.warning} />
-                                        <StatCard title="Avg Wait Time" value={`${avgWaitDays}d`} subtitle="Since ready" icon={Icons.hourglass} />
+                                    <p className="pm-muted" style={{ margin: "-6px 0 4px 2px", fontSize: 12 }}>
+                                        Orders that have finished production and are waiting to be dispatched.
+                                    </p>
+
+                                    {/* ===== PERIOD + CHANNEL =====
+                                        Same pills bar the other dashboards use, channel select riding
+                                        in its right-hand slot. Sits above the KPIs because it scopes
+                                        every figure below it. */}
+                                    <PeriodFilter {...dispatchPeriodProps} variant="pills">
+                                        <select
+                                            className="pm-dispatch-channel"
+                                            value={dispatchChannel}
+                                            onChange={(e) => setDispatchChannel(e.target.value)}
+                                        >
+                                            <option value="all">All Channels</option>
+                                            {CHANNEL_SEGMENTS.map(seg => (
+                                                <option key={seg.label} value={seg.label}>{seg.label}</option>
+                                            ))}
+                                        </select>
+                                    </PeriodFilter>
+
+                                    {/* ===== HEADLINE ===== */}
+                                    <div className="pm-dispatch-hero">
+                                        <div>
+                                            <p className="pm-dispatch-hero-label">AWAITING DISPATCH</p>
+                                            <p className="pm-dispatch-hero-value" style={{ color: d.pending.length > 0 ? "#8B7355" : "#2e7d32" }}>{d.pending.length}</p>
+                                            <p className="pm-dispatch-hero-sub">{d.readyPieces} piece{d.readyPieces === 1 ? "" : "s"} ready across {d.pending.length} order{d.pending.length === 1 ? "" : "s"}</p>
+                                        </div>
+                                        <div style={{ textAlign: "right" }}>
+                                            <p className="pm-dispatch-hero-label">ON-TIME DISPATCH</p>
+                                            <p className="pm-dispatch-hero-value" style={{ color: d.onTimePct == null ? "#90a4ae" : d.onTimePct >= 80 ? "#2e7d32" : d.onTimePct >= 60 ? "#e65100" : "#c62828" }}>
+                                                {d.onTimePct == null ? "—" : `${d.onTimePct}%`}
+                                            </p>
+                                            <p className="pm-dispatch-hero-sub">
+                                                {d.onTimeSample > 0
+                                                    ? `${d.onTimeOrders} of ${d.onTimeSample} orders on time`
+                                                    : "no orders dispatched yet"}
+                                            </p>
+                                        </div>
                                     </div>
 
-                                    {readyNotDispatched.length > 0 && (
-                                        <div className="pm-channel-card" style={{ marginTop: 20 }}>
-                                            <p className="pm-card-title">Pending Dispatch ({readyNotDispatched.length})</p>
-                                            <div style={{ overflowX: "auto" }}>
-                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Ready Since</th><th style={{ padding: "8px 10px" }}>Delivery Due</th><th style={{ padding: "8px 10px" }}>Wait</th></tr></thead>
-                                                    <tbody>{readyNotDispatched.sort((a, b) => new Date(a.ready_for_dispatch_at) - new Date(b.ready_for_dispatch_at)).map(o => {
-                                                        const waitDays = Math.ceil((now - new Date(o.ready_for_dispatch_at)) / (1000 * 60 * 60 * 24));
-                                                        const isOverdue = o.delivery_date && new Date(o.delivery_date) < now;
-                                                        return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", background: isOverdue ? "#fff8e1" : "transparent" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td><td style={{ padding: "8px 10px", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(o.ready_for_dispatch_at)}</td><td style={{ padding: "8px 10px", color: isOverdue ? "#c62828" : "inherit" }}>{formatDate(o.delivery_date) || "-"}</td><td style={{ padding: "8px 10px", fontWeight: 600, color: waitDays > 3 ? "#c62828" : "#333" }}>{waitDays}d</td></tr>);
-                                                    })}</tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    )}
+                                    {/* ===== KPI CARDS (click to filter the queue) ===== */}
+                                    <div className="pm-dispatch-kpis">
+                                        <StatCard
+                                            title="Overdue Dispatch"
+                                            value={d.overdueCount}
+                                            subtitle={d.overdueCount > 0 ? "dispatch now" : "nothing overdue"}
+                                            highlight={d.overdueCount > 0}
+                                            icon={Icons.warning}
+                                            onClick={d.overdueCount > 0 ? () => setDispatchFilter(dispatchFilter === "overdue" ? "all" : "overdue") : undefined}
+                                        />
+                                        <StatCard
+                                            title="Due"
+                                            value={d.dueCount}
+                                            subtitle={d.periodScoped ? `due ${dispatchPeriodLabel.toLowerCase()}` : "due for dispatch"}
+                                            highlight={d.dueCount > 0}
+                                            icon={Icons.clock}
+                                            onClick={d.dueCount > 0 ? () => setDispatchFilter(dispatchFilter === "due" ? "all" : "due") : undefined}
+                                        />
+                                        <StatCard
+                                            title="Avg Wait to Dispatch"
+                                            value={d.avgWait == null ? "—" : `${d.avgWait}d`}
+                                            subtitle={d.oldestWait != null ? `oldest waiting ${d.oldestWait}d` : "nothing waiting"}
+                                            highlight={d.oldestWait != null && d.oldestWait > 3}
+                                            icon={Icons.hourglass}
+                                        />
+                                        <StatCard
+                                            title="Dispatched"
+                                            value={d.dispatchedInScope}
+                                            subtitle={d.periodScoped ? `dispatched ${dispatchPeriodLabel.toLowerCase()}` : "dispatched all time"}
+                                            icon={Icons.truck}
+                                        />
+                                        <StatCard
+                                            title="Partially Ready"
+                                            value={d.partialCount}
+                                            subtitle="some pieces still in production"
+                                            highlight={d.partialCount > 0}
+                                            icon={Icons.layers}
+                                            onClick={d.partialCount > 0 ? () => setDispatchFilter(dispatchFilter === "partial" ? "all" : "partial") : undefined}
+                                        />
+                                    </div>
 
-                                    {recentlyDispatched.length > 0 && (
-                                        <div className="pm-channel-card" style={{ marginTop: 20 }}>
-                                            <p className="pm-card-title">Recently Dispatched</p>
-                                            <div style={{ overflowX: "auto" }}>
-                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Dispatched On</th><th style={{ padding: "8px 10px" }}>By</th></tr></thead>
-                                                    <tbody>{recentlyDispatched.map(o => (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0" }}><td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td><td style={{ padding: "8px 10px" }}>{getClientName(o) || "-"}</td><td style={{ padding: "8px 10px" }}>{formatDate(dispatchedDate(o)) || "-"}</td><td style={{ padding: "8px 10px" }}>{o.dispatched_by || "-"}</td></tr>))}</tbody>
+                                    {/* ===== CONTROLS ===== */}
+                                    <div className="pm-dispatch-controls">
+                                        <div className="pm-dispatch-chips">
+                                            {[
+                                                { key: "all", label: `All (${d.pending.length})` },
+                                                { key: "overdue", label: `Overdue (${d.overdueCount})` },
+                                                { key: "due", label: `Due (${d.dueCount})` },
+                                                { key: "partial", label: `Partially ready (${d.partialCount})` },
+                                            ].map(f => (
+                                                <button
+                                                    key={f.key}
+                                                    className={`pm-dispatch-chip ${dispatchFilter === f.key ? "active" : ""}`}
+                                                    onClick={() => setDispatchFilter(f.key)}
+                                                >
+                                                    {f.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <input
+                                            type="text"
+                                            className="pm-dispatch-search"
+                                            value={dispatchSearch}
+                                            onChange={(e) => setDispatchSearch(e.target.value)}
+                                            placeholder="Order no, customer, SA..."
+                                        />
+                                        <button className="pm-dispatch-export" onClick={handleDispatchExport}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                            Export Queue
+                                        </button>
+                                    </div>
+
+                                    {/* ===== DISPATCH QUEUE ===== */}
+                                    <div className="pm-channel-card">
+                                        <p className="pm-card-title">
+                                            Dispatch Queue ({pendingFiltered.length}{dispatchFilter !== "all" || q ? ` of ${d.pending.length}` : ""})
+                                        </p>
+                                        {pendingFiltered.length === 0 ? (
+                                            <p className="pm-muted" style={{ textAlign: "center", padding: 24 }}>
+                                                {d.pending.length > 0
+                                                    ? "No orders match the current filters."
+                                                    : scoped
+                                                        ? "Nothing is waiting to be dispatched in this period / channel."
+                                                        : "Nothing is waiting to be dispatched — every packed piece has gone out."}
+                                            </p>
+                                        ) : (
+                                            <div className="pm-dispatch-table-wrap">
+                                                <table className="pm-dispatch-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Order</th>
+                                                            <th>Customer</th>
+                                                            <th>Channel</th>
+                                                            <th style={{ textAlign: "center" }}>Pieces</th>
+                                                            <th>Stage</th>
+                                                            <th>Ready Since</th>
+                                                            <th style={{ textAlign: "center" }}>Waiting</th>
+                                                            <th>Dispatch By</th>
+                                                            <th style={{ textAlign: "center" }}>Urgency</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {pendingFiltered.slice(0, dispatchLimit).map(p => {
+                                                            const o = p.order;
+                                                            const urgency = p.overdue
+                                                                ? { cls: "pm-urg-overdue", label: p.daysToDue == null ? "Overdue" : `${Math.abs(p.daysToDue)}d overdue` }
+                                                                : p.daysToDue === 0 ? { cls: "pm-urg-today", label: "Due today" }
+                                                                    : p.daysToDue != null && p.daysToDue <= 2 ? { cls: "pm-urg-soon", label: `${p.daysToDue}d left` }
+                                                                        : p.daysToDue == null ? { cls: "pm-urg-none", label: "No date" }
+                                                                            : { cls: "pm-urg-ok", label: `${p.daysToDue}d left` };
+                                                            return (
+                                                                <tr
+                                                                    key={o.id}
+                                                                    className={p.overdue ? "pm-dispatch-row-overdue" : ""}
+                                                                    onClick={() => openOrderInList(o)}
+                                                                >
+                                                                    <td className="pm-mono">{o.order_no || "-"}</td>
+                                                                    <td>{getClientName(o) || "-"}</td>
+                                                                    <td><span className={`pm-channel-tag ${getChannelClass(o)}`}>{getChannelLabel(o)}</span></td>
+                                                                    <td style={{ textAlign: "center" }}>
+                                                                        <span className="pm-piece-count">{p.readyCount}</span>
+                                                                        {p.partial && (
+                                                                            <span className="pm-partial-flag" title={`${p.inProductionCount} piece(s) still in production`}>
+                                                                                +{p.inProductionCount} in prod
+                                                                            </span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>
+                                                                        {p.readyStages.map(s => (
+                                                                            <span key={s.stage} className="pm-stage-chip" style={{ "--chip-fg": getStageColor(s.stage) }}>
+                                                                                {s.label}{p.readyStages.length > 1 || s.count > 1 ? ` ${s.count}` : ""}
+                                                                            </span>
+                                                                        ))}
+                                                                    </td>
+                                                                    <td>{p.readySince ? formatDate(new Date(p.readySince).toISOString()) : "—"}</td>
+                                                                    <td style={{ textAlign: "center", fontWeight: 700, color: p.waitDays != null && p.waitDays > 3 ? "#c62828" : "#333" }}>
+                                                                        {p.waitDays == null ? "—" : `${p.waitDays}d`}
+                                                                    </td>
+                                                                    <td>{p.warehouseDue ? p.warehouseDue.toLocaleDateString("en-GB") : "—"}</td>
+                                                                    <td style={{ textAlign: "center" }}>
+                                                                        <span className={`pm-urgency-badge ${urgency.cls}`}>{urgency.label}</span>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                                {pendingFiltered.length > dispatchLimit && (
+                                                    <div style={{ marginTop: 12, textAlign: "center" }}>
+                                                        <button className="pm-showall-btn" onClick={() => setDispatchLimit(l => l + 50)}>
+                                                            Show 50 more ({pendingFiltered.length - dispatchLimit} remaining)
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* ===== RECENTLY DISPATCHED ===== */}
+                                    <div className="pm-channel-card">
+                                        <p className="pm-card-title">Recently Dispatched</p>
+                                        {dispatchedFiltered.length === 0 ? (
+                                            <p className="pm-muted" style={{ textAlign: "center", padding: 24 }}>
+                                                {d.dispatched.length > 0
+                                                    ? "No dispatched orders match your search."
+                                                    : scoped
+                                                        ? "No orders were dispatched in this period / channel."
+                                                        : "No dispatch scans recorded yet."}
+                                            </p>
+                                        ) : (
+                                            <div className="pm-dispatch-table-wrap">
+                                                <table className="pm-dispatch-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Order</th>
+                                                            <th>Customer</th>
+                                                            <th>Channel</th>
+                                                            <th style={{ textAlign: "center" }}>Pieces</th>
+                                                            <th>Dispatched On</th>
+                                                            <th style={{ textAlign: "center" }}>On Time</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {dispatchedFiltered.slice(0, 20).map(x => (
+                                                            <tr key={x.order.id} onClick={() => openOrderInList(x.order)}>
+                                                                <td className="pm-mono">{x.order.order_no || "-"}</td>
+                                                                <td>{getClientName(x.order) || "-"}</td>
+                                                                <td><span className={`pm-channel-tag ${getChannelClass(x.order)}`}>{getChannelLabel(x.order)}</span></td>
+                                                                <td style={{ textAlign: "center" }}>
+                                                                    <span className="pm-piece-count">{x.pieces}</span>
+                                                                    {x.stillPending > 0 && (
+                                                                        <span className="pm-partial-flag" title={`${x.stillPending} piece(s) still awaiting dispatch`}>
+                                                                            {x.stillPending} pending
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td>{x.at ? formatDate(new Date(x.at).toISOString()) : "—"}</td>
+                                                                <td style={{ textAlign: "center", fontWeight: 700, color: x.daysLate == null ? "#90a4ae" : x.daysLate <= 0 ? "#2e7d32" : "#c62828" }}>
+                                                                    {x.daysLate == null ? "—" : x.daysLate <= 0 ? "✓ on time" : `${x.daysLate}d late`}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
                                                 </table>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })()}
@@ -2610,6 +3435,44 @@ export default function ProductionManagerDashboard() {
                             const totalCompleted = completedRows.length;
                             const ontimePct = totalCompleted > 0 ? ((summary.ontime / totalCompleted) * 100).toFixed(1) : "0.0";
 
+                            // ==================== HEADLINE METRICS ====================
+                            // Average and worst delay across LATE completed orders only —
+                            // averaging in the on-time ones (negative days) would cancel the
+                            // lateness out and report a healthy-looking number.
+                            const lateRows = completedRows.filter(r => r.daysLate != null && r.daysLate > 0);
+                            const avgDelay = lateRows.length > 0
+                                ? (lateRows.reduce((s, r) => s + r.daysLate, 0) / lateRows.length).toFixed(1)
+                                : null;
+                            const worstDelay = lateRows.length > 0 ? Math.max(...lateRows.map(r => r.daysLate)) : null;
+                            // Orders with no trustworthy completion date — surfaced rather than
+                            // hidden, because they are a data-quality signal the PM should see.
+                            const noDateCount = completedRows.filter(r => r.bucket === "no_date").length;
+
+                            // ==================== BREAKDOWN: CHANNEL / SA ====================
+                            // Which channel (and which salesperson) is actually driving the
+                            // delays. A single on-time % hides that one channel can be fine
+                            // while another is the whole problem.
+                            const groupPerf = (rows, keyOf) => {
+                                const m = {};
+                                rows.forEach((r) => {
+                                    const k = keyOf(r) || "Unassigned";
+                                    const g = m[k] || (m[k] = { key: k, total: 0, ontime: 0, lateDays: 0, lateCount: 0 });
+                                    g.total++;
+                                    if (r.daysLate != null && r.daysLate <= 0) g.ontime++;
+                                    if (r.daysLate != null && r.daysLate > 0) { g.lateDays += r.daysLate; g.lateCount++; }
+                                });
+                                return Object.values(m)
+                                    .map(g => ({
+                                        ...g,
+                                        pct: g.total > 0 ? Math.round((g.ontime / g.total) * 100) : 0,
+                                        avgLate: g.lateCount > 0 ? (g.lateDays / g.lateCount).toFixed(1) : null,
+                                    }))
+                                    // Worst performer first — that's the row worth acting on.
+                                    .sort((a, b) => a.pct - b.pct || b.total - a.total);
+                            };
+                            const byChannel = groupPerf(completedRows, r => getOrderChannelLabel(r.order));
+                            const bySA = groupPerf(completedRows, r => r.order.salesperson).slice(0, 8);
+
                             // ==================== FILTER BY BUCKET + SEARCH ====================
                             const applyBucketAndSearch = (rows) => {
                                 let r = rows;
@@ -2651,7 +3514,7 @@ export default function ProductionManagerDashboard() {
                                     showPopup({ type: "info", title: "Nothing to export", message: "No orders match the current filters." });
                                     return;
                                 }
-                                const headers = ["Order No", "Type", "Customer", "SA Name", "Store", "Channel", "Product", "Size", "Amount", "Order Date", "Warehouse Date (T-2)", "Actual Delivery", "Days Late", "Bucket", "Status"];
+                                const headers = ["Order No", "Type", "Customer", "SA Name", "Store", "Channel", "Product", "Size", "Amount", "Order Date", "Promised Date", "Actual Delivery", "Days Late", "Bucket", "Status"];
                                 const csvRows = rows.map(r => {
                                     const o = r.order;
                                     const item = o.items?.[0] || {};
@@ -2711,63 +3574,187 @@ export default function ProductionManagerDashboard() {
                                 <div className="pm-orders-tab">
                                     <h2 className="pm-tab-title">Delivery Report</h2>
 
-                                    {/* ===== CONTROLS ===== */}
-                                    <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                                        {drPeriodControl}
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Channel</label>
-                                            <select value={drChannel} onChange={(e) => setDrChannel(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff" }}>
-                                                <option value="all">All Channels</option>
-                                                {CHANNEL_SEGMENTS.map(seg => (
-                                                    <option key={seg.label} value={seg.label}>{seg.label}</option>
-                                                ))}
-                                            </select>
+                                    <p className="pm-muted" style={{ margin: "-6px 0 4px 2px", fontSize: 12 }}>
+                                        Delivery performance against the promised date &mdash; how many orders landed on time, and where the delays are.
+                                    </p>
+
+                                    {/* ===== PERIOD + CHANNEL (same bar as the Dispatch tab) ===== */}
+                                    <PeriodFilter {...drPeriodProps} variant="pills">
+                                        <select
+                                            className="pm-dispatch-channel"
+                                            value={drChannel}
+                                            onChange={(e) => setDrChannel(e.target.value)}
+                                        >
+                                            <option value="all">All Channels</option>
+                                            {CHANNEL_SEGMENTS.map(seg => (
+                                                <option key={seg.label} value={seg.label}>{seg.label}</option>
+                                            ))}
+                                        </select>
+                                    </PeriodFilter>
+
+                                    {/* ===== HEADLINE ===== */}
+                                    <div className="pm-dispatch-hero">
+                                        <div>
+                                            <p className="pm-dispatch-hero-label">ON-TIME DELIVERY RATE</p>
+                                            <p className="pm-dispatch-hero-value" style={{ color: Number(ontimePct) >= 80 ? "#2e7d32" : Number(ontimePct) >= 60 ? "#e65100" : "#c62828" }}>{ontimePct}%</p>
+                                            <p className="pm-dispatch-hero-sub">{summary.ontime} of {totalCompleted} completed orders on time</p>
                                         </div>
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Status</label>
-                                            <select value={drStatus} onChange={(e) => setDrStatus(e.target.value)} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, background: "#fff" }}>
-                                                <option value="all">All</option>
-                                                <option value="done">Completed / Delivered</option>
-                                                <option value="open">Open (past deadline)</option>
-                                            </select>
-                                        </div>
-                                        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 200px", minWidth: 180 }}>
-                                            <label style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Search</label>
-                                            <input type="text" value={drSearch} onChange={(e) => setDrSearch(e.target.value)} placeholder="Order no, customer, SA, product..." style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13 }} />
-                                        </div>
-                                        <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignSelf: "flex-end" }}>
-                                            {drBucket !== "all" && (
-                                                <button onClick={() => setDrBucket("all")} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "7px 12px", cursor: "pointer", fontSize: 12 }}>Clear bucket</button>
-                                            )}
-                                            <button onClick={handleDrExport} style={{ display: "flex", alignItems: "center", gap: 6, background: "#2e7d32", color: "#fff", border: "none", borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                                                Export CSV
-                                            </button>
+                                        <div style={{ textAlign: "right" }}>
+                                            <p className="pm-dispatch-hero-label">CURRENTLY RUNNING LATE</p>
+                                            <p className="pm-dispatch-hero-value" style={{ color: openRows.length > 0 ? "#c62828" : "#2e7d32" }}>{openRows.length}</p>
+                                            <p className="pm-dispatch-hero-sub">open orders past their date</p>
                                         </div>
                                     </div>
 
-                                    {/* ===== HEADLINE KPI ===== */}
-                                    <div style={{ background: "linear-gradient(135deg, #faf6e8 0%, #fff 100%)", border: "1px solid #d5b85a", borderRadius: 12, padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-                                        <div>
-                                            <p style={{ fontSize: 12, color: "#8B7355", margin: 0, fontWeight: 600 }}>ON-TIME DELIVERY RATE</p>
-                                            <p style={{ fontSize: 32, fontWeight: 700, margin: "4px 0 0", color: Number(ontimePct) >= 80 ? "#2e7d32" : Number(ontimePct) >= 60 ? "#e65100" : "#c62828" }}>{ontimePct}%</p>
-                                            <p style={{ fontSize: 11, color: "#666", margin: "2px 0 0" }}>{summary.ontime} of {totalCompleted} completed orders on-time</p>
+                                    {/* ===== KPI CARDS ===== */}
+                                    <div className="pm-dispatch-kpis">
+                                        <StatCard
+                                            title="Delivered"
+                                            value={totalCompleted}
+                                            subtitle={`completed ${drPeriodLabel.toLowerCase()}`}
+                                            icon={Icons.package}
+                                        />
+                                        <StatCard
+                                            title="Delivered Late"
+                                            value={lateRows.length}
+                                            subtitle={totalCompleted > 0 ? `${Math.round((lateRows.length / totalCompleted) * 100)}% of deliveries` : "none"}
+                                            highlight={lateRows.length > 0}
+                                            icon={Icons.warning}
+                                        />
+                                        <StatCard
+                                            title="Avg Delay"
+                                            value={avgDelay == null ? "—" : `${avgDelay}d`}
+                                            subtitle={avgDelay == null ? "nothing delivered late" : "across late orders"}
+                                            highlight={avgDelay != null && Number(avgDelay) > 7}
+                                            icon={Icons.hourglass}
+                                        />
+                                        <StatCard
+                                            title="Worst Delay"
+                                            value={worstDelay == null ? "—" : `${worstDelay}d`}
+                                            subtitle={worstDelay == null ? "nothing delivered late" : "single worst order"}
+                                            highlight={worstDelay != null && worstDelay > 14}
+                                            icon={Icons.clock}
+                                        />
+                                        <StatCard
+                                            title="Critical (14d+)"
+                                            value={summary.b14_plus}
+                                            subtitle="severely delayed"
+                                            highlight={summary.b14_plus > 0}
+                                            icon={Icons.xCircle}
+                                            onClick={summary.b14_plus > 0 ? () => setDrBucket(drBucket === "14_plus" ? "all" : "14_plus") : undefined}
+                                        />
+                                    </div>
+
+                                    {/* ===== PERFORMANCE BREAKDOWN =====
+                                        A single on-time % hides which channel or SA is driving the
+                                        misses. Worst performer first — that's the actionable row. */}
+                                    {totalCompleted > 0 && (
+                                        <div className="pm-dr-split">
+                                            <div className="pm-channel-card">
+                                                <p className="pm-card-title">On-time by Channel</p>
+                                                <div className="pm-dispatch-table-wrap">
+                                                    <table className="pm-dispatch-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Channel</th>
+                                                                <th style={{ textAlign: "center" }}>Orders</th>
+                                                                <th style={{ textAlign: "center" }}>On-time</th>
+                                                                <th style={{ textAlign: "center" }}>Avg Delay</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {byChannel.map(g => (
+                                                                <tr key={g.key} className="pm-row-static">
+                                                                    <td>{g.key}</td>
+                                                                    <td style={{ textAlign: "center" }}>{g.total}</td>
+                                                                    <td style={{ textAlign: "center" }}>
+                                                                        <span className="pm-pct-badge" style={{ "--pct-fg": g.pct >= 80 ? "#2e7d32" : g.pct >= 60 ? "#e65100" : "#c62828" }}>{g.pct}%</span>
+                                                                    </td>
+                                                                    <td style={{ textAlign: "center", color: "#666" }}>{g.avgLate == null ? "—" : `${g.avgLate}d`}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                            <div className="pm-channel-card">
+                                                <p className="pm-card-title">On-time by Salesperson</p>
+                                                <div className="pm-dispatch-table-wrap">
+                                                    <table className="pm-dispatch-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Salesperson</th>
+                                                                <th style={{ textAlign: "center" }}>Orders</th>
+                                                                <th style={{ textAlign: "center" }}>On-time</th>
+                                                                <th style={{ textAlign: "center" }}>Avg Delay</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {bySA.map(g => (
+                                                                <tr key={g.key} className="pm-row-static">
+                                                                    <td>{g.key}</td>
+                                                                    <td style={{ textAlign: "center" }}>{g.total}</td>
+                                                                    <td style={{ textAlign: "center" }}>
+                                                                        <span className="pm-pct-badge" style={{ "--pct-fg": g.pct >= 80 ? "#2e7d32" : g.pct >= 60 ? "#e65100" : "#c62828" }}>{g.pct}%</span>
+                                                                    </td>
+                                                                    <td style={{ textAlign: "center", color: "#666" }}>{g.avgLate == null ? "—" : `${g.avgLate}d`}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div style={{ textAlign: "right" }}>
-                                            <p style={{ fontSize: 12, color: "#8B7355", margin: 0, fontWeight: 600 }}>CURRENTLY RUNNING LATE</p>
-                                            <p style={{ fontSize: 32, fontWeight: 700, margin: "4px 0 0", color: openRows.length > 0 ? "#c62828" : "#2e7d32" }}>{openRows.length}</p>
-                                            <p style={{ fontSize: 11, color: "#666", margin: "2px 0 0" }}>open orders past delivery date</p>
+                                    )}
+
+                                    {/* ===== STATUS + SEARCH + EXPORT ===== */}
+                                    <div className="pm-dispatch-controls">
+                                        <div className="pm-dispatch-chips">
+                                            {[
+                                                { key: "all", label: "All" },
+                                                { key: "done", label: `Delivered (${completedRows.length})` },
+                                                { key: "open", label: `Running late (${openRows.length})` },
+                                            ].map(f => (
+                                                <button
+                                                    key={f.key}
+                                                    className={`pm-dispatch-chip ${drStatus === f.key ? "active" : ""}`}
+                                                    onClick={() => setDrStatus(f.key)}
+                                                >
+                                                    {f.label}
+                                                </button>
+                                            ))}
+                                            {drBucket !== "all" && (
+                                                <button className="pm-dispatch-chip active" onClick={() => setDrBucket("all")}>
+                                                    {bucketStyle(drBucket).label} {"×"}
+                                                </button>
+                                            )}
                                         </div>
+                                        <input
+                                            type="text"
+                                            className="pm-dispatch-search"
+                                            value={drSearch}
+                                            onChange={(e) => setDrSearch(e.target.value)}
+                                            placeholder="Order no, customer, SA, product..."
+                                        />
+                                        <button className="pm-dispatch-export" onClick={handleDrExport}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                            Export CSV
+                                        </button>
                                     </div>
 
                                     {/* ===== BUCKET CARDS ===== */}
-                                    <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Completed Orders by Delay Bucket (click to filter)</p>
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
+                                    <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>
+                                        Completed Orders by Delay Bucket (click to filter)
+                                    </p>
+                                    <div className="pm-dr-buckets">
                                         <BucketCard title="On-time" value={summary.ontime} bucketKey="ontime" highlight={true} />
                                         <BucketCard title="0–2 days late" value={summary.b0_2} bucketKey="0_2" highlight={summary.b0_2 > 0} />
                                         <BucketCard title="2–7 days late" value={summary.b2_7} bucketKey="2_7" highlight={summary.b2_7 > 0} />
                                         <BucketCard title="7–14 days late" value={summary.b7_14} bucketKey="7_14" highlight={summary.b7_14 > 0} />
                                         <BucketCard title="14+ days critical" value={summary.b14_plus} bucketKey="14_plus" highlight={summary.b14_plus > 0} />
+                                        {noDateCount > 0 && (
+                                            <BucketCard title="No delivery date" value={noDateCount} bucketKey="no_date" highlight={true} subtitle="not recorded" />
+                                        )}
                                     </div>
 
                                     {/* ===== OPEN ORDERS RUNNING LATE ===== */}
@@ -2786,11 +3773,11 @@ export default function ProductionManagerDashboard() {
                                                         <th style={{ padding: "10px 12px", textAlign: "center" }}>Bucket</th>
                                                         <th style={{ padding: "10px 12px" }}>Stage</th>
                                                     </tr></thead>
-                                                    <tbody>{filteredOpen.slice(0, 50).map(r => {
+                                                    <tbody>{filteredOpen.slice(0, drOpenLimit).map(r => {
                                                         const o = r.order;
                                                         const style = bucketStyle(r.bucket);
                                                         return (
-                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => openOrderInList(o)}>
                                                                 <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{getClientName(o) || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
@@ -2806,10 +3793,13 @@ export default function ProductionManagerDashboard() {
                                                     })}</tbody>
                                                 </table>
                                             </div>
-                                            {filteredOpen.length > 50 && (
-                                                <div style={{ marginTop: 10, textAlign: "center" }}>
+                                            {filteredOpen.length > drOpenLimit && (
+                                                <div className="pm-dr-more">
+                                                    <button className="pm-showall-btn" onClick={() => setDrOpenLimit(l => l + 50)}>
+                                                        Show 50 more ({filteredOpen.length - drOpenLimit} remaining)
+                                                    </button>
                                                     <button className="pm-showall-btn" onClick={() => showAllFromReport("open")}>
-                                                        Show all {filteredOpen.length} in All Orders
+                                                        Open all {filteredOpen.length} in All Orders
                                                     </button>
                                                 </div>
                                             )}
@@ -2835,11 +3825,11 @@ export default function ProductionManagerDashboard() {
                                                         <th style={{ padding: "10px 12px", textAlign: "center" }}>Days Late</th>
                                                         <th style={{ padding: "10px 12px", textAlign: "center" }}>Bucket</th>
                                                     </tr></thead>
-                                                    <tbody>{filteredCompleted.slice(0, 50).map(r => {
+                                                    <tbody>{filteredCompleted.slice(0, drDoneLimit).map(r => {
                                                         const o = r.order;
                                                         const style = bucketStyle(r.bucket);
                                                         return (
-                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => openOrderInList(o)}>
                                                                 <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{getClientName(o) || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
@@ -2855,10 +3845,13 @@ export default function ProductionManagerDashboard() {
                                                         );
                                                     })}</tbody>
                                                 </table>
-                                                {filteredCompleted.length > 50 && (
-                                                    <div style={{ marginTop: 10, textAlign: "center" }}>
+                                                {filteredCompleted.length > drDoneLimit && (
+                                                    <div className="pm-dr-more">
+                                                        <button className="pm-showall-btn" onClick={() => setDrDoneLimit(l => l + 50)}>
+                                                            Show 50 more ({filteredCompleted.length - drDoneLimit} remaining)
+                                                        </button>
                                                         <button className="pm-showall-btn" onClick={() => showAllFromReport("completed")}>
-                                                            Show all {filteredCompleted.length} in All Orders
+                                                            Open all {filteredCompleted.length} in All Orders
                                                         </button>
                                                     </div>
                                                 )}
@@ -2877,204 +3870,260 @@ export default function ProductionManagerDashboard() {
                             const daysInMonth = new Date(year, month + 1, 0).getDate();
                             const firstDay = new Date(year, month, 1).getDay();
                             const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                            const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
                             const goToPrevMonth = () => { setSelectedCalendarDate(null); if (month === 0) { setCalendarMonth(11); setCalendarYear(year - 1); } else setCalendarMonth(month - 1); };
                             const goToNextMonth = () => { setSelectedCalendarDate(null); if (month === 11) { setCalendarMonth(0); setCalendarYear(year + 1); } else setCalendarMonth(month + 1); };
                             const goToToday = () => { setSelectedCalendarDate(null); setCalendarMonth(now.getMonth()); setCalendarYear(now.getFullYear()); };
-                            const jumpToDate = (e) => {
-                                const v = e.target.value; // YYYY-MM-DD
-                                if (!v) return;
-                                const d = new Date(v);
-                                setCalendarMonth(d.getMonth());
-                                setCalendarYear(d.getFullYear());
-                                setSelectedCalendarDate(v);
-                            };
+                            // An order is finished when it has left production — the same rule
+                            // the rest of the dashboard uses, so a "done" day here agrees with
+                            // every other tab.
+                            const isFinished = (o) =>
+                                ["delivered", "completed", "dispatched"].includes((o.status || "").toLowerCase()) ||
+                                o.warehouse_stage === "dispatched";
 
+                            // delivery_date is a plain YYYY-MM-DD column, so slice it rather
+                            // than round-tripping through Date — new Date(d).toISOString()
+                            // shifts the day backwards for any timezone behind UTC.
+                            const dayKeyOf = (o) => (o.delivery_date || "").slice(0, 10);
+
+                            const calOrders = orders.filter((o) => {
+                                if (!o.delivery_date || o.status === "cancelled") return false;
+                                if (calChannel !== "all" && getOrderChannelLabel(o) !== calChannel) return false;
+                                return true;
+                            });
+
+                            // Per-day buckets. `late` = still unfinished and the date has passed;
+                            // that is the state a PM needs to spot on a calendar.
                             const deliveryMap = {};
-                            orders.forEach(o => {
-                                if (o.delivery_date && o.status !== "cancelled") {
-                                    const key = new Date(o.delivery_date).toISOString().split("T")[0];
-                                    if (!deliveryMap[key]) deliveryMap[key] = { total: 0, delivered: 0, pending: 0 };
-                                    deliveryMap[key].total++;
-                                    if (o.status === "delivered" || o.status === "completed") deliveryMap[key].delivered++;
-                                    else deliveryMap[key].pending++;
-                                }
+                            calOrders.forEach((o) => {
+                                const key = dayKeyOf(o);
+                                if (!key) return;
+                                const b = deliveryMap[key] || (deliveryMap[key] = { total: 0, done: 0, pending: 0, late: 0 });
+                                b.total++;
+                                if (isFinished(o)) b.done++;
+                                else { b.pending++; if (key < todayKey) b.late++; }
                             });
 
                             const cells = [];
                             for (let i = 0; i < firstDay; i++) cells.push(null);
                             for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
-                            const monthOrders = orders.filter(o => {
-                                if (!o.delivery_date || o.status === "cancelled") return false;
-                                const dd = new Date(o.delivery_date);
-                                return dd.getMonth() === month && dd.getFullYear() === year;
-                            }).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date));
+                            const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+                            const monthOrders = calOrders
+                                .filter((o) => dayKeyOf(o).startsWith(monthPrefix))
+                                .sort((a, b) => dayKeyOf(a).localeCompare(dayKeyOf(b)) || (a.order_no || "").localeCompare(b.order_no || ""));
 
-                            // Selected-day orders (if a date has been clicked)
-                            const selectedDayOrders = selectedCalendarDate ? orders.filter(o => {
-                                if (!o.delivery_date || o.status === "cancelled") return false;
-                                return new Date(o.delivery_date).toISOString().split("T")[0] === selectedCalendarDate;
-                            }).sort((a, b) => (a.order_no || "").localeCompare(b.order_no || "")) : [];
+                            const selectedDayOrders = selectedCalendarDate
+                                ? calOrders.filter((o) => dayKeyOf(o) === selectedCalendarDate)
+                                    .sort((a, b) => (a.order_no || "").localeCompare(b.order_no || ""))
+                                : [];
 
-                            // Export handler — exports the current visible scope
+                            // The one number worth calling out beside the month: work that
+                            // is past its date and still unfinished.
+                            const monthLate = monthOrders.filter((o) => !isFinished(o) && dayKeyOf(o) < todayKey).length;
+
+                            // What the list below the grid is showing right now.
+                            const listOrders = selectedCalendarDate ? selectedDayOrders : monthOrders;
+                            const listLabel = selectedCalendarDate
+                                ? `Deliveries on ${formatDate(selectedCalendarDate)}`
+                                : `All deliveries in ${monthNames[month]} ${year}`;
+
                             const handleCalendarExport = () => {
-                                const scope = selectedCalendarDate ? selectedDayOrders : monthOrders;
-                                if (scope.length === 0) {
+                                if (listOrders.length === 0) {
                                     showPopup({ type: "info", title: "Nothing to export", message: "No deliveries in the selected range." });
                                     return;
                                 }
-                                const headers = ["Order No", "Customer Name", "Product", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Stage", "Priority", "Notes", "Order Date", "Warehouse Date (T-2)"];
-                                const rows = scope.map(o => {
-                                    const it = o.items?.[0] || {};
-                                    return [
-                                        o.order_no || "",
-                                        o.delivery_name || "",
-                                        it.product_name || "",
-                                        it.size || "",
-                                        o.grand_total || 0,
-                                        it.top_color?.name || "",
-                                        it.bottom_color?.name || "",
-                                        o.salesperson || "",
-                                        o.salesperson_store || "",
-                                        o.status || "",
-                                        (o.warehouse_stage || o.status || "").replace(/_/g, " "),
-                                        o.priority || "normal",
-                                        o.notes || "",
-                                        o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
-                                        getWarehouseDate(o.delivery_date, o.created_at, ""),
-                                    ].map(v => `"${String(v).replace(/"/g, '""')}"`);
+                                downloadCsv({
+                                    filename: `delivery_calendar_${selectedCalendarDate || `${monthNames[month]}_${year}`}`,
+                                    dated: false,
+                                    headers: [
+                                        "Order No", "Customer", "SA", "Store", "Channel", "Product", "Size", "Amount",
+                                        "Delivery Date", "Dispatch By", "Current Stage", "Status", "Priority",
+                                    ],
+                                    rows: listOrders.map((o) => {
+                                        const it = o.items?.[0] || {};
+                                        return [
+                                            o.order_no || "",
+                                            getClientName(o) || "",
+                                            o.salesperson || "",
+                                            o.salesperson_store || "",
+                                            getChannelLabel(o),
+                                            it.product_name || "",
+                                            it.size || "",
+                                            o.grand_total || 0,
+                                            formatDate(o.delivery_date) || "",
+                                            getWarehouseDate(o.delivery_date, o.created_at, ""),
+                                            getStageLabel(o.warehouse_stage) || o.warehouse_stage || "Order Received",
+                                            getOrderStatusLabel(o.status),
+                                            o.priority || "Normal",
+                                        ];
+                                    }),
                                 });
-                                const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-                                const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url;
-                                const label = selectedCalendarDate ? selectedCalendarDate : `${monthNames[month]}_${year}`;
-                                a.download = `delivery_calendar_${label}.csv`;
-                                a.click();
-                                URL.revokeObjectURL(url);
                             };
 
-                            // Date input value (YYYY-MM-DD) for jump-to
-                            const jumpValue = selectedCalendarDate || `${year}-${String(month + 1).padStart(2, "0")}-01`;
+                            const jumpValue = selectedCalendarDate || `${monthPrefix}-01`;
 
                             return (
                                 <div className="pm-orders-tab">
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-                                        <h2 className="pm-tab-title" style={{ margin: 0 }}>Delivery Calendar</h2>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                            <button onClick={goToPrevMonth} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 16 }}>{"\u25C0"}</button>
-                                            <span style={{ fontWeight: 600, fontSize: 16, minWidth: 140, textAlign: "center" }}>{monthNames[month]} {year}</span>
-                                            <button onClick={goToNextMonth} style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 16 }}>{"\u25B6"}</button>
-                                            <input
-                                                type="date"
-                                                value={jumpValue}
-                                                onChange={jumpToDate}
-                                                style={{ border: "1px solid #ddd", borderRadius: 6, padding: "6px 10px", fontSize: 13, cursor: "pointer" }}
-                                                title="Jump to any date"
-                                            />
-                                            <button onClick={goToToday} style={{ background: "#d5b85a", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Today</button>
-                                            <button onClick={handleCalendarExport} style={{ display: "flex", alignItems: "center", gap: 6, background: "#2e7d32", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                                    <h2 className="pm-tab-title">Delivery Calendar</h2>
+                                    <p className="pm-muted" style={{ margin: "-6px 0 4px 2px", fontSize: 12 }}>
+                                        When orders are promised to customers. Click any date to see that day&apos;s deliveries.
+                                    </p>
+
+                                    {/* ===== MONTH NAV ===== */}
+                                    {/* One row: move through months, scope by channel, export.
+                                        Deliberately minimal — this tab answers "what is due when",
+                                        so anything that isn't the month, the days, or the list is
+                                        noise competing with the calendar itself. */}
+                                    <div className="pm-cal-bar">
+                                        <div className="pm-cal-nav">
+                                            <button className="pm-cal-arrow" onClick={goToPrevMonth} title="Previous month">{"◀"}</button>
+                                            <span className="pm-cal-month">{monthNames[month]} {year}</span>
+                                            <button className="pm-cal-arrow" onClick={goToNextMonth} title="Next month">{"▶"}</button>
+                                            <button className="pm-cal-today" onClick={goToToday}>Today</button>
+                                            <span className="pm-cal-count">
+                                                {monthOrders.length} deliver{monthOrders.length === 1 ? "y" : "ies"}
+                                                {monthLate > 0 && <b className="pm-cal-count-late"> {"·"} {monthLate} overdue</b>}
+                                            </span>
+                                        </div>
+                                        <div className="pm-cal-scope">
+                                            <select className="pm-dispatch-channel" value={calChannel} onChange={(e) => setCalChannel(e.target.value)}>
+                                                <option value="all">All Channels</option>
+                                                {CHANNEL_SEGMENTS.map(seg => (
+                                                    <option key={seg.label} value={seg.label}>{seg.label}</option>
+                                                ))}
+                                            </select>
+                                            <button className="pm-dispatch-export" onClick={handleCalendarExport}>
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                                                 Export
                                             </button>
                                         </div>
                                     </div>
-                                    <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-                                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center", marginBottom: 8 }}>
-                                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (<div key={d} style={{ fontSize: 11, fontWeight: 600, color: "#999", padding: "6px 0" }}>{d}</div>))}
+
+                                    {/* ===== GRID ===== */}
+                                    <div className="pm-cal-card">
+                                        <div className="pm-cal-dow">
+                                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => <div key={d}>{d}</div>)}
                                         </div>
-                                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                                        <div className="pm-cal-grid">
                                             {cells.map((day, i) => {
-                                                if (!day) return <div key={`e${i}`} />;
-                                                const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                                                if (!day) return <div key={`e${i}`} className="pm-cal-empty" />;
+                                                const dateKey = `${monthPrefix}-${String(day).padStart(2, "0")}`;
                                                 const info = deliveryMap[dateKey];
-                                                const isToday = day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
-                                                const isPast = new Date(dateKey) < new Date(now.toISOString().split("T")[0]);
+                                                const isToday = dateKey === todayKey;
+                                                const isPast = dateKey < todayKey;
                                                 const isSelected = selectedCalendarDate === dateKey;
-                                                const hasOrders = !!info;
+                                                const cls = [
+                                                    "pm-cal-day",
+                                                    isSelected ? "selected" : "",
+                                                    isToday ? "today" : "",
+                                                    isPast && !isSelected ? "past" : "",
+                                                    info?.late > 0 ? "has-late" : "",
+                                                ].filter(Boolean).join(" ");
                                                 return (
-                                                    <div
+                                                    <button
+                                                        type="button"
                                                         key={day}
+                                                        className={cls}
                                                         onClick={() => setSelectedCalendarDate(isSelected ? null : dateKey)}
-                                                        style={{
-                                                            border: isSelected ? "2px solid #2e7d32" : isToday ? "2px solid #d5b85a" : "1px solid #f0f0f0",
-                                                            borderRadius: 8,
-                                                            padding: "6px 4px",
-                                                            minHeight: 56,
-                                                            background: isSelected ? "#e8f5e9" : isToday ? "#faf6e8" : isPast ? "#fafafa" : "#fff",
-                                                            cursor: "pointer",
-                                                            transition: "all 0.15s",
-                                                        }}
-                                                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = hasOrders ? "#fff8e1" : "#f5f5f5"; }}
-                                                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = isToday ? "#faf6e8" : isPast ? "#fafafa" : "#fff"; }}
+                                                        title={info ? `${info.total} deliver${info.total === 1 ? "y" : "ies"}${info.late ? ` · ${info.late} overdue` : ""}` : "No deliveries"}
                                                     >
-                                                        <div style={{ fontSize: 12, fontWeight: isToday || isSelected ? 700 : 400, color: isSelected ? "#2e7d32" : isToday ? "#d5b85a" : "#333" }}>{day}</div>
-                                                        {info && (<div style={{ marginTop: 2 }}>
-                                                            {info.pending > 0 && <div style={{ fontSize: 9, background: "#fff3e0", color: "#e65100", borderRadius: 4, padding: "1px 4px", marginTop: 2 }}>{info.pending} due</div>}
-                                                            {info.delivered > 0 && <div style={{ fontSize: 9, background: "#e8f5e9", color: "#2e7d32", borderRadius: 4, padding: "1px 4px", marginTop: 2 }}>{info.delivered} done</div>}
-                                                        </div>)}
-                                                    </div>
+                                                        <span className="pm-cal-daynum">{day}</span>
+                                                        {/* One number per day: how many orders are due. Three
+                                                            stacked pills (late/due/done) turned a 31-day grid
+                                                            into ~90 competing labels — the day's total is what
+                                                            the grid is for, and the row colour already says
+                                                            whether any of it is overdue. The breakdown is one
+                                                            click away in the list below. */}
+                                                        {info && (
+                                                            <span className={`pm-cal-count-badge ${info.late > 0 ? "late" : info.pending === 0 ? "done" : "due"}`}>
+                                                                {info.total}
+                                                            </span>
+                                                        )}
+                                                    </button>
                                                 );
                                             })}
                                         </div>
-                                        <p style={{ fontSize: 11, color: "#999", marginTop: 10, textAlign: "center" }}>Click any date to see its deliveries {"\u00B7"} Use the date picker to jump to any month/year</p>
                                     </div>
 
-                                    {/* ===== SELECTED DAY PANEL ===== */}
-                                    {selectedCalendarDate && (
-                                        <div className="pm-channel-card" style={{ marginBottom: 20, borderLeft: "4px solid #2e7d32" }}>
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-                                                <p className="pm-card-title" style={{ margin: 0 }}>{"\uD83D\uDCC5"} Deliveries on {formatDate(selectedCalendarDate)} {"\u2014"} {selectedDayOrders.length} orders</p>
-                                                <button onClick={() => setSelectedCalendarDate(null)} style={{ background: "transparent", border: "1px solid #ddd", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>Clear</button>
-                                            </div>
-                                            {selectedDayOrders.length > 0 ? (
-                                                <div style={{ overflowX: "auto" }}>
-                                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                                                        <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left", background: "#fafafa" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Amount</th><th style={{ padding: "8px 10px" }}>Stage</th><th style={{ padding: "8px 10px" }}>Status</th></tr></thead>
-                                                        <tbody>{selectedDayOrders.map(o => (
-                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
-                                                                <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
-                                                                <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
-                                                                <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
-                                                                <td style={{ padding: "8px 10px" }}>{"\u20B9"}{formatIndianNumber(o.grand_total || 0)}</td>
-                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage ? o.warehouse_stage.replace(/_/g, " ") : getOrderStatusLabel(o.status))}</td>
-                                                                <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{getOrderStatusLabel(o.status)}</td>
-                                                            </tr>
-                                                        ))}</tbody>
-                                                    </table>
-                                                </div>
-                                            ) : (
-                                                <p className="pm-muted" style={{ textAlign: "center", padding: 14 }}>No deliveries scheduled for this date</p>
+                                    {/* ===== LIST (selected day, else whole month) ===== */}
+                                    <div className="pm-channel-card">
+                                        <div className="pm-cal-list-head">
+                                            <p className="pm-card-title" style={{ margin: 0 }}>
+                                                {listLabel} {"—"} {listOrders.length} order{listOrders.length === 1 ? "" : "s"}
+                                            </p>
+                                            {selectedCalendarDate && (
+                                                <button className="pm-dispatch-chip" onClick={() => setSelectedCalendarDate(null)}>
+                                                    Show whole month
+                                                </button>
                                             )}
                                         </div>
-                                    )}
-
-                                    {/* ===== FULL MONTH TABLE (only shown when no date selected) ===== */}
-                                    {!selectedCalendarDate && monthOrders.length > 0 && (
-                                        <div className="pm-channel-card">
-                                            <p className="pm-card-title">All Deliveries in {monthNames[month]} {"\u2014"} {monthOrders.length} orders</p>
-                                            <div style={{ overflowX: "auto" }}>
-                                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                                                    <thead><tr style={{ borderBottom: "2px solid #e0e0e0", textAlign: "left" }}><th style={{ padding: "8px 10px" }}>Order</th><th style={{ padding: "8px 10px" }}>Customer</th><th style={{ padding: "8px 10px" }}>Product</th><th style={{ padding: "8px 10px" }}>Delivery Date</th><th style={{ padding: "8px 10px" }}>Status</th></tr></thead>
-                                                    <tbody>{monthOrders.map(o => (
-                                                        <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
-                                                            <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
-                                                            <td style={{ padding: "8px 10px" }}>{o.delivery_name || "-"}</td>
-                                                            <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
-                                                            <td style={{ padding: "8px 10px" }} title={`Customer date: ${formatDate(o.delivery_date)}`}>{getWarehouseDate(o.delivery_date, o.created_at)}</td>
-                                                            <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{(o.warehouse_stage ? o.warehouse_stage.replace(/_/g, " ") : getOrderStatusLabel(o.status))}</td>
+                                        {listOrders.length === 0 ? (
+                                            <p className="pm-muted" style={{ textAlign: "center", padding: 24 }}>
+                                                {calChannel !== "all"
+                                                    ? `No ${calChannel} deliveries here.`
+                                                    : "No deliveries scheduled."}
+                                            </p>
+                                        ) : (
+                                            <div className="pm-dispatch-table-wrap">
+                                                <table className="pm-dispatch-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Order</th>
+                                                            <th>Customer</th>
+                                                            <th>Channel</th>
+                                                            <th>Product</th>
+                                                            <th>Delivery Date</th>
+                                                            <th>Current Stage</th>
+                                                            <th style={{ textAlign: "center" }}>Status</th>
                                                         </tr>
-                                                    ))}</tbody>
+                                                    </thead>
+                                                    <tbody>
+                                                        {listOrders.slice(0, calLimit).map((o) => {
+                                                            const key = dayKeyOf(o);
+                                                            const done = isFinished(o);
+                                                            const late = !done && key < todayKey;
+                                                            // Ladder status from the order's own pieces (componentsByOrder
+                                                            // is the existing per-order lookup), so a status column and a
+                                                            // stage column say different, non-contradictory things.
+                                                            const statusLabel = getOrderProgressStatus(o, componentsByOrder[o.id]);
+                                                            return (
+                                                                <tr key={o.id} className={late ? "pm-dispatch-row-overdue" : ""} onClick={() => openOrderInList(o)}>
+                                                                    <td className="pm-mono">{o.order_no || "-"}</td>
+                                                                    <td>{getClientName(o) || "-"}</td>
+                                                                    <td><span className={`pm-channel-tag ${getChannelClass(o)}`}>{getChannelLabel(o)}</span></td>
+                                                                    <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
+                                                                    <td>{formatDate(o.delivery_date)}</td>
+                                                                    <td>{getStageLabel(o.warehouse_stage) || "Order Received"}</td>
+                                                                    <td style={{ textAlign: "center" }}>
+                                                                        {/* The real ladder status, never an invented word. "Overdue"
+                                                                            is a separate fact (past its date, still running), so it
+                                                                            rides alongside rather than replacing the status. */}
+                                                                        <span className={`pm-status-badge pm-status-${getOrderProgressStatusKey(statusLabel)}`}>
+                                                                            {statusLabel}
+                                                                        </span>
+                                                                        {late && <span className="pm-status-late">Overdue</span>}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
                                                 </table>
+                                                {listOrders.length > calLimit && (
+                                                    <div className="pm-dr-more">
+                                                        <button className="pm-showall-btn" onClick={() => setCalLimit(l => l + 50)}>
+                                                            Show 50 more ({listOrders.length - calLimit} remaining)
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    )}
-                                    {!selectedCalendarDate && monthOrders.length === 0 && <p className="pm-muted" style={{ textAlign: "center", padding: 20 }}>No deliveries for {monthNames[month]} {year}</p>}
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })()}
+
 
                         {activeTab === "overrides" && (
                             <div className="pm-orders-tab">

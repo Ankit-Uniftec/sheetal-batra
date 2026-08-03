@@ -190,11 +190,43 @@
 .pm-channel-store { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
 
 /* Status Colors (pills) */
-.pm-status-pending { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
-.pm-status-inprod { background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
+/* Order-status ladder (getOrderProgressStatusKey): received -> inprod ->
+   completed -> dispatched -> delivered, plus the two terminal states.
+   Colours advance warm -> blue -> green -> purple so progress reads visually. */
+/* index.css forces `color:#000 !important` on every span — these must too. */
+.pm-status-received { background: #fff3e0; color: #e65100 !important; border: 1px solid #ffcc80; }
+.pm-status-inprod { background: #e3f2fd; color: #1565c0 !important; border: 1px solid #bbdefb; }
+.pm-status-completed { background: #e8f5e9; color: #2e7d32 !important; border: 1px solid #c8e6c9; }
+.pm-status-dispatched { background: #ede7f6; color: #4527a0 !important; border: 1px solid #d1c4e9; }
+.pm-status-delivered { background: #f3e5f5; color: #6a1b9a !important; border: 1px solid #e1bee7; }
+.pm-status-cancelled { background: #ffebee; color: #c62828 !important; border: 1px solid #ffcdd2; }
+.pm-status-exchange { background: #eceff1; color: #455a64 !important; border: 1px solid #cfd8dc; }
+/* Retained: "ready" and "pending" are legacy keys still referenced by older
+   markup on this screen. */
 .pm-status-ready { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
-.pm-status-dispatched { background: #f3e5f5; color: #6a1b9a; border: 1px solid #e1bee7; }
-.pm-status-cancelled { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+.pm-status-pending { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+
+/* Status badge in a table cell (calendar list), plus the separate "past its
+   date" marker that rides beside it rather than replacing the status. */
+.pm-status-badge {
+    display: inline-block;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.pm-status-late {
+    display: inline-block;
+    margin-left: 6px;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    background: #b71c1c;
+    color: #fff !important;
+    white-space: nowrap;
+}
 
 /* Pipeline Card */
 .pm-pipeline-card { background: #FFFFFFB0; padding: 20px; border-radius: 12px; border: 1px solid #D4D4D4; height: fit-content; }
@@ -221,6 +253,19 @@
 .pm-filter-select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; background: white; cursor: pointer; width: auto; flex: 0 0 auto; }
 .pm-filter-select:focus { border-color: #d5b85a; outline: none; }
 .pm-filter-active { border-color: #d5b85a !important; background: #faf6e8 !important; color: #8a6d00 !important; font-weight: 600; }
+
+/* Date Range — the shared PeriodFilter mounted INLINE in the filter bar (one
+   dropdown, no nested panel/Apply step). The shared .pfx is built as a
+   standalone row, so drop its bottom margin and match the neighbouring
+   .pm-filter-select buttons' border/height. .pm-filter-active on the wrapper
+   tints the select when a period other than "All time" is chosen. */
+.pm-period-inline { display: inline-flex; align-items: center; }
+.pm-period-inline .pfx { margin-bottom: 0; gap: 8px; }
+.pm-period-inline .pfx-label { color: #555; }
+.pm-period-inline .pfx-select { border-color: #ddd; }
+.pm-period-inline.pm-filter-active { background: transparent !important; border: none !important; }
+.pm-period-inline.pm-filter-active .pfx-select { border-color: #d5b85a; background: #faf6e8; color: #8a6d00; font-weight: 600; }
+.pm-period-inline.pm-filter-active .pfx-label { color: #8a6d00; font-weight: 600; }
 
 /* Filter Dropdown Panels */
 .pm-dropdown-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 200; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 14px 16px; min-width: 220px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 8px; }
@@ -786,6 +831,329 @@
     transition: background 0.15s;
 }
 .pm-showall-btn:hover { background: #f7edd0; }
+
+/* Clickable count inside a table cell (Production Stage Bottlenecks) — looks
+   like the number it replaces, but drills into exactly those orders.
+   index.css forces `color: #000 !important` on every button, so the colours
+   here need !important to land (same reason as .pm-bucket-badge below). */
+.pm-linkish {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    background: none;
+    border: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #1565c0 !important;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.pm-linkish:hover { background: #eef4fb; }
+.pm-linkish-danger { color: #c62828 !important; font-weight: 700; }
+.pm-linkish-danger:hover { background: #fdeaea; }
+
+/* ==================== DISPATCH TAB ==================== */
+
+/* Headline strip — the two numbers a PM checks first: size of the outbound
+   queue, and whether recent dispatches actually made their deadline. Matches
+   the Delivery Report hero so the two sub-tabs read as one section. */
+.pm-dispatch-hero {
+    background: linear-gradient(135deg, #faf6e8 0%, #fff 100%);
+    border: 1px solid #d5b85a;
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.pm-dispatch-hero-label { font-size: 12px; color: #8B7355; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+.pm-dispatch-hero-value { font-size: 32px; font-weight: 700; margin: 4px 0 0; }
+.pm-dispatch-hero-sub { font-size: 11px; color: #666; margin: 2px 0 0; }
+/* Per-row stage chip in the queue table. Outlined rather than filled so a row
+   with two stages stays readable. The colour arrives as --chip-fg because
+   index.css forces `color: #000 !important` on every span, which a plain inline
+   style cannot beat (same reason as .pm-bucket-badge). */
+.pm-stage-chip {
+    display: inline-block;
+    border: 1px solid var(--chip-fg, #8b7355);
+    color: var(--chip-fg, #8b7355) !important;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-right: 4px;
+    background: #fff;
+}
+
+/* KPI row — five cards on one line, wrapping to fewer columns as space runs
+   out. Not .pm-stats-row-3, which is a fixed 3-up grid and left a ragged
+   two-card orphan row once the redundant "today" cards were merged away. */
+.pm-dispatch-kpis {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+}
+@media (max-width: 1400px) { .pm-dispatch-kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px)  { .pm-dispatch-kpis { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
+@media (max-width: 560px)  { .pm-dispatch-kpis { grid-template-columns: 1fr; gap: 12px; } }
+
+/* ==================== DELIVERY CALENDAR ==================== */
+
+.pm-cal-bar {
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+}
+.pm-cal-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-cal-scope { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-cal-arrow {
+    background: #fff; border: 1px solid #D4D4D4; border-radius: 8px;
+    padding: 6px 12px; cursor: pointer; font-size: 13px; color: #8b7355 !important;
+    font-family: inherit; line-height: 1;
+}
+.pm-cal-arrow:hover { border-color: #d5b85a; }
+.pm-cal-month { font-weight: 700; font-size: 15px; min-width: 150px; text-align: center; color: #8b7355; }
+.pm-cal-today {
+    background: #d5b85a; color: #fff !important; border: none; border-radius: 8px;
+    padding: 7px 14px; cursor: pointer; font-size: 12px; font-weight: 600; font-family: inherit;
+}
+.pm-cal-today:hover { background: #c5a84a; }
+/* Month total, inline beside the nav — no separate summary strip. */
+.pm-cal-count { font-size: 12.5px; color: #8a8a8a; margin-left: 4px; }
+.pm-cal-count-late { color: #c62828; }
+
+.pm-cal-card { background: #FFFFFFB0; border: 1px solid #D4D4D4; border-radius: 12px; padding: 16px; }
+.pm-cal-dow {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+    text-align: center; margin-bottom: 8px;
+}
+.pm-cal-dow div { font-size: 11px; font-weight: 700; color: #a99a7d; letter-spacing: 0.5px; padding: 4px 0; }
+.pm-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.pm-cal-empty { min-height: 74px; }
+
+/* A day cell is a button — keyboard reachable, unlike the old div+onClick. */
+.pm-cal-day {
+    min-height: 74px;
+    border: 1px solid #ececec;
+    border-radius: 8px;
+    background: #fff;
+    padding: 6px 5px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: border-color 0.12s, background 0.12s;
+}
+.pm-cal-day:hover { border-color: #d5b85a; background: #fffdf6; }
+.pm-cal-day.past { background: #fafafa; }
+.pm-cal-day.today { border: 2px solid #d5b85a; background: #faf6e8; }
+.pm-cal-day.has-late { border-left: 3px solid #c62828; }
+.pm-cal-day.selected { border: 2px solid #2e7d32; background: #e8f5e9; }
+.pm-cal-daynum { font-size: 12px; font-weight: 600; color: #555 !important; }
+.pm-cal-day.today .pm-cal-daynum { color: #b08f2e !important; }
+.pm-cal-day.selected .pm-cal-daynum { color: #2e7d32 !important; }
+/* One count per day. Colour carries the state, so no legend is needed:
+   red = something overdue, amber = due, green = all finished.
+   index.css forces `color:#000 !important` on spans — hence !important. */
+.pm-cal-count-badge {
+    align-self: flex-start;
+    margin-top: auto;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 5px;
+    padding: 1px 7px;
+    line-height: 1.5;
+}
+.pm-cal-count-badge.late { background: #ffebee; color: #c62828 !important; }
+.pm-cal-count-badge.due { background: #fff3e0; color: #e65100 !important; }
+.pm-cal-count-badge.done { background: #e8f5e9; color: #2e7d32 !important; }
+
+.pm-cal-list-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+
+@media (max-width: 768px) {
+    .pm-cal-day, .pm-cal-empty { min-height: 58px; }
+    .pm-cal-grid, .pm-cal-dow { gap: 3px; }
+    .pm-cal-count-badge { font-size: 11px; padding: 1px 5px; }
+    .pm-cal-bar { flex-direction: column; align-items: stretch; }
+}
+
+/* ==================== DELIVERY REPORT ==================== */
+
+/* Delay-bucket cards — auto-fit so the optional "No delivery date" card can
+   appear without breaking the row. */
+.pm-dr-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+
+/* Channel / salesperson performance, side by side. */
+.pm-dr-split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .pm-dr-split { grid-template-columns: 1fr; } }
+
+/* Rows in the breakdown tables are informational, not clickable — cancel the
+   pointer/hover the shared .pm-dispatch-table gives its rows. */
+.pm-dispatch-table tbody tr.pm-row-static { cursor: default; }
+.pm-dispatch-table tbody tr.pm-row-static:hover { background: transparent; }
+
+/* On-time percentage. Colour passed as --pct-fg because index.css forces
+   `color: #000 !important` on every span. */
+.pm-pct-badge { color: var(--pct-fg, #333) !important; font-weight: 700; font-size: 12.5px; }
+
+/* Grow-the-list / jump-to-orders pair under a truncated report table. */
+.pm-dr-more { margin-top: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* Channel select, riding in the PeriodFilter pills bar's right-hand slot.
+   Matches the comparison select the other dashboards put in that same slot. */
+.pm-dispatch-channel {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    cursor: pointer;
+    color: #555;
+    min-width: 130px;
+    font-family: inherit;
+}
+.pm-dispatch-channel:focus {
+    border-color: #d5b85a;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(213, 184, 90, 0.15);
+}
+
+/* Filter chips + search + export, one row above the queue. */
+.pm-dispatch-controls {
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+.pm-dispatch-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pm-dispatch-chip {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 16px;
+    border: 1px solid #D4D4D4;
+    background: #fff;
+    color: #8b7355 !important;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.pm-dispatch-chip:hover { border-color: #d5b85a; }
+.pm-dispatch-chip.active { background: #d5b85a; border-color: #d5b85a; color: #fff !important; }
+.pm-dispatch-search {
+    flex: 1 1 200px;
+    min-width: 170px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 13px;
+    font-family: inherit;
+}
+.pm-dispatch-export {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    background: #2e7d32;
+    color: #fff !important;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+}
+.pm-dispatch-export:hover { background: #256428; }
+
+/* Queue / dispatched tables. Sticky header so the columns stay readable while
+   scanning a long queue; rows are clickable through to the order. */
+.pm-dispatch-table-wrap { overflow-x: auto; max-height: 620px; overflow-y: auto; }
+.pm-dispatch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pm-dispatch-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #faf7ef;
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #8B7355;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border-bottom: 2px solid #e6dcc0;
+    white-space: nowrap;
+}
+.pm-dispatch-table tbody td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+.pm-dispatch-table tbody tr { cursor: pointer; transition: background 0.12s; }
+.pm-dispatch-table tbody tr:hover { background: #fdfaf1; }
+.pm-dispatch-row-overdue { background: #fff8f8; }
+.pm-dispatch-row-overdue:hover { background: #fdf0f0; }
+.pm-mono { font-family: monospace; font-size: 12px; white-space: nowrap; }
+
+/* Piece count + "some pieces still upstream" flag, so a part-ready order can
+   never be mistaken for a fully packed one. */
+.pm-piece-count {
+    display: inline-block;
+    min-width: 22px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #f3ecd8;
+    color: #8b7355 !important;
+    font-weight: 700;
+    font-size: 12px;
+}
+.pm-partial-flag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 7px;
+    border-radius: 8px;
+    background: #fff3e0;
+    color: #e65100 !important;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Urgency badge — same !important reason as .pm-bucket-badge below: index.css
+   forces `color: #000 !important` on every span, which inline styles can't beat. */
+.pm-urgency-badge {
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    display: inline-block;
+}
+.pm-urg-overdue { background: #b71c1c; color: #fff !important; }
+.pm-urg-today { background: #fff3e0; color: #e65100 !important; }
+.pm-urg-soon { background: #fffde7; color: #f57f17 !important; }
+.pm-urg-ok { background: #e8f5e9; color: #2e7d32 !important; }
+.pm-urg-none { background: #eceff1; color: #546e7a !important; }
+
+@media (max-width: 768px) {
+    .pm-dispatch-hero { flex-direction: column; align-items: flex-start; }
+    .pm-dispatch-hero > div:last-child { text-align: left !important; }
+    .pm-dispatch-export { margin-left: 0; }
+    .pm-dispatch-table-wrap { max-height: none; }
+}
 
 /* Delay-bucket badge. index.css forces `color: #000 !important` on every
    span/td globally, which an inline style cannot beat — so the per-bucket

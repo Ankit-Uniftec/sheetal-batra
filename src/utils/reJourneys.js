@@ -17,7 +17,7 @@ const TERMINAL_STAGES = new Set([
 ]);
 
 const COMPONENT_COLUMNS =
-    "id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, re_journey_count, is_rework, is_active, is_delayed, stage_deadline, stage_updated_at";
+    "id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, re_journey_count, is_rework, is_active, is_delayed, stage_deadline, stage_updated_at, channel_key";
 
 const QC_ENRICH_COLUMNS =
     "component_id, fail_reason, which_qc, rejourney_to_stage, rejourney_number, inspected_by, created_at";
@@ -132,17 +132,36 @@ export function reJourneyStageCounts(rows = []) {
         .sort((a, b) => b.count - a.count);
 }
 
+// The date a re-journey HAPPENED — the QC inspection that sent the piece back.
+// Not stage_updated_at: that moves every time the piece is re-scanned through
+// the rework, so filtering on it would answer "last touched", not "sent back
+// when". Falls back to stage_updated_at only when the enriching qc_record is
+// missing (a pre-V2 row whose rework event predates qc_records.outcome).
+export function reJourneyDate(row) {
+    return row?.lastFail?.created_at || row?.stage_updated_at || null;
+}
+
 // Client-side filtering for the panel controls.
 //   search      : order_no / barcode substring
 //   stage       : current_stage exact
+//   channel     : order_components.channel_key exact (see CHANNEL_KEY_LABELS)
+//   inPeriod    : (date) => boolean from usePeriodFilter, applied to
+//                 reJourneyDate(row). Omit for no time bound.
 //   overdueOnly : only overdue rows
 //   atLimitOnly : only rows at/over the re-journey limit (>= 2)
-export function filterReJourneys(rows = [], { search, stage, overdueOnly, atLimitOnly } = {}) {
+export function filterReJourneys(rows = [], { search, stage, channel, inPeriod, overdueOnly, atLimitOnly } = {}) {
     const q = (search || "").trim().toLowerCase();
     return rows.filter(r => {
         if (stage && r.current_stage !== stage) return false;
+        if (channel && r.channel_key !== channel) return false;
         if (overdueOnly && !r.overdue) return false;
         if (atLimitOnly && !r.atLimit) return false;
+        if (inPeriod) {
+            const d = reJourneyDate(r);
+            // No resolvable date can't be proven in-range — exclude rather than
+            // silently pass, so a bounded period never over-reports.
+            if (!d || !inPeriod(d)) return false;
+        }
         if (q) {
             const hay = `${r.order_no || ""} ${r.barcode || ""}`.toLowerCase();
             if (!hay.includes(q)) return false;

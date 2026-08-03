@@ -38,6 +38,27 @@
 }
 .qch-clear:hover { background: #faf6e8; }
 
+/* Export the FILTERED set. Pushed to the end of the bar so it reads as an
+   action on the filters to its left rather than another filter.
+   index.css forces `color: #000 !important` on buttons — hence !important. */
+.qch-export {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: #2e7d32;
+  color: #fff !important;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.qch-export:hover:not(:disabled) { background: #256428; }
+.qch-export:disabled { background: #cfcfcf; color: #7a7a7a !important; cursor: not-allowed; }
+
 .qch-summary {
   display: flex;
   flex-wrap: wrap;

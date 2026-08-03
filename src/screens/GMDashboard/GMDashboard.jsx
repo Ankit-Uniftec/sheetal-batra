@@ -17,7 +17,7 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
-import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel } from "../../utils/barcodeService";
+import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel, getStageLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../utils/barcodeService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -1477,17 +1477,26 @@ export default function GMDashboard() {
                                                             <td className="product-cell">{order.items?.[0]?.product_name || "-"}</td>
                                                             <td>{"\u20B9"}{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                             <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
-                                                            <td><span className={`status-badge ${order.status}`}>{order.status || "pending"}</span></td>
+                                                            <td><span className={`status-badge ${getOrderProgressStatusKey(getOrderProgressStatus(order))}`}>{getOrderProgressStatus(order)}</span></td>
                                                             <td>{getOrderSalesperson(order) || "-"}</td>
                                                             <td>{order.salesperson_store || "-"}</td>
                                                             <td>{formatDate(order.created_at)}</td>
                                                             <td>
+                                                                {/* orders.in_production_at / ready_for_dispatch_at are dead
+                                                                    columns no RPC writes, so those two lines never rendered and
+                                                                    the cell fell through to a literal "Pending" for every order.
+                                                                    warehouse_stage_updated_at is stamped on every scan, so it is
+                                                                    the real "last moved" signal. */}
                                                                 <div style={{ fontSize: 11, lineHeight: 1.4 }}>
-                                                                    {order.in_production_at && <div>{"\u2705"} Production: {formatDate(order.in_production_at)}</div>}
-                                                                    {order.ready_for_dispatch_at && <div>{"\u2705"} Ready: {formatDate(order.ready_for_dispatch_at)}</div>}
+                                                                    {order.warehouse_stage && order.warehouse_stage !== "order_received" && (
+                                                                        <div>{"\u2705"} {getStageLabel(order.warehouse_stage) || order.warehouse_stage}
+                                                                            {order.warehouse_stage_updated_at ? `: ${formatDate(order.warehouse_stage_updated_at)}` : ""}</div>
+                                                                    )}
                                                                     {order.dispatched_at && <div>{"\u2705"} Dispatched: {formatDate(order.dispatched_at)}</div>}
                                                                     {order.delivered_at && <div>{"\u2705"} Delivered: {formatDate(order.delivered_at)}</div>}
-                                                                    {!order.in_production_at && !order.dispatched_at && !order.delivered_at && <span style={{ color: '#999' }}>Pending</span>}
+                                                                    {(!order.warehouse_stage || order.warehouse_stage === "order_received") && !order.dispatched_at && !order.delivered_at && (
+                                                                        <span style={{ color: '#999' }}>Not started</span>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                             <td><div className="action-buttons"><button className="action-btn pdf" onClick={() => handleGeneratePdf(order, "customer")} disabled={pdfLoading === order.id}>{pdfLoading === order.id ? "..." : "PDF"}</button></div></td>

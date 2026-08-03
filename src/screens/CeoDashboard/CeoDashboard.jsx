@@ -19,6 +19,8 @@ import config from "../../config/config";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel } from "../../utils/barcodeService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
+import { fetchQcRecords } from "../../utils/qcHistory";
+import { summariseQcFails, isOrderStillRunning, computeStatusStats } from "../../utils/productionMetrics";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -182,6 +184,9 @@ export default function CEODashboard() {
     const [pdfLoading, setPdfLoading] = useState(null);
     const [vendors, setVendors] = useState([]);
     const [consignmentInventory, setConsignmentInventory] = useState([]);
+    // qc_records — the only real QC-failure signal (see fetchAllData).
+    const [qcRecords, setQcRecords] = useState([]);
+    const [qcLoaded, setQcLoaded] = useState(false);
 
     // Dashboard states
     const [recentOrdersCount, setRecentOrdersCount] = useState(10);
@@ -283,18 +288,25 @@ export default function CEODashboard() {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [ordersRes, productsRes, spRes, vendorsRes, consRes] = await Promise.all([
+            const [ordersRes, productsRes, spRes, vendorsRes, consRes, qcRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
                 supabase.from("vendors").select("*"),
                 supabase.from("consignment_inventory").select("*"),
+                // QC failures come from qc_records (written by record_qc_result).
+                // orders.qc_fail_reason is a dead column nothing writes, so the
+                // old count was permanently 0 — and rendered GREEN, reading as
+                // "no QC failures" to the CEO.
+                fetchQcRecords({ paged: true }),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
             if (productsRes.data) setProducts(productsRes.data);
             if (spRes.data) setSalespersonTable(spRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);
             if (consRes.data) setConsignmentInventory(consRes.data);
+            setQcRecords(qcRes || []);
+            setQcLoaded(true);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
@@ -1372,13 +1384,34 @@ export default function CEODashboard() {
     // ═══════════════════════════════════════════════════════════
     const opsFlags = useMemo(() => {
         const now = new Date();
-        const activeOrders = orders.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
-        const delayed = activeOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
-        const qcFailed = orders.filter(o => o.qc_fail_reason);
-        const inProduction = orders.filter(o => o.status === "in_production" || o.production_status === "in_production");
-        const backlog = activeOrders.filter(o => o.status === "pending" || o.status === "order_received");
-        return { delayedCount: delayed.length, qcFailCount: qcFailed.length, backlogCount: backlog.length, delayed: delayed.slice(0, 15), inProductionCount: inProduction.length };
-    }, [orders]);
+        // Delayed = still on the floor and past its delivery date. Uses the
+        // shared isOrderStillRunning so dispatched-but-unstatused orders aren't
+        // counted late (the plain status check missed warehouse_stage).
+        const running = orders.filter(isOrderStillRunning);
+        const delayed = running.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
+
+        // QC failures from qc_records, scoped to the orders this dashboard shows
+        // (comms orders are filtered out of `orders`). null until loaded so the
+        // card can show "—" rather than a green 0.
+        const orderIds = new Set(orders.map(o => o.id));
+        const qc = qcLoaded ? summariseQcFails(qcRecords.filter(r => orderIds.has(r.order_id))) : null;
+
+        // In Production / backlog from the real warehouse_stage signal.
+        // orders.status "in_production" and production_status are dead — this
+        // file's own ORDER_STATUS_OPTIONS comment already documents that ZERO
+        // orders carry them, so both counts were permanently 0.
+        const stats = computeStatusStats(orders);
+
+        return {
+            delayedCount: delayed.length,
+            qcFailCount: qc ? qc.fail : null,
+            qcFailRate: qc ? qc.ratePct.toFixed(1) : null,
+            qcInspected: qc ? qc.inspected : 0,
+            backlogCount: stats.orderReceived,
+            delayed: delayed.slice(0, 15),
+            inProductionCount: stats.inProd,
+        };
+    }, [orders, qcRecords, qcLoaded]);
 
     // ═══════════════════════════════════════════════════════════
     // CEO: CONSIGNMENT OVERVIEW
@@ -2736,7 +2769,7 @@ export default function CEODashboard() {
 
                             <div className="admin-stats-grid">
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Orders Delayed</span><span className="stat-value" style={{ color: opsFlags.delayedCount > 0 ? '#c62828' : '#2e7d32' }}>{opsFlags.delayedCount}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">QC Failures</span><span className="stat-value" style={{ color: opsFlags.qcFailCount > 0 ? '#c62828' : '#2e7d32' }}>{opsFlags.qcFailCount}</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">QC Failures</span><span className="stat-value" style={{ color: opsFlags.qcFailCount == null ? '#8a8a8a' : opsFlags.qcFailCount > 0 ? '#c62828' : '#2e7d32' }}>{opsFlags.qcFailCount == null ? "—" : opsFlags.qcFailCount}</span></div>{opsFlags.qcFailCount != null && <span className="stat-sublabel">{opsFlags.qcFailRate}% of {opsFlags.qcInspected} inspections</span>}</div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Production Backlog</span><span className="stat-value" style={{ color: opsFlags.backlogCount > 0 ? '#ef6c00' : '#2e7d32' }}>{opsFlags.backlogCount}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">In Production</span><span className="stat-value">{opsFlags.inProductionCount}</span></div></div>
                             </div>

@@ -18,6 +18,11 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
 import { getOrderChannelLabel } from "../../utils/barcodeService";
+import { fetchQcRecords } from "../../utils/qcHistory";
+import {
+    summariseQcFails, qcFailReasonBreakdown, computeAvgLeadTime, isOrderStillRunning,
+    computeStatusStats, computeReJourneyCount, countActiveComponents, computeDispatchReady,
+} from "../../utils/productionMetrics";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -84,6 +89,11 @@ export default function COODashboard() {
     // Core state
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
+    // Real production signals — qc_records (QC outcomes) and order_components
+    // (rework state). See fetchAllData for why the orders.* equivalents are dead.
+    const [qcRecords, setQcRecords] = useState([]);
+    const [components, setComponents] = useState([]);
+    const [productionLoaded, setProductionLoaded] = useState(false);
     const [products, setProducts] = useState([]);
     const [salespersonTable, setSalespersonTable] = useState([]);
     const [vendors, setVendors] = useState([]);
@@ -145,18 +155,27 @@ export default function COODashboard() {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [ordersRes, productsRes, spRes, vendorsRes, consRes] = await Promise.all([
+            const [ordersRes, productsRes, spRes, vendorsRes, consRes, qcRes, compRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
                 supabase.from("vendors").select("*"),
                 supabase.from("consignment_inventory").select("*"),
+                // The real production signals. orders.qc_fail_reason,
+                // orders.is_rework, orders.in_production_at and
+                // orders.ready_for_dispatch_at are all dead columns that no RPC
+                // writes — every metric built on them read 0 permanently.
+                fetchQcRecords({ paged: true }),
+                fetchAllRows("order_components", (q) => q.select("id, order_id, current_stage, is_rework, is_active")),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
             if (productsRes.data) setProducts(productsRes.data);
             if (spRes.data) setSalespersonTable(spRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);
             if (consRes.data) setConsignmentInventory(consRes.data);
+            setQcRecords(qcRes || []);
+            if (compRes.data) setComponents(compRes.data);
+            setProductionLoaded(true);
         } catch (err) { console.error("Error:", err); }
         finally { setLoading(false); }
     };
@@ -239,20 +258,34 @@ export default function COODashboard() {
         const period = nonLxrtsOrders.filter(o => inPeriod(o.created_at));
         const now = new Date();
 
-        const inProduction = period.filter(o => o.status === "in_production");
+        // In Production from the real warehouse_stage signal — orders.status
+        // "in_production" is a dead value ZERO orders carry, so this read 0.
+        const periodStats = computeStatusStats(period);
+        const inProductionCount = periodStats.inProd;
         const activeOrders = period.filter(o => o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled");
-        const delayed = activeOrders.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
-        const delayRate = activeOrders.length > 0 ? ((delayed.length / activeOrders.length) * 100) : 0;
+        // Delayed over orders still ON THE FLOOR, so numerator and denominator
+        // share a population and dispatched orders drop out of both.
+        const running = period.filter(isOrderStillRunning);
+        const delayed = running.filter(o => o.delivery_date && new Date(o.delivery_date) < now);
+        const delayRate = running.length > 0 ? ((delayed.length / running.length) * 100) : 0;
 
         // Production efficiency: completed / (completed + active)
         const completed = period.filter(o => o.status === "delivered" || o.status === "completed");
         const received = period.length;
         const efficiency = received > 0 ? ((completed.length / received) * 100) : 0;
 
-        // QC stats
-        const qcFailed = period.filter(o => o.qc_fail_reason);
-        const qcRate = received > 0 ? ((qcFailed.length / received) * 100) : 0;
-        const reworkOrders = period.filter(o => o.is_rework);
+        // QC stats from qc_records, scoped to this period's orders. Rate is over
+        // INSPECTIONS (overrides excluded), not orders received — a fail rate
+        // measured against orders that never reached QC is meaningless.
+        const periodOrderIds = new Set(period.map(o => o.id));
+        const qc = productionLoaded
+            ? summariseQcFails(qcRecords.filter(r => periodOrderIds.has(r.order_id)))
+            : null;
+        // Rework is a PIECE-level state on order_components; orders.is_rework is
+        // never written. Count live rework pieces for this period's orders.
+        const periodComponents = components.filter(c => periodOrderIds.has(c.order_id));
+        const reworkPieces = productionLoaded ? computeReJourneyCount(periodComponents) : null;
+        const activePieces = countActiveComponents(periodComponents);
 
         // Consignment sell-through
         const totalSent = consignmentInventory.reduce((s, c) => s + (c.quantity_sent || 0), 0);
@@ -276,21 +309,21 @@ export default function COODashboard() {
         });
         const stuckByStage = Object.entries(stageMap).map(([name, value]) => ({ name: name.replace(/_/g, " "), value })).sort((a, b) => b.value - a.value);
 
-        // Avg production lead time (orders with both in_production_at and delivered_at/ready_for_dispatch_at)
-        let totalLeadDays = 0, leadCount = 0;
-        period.forEach(o => {
-            if (o.in_production_at && (o.ready_for_dispatch_at || o.delivered_at)) {
-                const start = new Date(o.in_production_at);
-                const end = new Date(o.ready_for_dispatch_at || o.delivered_at);
-                const days = (end - start) / (1000 * 60 * 60 * 24);
-                if (days > 0 && days < 365) { totalLeadDays += days; leadCount++; }
-            }
-        });
-        const avgLeadTime = leadCount > 0 ? (totalLeadDays / leadCount) : 0;
+        // Avg production lead time — order placed to first QC touch, both real
+        // columns. The old in_production_at -> ready_for_dispatch_at pair is
+        // dead on both ends, so this always read 0.0.
+        const lead = productionLoaded
+            ? computeAvgLeadTime(period, qcRecords.filter(r => periodOrderIds.has(r.order_id)))
+            : { avgDays: null, sampleSize: 0 };
 
-        // Dispatch: ready vs dispatched
-        const readyForDispatch = period.filter(o => o.ready_for_dispatch_at && !o.dispatched_at);
-        const dispatched = period.filter(o => o.dispatched_at);
+        // Dispatch: pieces sitting at packaging_dispatch (the real scan signal)
+        // vs orders actually dispatched. orders.ready_for_dispatch_at is never
+        // written, so the old "Ready for Dispatch" tile read 0.
+        const dispatchReady = computeDispatchReady(periodComponents, {});
+        const dispatched = period.filter(o => {
+            const s = (o.status || "").toLowerCase();
+            return s === "dispatched" || s === "delivered" || o.warehouse_stage === "dispatched" || o.dispatched_at;
+        });
 
         // Max backlog & delay by stage
         const delayByStage = {};
@@ -301,21 +334,28 @@ export default function COODashboard() {
         });
         const delayByStageData = Object.entries(delayByStage).map(([name, value]) => ({ name: name.replace(/_/g, " "), value })).sort((a, b) => b.value - a.value);
 
-        // Exceeding delivery date
-        const exceedingDelivery = nonLxrtsOrders.filter(o => {
-            if (o.status === "delivered" || o.status === "completed" || o.status === "cancelled") return false;
-            return o.delivery_date && new Date(o.delivery_date) < now;
-        }).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date));
+        // Exceeding delivery date — same still-running rule as Delayed above.
+        const exceedingDelivery = nonLxrtsOrders
+            .filter(o => isOrderStillRunning(o) && o.delivery_date && new Date(o.delivery_date) < now)
+            .sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date));
 
         return {
-            inProduction: inProduction.length, delayed: delayed.length, delayRate: delayRate.toFixed(1),
-            efficiency: efficiency.toFixed(1), qcFailed: qcFailed.length, qcRate: qcRate.toFixed(1),
-            reworkCount: reworkOrders.length, sellThrough: sellThrough.toFixed(1), slowMoving: slowMoving.length,
-            received, completed: completed.length, stuckByStage, avgLeadTime: avgLeadTime.toFixed(1),
-            readyForDispatch: readyForDispatch.length, dispatched: dispatched.length,
+            inProduction: inProductionCount, delayed: delayed.length, delayRate: delayRate.toFixed(1),
+            efficiency: efficiency.toFixed(1),
+            // null while the real signals load -> the tiles render "—", never a
+            // fabricated 0 that reads as "no failures".
+            qcFailed: qc ? qc.fail : null,
+            qcRate: qc ? qc.ratePct.toFixed(1) : null,
+            qcInspected: qc ? qc.inspected : 0,
+            reworkCount: reworkPieces,
+            reworkRate: reworkPieces != null && activePieces > 0 ? ((reworkPieces / activePieces) * 100).toFixed(1) : null,
+            sellThrough: sellThrough.toFixed(1), slowMoving: slowMoving.length,
+            received, completed: completed.length, stuckByStage,
+            avgLeadTime: lead.avgDays, leadTimeSample: lead.sampleSize,
+            readyForDispatch: dispatchReady.pending, dispatched: dispatched.length,
             delayByStageData, exceedingDelivery: exceedingDelivery.slice(0, 20), exceedingCount: exceedingDelivery.length,
         };
-    }, [nonLxrtsOrders, inPeriod, consignmentInventory, products, variantInventory]);
+    }, [nonLxrtsOrders, inPeriod, consignmentInventory, products, variantInventory, qcRecords, components, productionLoaded]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 2: BRAND PERFORMANCE
@@ -390,8 +430,13 @@ export default function COODashboard() {
     const qcStats = useMemo(() => {
         const period = nonLxrtsOrders.filter(o => inPeriod(o.created_at));
 
-        const qcFailed = period.filter(o => o.qc_fail_reason);
-        const rework = period.filter(o => o.is_rework);
+        // QC + rework from the real signals (qc_records / order_components).
+        const periodOrderIds = new Set(period.map(o => o.id));
+        const periodQc = qcRecords.filter(r => periodOrderIds.has(r.order_id));
+        const qc = productionLoaded ? summariseQcFails(periodQc) : null;
+        const periodComponents = components.filter(c => periodOrderIds.has(c.order_id));
+        const reworkPieces = productionLoaded ? computeReJourneyCount(periodComponents) : null;
+        const activePieces = countActiveComponents(periodComponents);
         const alterations = period.filter(o => o.is_alteration);
         const cancelled = period.filter(o => o.status === "cancelled");
         const returned = period.filter(o => o.return_reason);
@@ -405,11 +450,18 @@ export default function COODashboard() {
             return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
         };
 
-        const reworkRate = period.length > 0 ? ((rework.length / period.length) * 100) : 0;
+        // Rework rate is pieces-in-rework / active pieces (both piece-level), so
+        // the rate matches the count's population.
+        const reworkRate = reworkPieces != null && activePieces > 0 ? ((reworkPieces / activePieces) * 100) : null;
 
         return {
-            qcFailedCount: qcFailed.length, qcFailReasons: analyzeReasons(qcFailed, "qc_fail_reason"),
-            reworkCount: rework.length, reworkRate: reworkRate.toFixed(1),
+            qcFailedCount: qc ? qc.fail : null,
+            qcFailRate: qc ? qc.ratePct.toFixed(1) : null,
+            qcInspected: qc ? qc.inspected : 0,
+            // Reasons come from qc_records.fail_reason — what the inspector
+            // actually typed. The old orders.qc_fail_reason chart was always empty.
+            qcFailReasons: qcFailReasonBreakdown(periodQc),
+            reworkCount: reworkPieces, reworkRate: reworkRate == null ? null : reworkRate.toFixed(1),
             alterationCount: alterations.length,
             cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
             returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
@@ -421,7 +473,7 @@ export default function COODashboard() {
             cancellationReasons: analyzeReasons(cancelled, "cancellation_reason"),
             exchangeReasons: analyzeReasons(exchanged, "exchange_reason"),
         };
-    }, [nonLxrtsOrders, inPeriod]);
+    }, [nonLxrtsOrders, inPeriod, qcRecords, components, productionLoaded]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 6: CONSIGNMENT
@@ -714,17 +766,17 @@ export default function COODashboard() {
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Running Delayed</span><span className="stat-value" style={{ color: '#c62828' }}>{opsStats.delayed}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Delay Rate</span><span className="stat-value" style={{ color: Number(opsStats.delayRate) > 20 ? '#c62828' : '#2e7d32' }}>{opsStats.delayRate}%</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Efficiency</span><span className="stat-value">{opsStats.efficiency}%</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">QC Failure Rate</span><span className="stat-value" style={{ color: Number(opsStats.qcRate) > 5 ? '#c62828' : '#2e7d32' }}>{opsStats.qcRate}%</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">QC Failure Rate</span><span className="stat-value" style={{ color: opsStats.qcRate == null ? '#8a8a8a' : Number(opsStats.qcRate) > 5 ? '#c62828' : '#2e7d32' }}>{opsStats.qcRate == null ? "—" : `${opsStats.qcRate}%`}</span></div>{opsStats.qcRate != null && <span className="stat-sublabel">{opsStats.qcFailed} of {opsStats.qcInspected} inspections</span>}</div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Consignment Sell-Through</span><span className="stat-value">{opsStats.sellThrough}%</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Slow Moving Stock</span><span className="stat-value">{opsStats.slowMoving}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Avg Lead Time</span><span className="stat-value">{opsStats.avgLeadTime} days</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Avg Lead Time</span><span className="stat-value">{opsStats.avgLeadTime == null ? "—" : `${opsStats.avgLeadTime} days`}</span></div>{opsStats.avgLeadTime != null && <span className="stat-sublabel">Order to QC {"·"} {opsStats.leadTimeSample} order{opsStats.leadTimeSample === 1 ? "" : "s"}</span>}</div>
                             </div>
 
                             <h3 className="admin-subsection-title">Processed vs Received (Period)</h3>
                             <div className="admin-stats-grid">
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Orders Received</span><span className="stat-value">{opsStats.received}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Completed</span><span className="stat-value" style={{ color: '#2e7d32' }}>{opsStats.completed}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Ready for Dispatch</span><span className="stat-value">{opsStats.readyForDispatch}</span></div></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Ready for Dispatch</span><span className="stat-value">{opsStats.readyForDispatch}</span></div><span className="stat-sublabel">pieces at packaging</span></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Dispatched</span><span className="stat-value">{opsStats.dispatched}</span></div></div>
                             </div>
 
@@ -835,8 +887,8 @@ export default function COODashboard() {
                         <div>
                             <h2 className="admin-section-title">QC & Customer Issues</h2>
                             <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">QC Failures</span><span className="stat-value" style={{ color: '#c62828' }}>{qcStats.qcFailedCount}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Rework Count</span><span className="stat-value">{qcStats.reworkCount}</span></div><span className="stat-sublabel">{qcStats.reworkRate}% rate</span></div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">QC Failures</span><span className="stat-value" style={{ color: qcStats.qcFailedCount == null ? '#8a8a8a' : '#c62828' }}>{qcStats.qcFailedCount == null ? "—" : qcStats.qcFailedCount}</span></div>{qcStats.qcFailedCount != null && <span className="stat-sublabel">{qcStats.qcFailRate}% of {qcStats.qcInspected} inspections</span>}</div>
+                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Rework Count</span><span className="stat-value">{qcStats.reworkCount == null ? "—" : qcStats.reworkCount}</span></div><span className="stat-sublabel">{qcStats.reworkRate == null ? "pieces in rework" : `${qcStats.reworkRate}% of active pieces`}</span></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Alterations</span><span className="stat-value">{qcStats.alterationCount}</span></div></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Cancellations</span><span className="stat-value">{qcStats.cancelledCount}</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(qcStats.cancelledValue))}</span></div>
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Returns</span><span className="stat-value">{qcStats.returnedCount}</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(qcStats.returnedValue))}</span></div>
