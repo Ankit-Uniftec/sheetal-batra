@@ -1,5 +1,6 @@
 import React from "react";
-import { getStageLabel } from "../utils/barcodeService";
+import { getStageLabel, CHANNEL_KEY_LABELS } from "../utils/barcodeService";
+import { whichQcLabel } from "../utils/qcHistory";
 import "./ReJourneyTable.css";
 
 /**
@@ -12,9 +13,11 @@ import "./ReJourneyTable.css";
  * @param {object[]} rows
  * @param {boolean}  loading
  * @param {string}   [emptyText]
+ * @param {boolean}  [showChannel]  show the channel on each row — on where the
+ *                                  list spans channels, off where it's already one
  * @param {function} [onOrderClick] (orderId, orderNo) => void — jump to the order
  */
-export default function ReJourneyTable({ rows = [], loading, emptyText = "No components currently in re-journey.", onOrderClick }) {
+export default function ReJourneyTable({ rows = [], loading, emptyText = "No components currently in re-journey.", showChannel = false, onOrderClick }) {
     if (loading) return <p className="rj-empty">Loading re-journeys…</p>;
     if (!rows.length) return <p className="rj-empty">{emptyText}</p>;
 
@@ -37,6 +40,9 @@ export default function ReJourneyTable({ rows = [], loading, emptyText = "No com
                         <div className="rj-row-head">
                             <span className="rj-barcode">{r.barcode}</span>
                             {r.order_no && <span className="rj-order">{r.order_no}</span>}
+                            {showChannel && r.channel_key && (
+                                <span className="rj-channel">{CHANNEL_KEY_LABELS[r.channel_key] || r.channel_key}</span>
+                            )}
                             <span className="rj-label">{r.component_label || r.component_type}</span>
                             <span className={`rj-count ${r.overLimit ? "rj-count-over" : r.atLimit ? "rj-count-at" : ""}`}>
                                 {r.overLimit ? `${count}× (over limit)` : r.atLimit ? `${count}× (at limit)` : `${count}× re-journey`}
@@ -54,7 +60,7 @@ export default function ReJourneyTable({ rows = [], loading, emptyText = "No com
                             <div className="rj-detail">
                                 {r.lastFail.fail_reason && <div><strong>Last fail:</strong> {r.lastFail.fail_reason}</div>}
                                 <div className="rj-detail-meta">
-                                    {r.lastFail.which_qc === "final" ? "Final QC" : "QC 1"}
+                                    {whichQcLabel(r.lastFail.which_qc)}
                                     {r.lastFail.inspected_by ? ` · by ${r.lastFail.inspected_by}` : ""}
                                     {r.lastFail.created_at ? ` · ${new Date(r.lastFail.created_at).toLocaleString("en-GB")}` : ""}
                                 </div>

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { CHANNEL_KEY_LABELS, distinctChannelKeys } from "./barcodeService";
 
 // ============================================================
 // QC history — shared data helpers for every qc_records view
@@ -8,7 +9,19 @@ import { supabase } from "../lib/supabaseClient";
 // ============================================================
 
 export const QC_RECORD_COLUMNS =
-  "id, barcode, component_id, order_id, order_no, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at, is_override, overridden_by";
+  "id, barcode, component_id, order_id, order_no, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at, is_override, overridden_by, channel_key";
+
+// Channel labels/keys are shared with every other channel_key surface (the
+// Re-journeys tab reads the same stored column on order_components) — see
+// CHANNEL_KEY_LABELS in barcodeService.js. Re-exported so the QC components
+// that already import from here don't need a second import path.
+export { CHANNEL_KEY_LABELS };
+
+// Human label for qc_records.which_qc ('qc1' | 'final'). Shared so the QC
+// History rows and the Re-journeys "last fail" line can't drift apart.
+export function whichQcLabel(whichQc) {
+  return whichQc === "final" ? "Final QC" : "QC 1";
+}
 
 // Fetch QC records, scoped one of three ways:
 //   { inspectedBy }        -> that QC person's own records ("My QC History")
@@ -91,14 +104,28 @@ export function qcSummary(records = []) {
   return { total, pass, fail, override, failRatePct };
 }
 
+// Distinct channels present in a record set, as { key, label } for the dropdown.
+//
+// channel_key is a STORED fact, not something re-derived here: the DB writes it
+// at inspection time from the order (trg_qc_records_set_channel →
+// resolve_order_channel_key, db/…/v2/61), applying the same
+// stock-flag-outranks-prefix rule as getOrderChannelKey. Inferring it in JS from
+// the order_no prefix would mis-file stock raised through a store, whose flags
+// aren't on qc_records at all.
+//
+// The Re-journeys tab reads the same stored column on order_components, so the
+// implementation is shared rather than duplicated per surface.
+export const distinctChannels = distinctChannelKeys;
+
 // Client-side filtering for the dashboard controls. All filters optional.
 //   from/to      : YYYY-MM-DD date bounds (inclusive) on created_at
 //   result       : 'pass' | 'fail' | 'override'  ('pass'/'fail' exclude
 //                  overrides — those rows are result='pass' on paper only)
 //   whichQc      : 'qc1' | 'final'
 //   inspectedBy  : exact QC-person email
+//   channel      : exact qc_records.channel_key (see CHANNEL_KEY_LABELS)
 //   search       : substring match on order_no or barcode (case-insensitive)
-export function filterQcRecords(records = [], { from, to, result, whichQc, inspectedBy, search } = {}) {
+export function filterQcRecords(records = [], { from, to, result, whichQc, inspectedBy, channel, search } = {}) {
   const fromT = from ? new Date(from + "T00:00:00").getTime() : null;
   const toT = to ? new Date(to + "T23:59:59.999").getTime() : null;
   const q = (search || "").trim().toLowerCase();
@@ -108,6 +135,7 @@ export function filterQcRecords(records = [], { from, to, result, whichQc, inspe
     else if (result && (isOverride || r.result !== result)) return false;
     if (whichQc && r.which_qc !== whichQc) return false;
     if (inspectedBy && r.inspected_by !== inspectedBy) return false;
+    if (channel && r.channel_key !== channel) return false;
     if (fromT || toT) {
       const t = new Date(r.created_at).getTime();
       if (fromT && t < fromT) return false;

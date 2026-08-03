@@ -13,7 +13,7 @@ import {
 import SearchByDropdown from "../../components/SearchByDropdown";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
-import { getOrderChannelLabel } from "../../utils/barcodeService";
+import { getOrderChannelLabel, getOrderProgressStatusStage } from "../../utils/barcodeService";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 
 // Head of Design Dashboard — read-only view for Tanuja Singh.
@@ -38,7 +38,7 @@ const CHANNEL_COLORS = {
 const STATUS_FLOW = [
   { key: "order_received", label: "Order Received", color: "#9e9e9e" },
   { key: "in_production",  label: "In Production",  color: "#3f51b5" },
-  { key: "ready_for_dispatch", label: "Ready for Dispatch", color: "#2e7d32" },
+  { key: "completed", label: "Completed", color: "#2e7d32" },
   { key: "dispatched", label: "Dispatched", color: "#1565c0" },
   { key: "delivered",  label: "Delivered",  color: "#0d47a1" },
   { key: "cancelled",  label: "Cancelled",  color: "#c62828" },
@@ -71,18 +71,16 @@ const ChartTooltip = ({ active, payload, label, prefix = "₹" }) => {
 // channel — such orders report under the channel they were placed in).
 const getOrderChannel = (order) => getOrderChannelLabel(order);
 
-const getOrderStatus = (order) => {
-  if (order.refund_status === "pending" || order.refund_reason) return "refund_requested";
-  if (order.exchange_reason || order.return_reason) return "exchange_return";
-  if (order.revoked_at) return "revoked";
-  const s = (order.status || "").toLowerCase();
-  if (s === "cancelled") return "cancelled";
-  if (s === "delivered") return "delivered";
-  if (s === "completed" || order.dispatched_at) return "dispatched";
-  if (order.ready_for_dispatch_at) return "ready_for_dispatch";
-  if (order.in_production_at) return "in_production";
-  return "order_received";
-};
+// The SHARED order-status ladder (barcodeService.getOrderProgressStatusStage):
+//   order_received -> in_production -> completed -> dispatched -> delivered
+// plus the commercial exceptions (refund / exchange / revoked / cancelled).
+//
+// The local version this replaces keyed off orders.in_production_at and
+// orders.ready_for_dispatch_at — dead columns no RPC writes — so no order ever
+// reached "In Production" and everything mid-production reported as
+// "Order Received". This dashboard fetches no components, so the shared helper
+// falls back to warehouse_stage, which IS written on every scan.
+const getOrderStatus = (order) => getOrderProgressStatusStage(order);
 
 export default function HeadOfDesignDashboard() {
   const navigate = useNavigate();
@@ -211,7 +209,7 @@ export default function HeadOfDesignDashboard() {
     const rejected = b2bAll.filter(o => o.approval_status === "rejected").length;
     const inProduction = b2bAll.filter(o => {
       const s = getOrderStatus(o);
-      return s === "in_production" || s === "ready_for_dispatch";
+      return s === "in_production" || s === "completed";
     }).length;
     const delivered = b2bAll.filter(o => getOrderStatus(o) === "delivered").length;
     const dispatched = b2bAll.filter(o => getOrderStatus(o) === "dispatched").length;

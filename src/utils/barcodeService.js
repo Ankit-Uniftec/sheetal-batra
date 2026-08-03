@@ -289,6 +289,125 @@ export function getOrderStatusLabel(status) {
     .join(" ");
 }
 
+// ==================== ORDER STATUS LADDER ====================
+// The ONE definition of "where is this order", for every Status column in the
+// app (order cards, calendar, all-orders list, reports).
+//
+//   Order Received -> In Production -> Completed -> Dispatched -> Delivered
+//
+// Derived from the order's COMPONENTS, not from orders.status alone: an order
+// sits at status='order_received' while its pieces are already being stitched,
+// so status by itself under-reports progress. The moment any piece moves past
+// order_received the ORDER is in production.
+//
+// This is deliberately NOT the per-component warehouse stage. A stage
+// ("Cloth Issued", "Embroidery In-Progress") describes one piece; an order with
+// four pieces has four stages at once, so a stage badge cannot answer "where is
+// the order". Screens that want the stage should show it in its own column,
+// beside the status — never instead of it.
+//
+// Cancelled / Exchange Return are terminal states outside the ladder and are
+// returned as-is.
+const ORDER_RECEIVED_STAGES = new Set(["order_received"]);
+// Pieces that have left the flow entirely — they must not make an order look
+// like it is still in production, nor block it from reading as completed.
+const STATUS_IGNORED_STAGES = new Set(["disposed", "scrapped"]);
+// Component stages that mean production is finished with that piece.
+const COMPONENT_DONE_STAGES = new Set([
+  "production_complete", "final_qc_passed", "packaging_dispatch", "dispatched",
+]);
+
+export const ORDER_STATUS_STEPS = [
+  "Order Received", "In Production", "Completed", "Dispatched", "Delivered",
+];
+
+/**
+ * Where an order stands, as one of ORDER_STATUS_STEPS (or Cancelled /
+ * Exchange Return).
+ *
+ * @param {object}   order
+ * @param {object[]} [components]  the order's own order_components rows. Omit
+ *                                 and the ladder falls back to order-level
+ *                                 signals only (so callers without components
+ *                                 still get a sane answer, just a coarser one).
+ * @returns {string} display-ready label
+ */
+export function getOrderProgressStatus(order, components) {
+  const s = normalizeOrderStatus(order?.status);
+
+  // Terminal / outside the ladder — these are true regardless of pieces.
+  if (s === "cancelled") return "Cancelled";
+  if (s === "exchange_return") return "Exchange Return";
+  if (s === "delivered") return "Delivered";
+  if (s === "dispatched" || order?.warehouse_stage === "dispatched") return "Dispatched";
+  if (s === "completed") return "Completed";
+
+  const live = Array.isArray(components)
+    ? components.filter((c) => !STATUS_IGNORED_STAGES.has(c.current_stage))
+    : [];
+
+  if (live.length > 0) {
+    // All pieces finished production but the order was never marked completed —
+    // report what the floor actually did rather than a stale order row.
+    if (live.every((c) => COMPONENT_DONE_STAGES.has(c.current_stage))) return "Completed";
+    // Any piece past Order Received means work has started.
+    if (live.some((c) => !ORDER_RECEIVED_STAGES.has(c.current_stage))) return "In Production";
+    return "Order Received";
+  }
+
+  // No components supplied/minted: fall back to the order's own stage.
+  if (order?.warehouse_stage && order.warehouse_stage !== "order_received") return "In Production";
+  return "Order Received";
+}
+
+/**
+ * The ladder as a STAGE KEY, for screens that bucket/filter orders by status
+ * rather than just printing a label (Accountant, Head of Design, GM …).
+ *
+ * Extends the ladder with the states those screens track outside production —
+ * refunds, returns and revokes — which take precedence because they describe
+ * what happened to the ORDER, not where its pieces are.
+ *
+ * Returns one of:
+ *   refund_requested | exchange_return | revoked | cancelled |
+ *   delivered | dispatched | completed | in_production | order_received
+ *
+ * @param {object}   order
+ * @param {object[]} [components]  the order's order_components; omit for the
+ *                                 order-level fallback (see getOrderProgressStatus)
+ */
+export function getOrderProgressStatusStage(order, components) {
+  // Commercial exceptions first — an order that was refunded/returned is not
+  // meaningfully "in production" regardless of where its pieces sit.
+  if (order?.refund_status === "pending" || order?.refund_reason) return "refund_requested";
+  if (order?.exchange_reason || order?.return_reason) return "exchange_return";
+  if (order?.revoked_at) return "revoked";
+
+  switch (getOrderProgressStatus(order, components)) {
+    case "Cancelled": return "cancelled";
+    case "Exchange Return": return "exchange_return";
+    case "Delivered": return "delivered";
+    case "Dispatched": return "dispatched";
+    case "Completed": return "completed";
+    case "In Production": return "in_production";
+    default: return "order_received";
+  }
+}
+
+// CSS-class suffix for the status badge, so every screen colours the ladder
+// identically. Pair with a `.<prefix>-status-<key>` rule in the screen's CSS.
+export function getOrderProgressStatusKey(label) {
+  switch (label) {
+    case "Delivered": return "delivered";
+    case "Dispatched": return "dispatched";
+    case "Completed": return "completed";
+    case "In Production": return "inprod";
+    case "Cancelled": return "cancelled";
+    case "Exchange Return": return "exchange";
+    default: return "received";
+  }
+}
+
 // Display label for revenue/channel breakdowns — same prefix authority as
 // getOrderChannelKey, but the two physical stores split out. Every dashboard's
 // channel breakdown must use this so the labels (and the numbers behind them)
@@ -314,6 +433,27 @@ export function getOrderChannelLabel(order) {
   return "Store";
 }
 
+// Display labels for the STORED channel_key column (order_components.channel_key,
+// qc_records.channel_key), written by resolve_order_channel_key() —
+// db/…/v2/61 + 62. Labels are exactly the CHANNEL_SEGMENTS strings so a stored
+// key renders identically to a computed getOrderChannelLabel() anywhere else.
+//
+// The two physical stores are stored SEPARATELY (delhi/ludhiana) rather than as
+// one 'offline' key: getOrderChannelLabel already splits them everywhere, and a
+// stored key needing the prefix re-parsed to render its own label would defeat
+// the point of storing it.
+export const CHANNEL_KEY_LABELS = {
+  delhi: "Delhi Store",
+  ludhiana: "Ludhiana Store",
+  shopify: "Shopify",
+  b2b: "B2B",
+  private: "Private",
+  comms: "Comms",
+  exhibition: "Exhibition",
+  stock: "Stock",
+  store: "Store", // offline with an unrecognised prefix
+};
+
 // Fixed display order + colors for channel breakdowns, shared app-wide.
 export const CHANNEL_SEGMENTS = [
   { label: "Delhi Store", color: "#2e7d32" },
@@ -326,6 +466,25 @@ export const CHANNEL_SEGMENTS = [
   { label: "Stock", color: "#546e7a" },
   { label: "Store", color: "#2e7d32" }, // offline fallback (unknown prefix)
 ];
+
+// Distinct channels present in a set of rows carrying channel_key, as
+// { key, label }, ordered by the CHANNEL_SEGMENTS sequence so every channel
+// dropdown in the app reads in the same order. NULL keys are skipped — a row
+// whose order no longer resolves has no channel, and the UI must show it under
+// "All channels" rather than invent one.
+export function distinctChannelKeys(rows = []) {
+  const present = new Set(rows.map((r) => r?.channel_key).filter(Boolean));
+  const order = CHANNEL_SEGMENTS.map((s) => s.label);
+  return [...present]
+    .map((key) => ({ key, label: CHANNEL_KEY_LABELS[key] || key }))
+    .sort((a, b) => {
+      const ia = order.indexOf(a.label), ib = order.indexOf(b.label);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.label.localeCompare(b.label);
+    });
+}
 
 export function getOrderChannelKey(order) {
   if (!order) return null;

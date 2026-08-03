@@ -108,7 +108,7 @@ export default function ProductionOverview({ orders = [], components = [], allCo
         <StatCard
           title="Bottlenecks"
           value={metrics.bottlenecks.count}
-          subtitle={metrics.bottlenecks.count > 0 ? `${metrics.bottlenecks.topBottleneck} · ${metrics.bottlenecks.topOverdue} overdue · avg ${metrics.bottlenecks.topAvgDays}d late` : "No overdue stages"}
+          subtitle={metrics.bottlenecks.count > 0 ? `${metrics.bottlenecks.topBottleneck} · ${metrics.bottlenecks.topOverdue} overdue · avg ${metrics.bottlenecks.topAvgDays}d at stage` : "No overdue stages"}
           highlight={metrics.bottlenecks.count > 0}
           icon={Icon.warning}
         />

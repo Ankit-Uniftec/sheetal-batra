@@ -831,13 +831,15 @@ export default function B2bProductionDashboard() {
                 {activeTab === "qc_history" && (
                     <div className="prod-tab-wrapper">
                         <h2 className="prod-tab-title">QC History</h2>
-                        <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} />
+                        {/* Every record here is already B2B-scoped — a channel filter would be a one-option dropdown. */}
+                        <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} showChannelFilter={false} />
                     </div>
                 )}
                 {activeTab === "rejourneys" && (
                     <div className="prod-tab-wrapper">
                         <h2 className="prod-tab-title">Re-journeys</h2>
-                        <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} />
+                        {/* Every row here is already B2B-scoped — a channel filter would be a one-option dropdown. */}
+                        <ReJourneyPanel rows={reJourneys} loading={reJourneysLoading} showChannelFilter={false} />
                     </div>
                 )}
             </div>

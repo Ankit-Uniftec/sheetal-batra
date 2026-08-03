@@ -13,7 +13,7 @@ import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
-import { getOrderStatusLabel } from "../../utils/barcodeService";
+import { getOrderStatusLabel, getStageLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../utils/barcodeService";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../../components/PeriodFilter";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -1221,17 +1221,25 @@ export default function StoreManagerDashboard() {
                                                                 <td className="amount">{refundAmt > 0 ? `\u20B9${formatIndianNumber(refundAmt)}` : "\u2014"}</td>
                                                                 <td className="amount">{credit > 0 ? `\u20B9${formatIndianNumber(credit)}` : "\u2014"}</td>
                                                                 <td><span className={`sm-payment-badge ${getPaymentStatus(o)}`}>{getPaymentStatus(o)}</span></td>
-                                                                <td><span className={`sm-status-badge ${(o.status === "pending" ? "order_received" : (o.status || "order_received"))}`}>{getOrderStatusLabel(o.status)}</span></td>
+                                                                <td><span className={`sm-status-badge ${getOrderProgressStatusKey(getOrderProgressStatus(o))}`}>{getOrderProgressStatus(o)}</span></td>
                                                                 <td>{getOrderSalesperson(o) || "-"}</td>
                                                                 <td>{formatDate(o.created_at)}</td>
                                                                 <td>{o.delivery_date ? formatDate(o.delivery_date) : "\u2014"}</td>
                                                                 <td>
+                                                                    {/* orders.in_production_at / ready_for_dispatch_at are dead
+                                                                        columns no RPC writes, so those lines never rendered and the
+                                                                        cell always read "Pending". warehouse_stage_updated_at is
+                                                                        stamped on every scan \u2014 the real "last moved" signal. */}
                                                                     <div style={{ fontSize: 11, lineHeight: 1.4 }}>
-                                                                        {o.in_production_at && <div>{"\u2705"} Production: {formatDate(o.in_production_at)}</div>}
-                                                                        {o.ready_for_dispatch_at && <div>{"\u2705"} Ready: {formatDate(o.ready_for_dispatch_at)}</div>}
+                                                                        {o.warehouse_stage && o.warehouse_stage !== "order_received" && (
+                                                                            <div>{"\u2705"} {getStageLabel(o.warehouse_stage) || o.warehouse_stage}
+                                                                                {o.warehouse_stage_updated_at ? `: ${formatDate(o.warehouse_stage_updated_at)}` : ""}</div>
+                                                                        )}
                                                                         {o.dispatched_at && <div>{"\u2705"} Dispatched: {formatDate(o.dispatched_at)}</div>}
                                                                         {o.delivered_at && <div>{"\u2705"} Delivered: {formatDate(o.delivered_at)}</div>}
-                                                                        {!o.in_production_at && !o.dispatched_at && !o.delivered_at && <span style={{ color: '#999' }}>Pending</span>}
+                                                                        {(!o.warehouse_stage || o.warehouse_stage === "order_received") && !o.dispatched_at && !o.delivered_at && (
+                                                                            <span style={{ color: '#999' }}>Not started</span>
+                                                                        )}
                                                                     </div>
                                                                 </td>
                                                             </>

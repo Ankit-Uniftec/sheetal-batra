@@ -25,6 +25,8 @@
 .rj-input:focus { outline: none; border-color: #d5b85a; }
 .rj-filters > input[type="text"] { flex: 1 1 180px; min-width: 160px; }
 .rj-filters > select.rj-input { flex: 0 0 auto; width: auto; min-width: 130px; }
+/* The shared PeriodFilter (.pfx) sits inline in the bar without its own bottom margin. */
+.rj-filters .pfx { margin-bottom: 0; }
 
 .rj-check {
     display: inline-flex;
@@ -48,6 +50,25 @@
     cursor: pointer;
 }
 .rj-clear:hover { background: #faf6e8; }
+
+/* Export the FILTERED set — see QcHistoryPanel.css for the !important note. */
+.rj-export {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    background: #2e7d32;
+    color: #fff !important;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.rj-export:hover:not(:disabled) { background: #256428; }
+.rj-export:disabled { background: #cfcfcf; color: #7a7a7a !important; cursor: not-allowed; }
 
 .rj-summary {
     display: flex;
