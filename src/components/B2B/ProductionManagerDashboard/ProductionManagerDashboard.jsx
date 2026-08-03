@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import "./ProductionManagerDashboard.css";
 import Logo from "../../../images/logo.png";
@@ -236,6 +236,11 @@ export default function ProductionManagerDashboard() {
     // the tab the user was on, and browser Back moves between tabs. The hook
     // still honours location.state?.activeTab for the flows that push it.
     const [activeTab, setActiveTab] = useTabParam("overview");
+    // Direct search-param access, for handlers that must set the tab AND several
+    // filters in ONE navigation (see goToOrder). Calling the individual setters
+    // in sequence loses all but the last, because useTabParam pushes while
+    // useFilterParam replaces.
+    const [, setSearchParams] = useSearchParams();
     // Sub-tab within a merged section (Delivery Report → dispatch/report,
     // Vendors → directory/external). Plain state, NOT a second useTabParam —
     // two hooks both writing searchParams with functional updaters clobber
@@ -614,17 +619,35 @@ export default function ProductionManagerDashboard() {
         clearOrdersPeriod();
     };
 
-    // Jump from a QC-history / re-journey / external-vendor row to that order's
-    // card in All Orders: switch tab, search by order #, highlight + scroll, then
-    // auto-clear the highlight. Same flow the notification bell uses. Resets other
-    // filters so nothing hides the target (channel/status view is "all" for PM).
+    // Jump from any reporting row to that order's card in All Orders: switch
+    // tab, search by order #, highlight + scroll, then auto-clear the highlight.
+    // Resets the other filters so nothing hides the target.
+    //
+    // Used by QC History, Re-journeys, External Vendors, the notification bell,
+    // and (via openOrderInList) every row on the Production, Dispatch, Delivery
+    // Report and Calendar tabs.
     const goToOrder = (orderId, orderNo) => {
-        setActiveTab("orders");
-        setStatusTab("all");
-        setChannelFilter("all");
-        clearAllFilters();
-        setOrderSearchField("order_no");
-        setOrderSearch(orderNo || "");
+        // ONE navigation for every URL-backed value. activeTab, statusTab,
+        // channelFilter, orderSearchField and orderSearch are all search params;
+        // calling their setters in sequence used to leave the user on the
+        // current tab, because useTabParam PUSHES while useFilterParam REPLACES
+        // — the replace landed last and discarded the pushed tab entry. Writing
+        // the params together is the same fix useClearFilterParams applies.
+        setSearchParams((prev) => {
+            const p = new URLSearchParams(prev);
+            p.set("tab", "orders");
+            p.delete("status");        // "all"       — default, keep the URL clean
+            p.delete("channel");       // "all"       — default
+            p.delete("qf");            // "order_no"  — default
+            if (orderNo) p.set("q", orderNo); else p.delete("q");
+            return p;
+        });
+        // Plain useState — unaffected by the search-param batching above, so
+        // these still need their own setters. The orders period is one of them
+        // (usePeriodFilter holds state locally); it must be cleared or an order
+        // outside the current window lands on an empty list.
+        clearOrdersPeriod();
+        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], salesperson: "", stage: [], stageKind: "both", disposedOnly: false, delayedOnly: false, dispatchedOnly: false, dispatchReadyOnly: false, orderIdSet: null, orderIdSetLabel: "" });
         setCurrentPage(1);
         setHighlightOrderId(orderId);
         setTimeout(() => {
@@ -1933,6 +1956,16 @@ export default function ProductionManagerDashboard() {
         navigate(`/order/${order.id}`, { state: { fromProductionManager: true } });
     };
 
+    // Row click on the REPORTING tabs (Production, Dispatch, Delivery Report,
+    // Calendar). These lists are for scanning and acting, so a click hands the
+    // order to All Orders — where the full card, its component journey and every
+    // action already live — instead of pushing the read-only Order Details page
+    // and dropping the user out of the dashboard.
+    //
+    // goToOrder resets the period + filters, so the target can never land
+    // outside the current All Orders scope and render an empty list.
+    const openOrderInList = (order) => goToOrder(order.id, order.order_no);
+
     if (loading) return <p className="loading-text">Loading Dashboard...</p>;
 
     return (
@@ -2862,7 +2895,7 @@ export default function ProductionManagerDashboard() {
                                                 <tbody>{productionMetricsProd.exceedingDelivery.slice(0, 15).map(o => {
                                                     const overdue = Math.ceil((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
                                                     const isBusy = actionLoading === o.id;
-                                                    return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                    return (<tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => openOrderInList(o)}>
                                                         <td style={{ padding: "8px 10px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                         <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.items?.[0]?.product_name || "-"}</td>
                                                         <td style={{ padding: "8px 10px" }} title={`Customer date: ${formatDate(o.delivery_date)}`}>{getWarehouseDate(o.delivery_date, o.created_at)}</td>
@@ -3165,7 +3198,7 @@ export default function ProductionManagerDashboard() {
                                                                 <tr
                                                                     key={o.id}
                                                                     className={p.overdue ? "pm-dispatch-row-overdue" : ""}
-                                                                    onClick={() => viewOrderDetails(o)}
+                                                                    onClick={() => openOrderInList(o)}
                                                                 >
                                                                     <td className="pm-mono">{o.order_no || "-"}</td>
                                                                     <td>{getClientName(o) || "-"}</td>
@@ -3235,7 +3268,7 @@ export default function ProductionManagerDashboard() {
                                                     </thead>
                                                     <tbody>
                                                         {dispatchedFiltered.slice(0, 20).map(x => (
-                                                            <tr key={x.order.id} onClick={() => viewOrderDetails(x.order)}>
+                                                            <tr key={x.order.id} onClick={() => openOrderInList(x.order)}>
                                                                 <td className="pm-mono">{x.order.order_no || "-"}</td>
                                                                 <td>{getClientName(x.order) || "-"}</td>
                                                                 <td><span className={`pm-channel-tag ${getChannelClass(x.order)}`}>{getChannelLabel(x.order)}</span></td>
@@ -3744,7 +3777,7 @@ export default function ProductionManagerDashboard() {
                                                         const o = r.order;
                                                         const style = bucketStyle(r.bucket);
                                                         return (
-                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => openOrderInList(o)}>
                                                                 <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{getClientName(o) || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
@@ -3796,7 +3829,7 @@ export default function ProductionManagerDashboard() {
                                                         const o = r.order;
                                                         const style = bucketStyle(r.bucket);
                                                         return (
-                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => viewOrderDetails(o)}>
+                                                            <tr key={o.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer" }} onClick={() => openOrderInList(o)}>
                                                                 <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 12 }}>{o.order_no || "-"}</td>
                                                                 <td style={{ padding: "8px 12px" }}>{getClientName(o) || "-"}</td>
                                                                 <td style={{ padding: "8px 12px", fontSize: 12 }}>{o.salesperson || "-"}</td>
@@ -4056,7 +4089,7 @@ export default function ProductionManagerDashboard() {
                                                             // stage column say different, non-contradictory things.
                                                             const statusLabel = getOrderProgressStatus(o, componentsByOrder[o.id]);
                                                             return (
-                                                                <tr key={o.id} className={late ? "pm-dispatch-row-overdue" : ""} onClick={() => viewOrderDetails(o)}>
+                                                                <tr key={o.id} className={late ? "pm-dispatch-row-overdue" : ""} onClick={() => openOrderInList(o)}>
                                                                     <td className="pm-mono">{o.order_no || "-"}</td>
                                                                     <td>{getClientName(o) || "-"}</td>
                                                                     <td><span className={`pm-channel-tag ${getChannelClass(o)}`}>{getChannelLabel(o)}</span></td>
