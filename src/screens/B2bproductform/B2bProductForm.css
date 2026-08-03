@@ -70,9 +70,104 @@
   outline: none;
 }
 
+/* ===== ALIGNED FORM ROWS (Delivery Date / Mode / Flag, Notes / Attachments) =====
+   These rows use a fixed 3-column grid instead of flex so the columns line up
+   vertically ACROSS rows — with `flex: 1` a 2-field row splits 50/50 while a
+   3-field row splits 33/33/33, and nothing lined up. A field can span two
+   columns with .field-span-2. */
+.b2b-pf-page .screen4-form > .row.form-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+  align-items: start;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 > .field {
+  /* Label on top, control pinned to the bottom of the field, so the gold
+     underline sits at the same height in every column even when labels wrap. */
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-bottom: none;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 > .field.field-span-2 {
+  grid-column: span 2;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 > .field > label {
+  margin-bottom: 4px;
+}
+
+/* The underline belongs to the control wrapper, not the whole field, so a
+   field with extra content below (attachment chips) keeps its line at the
+   same height as its neighbours. */
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control {
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  min-height: 38px;
+  border-bottom: 2px solid #d5b85a;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control > * {
+  width: 100%;
+}
+
+/* Normalise all three control types (date input, SearchableSelect, upload
+   button) onto the same box so their text shares one baseline. */
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control .input-line {
+  width: 100%;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 15px;
+  line-height: 24px;
+  outline: none;
+}
+
+/* Screen4.css nudges .ss-root down with `top: 10px`, which pushed the two
+   selects below the date input's baseline. Neutralise it here. */
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control .ss-root {
+  top: 0;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control .ss-control {
+  align-items: center;
+  padding: 0;
+  min-height: 0;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control .ss-input {
+  font-size: 15px;
+  line-height: 24px;
+  padding: 0;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control .custom-file-upload {
+  width: 100%;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 .field-control .upload-btn {
+  display: block;
+  padding: 0;
+  font-size: 15px !important;
+  line-height: 24px;
+}
+
+.b2b-pf-page .screen4-form > .row.form-row-3 .attachment-preview {
+  margin-top: 8px;
+}
+
 @media (max-width: 1100px) {
   .b2b-pf-page .screen4-form > .row {
     gap: 15px;
+  }
+
+  .b2b-pf-page .screen4-form > .row.form-row-3 {
+    gap: 15px 20px;
   }
 }
 
@@ -85,6 +180,14 @@
   .b2b-pf-page .screen4-form > .row > .field {
     min-width: 100%;
     flex: 1 1 100%;
+  }
+
+  .b2b-pf-page .screen4-form > .row.form-row-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .b2b-pf-page .screen4-form > .row.form-row-3 > .field.field-span-2 {
+    grid-column: span 1;
   }
 }
 

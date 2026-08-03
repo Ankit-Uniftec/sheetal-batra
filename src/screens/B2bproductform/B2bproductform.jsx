@@ -831,15 +831,19 @@ export default function B2bProductForm() {
                             </div>
                         )}
 
-                        <div className="row">
-                            <div className="field"><label>Delivery Date*</label><input type="date" className="input-line" value={deliveryDate} min={new Date().toISOString().split("T")[0]} onChange={(e) => setDeliveryDate(e.target.value)} /></div>
-                            <div className="field"><SearchableSelect options={[{ label: "B2B Store", value: "B2B Store" }]} value={modeOfDelivery} onChange={setModeOfDelivery} placeholder="Mode of Delivery" /></div>
-                            <div className="field"><SearchableSelect options={[{ label: "Urgent", value: "Urgent" }, { label: "Normal", value: "Normal" }]} value={orderFlag} onChange={(v) => { if (v === "Urgent") setShowUrgentModal(true); else { setOrderFlag(v); setUrgentReason(""); } }} placeholder="Order Flag" /></div>
+                        {/* Every field carries a label and a .field-control wrapper so the
+                            labels, the controls and the gold underlines all line up across
+                            both rows, regardless of whether the control is an input, a
+                            SearchableSelect or the file-upload button. */}
+                        <div className="row form-row-3">
+                            <div className="field"><label>Delivery Date*</label><div className="field-control"><input type="date" className="input-line" value={deliveryDate} min={new Date().toISOString().split("T")[0]} onChange={(e) => setDeliveryDate(e.target.value)} /></div></div>
+                            <div className="field"><label>Mode of Delivery</label><div className="field-control"><SearchableSelect options={[{ label: "B2B Store", value: "B2B Store" }]} value={modeOfDelivery} onChange={setModeOfDelivery} placeholder="Mode of Delivery" /></div></div>
+                            <div className="field"><label>Order Flag</label><div className="field-control"><SearchableSelect options={[{ label: "Urgent", value: "Urgent" }, { label: "Normal", value: "Normal" }]} value={orderFlag} onChange={(v) => { if (v === "Urgent") setShowUrgentModal(true); else { setOrderFlag(v); setUrgentReason(""); } }} placeholder="Order Flag" /></div></div>
                         </div>
 
-                        <div className="row">
-                            <div className="field"><label>Notes:</label><input style={{ border: "none", background: "transparent" }} className="input-line" placeholder="" value={comments} onChange={(e) => setComments(e.target.value)} /></div>
-                            <div className="field"><label>Attachments</label><div className="custom-file-upload"><label className="upload-btn">Upload Files<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx" multiple onChange={handleFileUpload} /></label></div>{attachments.length > 0 && <div className="attachment-preview">{attachments.map((url, idx) => <span key={idx} className="file-item">{url.split("/").pop()}<button type="button" className="remove-attachment-btn" onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}>×</button></span>)}</div>}</div>
+                        <div className="row form-row-3">
+                            <div className="field field-span-2"><label>Notes</label><div className="field-control"><input className="input-line" placeholder="" value={comments} onChange={(e) => setComments(e.target.value)} /></div></div>
+                            <div className="field"><label>Attachments</label><div className="field-control"><div className="custom-file-upload"><label className="upload-btn">Upload Files<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx" multiple onChange={handleFileUpload} /></label></div></div>{attachments.length > 0 && <div className="attachment-preview">{attachments.map((url, idx) => <span key={idx} className="file-item">{url.split("/").pop()}<button type="button" className="remove-attachment-btn" onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}>×</button></span>)}</div>}</div>
                         </div>
 
                         {/* Stock orders carry no value, so the money lines would all read
