@@ -17,10 +17,8 @@ import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
-import CompletePicker from "../../components/CompletePicker";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange } from "../../components/PeriodFilter";
-import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 import { startB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
 import WarehouseTab from "../../components/stock/WarehouseTab";
 import StockExchangeTab from "../../components/stock/StockExchangeTab";
@@ -47,18 +45,9 @@ const TERMINAL_ORDER_STATUSES = ["completed", "delivered", "cancelled"];
 const isTerminalOrder = (order) =>
     TERMINAL_ORDER_STATUSES.includes((order?.status || "").toLowerCase());
 
-// Mark as Completed is still gated to
-// the specific merchandisers cleared for it rather than the whole role. Add or
-// remove an email here to grant/revoke (lowercase).
-const MANUAL_COMPLETE_EMAILS = [
-    "merchendiser.sheetalbatra@gmail.com", // Prastuti Kaushik (B2B merchandiser)
-    "merch@sheetalbatra.com",
-];
-
 export default function B2bMerchandiserDashboard() {
     const navigate = useNavigate();
     const { showPopup, PopupComponent } = usePopup();
-    const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
 
     const [activeTab, setActiveTab] = useTabParam("dashboard");
     const [user, setUser] = useState(null);
@@ -739,50 +728,6 @@ export default function B2bMerchandiserDashboard() {
         }
     };
 
-    // Mark as Completed — production finished. Final QC is mandatory (the RPC
-    // refuses otherwise) but can be overridden here, same as on the Production
-    // Head / Manager dashboards: a second confirm lists the pieces being
-    // skipped and the override lands in the order's QC Report. Same
-    // manual_complete_order RPC. Gated to MANUAL_COMPLETE_EMAILS.
-    const runManualComplete = async (order, picked) => {
-        try {
-            // Merchandisers cannot override Final QC — only the Production
-            // Manager can. Without allowOverride, a piece short of Final QC
-            // makes the helper throw the RPC's "Final QC is mandatory" message
-            // (caught below and shown as an error).
-            const res = await runManualCompleteWithOverride({
-                orderId: order.id,
-                by: user?.email || "unknown",
-                picked,
-            });
-            if (res.cancelled) return;
-        } catch (err) {
-            showPopup({ type: "error", title: "Update Failed", message: err.message || "Could not complete the order.", confirmText: "OK" });
-            return;
-        }
-        loadAllData();
-        showPopup({ type: "success", title: "Done", message: `Order ${order.order_no} updated.`, confirmText: "OK" });
-    };
-
-    const markManualComplete = async (order) => {
-        const comps = componentsByOrder[order.id] || [];
-        const productIdxs = [...new Set(comps.map((c) => c.item_index ?? 0))].sort((a, b) => a - b);
-        if (productIdxs.length > 1) { setCompletePicker({ order, productIdxs }); return; }
-        const ok = await new Promise((resolve) => {
-            showPopup({
-                type: "confirm",
-                title: "Mark as Completed",
-                message: `Mark order ${order.order_no} as completed? Pieces become ready for Packaging & Dispatch. If any piece has not passed Final QC you'll be asked to confirm an override.`,
-                confirmText: "Yes, complete it",
-                cancelText: "Cancel",
-                onConfirm: () => resolve(true),
-                onCancel: () => resolve(false),
-            });
-        });
-        if (!ok) return;
-        await runManualComplete(order, null);
-    };
-
     // ==================== HELPERS ====================
     // Clear the stock flag on logout so it can't leak into the next session and
     // make a normal B2B order behave as stock.
@@ -857,15 +802,6 @@ export default function B2bMerchandiserDashboard() {
 
     return (
         <div className="merch-dashboard-wrapper">
-            {completePicker && (
-                <CompletePicker
-                    order={completePicker.order}
-                    components={componentsByOrder[completePicker.order.id] || []}
-                    productIdxs={completePicker.productIdxs}
-                    onConfirm={(picked) => runManualComplete(completePicker.order, picked)}
-                    onClose={() => setCompletePicker(null)}
-                />
-            )}
             {PopupComponent}
             {/* ===== HEADER ===== */}
             <header className="merch-header">
@@ -1134,18 +1070,6 @@ export default function B2bMerchandiserDashboard() {
                                                 <button className="merch-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
                                                     {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
                                                 </button>
-                                                {/* Bypass for the cleared merchandiser when an order can't
-                                                    finish the normal gated flow. Hidden once the order is
-                                                    already finished/cancelled. */}
-                                                {MANUAL_COMPLETE_EMAILS.includes((user?.email || "").toLowerCase())
-                                                    && !["completed", "delivered", "cancelled"].includes(order.status) && (
-                                                    <button
-                                                        className="merch-manual-complete-btn"
-                                                        onClick={(e) => { e.stopPropagation(); markManualComplete(order); }}
-                                                    >
-                                                        Mark as Completed
-                                                    </button>
-                                                )}
                                             </div>
                                         </div>
                                         <div className="merch-ocard-content">
