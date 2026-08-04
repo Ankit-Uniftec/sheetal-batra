@@ -14,10 +14,14 @@ import useTabParam from "../../hooks/useTabParam";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import StoreCalendarTab from "../StoreManagerDashboard/StoreCalendarTab";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
+import { downloadCsv } from "../../utils/downloadCsv";
 import {
   enrichComponentsWithMovements,
   getOrderStatusLabel,
   normalizeOrderStatus,
+  getStageGroupKey,
+  STAGE_GROUPS,
+  PRODUCTION_STAGES,
 } from "../../utils/barcodeService";
 import formatDate from "../../utils/formatDate";
 import Logo from "../../images/logo.png";
@@ -103,6 +107,47 @@ const ORDER_LIST_COLUMNS = [
   "web_order_status", "web_order_issues",
 ].join(", ");
 
+// ─── Orders tab sorting ────────────────────────────────────────────────────
+// "High to low / low to high" is by QUANTITY, not price. This screen does not
+// fetch money at all (see the header note), so an amount sort is not something
+// it can honestly offer — units are the magnitude the warehouse actually reads.
+const SORT_OPTIONS = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "qty_desc", label: "Quantity: high to low" },
+  { value: "qty_asc", label: "Quantity: low to high" },
+  { value: "delivery_asc", label: "Delivery date: soonest" },
+  { value: "delivery_desc", label: "Delivery date: latest" },
+];
+
+// Sort comparators. Orders with no delivery date sort LAST in both delivery
+// directions — an undated order is not "soonest", and letting an empty value
+// win the top of the list is how a dateless order gets mistaken for urgent.
+const SORTERS = {
+  newest: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+  oldest: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+  qty_desc: (a, b) => (b.total_quantity || 0) - (a.total_quantity || 0),
+  qty_asc: (a, b) => (a.total_quantity || 0) - (b.total_quantity || 0),
+  delivery_asc: (a, b) => {
+    if (!a.delivery_date) return 1;
+    if (!b.delivery_date) return -1;
+    return new Date(a.delivery_date) - new Date(b.delivery_date);
+  },
+  delivery_desc: (a, b) => {
+    if (!a.delivery_date) return 1;
+    if (!b.delivery_date) return -1;
+    return new Date(b.delivery_date) - new Date(a.delivery_date);
+  },
+};
+
+// Raw production_stage enum value -> human label, for the CSV's per-piece
+// stage column. PRODUCTION_STAGES includes the legacy entries, so an in-flight
+// piece on a removed stage still exports a readable label instead of a raw enum.
+const STAGE_LABEL_BY_VALUE = PRODUCTION_STAGES.reduce((m, s) => {
+  m[s.value] = s.label;
+  return m;
+}, {});
+
 // A colour swatch + name, matching OrderDetailPage.jsx:33 and the B2B/Comms
 // cards. Colours are stored as { hex, name } objects; tolerate a bare string
 // (legacy rows) and a missing hex (a Shopify colour absent from the `colors`
@@ -175,6 +220,17 @@ export default function ShopifyOrdersDashboard() {
   const [searchField, setSearchField] = useState("order_no");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  // Orders-tab filters. Stage is a LIST of STAGE_GROUPS keys (the 10 logical
+  // stages), not a raw enum — the floor thinks in "Embroidery", not
+  // "embroidery_in_progress"/"embroidery_completed". Multi-select, because
+  // "show me everything at Stitching OR Hemming" is the real question; empty =
+  // no stage filter.
+  const [stageFilter, setStageFilter] = useState([]);
+  const [sortBy, setSortBy] = useState("newest");
+  const [exporting, setExporting] = useState(false);
+  // Which filter popover is open ("stage" | "sort" | null). One at a time, so
+  // opening a second closes the first.
+  const [openDropdown, setOpenDropdown] = useState(null);
 
   // Needs Review has its OWN search + issue filter + paging, kept separate from
   // the Orders tab's. Sharing them meant switching tabs silently carried a
@@ -185,6 +241,14 @@ export default function ShopifyOrdersDashboard() {
   const [reviewPage, setReviewPage] = useState(1);
 
   const { control: periodControl, inPeriod } = usePeriodFilter("month", { variant: "pills" });
+
+  // The Orders tab gets its OWN period selection, defaulting to All time. It is
+  // a lookup list, not an overview: inheriting the Overview's "This month"
+  // would hide older in-production orders the warehouse is still working on.
+  // Compact "select" variant so it sits inline in the toolbar with the other
+  // dropdowns, and no caption (every neighbouring control is self-describing).
+  const { control: ordersPeriodControl, inPeriod: inOrdersPeriod } =
+    usePeriodFilter("all", { variant: "select", label: "" });
 
   // ── Role guard. PrivateRoute only checks authentication, so every dashboard
   // self-guards on its role (the app's documented two-place convention).
@@ -269,6 +333,21 @@ export default function ShopifyOrdersDashboard() {
     loadOrders();
   }, [authChecked, loadOrders]);
 
+  // Close an open filter popover on a click outside it. Without this the panel
+  // stays open behind whatever you click next, over the order list.
+  useEffect(() => {
+    if (!openDropdown) return;
+    const onDocClick = (e) => {
+      // `closest` exists on Elements only — a click landing on a text node (or
+      // the document itself) has no closest() and would throw here.
+      if (typeof e.target?.closest !== "function") { setOpenDropdown(null); return; }
+      if (!e.target.closest(".sho-filter-dropdown")) setOpenDropdown(null);
+    };
+    // `true` = capture phase, so this runs before a card's own click handler.
+    document.addEventListener("click", onDocClick, true);
+    return () => document.removeEventListener("click", onDocClick, true);
+  }, [openDropdown]);
+
   // ── Manual pull. Same edge function the webhook and cron poll use, so a
   // duplicate is a harmless no-op (idempotent on shopify_order_id).
   const handleSyncNow = async () => {
@@ -311,6 +390,87 @@ export default function ShopifyOrdersDashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
+  };
+
+  // ── CSV export.
+  //
+  // Exports every order matching the CURRENT filters and search — the whole
+  // filtered set, not just the visible page. Exporting page 1 of 30 is the kind
+  // of silent truncation someone builds a report on without noticing.
+  //
+  // NO client and NO money columns, for the same reason the screen doesn't
+  // render them: this file leaves the building, so it is the last place to
+  // start leaking a customer name or an order value. It carries what the
+  // warehouse needs — the two order numbers, dates, quantity, status, the
+  // garment breakdown and the state of each physical piece.
+  //
+  // `rows` is passed in so both tabs share one implementation; the Needs Review
+  // export adds an Issues column and drops the pieces (a flagged order's whole
+  // point is that its breakdown is incomplete).
+  const exportOrdersCsv = (rows, { filename, withIssues = false }) => {
+    if (!rows.length) {
+      showPopup({ title: "Nothing to export", message: "No orders match the current filters.", type: "info" });
+      return;
+    }
+    setExporting(true);
+    try {
+      const headers = [
+        "Order No", "Shopify Order No", "Order Date", "Delivery Date",
+        "Status", "Qty", "Products", "Size", "Top", "Bottom", "Dupatta",
+        ...(withIssues ? ["Issues"] : ["Pieces", "Piece Stages"]),
+      ];
+
+      const colorText = (c) => {
+        if (!c) return "";
+        if (typeof c === "string") return c.startsWith("#") ? "" : c;
+        return c.name || "";
+      };
+      // "Top" etc. describe the FIRST item; a multi-item order names all its
+      // products in Products and carries its full piece list, which is what the
+      // floor matches against. Joined with " | " because a comma would read as a
+      // column break to anyone eyeballing the raw file.
+      const join = (parts) => parts.filter(Boolean).join(" ");
+
+      const dataRows = rows.map((o) => {
+        const item = o.items?.[0] || {};
+        const comps = componentsByOrder[o.id] || [];
+        const base = [
+          o.order_no || "",
+          o.shopify_order_name || "",
+          formatDate(o.created_at) || "",
+          o.delivery_date ? formatDate(o.delivery_date) : "",
+          getOrderStatusLabel(o.status),
+          o.total_quantity || 0,
+          (o.items || []).map((i) => i.product_name).filter(Boolean).join(" | "),
+          item.size || "",
+          join([item.top, colorText(item.top_color)]),
+          join([item.bottom, colorText(item.bottom_color)]),
+          item.includes_dupatta ? join(["Yes", colorText(item.dupatta_color)]) : "No",
+        ];
+        if (withIssues) {
+          return [
+            ...base,
+            (o.web_order_issues || [])
+              .filter((i) => i.code !== DERIVED_CODE)
+              .map((i) => `${ISSUE_LABELS[i.code] || i.code}${i.detail ? `: ${i.detail}` : ""}`)
+              .join(" | "),
+          ];
+        }
+        return [
+          ...base,
+          comps.map((c) => c.barcode).filter(Boolean).join(" | "),
+          comps
+            .map((c) => `${c.component_label || c.component_type}: ${STAGE_LABEL_BY_VALUE[c.current_stage] || c.current_stage || "—"}`)
+            .join(" | "),
+        ];
+      });
+
+      downloadCsv({ filename, headers, rows: dataRows });
+    } catch (e) {
+      showPopup({ title: "Export failed", message: e.message, type: "error" });
+    } finally {
+      setExporting(false);
+    }
   };
 
   // ── Derived data
@@ -369,10 +529,57 @@ export default function ShopifyOrdersDashboard() {
     }
   }, [componentsByOrder]);
 
-  const filteredOrders = useMemo(
-    () => orders.filter((o) => matchesSearch(o, searchField, search)),
-    [orders, search, searchField, matchesSearch]
-  );
+  // order_id -> Set of stage-group keys its pieces are currently at. An order
+  // is "at" a stage if ANY of its components is — a multi-piece order legitimately
+  // straddles two stages, and filtering on the order's single warehouse_stage
+  // would drop it from the stage its other pieces are actually sitting at.
+  const stageKeysByOrder = useMemo(() => {
+    const map = {};
+    Object.entries(componentsByOrder).forEach(([orderId, comps]) => {
+      const keys = new Set();
+      comps.forEach((c) => {
+        // getStageGroupKey returns null for order_received (deliberate, for
+        // order-level logic), so map that bucket explicitly — "not started yet"
+        // is a filter the floor wants.
+        const key = c.current_stage === "order_received"
+          ? "order_received"
+          : getStageGroupKey(c.current_stage);
+        if (key) keys.add(key);
+      });
+      map[orderId] = keys;
+    });
+    return map;
+  }, [componentsByOrder]);
+
+  // All 10 logical stages, always. Unlike the Needs Review issue filter (whose
+  // codes are unbounded), the stage list is a fixed, ordered pipeline — showing
+  // it whole lets someone read off where work ISN'T, and a checkbox that
+  // returns nothing is honest information here, not a dead option.
+  const stageOptions = STAGE_GROUPS;
+
+  const toggleStage = (key) =>
+    setStageFilter((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+
+  const filteredOrders = useMemo(() => {
+    const rows = orders.filter((o) => {
+      if (!matchesSearch(o, searchField, search)) return false;
+      if (!inOrdersPeriod(o.created_at)) return false;
+      if (stageFilter.length === 0) return true;
+      // OR across the ticked stages: an order matches if ANY piece is at ANY of
+      // them. Ticking more stages widens the list, which is what a checkbox
+      // group is expected to do.
+      const keys = stageKeysByOrder[o.id];
+      // An order with no components yet (freshly ingested, or flagged before
+      // barcodes were minted) counts as Order Received — that IS its state, and
+      // dropping it from the list would hide the newest orders on the screen.
+      if (!keys || keys.size === 0) return stageFilter.includes("order_received");
+      return stageFilter.some((k) => keys.has(k));
+    });
+    // Copy before sorting — .sort mutates, and `orders` is state.
+    return rows.sort(SORTERS[sortBy] || SORTERS.newest);
+  }, [orders, search, searchField, matchesSearch, inOrdersPeriod, stageFilter, stageKeysByOrder, sortBy]);
 
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
   const paginated = useMemo(
@@ -380,7 +587,10 @@ export default function ShopifyOrdersDashboard() {
     [filteredOrders, page]
   );
 
-  useEffect(() => { setPage(1); }, [search, searchField]);
+  // inOrdersPeriod (not `ordersTimeline`) is the dep: it is a fresh callback per
+  // RANGE, so editing a custom From/To resets the page too — with the timeline
+  // alone the selection stays "custom" and page 4 of a now-shorter list is empty.
+  useEffect(() => { setPage(1); }, [search, searchField, stageFilter, sortBy, inOrdersPeriod]);
 
   // ── Needs Review tab: search + filter by which blocker the order has.
   // Only codes actually PRESENT in the current data become options, so the
@@ -722,7 +932,97 @@ export default function ShopifyOrdersDashboard() {
                       onQueryChange={setSearch}
                       placeholder="Type to search..."
                     />
+                    {/* Period — the app-standard control, never a hand-rolled
+                        From/To pair. */}
+                    {ordersPeriodControl}
+                    {/* Stage — multi-select checkboxes in a popover, the same
+                        pattern as the Warehouse dashboard's Stage filter
+                        (WarehouseDashboard.jsx:1530). A single-select dropdown
+                        can't express "Stitching or Hemming", which is how the
+                        floor actually asks the question. */}
+                    <div className="sho-filter-dropdown">
+                      <button
+                        className={`sho-filter-btn ${stageFilter.length > 0 ? "active" : ""}`}
+                        onClick={() => setOpenDropdown(openDropdown === "stage" ? null : "stage")}
+                      >
+                        Stage{stageFilter.length > 0 ? ` (${stageFilter.length})` : ""}
+                        <span className="sho-dropdown-arrow">&#9662;</span>
+                      </button>
+                      {openDropdown === "stage" && (
+                        <div className="sho-dropdown-panel">
+                          <div className="sho-dropdown-title">Production Stage</div>
+                          {stageOptions.map((g) => (
+                            <label key={g.key} className="sho-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={stageFilter.includes(g.key)}
+                                onChange={() => toggleStage(g.key)}
+                              />
+                              <span>{g.label}</span>
+                            </label>
+                          ))}
+                          <button
+                            className="sho-dropdown-apply"
+                            onClick={() => setOpenDropdown(null)}
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Sort — single choice, so radios rather than checkboxes:
+                        the control must show that picking one drops the other. */}
+                    <div className="sho-filter-dropdown">
+                      <button
+                        className={`sho-filter-btn ${sortBy !== "newest" ? "active" : ""}`}
+                        onClick={() => setOpenDropdown(openDropdown === "sort" ? null : "sort")}
+                      >
+                        Sort
+                        <span className="sho-dropdown-arrow">&#9662;</span>
+                      </button>
+                      {openDropdown === "sort" && (
+                        <div className="sho-dropdown-panel">
+                          <div className="sho-dropdown-title">Sort By</div>
+                          {SORT_OPTIONS.map((s) => (
+                            <label key={s.value} className="sho-checkbox-label">
+                              <input
+                                type="radio"
+                                name="sho-sort"
+                                checked={sortBy === s.value}
+                                onChange={() => setSortBy(s.value)}
+                              />
+                              <span>{s.label}</span>
+                            </label>
+                          ))}
+                          <button
+                            className="sho-dropdown-apply"
+                            onClick={() => setOpenDropdown(null)}
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     <span className="sho-count">{filteredOrders.length} orders</span>
+                    {(search || stageFilter.length > 0 || sortBy !== "newest") && (
+                      <button
+                        className="sho-ghost-btn"
+                        onClick={() => { setSearch(""); setStageFilter([]); setSortBy("newest"); }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button
+                      className="sho-ghost-btn"
+                      disabled={exporting || filteredOrders.length === 0}
+                      onClick={() =>
+                        exportOrdersCsv(filteredOrders, { filename: "shopify_orders" })
+                      }
+                    >
+                      {exporting ? "Exporting…" : "Export CSV"}
+                    </button>
                   </div>
                   {paginated.length === 0 ? (
                     <div className="sho-empty">No orders match this search.</div>
@@ -762,9 +1062,12 @@ export default function ShopifyOrdersDashboard() {
                           onQueryChange={setReviewSearch}
                           placeholder="Type to search..."
                         />
-                        {/* Only codes present in the current data are offered. */}
+                        {/* Only codes present in the current data are offered.
+                            Wider than the Orders-tab dropdowns: these labels are
+                            full sentences ("Garment breakdown missing — needs
+                            custom.top_style"), not one-word stage names. */}
                         <select
-                          className="sho-select"
+                          className="sho-select sho-select-wide"
                           value={issueFilter}
                           onChange={(e) => setIssueFilter(e.target.value)}
                         >
@@ -784,6 +1087,22 @@ export default function ShopifyOrdersDashboard() {
                             Clear
                           </button>
                         )}
+                        {/* Issues column instead of the piece list — the whole
+                            point of this export is what has to be fixed in
+                            Shopify, and it is the list the catalogue team works
+                            through off-screen. */}
+                        <button
+                          className="sho-ghost-btn"
+                          disabled={exporting || filteredReview.length === 0}
+                          onClick={() =>
+                            exportOrdersCsv(filteredReview, {
+                              filename: "shopify_needs_review",
+                              withIssues: true,
+                            })
+                          }
+                        >
+                          {exporting ? "Exporting…" : "Export CSV"}
+                        </button>
                       </div>
                       {paginatedReview.length === 0 ? (
                         <div className="sho-empty">No orders match this search.</div>
