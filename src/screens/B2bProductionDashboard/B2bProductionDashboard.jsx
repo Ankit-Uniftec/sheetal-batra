@@ -23,6 +23,7 @@ import { getStageLabel, getStageGroupKey, enrichComponentsWithMovements, classif
 import { fetchQcRecords } from "../../utils/qcHistory";
 import { fetchReJourneys } from "../../utils/reJourneys";
 import { runManualCompleteWithOverride } from "../../utils/manualComplete";
+import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 
 export default function B2bProductionDashboard() {
@@ -327,7 +328,8 @@ export default function B2bProductionDashboard() {
         let filtered = [...orders];
         if (prodFilter === "cancelled") filtered = filtered.filter(o => (o.status || "").toLowerCase() === "cancelled");
         else if (prodFilter !== "all") filtered = filtered.filter(o => (o.status || "").toLowerCase() !== "cancelled" && getStageBucket(o) === prodFilter);
-        if (allTypeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type === allTypeFilter);
+        if (allTypeFilter === "stock") filtered = filtered.filter(o => isB2bStockOrderRow(o));
+        else if (allTypeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type === allTypeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
@@ -361,7 +363,10 @@ export default function B2bProductionDashboard() {
     // Helper to filter by search + type
     const applyFilters = (list, search, type) => {
         let result = [...list];
-        if (type !== "all") result = result.filter(o => o.b2b_order_type === type);
+        // "stock" is not a b2b_order_type — internal stock orders carry a null
+        // type and are identified by the is_stock_order flag instead.
+        if (type === "stock") result = result.filter(o => isB2bStockOrderRow(o));
+        else if (type !== "all") result = result.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type === type);
         if (search.trim()) {
             const q = search.toLowerCase();
             result = result.filter(o =>
@@ -574,9 +579,11 @@ export default function B2bProductionDashboard() {
                                         <div key={order.id} className="prod-pending-item">
                                             <div className="prod-pending-top">
                                                 <b className="prod-gold-text">{order.order_no}</b>
-                                                <span className={`prod-type-tag ${order.b2b_order_type === "Buyout" ? "prod-tag-buyout" : "prod-tag-consignment"}`}>{order.b2b_order_type || "\u2014"}</span>
+                                                <span className={`prod-type-tag ${isB2bStockOrderRow(order) ? "prod-tag-stock" : order.b2b_order_type === "Buyout" ? "prod-tag-buyout" : "prod-tag-consignment"}`}>{isB2bStockOrderRow(order) ? "Stock" : (order.b2b_order_type || "\u2014")}</span>
                                             </div>
-                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
+                                            {!isB2bStockOrderRow(order) && (
+                                                <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
+                                            )}
                                             <div className="prod-pending-btns">
                                                 <button className="prod-detail-sm" onClick={() => handleViewOrder(order.id)}>View</button>
                                             </div>
@@ -598,8 +605,16 @@ export default function B2bProductionDashboard() {
                                         orders.slice(0, 10).map(o => {
                                             return (
                                                 <div className="prod-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
-                                                    <p><b>Order No:</b> {o.order_no} &nbsp;|&nbsp; <b>PO:</b> {o.po_number || "\u2014"}</p>
-                                                    <p><b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Type:</b> {o.b2b_order_type || "\u2014"}</p>
+                                                    {/* Stock orders have no PO / vendor / type \u2014 print the order no alone
+                                                        rather than three em-dashes. */}
+                                                    {isB2bStockOrderRow(o) ? (
+                                                        <p><b>Order No:</b> {o.order_no} &nbsp;|&nbsp; <b>Type:</b> Stock</p>
+                                                    ) : (
+                                                        <>
+                                                            <p><b>Order No:</b> {o.order_no} &nbsp;|&nbsp; <b>PO:</b> {o.po_number || "\u2014"}</p>
+                                                            <p><b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Type:</b> {o.b2b_order_type || "\u2014"}</p>
+                                                        </>
+                                                    )}
                                                     <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "\u2014"}</p>
                                                     <p><b>Status:</b> <span className={getStageStatusClass(o)}>{getStageStatusLabel(o)}</span></p>
                                                 </div>
@@ -628,6 +643,7 @@ export default function B2bProductionDashboard() {
                                 <option value="all">All Types</option>
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
+                                <option value="stock">Stock</option>
                             </select>
                         </div>
                         {filteredQueue.length === 0 ? (
@@ -651,6 +667,7 @@ export default function B2bProductionDashboard() {
                                 <option value="all">All Types</option>
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
+                                <option value="stock">Stock</option>
                             </select>
                         </div>
                         {filteredInprod.length === 0 ? (
@@ -678,6 +695,7 @@ export default function B2bProductionDashboard() {
                                 <option value="all">All Types</option>
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
+                                <option value="stock">Stock</option>
                             </select>
                             <select value={dispatchSection} onChange={(e) => { setDispatchSection(e.target.value); setDispatchPage(1); }} className="prod-filter-select">
                                 <option value="ready">Ready for Dispatch</option>
@@ -717,6 +735,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="Client Order">Client Order</option>
+                                <option value="stock">Stock</option>
                             </select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
                                 <option value="all">All Merchandisers</option>
@@ -796,8 +815,14 @@ export default function B2bProductionDashboard() {
                                         orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).map(order => {
                                             return (
                                                 <div className="prod-order-item" key={order.id} onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
-                                                    <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
-                                                    <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
+                                                    {isB2bStockOrderRow(order) ? (
+                                                        <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>Type:</b> Stock</p>
+                                                    ) : (
+                                                        <>
+                                                            <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "\u2014"}</p>
+                                                            <p><b>Vendor:</b> {vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</p>
+                                                        </>
+                                                    )}
                                                     <p><b>Status:</b> <span className={getStageStatusClass(order)}>{getStageStatusLabel(order)}</span></p>
                                                 </div>
                                             );
@@ -893,6 +918,8 @@ export default function B2bProductionDashboard() {
 function OrderCard({ order, vendorMap, components = [], onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete }) {
     const item = order.items?.[0] || {};
     const imgSrc = item.image_url || "/placeholder.png";
+    // Internal stock: no vendor, no PO, no order type — hide those rows entirely.
+    const isStock = isB2bStockOrderRow(order);
 
     return (
         <div className="prod-order-card-full" onClick={() => onView(order.id)} style={{ cursor: "pointer" }}>
@@ -901,11 +928,13 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                     <div className="prod-ocard-field"><span className="prod-ocard-label">ORDER NO:</span><span className="prod-ocard-val">{order.order_no || "\u2014"}</span></div>
                     <div className="prod-ocard-field"><span className="prod-ocard-label">ORDER DATE:</span><span className="prod-ocard-val">{formatDate(order.created_at) || "\u2014"}</span></div>
                     <div className="prod-ocard-field"><span className="prod-ocard-label">DELIVERY:</span><span className="prod-ocard-val">{formatDate(order.delivery_date) || "\u2014"}</span></div>
-                    <div className="prod-ocard-field"><span className="prod-ocard-label">PO NUMBER:</span><span className="prod-ocard-val">{order.po_number || "\u2014"}</span></div>
+                    {!isStock && (<div className="prod-ocard-field"><span className="prod-ocard-label">PO NUMBER:</span><span className="prod-ocard-val">{order.po_number || "\u2014"}</span></div>)}
                 </div>
                 <div className="prod-ocard-badges">
                     <div className={`prod-order-status-badge ${getStageStatusClass(order)}`}>{getStageStatusLabel(order)}</div>
-                    {order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
+                    {isStock
+                        ? (<div className="prod-order-type-badge prod-type-stock">Stock</div>)
+                        : order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
                     {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"\u26A0"} Urgent</div>)}
                     <button className="prod-pdf-btn" onClick={(e) => onWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
                         {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
@@ -916,7 +945,7 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                 <div className="prod-ocard-thumb"><img src={imgSrc} alt={item.product_name || "Product"} /></div>
                 <div className="prod-ocard-details">
                     <div className="prod-ocard-row"><span className="prod-ocard-dlabel">Product:</span><span className="prod-ocard-dval">{item.product_name || "\u2014"}</span></div>
-                    <div className="prod-ocard-row"><span className="prod-ocard-dlabel">Vendor:</span><span className="prod-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>
+                    {!isStock && (<div className="prod-ocard-row"><span className="prod-ocard-dlabel">Vendor:</span><span className="prod-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>)}
                     <div className="prod-ocard-grid">
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Qty:</span><span className="prod-ocard-dval">{order.total_quantity || 1}</span></div>
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Delivery:</span><span className="prod-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>

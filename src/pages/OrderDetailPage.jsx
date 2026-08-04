@@ -458,7 +458,20 @@ export default function OrderDetailPage() {
   }
 
   const items = order.items || [];
-  
+
+  // Shipping address, only meaningful for Home Delivery. Empty string when the
+  // order is picked up in store or when no address parts were captured.
+  const deliveryAddress =
+    order.mode_of_delivery === "Home Delivery"
+      ? [
+          order.delivery_address,
+          order.delivery_city,
+          order.delivery_state,
+          order.delivery_pincode,
+          order.delivery_country
+        ].filter(Boolean).join(", ")
+      : "";
+
   // Check if alteration section should be shown (inverse of Edit availability)
   const canShowAlterationSection = canRequestAlteration();
 
@@ -744,41 +757,25 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <div className="odp-info-card">
-              <h3>Delivery Details</h3>
-              <div className="odp-info-row">
-                <label>Name:</label>
-                <span>{order.delivery_name}</span>
+            {/* Client identity (name / phone / email) is deliberately NOT shown
+                here — only the logistics needed to fulfil the order. */}
+            {(deliveryAddress || order.delivery_notes) && (
+              <div className="odp-info-card">
+                <h3>Delivery Details</h3>
+                {deliveryAddress && (
+                  <div className="odp-info-row full-width">
+                    <label>Address:</label>
+                    <span>{deliveryAddress}</span>
+                  </div>
+                )}
+                {order.delivery_notes && (
+                  <div className="odp-info-row full-width">
+                    <label>Notes:</label>
+                    <span>{order.delivery_notes}</span>
+                  </div>
+                )}
               </div>
-              <div className="odp-info-row">
-                <label>Phone:</label>
-                <span>{formatPhoneNumber(order.delivery_phone)}</span>
-              </div>
-              <div className="odp-info-row">
-                <label>Email:</label>
-                <span>{order.delivery_email}</span>
-              </div>
-              {order.mode_of_delivery === "Home Delivery" && (
-                <div className="odp-info-row full-width">
-                  <label>Address:</label>
-                  <span>
-                    {[
-                      order.delivery_address,
-                      order.delivery_city,
-                      order.delivery_state,
-                      order.delivery_pincode,
-                      order.delivery_country
-                    ].filter(Boolean).join(", ")}
-                  </span>
-                </div>
-              )}
-              {order.delivery_notes && (
-                <div className="odp-info-row full-width">
-                  <label>Notes:</label>
-                  <span>{order.delivery_notes}</span>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Alteration Info (if this is an alteration order) */}
             {order.is_alteration && (

@@ -65,6 +65,23 @@ export function clearB2bStockOrder() {
 }
 
 /**
+ * Is a SAVED order a B2B stock order? Reads the persisted `is_stock_order`
+ * column, unlike isB2bStockOrder() above which reads the in-progress flow flag.
+ *
+ * WHY: a stock order is raised with no vendor, no PO number and no
+ * b2b_order_type (see the null-outs in B2bReviewOrder). Every dashboard that
+ * renders an order card therefore has three fields that can only ever print an
+ * em-dash for these orders. Use this to hide the label and its value entirely
+ * rather than showing an empty row — an em-dash reads as "missing data" when in
+ * fact the field does not apply to this kind of order at all.
+ *
+ * @param {object} order - a row from `orders`.
+ */
+export function isB2bStockOrderRow(order) {
+  return order?.is_stock_order === true;
+}
+
+/**
  * The fixed internal destination for stock orders — B2B stock ships to the
  * warehouse, not to a vendor. Same value the retail stock flow writes, so both
  * kinds of stock order land in one place on the warehouse side.
