@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import Paginator from "../../components/Paginator";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import { usePeriodFilterParam } from "../../components/PeriodFilter";
+import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 
 // Color display component (same as OrderHistory)
 function ColorDot({ color }) {
@@ -83,7 +84,10 @@ export default function B2bOrderHistory() {
                         .eq("is_b2b", true)
                         .order("created_at", { ascending: false });
                     if (statusFilter !== "all") query = query.eq("approval_status", statusFilter);
-                    if (typeFilter !== "all") query = query.eq("b2b_order_type", typeFilter);
+                    // "stock" is not a b2b_order_type — internal stock orders carry a
+                    // null type and are identified by the is_stock_order flag instead.
+                    if (typeFilter === "stock") query = query.eq("is_stock_order", true);
+                    else if (typeFilter !== "all") query = query.eq("b2b_order_type", typeFilter);
                     return query;
                 });
                 if (error) throw error;
@@ -247,6 +251,7 @@ export default function B2bOrderHistory() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="Client Order">Client Order</option>
+                                <option value="stock">Stock</option>
                             </select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="b2boh-filter-select">
                                 <option value="all">All Merchandisers</option>
@@ -312,10 +317,13 @@ export default function B2bOrderHistory() {
                                                 <span className="b2boh-header-label">Order Date:</span>
                                                 <span className="b2boh-header-value">{formatDate(order.created_at) || "—"}</span>
                                             </div>
-                                            <div className="b2boh-header-item">
-                                                <span className="b2boh-header-label">PO Number:</span>
-                                                <span className="b2boh-header-value">{order.po_number || "—"}</span>
-                                            </div>
+                                            {/* Internal stock orders carry no PO. */}
+                                            {!isB2bStockOrderRow(order) && (
+                                                <div className="b2boh-header-item">
+                                                    <span className="b2boh-header-label">PO Number:</span>
+                                                    <span className="b2boh-header-value">{order.po_number || "—"}</span>
+                                                </div>
+                                            )}
                                             <div className="b2boh-header-item">
                                                 <span className="b2boh-header-label">Delivery Date:</span>
                                                 <span className="b2boh-header-value">{formatDate(order.delivery_date) || "—"}</span>
@@ -325,7 +333,9 @@ export default function B2bOrderHistory() {
                                             <span className={`b2boh-badge ${getStatusClass(order.approval_status)}`}>
                                                 {getStatusText(order.approval_status)}
                                             </span>
-                                            {order.b2b_order_type && (
+                                            {isB2bStockOrderRow(order) ? (
+                                                <span className="b2boh-badge type-stock">Stock</span>
+                                            ) : order.b2b_order_type && (
                                                 <span className={`b2boh-badge type-${order.b2b_order_type?.toLowerCase()}`}>
                                                     {order.b2b_order_type}
                                                 </span>
@@ -377,18 +387,24 @@ export default function B2bOrderHistory() {
                                             </div>
 
                                             <div className="b2boh-details-row">
-                                                <div className="b2boh-detail">
-                                                    <span className="b2boh-label">Amount</span>
-                                                    <span className="b2boh-value b2boh-amount">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
-                                                </div>
+                                                {/* Stock orders are zero-value and have no
+                                                    vendor-facing merchandiser attribution. */}
+                                                {!isB2bStockOrderRow(order) && (
+                                                    <div className="b2boh-detail">
+                                                        <span className="b2boh-label">Amount</span>
+                                                        <span className="b2boh-value b2boh-amount">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
+                                                    </div>
+                                                )}
                                                 <div className="b2boh-detail">
                                                     <span className="b2boh-label">Qty</span>
                                                     <span className="b2boh-value">{order.total_quantity || 1}</span>
                                                 </div>
-                                                <div className="b2boh-detail wide">
-                                                    <span className="b2boh-label">Merchandiser</span>
-                                                    <span className="b2boh-value">{order.merchandiser || order.merchandiser_name || "—"}</span>
-                                                </div>
+                                                {!isB2bStockOrderRow(order) && (
+                                                    <div className="b2boh-detail wide">
+                                                        <span className="b2boh-label">Merchandiser</span>
+                                                        <span className="b2boh-value">{order.merchandiser || order.merchandiser_name || "—"}</span>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {item.extras && item.extras.length > 0 && (

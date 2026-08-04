@@ -71,14 +71,18 @@ export default function B2bMerchandiserDashboard() {
     const [statusFilter, setStatusFilter] = useFilterParam("status", "all");
     const [typeFilter, setTypeFilter] = useFilterParam("type", "all");
     const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
+    const [vendorFilter, setVendorFilter] = useFilterParam("vendor", "all");
     // Order-date scope — URL-persisted PeriodFilter (legacy ?from/?to links
     // still apply as a custom range).
     const {
         control: ordersPeriodControl, timeline: ordersTimeline,
         inPeriod: inOrdersPeriod, range: ordersPeriodRange,
-    } = usePeriodFilterParam("all", { variant: "select", label: "Order date:" });
+        // No label: every other control in this toolbar is a self-describing
+        // "All X" select, and the options ("All time", "Last 7 days") already
+        // read as a date filter on their own.
+    } = usePeriodFilterParam("all", { variant: "select", label: "" });
     // One navigation, or the setters clobber each other (see the hook).
-    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "period", "from", "to"]);
+    const clearOrderFilters = useClearFilterParams(["status", "type", "merch", "vendor", "period", "from", "to"]);
     const [currentPage, setCurrentPage] = useState(1);
     const ORDERS_PER_PAGE = 20;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -277,6 +281,17 @@ export default function B2bMerchandiserDashboard() {
         return names.sort();
     }, [orders]);
 
+    // Vendors that actually appear on an order — vendorMap is already scoped to
+    // exactly those (see the fetch), so an unused vendor never clutters the list.
+    // Filtered by id, not name, so two vendors sharing a brand name stay distinct.
+    const uniqueVendors = useMemo(() => {
+        const ids = [...new Set(orders.map(o => o.vendor_id).filter(Boolean))];
+        return ids
+            .map(id => ({ id, name: vendorMap[id]?.store_brand_name }))
+            .filter(v => v.name)
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [orders, vendorMap]);
+
     // ==================== VENDOR GROWTH ANALYTICS ====================
     const vendorGrowthStats = useMemo(() => {
         const prevRange = comparisonPeriodRange(analyticsPeriodRange, "previous_period");
@@ -324,6 +339,8 @@ export default function B2bMerchandiserDashboard() {
         if (typeFilter === "stock") filtered = filtered.filter(o => o.is_stock_order === true);
         else if (typeFilter !== "all") filtered = filtered.filter(o => !o.is_stock_order && o.b2b_order_type?.toLowerCase() === typeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        // vendor_id is a uuid in the URL — compare as string, not by identity.
+        if (vendorFilter !== "all") filtered = filtered.filter(o => String(o.vendor_id) === vendorFilter);
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
@@ -336,7 +353,7 @@ export default function B2bMerchandiserDashboard() {
             );
         }
         return filtered;
-    }, [orders, statusFilter, typeFilter, merchandiserFilter, ordersPeriodRange, inOrdersPeriod, orderSearch, vendorMap]);
+    }, [orders, statusFilter, typeFilter, merchandiserFilter, vendorFilter, ordersPeriodRange, inOrdersPeriod, orderSearch, vendorMap]);
 
     const paginatedOrders = useMemo(() => {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -930,7 +947,10 @@ export default function B2bMerchandiserDashboard() {
                                                 <b className="merch-gold-text">{order.order_no}</b>
                                                 <span className={`merch-type-tag ${order.is_stock_order ? "merch-tag-stock" : order.b2b_order_type === "Buyout" ? "merch-tag-buyout" : "merch-tag-consignment"}`}>{order.is_stock_order ? "Stock" : (order.b2b_order_type || "\u2014")}</span>
                                             </div>
-                                            <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>PO: {order.po_number || "\u2014"} {"\u00B7"} {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</p>
+                                            {/* Stock orders carry no PO and zero value \u2014 both would read "\u2014". */}
+                                            {!order.is_stock_order && (
+                                                <p style={{ fontSize: 12, color: "#777", margin: "2px 0" }}>PO: {order.po_number || "\u2014"} {"\u00B7"} {`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</p>
+                                            )}
                                             <div className="merch-pending-btns">
                                                 <button className="merch-approve-sm" onClick={() => setApprovalModal({ order, action: "approve" })}>{"\u2713"}</button>
                                                 <button className="merch-reject-sm" onClick={() => setApprovalModal({ order, action: "reject" })}>{"\u2715"}</button>
@@ -953,10 +973,15 @@ export default function B2bMerchandiserDashboard() {
                                         orders.slice(0, 10).map(o => (
                                             <div className="merch-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
                                                 <p><b>Order No:</b> {o.order_no}</p>
-                                                <p><b>PO:</b> {o.po_number || "\u2014"} &nbsp;|&nbsp; <b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"}</p>
-                                                <p><b>Type:</b> {o.b2b_order_type || "\u2014"} &nbsp;|&nbsp; <b>Status:</b> <span className={orderBadgeClass(o)}>{orderBadgeLabel(o)}</span></p>
+                                                {/* Internal stock: no PO, no vendor, no order type, no value. */}
+                                                {!o.is_stock_order && (
+                                                    <p><b>PO:</b> {o.po_number || "\u2014"} &nbsp;|&nbsp; <b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"}</p>
+                                                )}
+                                                <p><b>Type:</b> {o.is_stock_order ? "Stock" : (o.b2b_order_type || "\u2014")} &nbsp;|&nbsp; <b>Status:</b> <span className={orderBadgeClass(o)}>{orderBadgeLabel(o)}</span></p>
                                                 <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "\u2014"}</p>
-                                                <p><b>Total:</b> {`\u20B9${formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}`}</p>
+                                                {!o.is_stock_order && (
+                                                    <p><b>Total:</b> {`\u20B9${formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}`}</p>
+                                                )}
                                             </div>
                                         ))
                                     )}
@@ -982,7 +1007,7 @@ export default function B2bMerchandiserDashboard() {
                                             <div className="merch-appr-header">
                                                 <div className="merch-appr-info">
                                                     <div className="merch-appr-field"><span className="merch-appr-label">ORDER NO:</span><span className="merch-appr-value">{order.order_no || "\u2014"}</span></div>
-                                                    <div className="merch-appr-field"><span className="merch-appr-label">PO NUMBER:</span><span className="merch-appr-value">{order.po_number || "\u2014"}</span></div>
+                                                    {!order.is_stock_order && (<div className="merch-appr-field"><span className="merch-appr-label">PO NUMBER:</span><span className="merch-appr-value">{order.po_number || "\u2014"}</span></div>)}
                                                     <div className="merch-appr-field"><span className="merch-appr-label">DATE:</span><span className="merch-appr-value">{formatDate(order.created_at)}</span></div>
                                                 </div>
                                                 <div className="merch-appr-badges">
@@ -998,8 +1023,8 @@ export default function B2bMerchandiserDashboard() {
                                                 <div className="merch-appr-thumb" onClick={() => handleViewOrder(order.id)}><img src={imgSrc} alt={item.product_name || "Product"} /></div>
                                                 <div className="merch-appr-details">
                                                     <div className="merch-appr-row"><span className="merch-appr-dlabel">Product:</span><span className="merch-appr-dvalue">{item.product_name || "\u2014"}</span></div>
-                                                    <div className="merch-appr-row"><span className="merch-appr-dlabel">Vendor:</span><span className="merch-appr-dvalue">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>
-                                                    <div className="merch-appr-row"><span className="merch-appr-dlabel">Merchandiser:</span><span className="merch-appr-dvalue">{order.merchandiser_name || "\u2014"}</span></div>
+                                                    {!order.is_stock_order && (<div className="merch-appr-row"><span className="merch-appr-dlabel">Vendor:</span><span className="merch-appr-dvalue">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>)}
+                                                    {!order.is_stock_order && (<div className="merch-appr-row"><span className="merch-appr-dlabel">Merchandiser:</span><span className="merch-appr-dvalue">{order.merchandiser_name || "\u2014"}</span></div>)}
                                                     <div className="merch-appr-grid">
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Amount:</span><span className="merch-appr-dvalue">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Qty:</span><span className="merch-appr-dvalue">{order.total_quantity || 1}</span></div>
@@ -1033,15 +1058,21 @@ export default function B2bMerchandiserDashboard() {
                 {activeTab === "orders" && (
                     <div className="merch-tab-wrapper">
                         <h2 className="merch-tab-title">All Orders</h2>
-                        <div className="merch-filters-row" style={{ flexWrap: "wrap" }}>
-                            <input type="text" placeholder="Search order #, PO, vendor, merchandiser..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="merch-search-input" />
-                            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>
-                            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option><option value="stock">Stock</option></select>
-                            <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Merchandisers</option>{uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}</select>
-                            {ordersPeriodControl}
-                            {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || ordersTimeline !== "all") && (
-                                <button onClick={() => { clearOrderFilters(); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
-                            )}
+                        {/* Search on its own line, the selects on a second one — they
+                            share a height and baseline instead of the search stretching
+                            the row and pushing the others out of alignment. */}
+                        <div className="merch-filters-row">
+                            <input type="text" placeholder="Search order #, PO, vendor, merchandiser, client, product..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="merch-search-input" />
+                            <div className="merch-filters-controls">
+                                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>
+                                <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option><option value="stock">Stock</option></select>
+                                <select value={vendorFilter} onChange={(e) => { setVendorFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Vendors</option>{uniqueVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
+                                <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Merchandisers</option>{uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}</select>
+                                {ordersPeriodControl}
+                                {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || vendorFilter !== "all" || ordersTimeline !== "all") && (
+                                    <button className="merch-clear-filters-btn" onClick={() => { clearOrderFilters(); setCurrentPage(1); }}>Clear</button>
+                                )}
+                            </div>
                         </div>
                         <div className="merch-order-list-scroll">
                             {filteredOrders.length === 0 && <p className="merch-muted">No orders match your filters.</p>}
@@ -1055,7 +1086,7 @@ export default function B2bMerchandiserDashboard() {
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">ORDER NO:</span><span className="merch-ocard-val">{order.order_no || "\u2014"}</span></div>
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">ORDER DATE:</span><span className="merch-ocard-val">{formatDate(order.created_at) || "\u2014"}</span></div>
                                                 <div className="merch-ocard-field"><span className="merch-ocard-label">DELIVERY:</span><span className="merch-ocard-val">{formatDate(order.delivery_date) || "\u2014"}</span></div>
-                                                <div className="merch-ocard-field"><span className="merch-ocard-label">PO NUMBER:</span><span className="merch-ocard-val">{order.po_number || "\u2014"}</span></div>
+                                                {!order.is_stock_order && (<div className="merch-ocard-field"><span className="merch-ocard-label">PO NUMBER:</span><span className="merch-ocard-val">{order.po_number || "\u2014"}</span></div>)}
                                             </div>
                                             <div className="merch-ocard-badges">
                                                 <div className={`merch-order-status-badge ${orderBadgeClass(order)}`}>{orderBadgeLabel(order)}</div>
@@ -1076,16 +1107,16 @@ export default function B2bMerchandiserDashboard() {
                                             <div className="merch-ocard-thumb"><img src={imgSrc} alt={item.product_name || "Product"} /></div>
                                             <div className="merch-ocard-details">
                                                 <div className="merch-ocard-row"><span className="merch-ocard-dlabel">Product:</span><span className="merch-ocard-dval">{item.product_name || "\u2014"}</span></div>
-                                                <div className="merch-ocard-row"><span className="merch-ocard-dlabel">Vendor:</span><span className="merch-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>
-                                                <div className="merch-ocard-row"><span className="merch-ocard-dlabel">Merchandiser:</span><span className="merch-ocard-dval">{order.merchandiser_name || "\u2014"}</span></div>
+                                                {!order.is_stock_order && (<div className="merch-ocard-row"><span className="merch-ocard-dlabel">Vendor:</span><span className="merch-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>)}
+                                                {!order.is_stock_order && (<div className="merch-ocard-row"><span className="merch-ocard-dlabel">Merchandiser:</span><span className="merch-ocard-dval">{order.merchandiser_name || "\u2014"}</span></div>)}
                                                 <div className="merch-ocard-grid">
-                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>
+                                                    {!order.is_stock_order && (<div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>)}
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Qty:</span><span className="merch-ocard-dval">{order.total_quantity || 1}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Top:</span><span className="merch-ocard-dval"><GarmentValue name={item.top} color={item.top_color} /></span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Bottom:</span><span className="merch-ocard-dval"><GarmentValue name={item.bottom} color={item.bottom_color} /></span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Size:</span><span className="merch-ocard-dval">{item.size || "\u2014"}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Category:</span><span className="merch-ocard-dval">{item.isKids ? "Kids" : "Women"}</span></div>
-                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Markdown:</span><span className="merch-ocard-dval">{order.markdown_percent || 0}%</span></div>
+                                                    {!order.is_stock_order && (<div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Markdown:</span><span className="merch-ocard-dval">{order.markdown_percent || 0}%</span></div>)}
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Delivery:</span><span className="merch-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 </div>
                                                 {item.extras?.length > 0 && (

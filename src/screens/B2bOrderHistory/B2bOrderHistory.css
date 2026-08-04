@@ -307,6 +307,8 @@
 .b2boh-badge.rejected { background: #ffebee; color: #c62828; }
 .b2boh-badge.type-buyout { background: #e3f2fd; color: #1565c0; }
 .b2boh-badge.type-consignment { background: #f3e5f5; color: #7b1fa2; }
+/* Internal stock (SB-B2BSTOCK-…) — slate, matching the B2B dashboards. */
+.b2boh-badge.type-stock { background: #eceff1; color: #546e7a; }
 
 /* Card Body */
 .b2boh-card-body {

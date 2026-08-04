@@ -12,6 +12,7 @@ import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam } from "../../components/PeriodFilter";
+import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
@@ -145,7 +146,10 @@ export default function B2bExecutiveDashboard() {
         let filtered = [...orders];
 
         if (statusFilter !== "all") filtered = filtered.filter(o => o.approval_status === statusFilter);
-        if (typeFilter !== "all") filtered = filtered.filter(o => o.b2b_order_type?.toLowerCase() === typeFilter);
+        // "stock" is not a b2b_order_type — stock orders carry a null type and are
+        // identified by is_stock_order instead.
+        if (typeFilter === "stock") filtered = filtered.filter(o => isB2bStockOrderRow(o));
+        else if (typeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type?.toLowerCase() === typeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
 
@@ -364,10 +368,12 @@ export default function B2bExecutiveDashboard() {
                                         orders.slice(0, 10).map((o) => (
                                             <div className="b2b-order-item" key={o.id} onClick={() => handleViewOrder(o.id)} style={{ cursor: "pointer" }}>
                                                 <p><b>Order No:</b> {o.order_no}</p>
-                                                <p><b>PO Number:</b> {o.po_number || "—"}</p>
-                                                <p><b>Type:</b> {o.b2b_order_type || "—"} &nbsp; | &nbsp; <b>Status:</b> <span className={getStatusBadgeClass(o.approval_status)}>{o.approval_status || "Pending"}</span></p>
+                                                {/* Internal stock orders (SB-B2BSTOCK-…) have no PO and no
+                                                    order type — hide the labels instead of printing em-dashes. */}
+                                                {!isB2bStockOrderRow(o) && <p><b>PO Number:</b> {o.po_number || "—"}</p>}
+                                                <p><b>Type:</b> {isB2bStockOrderRow(o) ? "Stock" : (o.b2b_order_type || "—")} &nbsp; | &nbsp; <b>Status:</b> <span className={getStatusBadgeClass(o.approval_status)}>{o.approval_status || "Pending"}</span></p>
                                                 <p><b>Order Date:</b> {formatDate(o.created_at) || "—"} &nbsp; | &nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "—"}</p>
-                                                <p><b>Total:</b> ₹{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</p>
+                                                {!isB2bStockOrderRow(o) && <p><b>Total:</b> ₹{formatIndianNumber(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0)}</p>}
                                             </div>
                                         ))
                                     )}
@@ -402,6 +408,7 @@ export default function B2bExecutiveDashboard() {
                                 <option value="buyout">Buyout</option>
                                 <option value="consignment">Consignment</option>
                                 <option value="client order">Client Order</option>
+                                <option value="stock">Stock</option>
                             </select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }}>
                                 <option value="all">All Merchandisers</option>
@@ -449,7 +456,9 @@ export default function B2bExecutiveDashboard() {
                                                 <div className={`b2b-order-status-badge ${getStatusBadgeClass(order.approval_status)}`}>
                                                     {order.approval_status || "Pending"}
                                                 </div>
-                                                {order.b2b_order_type && (
+                                                {isB2bStockOrderRow(order) ? (
+                                                    <div className="b2b-order-type-badge b2b-type-stock">Stock</div>
+                                                ) : order.b2b_order_type && (
                                                     <div className={`b2b-order-type-badge ${order.b2b_order_type === "Buyout" ? "b2b-type-buyout" : "b2b-type-consignment"}`}>
                                                         {order.b2b_order_type}
                                                     </div>
@@ -479,19 +488,25 @@ export default function B2bExecutiveDashboard() {
                                                     <span className="b2b-order-label">Product:</span>
                                                     <span className="b2b-field-value">{item.product_name || "—"}</span>
                                                 </div>
-                                                <div className="b2b-product-name">
-                                                    <span className="b2b-order-label">Vendor:</span>
-                                                    <span className="b2b-field-value">{vendors[order.vendor_id]?.store_brand_name || "—"}</span>
-                                                </div>
-                                                <div className="b2b-product-name">
-                                                    <span className="b2b-order-label">Merchandiser:</span>
-                                                    <span className="b2b-field-value">{order.merchandiser_name || order.merchandiser || "—"}</span>
-                                                </div>
-                                                <div className="b2b-details-grid">
-                                                    <div className="b2b-detail-item">
-                                                        <span className="b2b-order-label">Amount:</span>
-                                                        <span className="b2b-field-value">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
+                                                {!isB2bStockOrderRow(order) && (
+                                                    <div className="b2b-product-name">
+                                                        <span className="b2b-order-label">Vendor:</span>
+                                                        <span className="b2b-field-value">{vendors[order.vendor_id]?.store_brand_name || "—"}</span>
                                                     </div>
+                                                )}
+                                                {!isB2bStockOrderRow(order) && (
+                                                    <div className="b2b-product-name">
+                                                        <span className="b2b-order-label">Merchandiser:</span>
+                                                        <span className="b2b-field-value">{order.merchandiser_name || order.merchandiser || "—"}</span>
+                                                    </div>
+                                                )}
+                                                <div className="b2b-details-grid">
+                                                    {!isB2bStockOrderRow(order) && (
+                                                        <div className="b2b-detail-item">
+                                                            <span className="b2b-order-label">Amount:</span>
+                                                            <span className="b2b-field-value">₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</span>
+                                                        </div>
+                                                    )}
                                                     <div className="b2b-detail-item">
                                                         <span className="b2b-order-label">Qty:</span>
                                                         <span className="b2b-field-value">{order.total_quantity || 1}</span>
@@ -630,7 +645,7 @@ export default function B2bExecutiveDashboard() {
                                         orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).map((order) => (
                                             <div className="b2b-order-item" key={order.id} onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
                                                 <p><b>Order No:</b> {order.order_no}</p>
-                                                <p><b>PO:</b> {order.po_number || "—"}</p>
+                                                {!isB2bStockOrderRow(order) && <p><b>PO:</b> {order.po_number || "—"}</p>}
                                                 <p><b>Status:</b> {order.approval_status || "Pending"}</p>
                                                 {order.order_flag === "Urgent" && <p><b style={{ color: "#e53935" }}>{"\u26A0"} Urgent</b></p>}
                                                 <p><b>Delivery:</b> {formatDate(order.delivery_date)}</p>

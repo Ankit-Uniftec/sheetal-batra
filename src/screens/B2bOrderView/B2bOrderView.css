@@ -170,6 +170,13 @@
     border: 1px solid #e1bee7;
 }
 
+/* Internal stock (SB-B2BSTOCK-…) — slate, matching the B2B dashboards. */
+.b2bov-type-badge.type-stock {
+    background: #eceff1;
+    color: #546e7a;
+    border: 1px solid #cfd8dc;
+}
+
 /* ===== SECTION BOX (mirrors B2C section-box) ===== */
 .b2bov-section {
     background: rgba(255, 255, 255, 0.95);

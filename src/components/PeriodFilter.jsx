@@ -142,7 +142,10 @@ export default function PeriodFilter({ timeline, setTimeline, customFrom, setCus
     // "select" — compact dropdown, for toolbars that already hold other controls.
     return (
         <div className="pfx">
-            <label className="pfx-label">{label}</label>
+            {/* Pass label="" (or null) to drop it — in a toolbar where every other
+                control is a self-describing "All X" select, a lone caption reads
+                as clutter and knocks the row out of alignment. */}
+            {label ? <label className="pfx-label">{label}</label> : null}
             <select className="pfx-select" value={timeline} onChange={(e) => setTimeline(e.target.value)}>
                 {PERIOD_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>

@@ -6,6 +6,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
+import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 
 function ColorDotDisplay({ colorObject }) {
     if (!colorObject) return null;
@@ -241,7 +242,9 @@ export default function B2bOrderView() {
                         <span className={`b2bov-status-badge ${getStatusClass(order.approval_status)}`}>
                             {order.approval_status || "Pending"}
                         </span>
-                        {order.b2b_order_type && (
+                        {isB2bStockOrderRow(order) ? (
+                            <span className="b2bov-type-badge type-stock">Stock</span>
+                        ) : order.b2b_order_type && (
                             <span className={`b2bov-type-badge ${order.b2b_order_type === "Buyout" ? "type-buyout" : "type-consignment"}`}>
                                 {order.b2b_order_type}
                             </span>
@@ -348,14 +351,22 @@ export default function B2bOrderView() {
                 <div className="b2bov-section">
                     <h3>Order Information</h3>
                     <div className="b2bov-info-grid">
-                        <div className="b2bov-field">
-                            <label>PO Number:</label>
-                            <span>{order.po_number || "—"}</span>
-                        </div>
-                        <div className="b2bov-field">
-                            <label>Merchandiser:</label>
-                            <span>{order.merchandiser || order.merchandiser_name || "—"}</span>
-                        </div>
+                        {/* Internal stock orders are raised with no vendor and no PO,
+                            and merchandiser attribution is vendor-facing — none of
+                            these three rows apply, so hide them rather than print
+                            em-dashes. */}
+                        {!isB2bStockOrderRow(order) && (
+                            <>
+                                <div className="b2bov-field">
+                                    <label>PO Number:</label>
+                                    <span>{order.po_number || "—"}</span>
+                                </div>
+                                <div className="b2bov-field">
+                                    <label>Merchandiser:</label>
+                                    <span>{order.merchandiser || order.merchandiser_name || "—"}</span>
+                                </div>
+                            </>
+                        )}
                         {vendor && (
                             <>
                                 <div className="b2bov-field">

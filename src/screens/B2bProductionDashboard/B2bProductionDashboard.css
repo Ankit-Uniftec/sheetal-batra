@@ -72,6 +72,9 @@
 .prod-type-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
 .prod-tag-buyout { background: #e3f2fd; color: #1565c0; }
 .prod-tag-consignment { background: #f3e5f5; color: #7b1fa2; }
+/* Internal stock (SB-B2BSTOCK-…) — slate, same colour the merchandiser
+   dashboard uses, so the channel reads identically across B2B screens. */
+.prod-tag-stock { background: #eceff1; color: #546e7a; }
 .prod-pending-btns { display: flex; gap: 6px; margin-top: 6px; }
 .prod-accept-sm, .prod-detail-sm { border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
 .prod-accept-sm { background: #e3f2fd; color: #1565c0; }
@@ -116,6 +119,7 @@
 .prod-order-type-badge { padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
 .prod-type-buyout { background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
 .prod-type-consignment { background: #f3e5f5; color: #7b1fa2; border: 1px solid #e1bee7; }
+.prod-type-stock { background: #eceff1; color: #546e7a; border: 1px solid #cfd8dc; }
 
 /* ---------------- TAB WRAPPER (full-width tabs) ---------------- */
 .prod-tab-wrapper { grid-column: span 3; display: flex; flex-direction: column; height: calc(100vh - 140px); padding-top: 4px; padding-left: 20px; padding-right: 20px; padding-bottom: 20px; }
