@@ -207,8 +207,25 @@ export default function OrderHistory() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const customerFromState = location.state?.customer;
-  const fromAssociate = location.state?.fromAssociate;
+  // Who we are viewing must survive a tab switch. The tab lives in the URL
+  // (useTabParam → setSearchParams), and setSearchParams pushes a new history
+  // entry WITHOUT carrying location.state forward — so one click on "Profile"
+  // dropped location.state.customer, the fetch fell through to the "logged-in
+  // user" branch, and the page silently showed the SA's OWN orders/profile
+  // instead of the client's. Mirror the customer into sessionStorage on arrival
+  // (same durability trick already used for the SA flags below) and read
+  // through it, so every tab/back navigation keeps the same client.
+  const customerFromState = useMemo(() => {
+    if (location.state?.customer) return location.state.customer;
+    try {
+      return JSON.parse(sessionStorage.getItem("oh_customer") || "null");
+    } catch {
+      return null;
+    }
+  }, [location.state?.customer]);
+
+  const fromAssociate = location.state?.fromAssociate
+    ?? (sessionStorage.getItem("oh_fromAssociate") === "true");
 
   // Persist SA flags in sessionStorage so they survive back-navigation
   const readOnly = (location.state?.readOnly ?? JSON.parse(sessionStorage.getItem("oh_readOnly") || "false"));
@@ -216,6 +233,10 @@ export default function OrderHistory() {
   const isServicesSA = (location.state?.isServices ?? JSON.parse(sessionStorage.getItem("oh_isServices") || "false"));
 
   useEffect(() => {
+    if (location.state?.customer) {
+      sessionStorage.setItem("oh_customer", JSON.stringify(location.state.customer));
+      sessionStorage.setItem("oh_fromAssociate", JSON.stringify(!!location.state.fromAssociate));
+    }
     if (location.state?.saEmail !== undefined) {
       sessionStorage.setItem("oh_saEmail", location.state.saEmail || "");
       sessionStorage.setItem("oh_readOnly", JSON.stringify(location.state.readOnly || false));
@@ -456,6 +477,20 @@ export default function OrderHistory() {
               .eq("email", customerFromState.email)
               .single();
             setProfile(profileData || null);
+
+            // Measurements are keyed by customer_id, so resolve it from the
+            // profile we just matched by email — otherwise this branch left
+            // Measurements History permanently empty for email-only clients.
+            if (profileData?.id) {
+              const { data: measurementsData } = await supabase
+                .from("customer_measurements")
+                .select("*, orders(order_no)")
+                .eq("customer_id", profileData.id)
+                .order("created_at", { ascending: false });
+              setMeasurementsHistory(measurementsData || []);
+            } else {
+              setMeasurementsHistory([]);
+            }
           }
 
           const { data } = await query.order("created_at", { ascending: false });
@@ -489,12 +524,17 @@ export default function OrderHistory() {
 
   useEffect(() => {
     const fetchDraftOrders = async () => {
-      if (!user?.id && !customerFromState?.user_id) return;
+      // When an SA is viewing a client, the drafts must be the CLIENT's — never
+      // fall back to the logged-in SA's id, which would list the SA's own drafts
+      // under the client's Profile tab. A client with no user_id simply has no
+      // drafts to show.
+      const customerId = fromAssociate && customerFromState
+        ? customerFromState.user_id
+        : user?.id;
+      if (!customerId) { setDraftOrders([]); return; }
 
       setDraftsLoading(true);
       try {
-        const customerId = customerFromState?.user_id || user?.id;
-
         const { data, error } = await supabase
           .from("draft_orders")
           .select("*")
@@ -514,7 +554,7 @@ export default function OrderHistory() {
     };
 
     fetchDraftOrders();
-  }, [user?.id, customerFromState?.user_id]);
+  }, [user?.id, fromAssociate, customerFromState]);
 
   // ==================== PERMISSION HELPERS ====================
 
@@ -1334,6 +1374,10 @@ export default function OrderHistory() {
     sessionStorage.removeItem("oh_saEmail");
     sessionStorage.removeItem("oh_readOnly");
     sessionStorage.removeItem("oh_isServices");
+    // Drop the viewed client too, or the next visit (a customer viewing their
+    // own history, or a different client) would inherit this one.
+    sessionStorage.removeItem("oh_customer");
+    sessionStorage.removeItem("oh_fromAssociate");
     // Walk history so the user lands back on the dashboard TAB they left
     // (?tab= is in the URL of the previous entry). Pushing the bare dashboard
     // route dumped them on the default tab. Hardcoded route only remains as
@@ -1343,6 +1387,12 @@ export default function OrderHistory() {
   };
 
   const handleLogout = async () => {
+    // Leaving the page by the logo must clear the viewed-client context too.
+    sessionStorage.removeItem("oh_saEmail");
+    sessionStorage.removeItem("oh_readOnly");
+    sessionStorage.removeItem("oh_isServices");
+    sessionStorage.removeItem("oh_customer");
+    sessionStorage.removeItem("oh_fromAssociate");
     navigate(sessionStorage.getItem("returnDashboard") || "/AssociateDashboard", { replace: true });
   };
 
