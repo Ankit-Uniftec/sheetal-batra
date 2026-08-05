@@ -125,11 +125,17 @@ const SEARCH_FIELDS = [
 // (The warehouse PDF re-fetches the full row by id on click via
 // pdfUtils.fetchFullOrder, so it still gets everything IT needs — the PDF is a
 // production document and prints no money.)
+// shopify_financial_status / shopify_tags are the ONE payment-related pair this
+// screen fetches, and they are deliberately not money: they are the words
+// Shopify itself used ("PAID"/"PENDING", "COD"/"COD Confirmed"). Dispatch needs
+// to know a parcel is collect-on-delivery; it must still not learn the amount.
+// Adding any *_total / *_payment column here would undo the note above.
 const ORDER_LIST_COLUMNS = [
   "id", "order_no", "created_at", "delivery_date", "status",
   "total_quantity", "items", "warehouse_stage",
   "warehouse_urls",
   "shopify_order_id", "shopify_order_name", "shopify_synced_at",
+  "shopify_financial_status", "shopify_tags",
   "web_order_status", "web_order_issues",
 ].join(", ");
 
@@ -210,6 +216,49 @@ const statusVariant = (status) => {
   return "info";
 };
 
+// ─── Shopify payment state ─────────────────────────────────────────────────
+// Shown VERBATIM, never inferred. Whatever word Shopify used is the word on the
+// badge, so this screen can't disagree with Shopify admin. (The mapper's older
+// isCod derivation treats every PENDING order as COD, which over-matches —
+// nothing here depends on it.) Colour-only mapping; unknown states fall through
+// to neutral rather than being guessed at.
+const paymentVariant = (financialStatus) => {
+  const s = String(financialStatus || "").toUpperCase();
+  if (s === "PAID") return "success";
+  if (s === "PENDING" || s === "PARTIALLY_PAID" || s === "AUTHORIZED") return "warning";
+  if (s === "REFUNDED" || s === "VOIDED" || s === "PARTIALLY_REFUNDED") return "danger";
+  return "neutral";
+};
+
+// The COD-related tags on an order, from the stored array.
+//
+// `shopify_tags` is a SHARED field: alongside the payment tags it carries
+// gateway names (GoKwik, UPI, Cards, Wallets), GoKwik risk scores (Low/Medium/
+// High Risk), campaign codes (SB-lxrts_delhi_mumbai_…), call-attempt notes and
+// marketing-automation tags. Only the payment ones belong on a warehouse card.
+//
+// Anchored, NOT a bare /cod/ substring. Live PROD tags include
+//   "SW-WhatsApp COD Confirmation & COD to pr"
+// — a truncated marketing-automation tag that a substring match would render as
+// a COD chip and count as a COD order in the filter. Requiring the tag to START
+// with COD keeps the real ones ("COD", "COD Confirmed") and drops that.
+//
+// Still a pattern rather than a fixed list, so a new payment tag in the same
+// shape ("COD Cancelled", …) works with no code change.
+const COD_TAG_RE = /^cod\b/i;
+
+const codTags = (order) =>
+  (order?.shopify_tags || []).filter((t) => COD_TAG_RE.test(String(t).trim()));
+
+// Does this order carry any COD tag at all? Used by the filter.
+const isCodTagged = (order) => codTags(order).length > 0;
+
+const COD_FILTER_OPTIONS = [
+  { value: "all", label: "All orders" },
+  { value: "cod", label: "COD only" },
+  { value: "non_cod", label: "Non-COD only" },
+];
+
 // ─── Needs Review: a SHORT label per mapper blocker code ───────────────────
 // One line each, deliberately. An earlier version explained what each code
 // blocked and who fixes it in full prose; nobody reads a wall of text on a
@@ -252,6 +301,10 @@ export default function ShopifyOrdersDashboard() {
   // "show me everything at Stitching OR Hemming" is the real question; empty =
   // no stage filter.
   const [stageFilter, setStageFilter] = useState([]);
+  // Shopify payment state, e.g. ["PAID"] — multi-select like the stage filter.
+  const [paymentFilter, setPaymentFilter] = useState([]);
+  // "all" | "cod" | "non_cod" — one choice, so a plain string not an array.
+  const [codFilter, setCodFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [exporting, setExporting] = useState(false);
   // Which filter popover is open ("stage" | "sort" | null). One at a time, so
@@ -539,7 +592,8 @@ export default function ShopifyOrdersDashboard() {
     try {
       const headers = [
         "Order No", "Shopify Order No", "Order Date", "Delivery Date",
-        "Status", "Qty", "Products", "Size", "Top", "Bottom", "Dupatta",
+        "Status", "Payment", "Tags", "Qty", "Products",
+        "Size", "Top", "Bottom", "Dupatta",
         ...(withIssues ? ["Issues"] : ["Pieces", "Piece Stages"]),
       ];
 
@@ -563,6 +617,10 @@ export default function ShopifyOrdersDashboard() {
           formatDate(o.created_at) || "",
           o.delivery_date ? formatDate(o.delivery_date) : "",
           getOrderStatusLabel(o.status),
+          // Payment STATE only — Shopify's own word, no amounts. Lets the floor
+          // pull a COD dispatch run without money ever entering this screen.
+          o.shopify_financial_status || "",
+          (o.shopify_tags || []).join(" | "),
           o.total_quantity || 0,
           (o.items || []).map((i) => i.product_name).filter(Boolean).join(" | "),
           item.size || "",
@@ -756,10 +814,31 @@ export default function ShopifyOrdersDashboard() {
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
 
+  // Payment states actually PRESENT in the data, so the dropdown never offers a
+  // filter that returns nothing — same rule as issueCodeOptions below. Built off
+  // every order (not the filtered set) so ticking one option doesn't make the
+  // others vanish from the list.
+  const paymentOptions = useMemo(() => {
+    const states = new Set();
+    orders.forEach((o) => {
+      const s = String(o.shopify_financial_status || "").toUpperCase();
+      if (s) states.add(s);
+    });
+    return [...states].sort();
+  }, [orders]);
+
   const filteredOrders = useMemo(() => {
     const rows = orders.filter((o) => {
       if (!matchesSearch(o, searchField, search)) return false;
       if (!inOrdersPeriod(o.created_at)) return false;
+      // Payment filters run BEFORE the stage early-return below — putting them
+      // after it would silently skip them whenever no stage was ticked.
+      if (paymentFilter.length > 0) {
+        const s = String(o.shopify_financial_status || "").toUpperCase();
+        if (!paymentFilter.includes(s)) return false;
+      }
+      if (codFilter === "cod" && !isCodTagged(o)) return false;
+      if (codFilter === "non_cod" && isCodTagged(o)) return false;
       if (stageFilter.length === 0) return true;
       // OR across the ticked stages: an order matches if ANY piece is at ANY of
       // them. Ticking more stages widens the list, which is what a checkbox
@@ -773,7 +852,8 @@ export default function ShopifyOrdersDashboard() {
     });
     // Copy before sorting — .sort mutates, and `orders` is state.
     return rows.sort(SORTERS[sortBy] || SORTERS.newest);
-  }, [orders, search, searchField, matchesSearch, inOrdersPeriod, stageFilter, stageKeysByOrder, sortBy]);
+  }, [orders, search, searchField, matchesSearch, inOrdersPeriod, stageFilter,
+      stageKeysByOrder, sortBy, paymentFilter, codFilter]);
 
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
   const paginated = useMemo(
@@ -784,7 +864,8 @@ export default function ShopifyOrdersDashboard() {
   // inOrdersPeriod (not `ordersTimeline`) is the dep: it is a fresh callback per
   // RANGE, so editing a custom From/To resets the page too — with the timeline
   // alone the selection stays "custom" and page 4 of a now-shorter list is empty.
-  useEffect(() => { setPage(1); }, [search, searchField, stageFilter, sortBy, inOrdersPeriod]);
+  useEffect(() => { setPage(1); }, [search, searchField, stageFilter, sortBy,
+    inOrdersPeriod, paymentFilter, codFilter]);
 
   // ── Needs Review tab: search + filter by which blocker the order has.
   // Only codes actually PRESENT in the current data become options, so the
@@ -889,12 +970,25 @@ export default function ShopifyOrdersDashboard() {
               customer their own order confirmation, so a second invoice from
               us would be a duplicate (and could disagree with theirs). Only the
               Warehouse work order is ours to produce.
-              NO COD badge and NO amount here either — this is a warehouse
-              screen; payment is not its business. */}
+
+              STILL NO AMOUNT here. The payment badges below are payment STATE
+              (Shopify's own words), which dispatch needs to know before handing
+              a parcel over — never a figure. */}
           <div className="sho-header-actions">
             <Badge variant={statusVariant(order.status)}>
               {getOrderStatusLabel(order.status)}
             </Badge>
+            {/* Shopify's displayFinancialStatus, verbatim and un-inferred. */}
+            {order.shopify_financial_status && (
+              <Badge variant={paymentVariant(order.shopify_financial_status)}>
+                {order.shopify_financial_status}
+              </Badge>
+            )}
+            {/* COD tags, one chip each. Driven off the stored array so a new
+                tag the business starts using shows up with no code change. */}
+            {codTags(order).map((tag) => (
+              <Badge key={tag} variant="info">{tag}</Badge>
+            ))}
             {flagged && <Badge variant="warning">Needs Review</Badge>}
             <button
               className="sho-ghost-btn"
@@ -937,7 +1031,13 @@ export default function ShopifyOrdersDashboard() {
                 <span className="sho-value">{order.total_quantity || 1}</span>
               </div>
               <div className="sho-detail-item">
-                <span className="sho-order-label">Size:</span>
+                {/* Label follows the option the size came from: a kids line
+                    carries an Age value ("5-6 YEARS"), which must not read
+                    "Size:". Falls back for orders ingested before the mapper
+                    started sending size_label. */}
+                <span className="sho-order-label">
+                  {item.size_label || (item.isKids ? "Age" : "Size")}:
+                </span>
                 <span className="sho-value">{item.size || "—"}</span>
               </div>
               <div className="sho-detail-item">
@@ -956,6 +1056,11 @@ export default function ShopifyOrdersDashboard() {
                 <span className="sho-order-label">Dupatta:</span>
                 <span className="sho-value">
                   {item.includes_dupatta ? "Yes" : "No"}
+                  {/* Heavy / Light — the warehouse pulls a different piece for
+                      each, so the qualifier matters as much as the yes/no. */}
+                  {item.includes_dupatta && item.dupatta_weight && (
+                    <span className="sho-qualifier"> ({item.dupatta_weight})</span>
+                  )}
                   {item.includes_dupatta && <ColorDot color={item.dupatta_color} />}
                 </span>
               </div>
@@ -1256,6 +1361,61 @@ export default function ShopifyOrdersDashboard() {
                       )}
                     </div>
 
+                    {/* Payment — Shopify's own states, multi-select like Stage.
+                        Options come from the DATA, not a hardcoded list, so a
+                        state we haven't seen (REFUNDED, AUTHORIZED…) becomes
+                        filterable the moment one appears. */}
+                    {paymentOptions.length > 0 && (
+                      <div className="sho-filter-dropdown">
+                        <button
+                          className={`sho-filter-btn ${paymentFilter.length > 0 ? "active" : ""}`}
+                          onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}
+                        >
+                          Payment{paymentFilter.length > 0 ? ` (${paymentFilter.length})` : ""}
+                          <span className="sho-dropdown-arrow">&#9662;</span>
+                        </button>
+                        {openDropdown === "payment" && (
+                          <div className="sho-dropdown-panel">
+                            <div className="sho-dropdown-title">Payment Status</div>
+                            {paymentOptions.map((p) => (
+                              <label key={p} className="sho-checkbox-label">
+                                <input
+                                  type="checkbox"
+                                  checked={paymentFilter.includes(p)}
+                                  onChange={() =>
+                                    setPaymentFilter((prev) =>
+                                      prev.includes(p)
+                                        ? prev.filter((x) => x !== p)
+                                        : [...prev, p]
+                                    )
+                                  }
+                                />
+                                <span>{p}</span>
+                              </label>
+                            ))}
+                            <div className="sho-dropdown-title">COD</div>
+                            {COD_FILTER_OPTIONS.map((c) => (
+                              <label key={c.value} className="sho-checkbox-label">
+                                <input
+                                  type="radio"
+                                  name="sho-cod"
+                                  checked={codFilter === c.value}
+                                  onChange={() => setCodFilter(c.value)}
+                                />
+                                <span>{c.label}</span>
+                              </label>
+                            ))}
+                            <button
+                              className="sho-dropdown-apply"
+                              onClick={() => setOpenDropdown(null)}
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Sort — single choice, so radios rather than checkboxes:
                         the control must show that picking one drops the other. */}
                     <div className="sho-filter-dropdown">
@@ -1291,10 +1451,19 @@ export default function ShopifyOrdersDashboard() {
                     </div>
 
                     <span className="sho-count">{filteredOrders.length} orders</span>
-                    {(search || stageFilter.length > 0 || sortBy !== "newest") && (
+                    {(search || stageFilter.length > 0 || sortBy !== "newest" ||
+                      paymentFilter.length > 0 || codFilter !== "all") && (
                       <button
                         className="sho-ghost-btn"
-                        onClick={() => { setSearch(""); setStageFilter([]); setSortBy("newest"); }}
+                        onClick={() => {
+                          setSearch("");
+                          setStageFilter([]);
+                          setSortBy("newest");
+                          // Clear must clear EVERYTHING — a payment filter left
+                          // behind would keep hiding orders with no visible cause.
+                          setPaymentFilter([]);
+                          setCodFilter("all");
+                        }}
                       >
                         Clear
                       </button>

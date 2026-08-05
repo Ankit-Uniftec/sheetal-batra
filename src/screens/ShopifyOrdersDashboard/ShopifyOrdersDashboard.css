@@ -783,6 +783,15 @@
     color: #8B7355;
 }
 
+/* The Heavy/Light dupatta qualifier. Secondary to the Yes/No it follows, so it
+   reads as a modifier rather than competing with the value itself. */
+.sho-qualifier {
+    font-size: 11px;
+    font-weight: 500;
+    color: #8B7355;
+    text-transform: capitalize;
+}
+
 /* A GRID, not a flex row. As flex with a fixed gap, each cell was only as wide
    as its content, so a short value ("—", "1", "L") bunched its neighbours right
    up against it and the row read as one run-on line. Fixed minimum tracks keep
