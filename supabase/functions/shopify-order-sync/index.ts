@@ -19,7 +19,7 @@ import {
 // neither of which the browser's anon key can do (and the Shopify token must
 // never reach the client).
 //
-// Two ways in, ONE mapper and ONE idempotent write path, so a duplicate
+// Three ways in, ONE mapper and ONE idempotent write path, so a duplicate
 // delivery is a harmless no-op:
 //
 //   A. WEBHOOK  — Shopify POSTs on orders/create|updated|cancelled. Identified
@@ -28,15 +28,31 @@ import {
 //      order id and re-fetch through the same GraphQL query as every other
 //      mode. Near-instant.
 //
-//   B. RECONCILE POLL — pg_cron every 15 min over a 30 min window (deliberate
-//      overlap so nothing falls between runs). This is the safety net:
-//      webhooks are silently dropped during a deploy, a cold start, or after
-//      Shopify exhausts its retries, and a lost paid order is not an
-//      acceptable failure mode.
+//   B. RECONCILE POLL — pg_cron every 5 min over a 15 min window (deliberate
+//      overlap so nothing falls between runs). Filters on CREATED_AT. This is
+//      the safety net for INGESTION: webhooks are silently dropped during a
+//      deploy, a cold start, or after Shopify exhausts its retries, and a lost
+//      paid order is not an acceptable failure mode.
+//
+//   C. REFRESH SWEEP — pg_cron hourly over a 24h window, filtering on
+//      UPDATED_AT. The safety net for FRESHNESS: an order paid hours after
+//      checkout never re-enters a created_at window, so reconcile can never
+//      see it. Kept separate from reconcile on purpose — see the fetchOrders
+//      docblock for the paging hazard that separation avoids.
+//      REFRESH-ONLY: it updates orders we already have and SKIPS ones we do
+//      not. Its updated_at window is full of old orders that were never
+//      ingested, and creating those retro-actively mints out-of-sequence
+//      order numbers and past-due production work. Only A and B create.
+//
+// "Idempotent" means REFRESH, not skip. A known order has its payment state
+// (financial status + tags) updated from the fresh node; everything production
+// depends on — order_no, items, delivery_date, status — is left alone. See
+// refreshExistingOrder.
 //
 // Manual modes:
 //   { mode: "sync-now",  sinceDays?, first? }   dashboard "Sync now" button
-//   { mode: "order",     id: "gid://..." }      re-ingest one order
+//   { mode: "order",     id: "gid://..." }      re-ingest/refresh one order
+//   { mode: "refresh",   sinceMinutes?, first? } catch-up sweep on updated_at
 //   { mode: "remap-items" }                     re-run the mapper over stored
 //                                               shopify_raw (no Shopify call)
 //   { mode: "backfill-components" }             mint components for older rows
@@ -311,9 +327,110 @@ async function resolveProfileId(
   return id;
 }
 
+// ─── Refresh an order that already exists ───────────────────
+
+/**
+ * Payment state moves AFTER the order reaches us. A COD order becomes
+ * "COD Confirmed" when GoKwik confirms it; a PENDING order becomes PAID when
+ * the customer actually pays. Without this, the dashboard badge means "was
+ * unpaid when we received it" and never changes — the order stays PENDING
+ * forever even after Shopify says PAID.
+ *
+ * ─── WHAT THIS DELIBERATELY DOES NOT TOUCH ───────────────────
+ * Only fields that are Shopify's to own and that production does not build on.
+ * NEVER order_no (printed on physical barcodes — changing it orphans every
+ * work order already on the floor), NEVER items (components/barcodes are
+ * minted from it, and a Shopify-side product edit must not re-shape an order
+ * mid-production), NEVER delivery_date (production schedules to it via T-2),
+ * NEVER status/warehouse_stage (derived from order_components by scans, never
+ * from Shopify), and NEVER user_id, money or addresses.
+ *
+ * `remap-items` stays the deliberate, human-triggered way to re-derive items.
+ * A refresh is automatic; re-shaping a live order must not be.
+ *
+ * Returns `already_exists` unchanged when nothing actually differs — the
+ * reconcile poll re-presents the same recent orders every 5 minutes, and
+ * writing a no-op row 288 times a day would bury the real signal in the audit
+ * log and churn the table for nothing.
+ */
+async function refreshExistingOrder(
+  existing: { id: string; order_no?: string; shopify_financial_status?: string | null; shopify_tags?: string[] | null },
+  node: any,
+  gid: string,
+  colorMap?: Map<string, string>,
+) {
+  const base = { gid, order_no: existing.order_no, id: existing.id };
+
+  let orderRow: any;
+  try {
+    ({ orderRow } = mapShopifyOrder(node, colorMap));
+  } catch {
+    // A mapping failure must not turn a harmless duplicate delivery into an
+    // error — the order is already safely stored. Fall back to the old answer.
+    return { ...base, outcome: "already_exists" };
+  }
+
+  const nextStatus = orderRow.shopify_financial_status ?? null;
+  const nextTags: string[] = orderRow.shopify_tags || [];
+  const prevStatus = existing.shopify_financial_status ?? null;
+  const prevTags: string[] = existing.shopify_tags || [];
+
+  const changed: string[] = [];
+  if (nextStatus !== prevStatus) changed.push("shopify_financial_status");
+  // Compare as a SET: Shopify does not promise tag order, so a merely
+  // re-ordered list must not read as a change and trigger a pointless write.
+  // Sorted copies compared element-wise -- joining into a single string
+  // would make ["ab","c"] and ["a","bc"] compare equal.
+  const nextSorted = [...nextTags].sort();
+  const prevSorted = [...prevTags].sort();
+  const sameTags =
+    nextSorted.length === prevSorted.length &&
+    nextSorted.every((t, i) => t === prevSorted[i]);
+  if (!sameTags) changed.push("shopify_tags");
+
+  if (changed.length === 0) return { ...base, outcome: "already_exists" };
+
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      shopify_financial_status: nextStatus,
+      shopify_tags: nextTags,
+      // Keep the stored snapshot honest: remap-items replays THIS blob, so a
+      // stale one would make a later remap re-apply outdated Shopify data.
+      shopify_raw: node,
+      // Until now this column meant "first ingested" — ingestOrder returned
+      // before ever writing it again. Now it means what its name says.
+      shopify_synced_at: new Date().toISOString(),
+    })
+    .eq("id", existing.id);
+
+  if (error) {
+    return { ...base, outcome: "failed", reason: "REFRESH_FAILED", detail: error.message };
+  }
+  return { ...base, outcome: "refreshed", changed };
+}
+
 // ─── Ingest one order ───────────────────────────────────────
 
-async function ingestOrder(node: any, colorMap?: Map<string, string>) {
+/**
+ * `refreshOnly` makes this REFRESH-OR-SKIP: an order we do not already have
+ * is left alone instead of being created.
+ *
+ * The refresh sweep queries UPDATED_AT, so its window contains every order
+ * Shopify has TOUCHED, including old ones we deliberately never ingested. On
+ * a 7-day window that made a single call create 75 orders (46 with barcodes),
+ * minting order numbers in FETCH order so a June order got an August number,
+ * and surfacing long-shipped garments as overdue production work.
+ *
+ * Ingestion already has two paths that are supposed to create orders: the
+ * webhook and the reconcile poll, both keyed on CREATED_AT. A freshness sweep
+ * has no business minting anything.
+ */
+async function ingestOrder(
+  node: any,
+  colorMap?: Map<string, string>,
+  refreshOnly = false,
+) {
   const gid = String(node?.id || "");
   if (!gid) return { gid: "", outcome: "skipped", reason: "no id" };
 
@@ -321,13 +438,24 @@ async function ingestOrder(node: any, colorMap?: Map<string, string>) {
   // The order-number sequence is a single GLOBAL counter. Generating before
   // this check would burn a number on every duplicate webhook delivery,
   // leaving gaps that read as deleted orders in an audit.
+  //
+  // The payment columns come back too so refreshExistingOrder can diff without
+  // a second round trip.
   const { data: existing } = await supabase
     .from("orders")
-    .select("id, order_no")
+    .select("id, order_no, shopify_financial_status, shopify_tags")
     .eq("shopify_order_id", gid)
     .maybeSingle();
   if (existing?.id) {
-    return { gid, outcome: "already_exists", order_no: existing.order_no, id: existing.id };
+    // Known order: refresh the fields Shopify owns rather than skipping. This
+    // is what makes an orders/updated webhook and the refresh sweep do anything
+    // at all — previously both re-fetched live data and threw it away.
+    return await refreshExistingOrder(existing as any, node, gid, colorMap);
+  }
+
+  // Unknown order on a refresh sweep: NOT ours to create. See the docblock.
+  if (refreshOnly) {
+    return { gid, outcome: "skipped", reason: "NOT_INGESTED" };
   }
 
   const { orderRow, blockers } = mapShopifyOrder(node, colorMap);
@@ -389,9 +517,15 @@ async function ingestOrder(node: any, colorMap?: Map<string, string>) {
     if ((insertErr as any).code === "23505") {
       const { data: winner } = await supabase
         .from("orders")
-        .select("id, order_no")
+        .select("id, order_no, shopify_financial_status, shopify_tags")
         .eq("shopify_order_id", gid)
         .maybeSingle();
+      // Refresh here too, for the same reason as the pre-check above: the
+      // winner may have been written from a slightly older Shopify node than
+      // the one we are holding.
+      if (winner?.id) {
+        return await refreshExistingOrder(winner as any, node, gid, colorMap);
+      }
       return { gid, outcome: "already_exists", order_no: winner?.order_no, id: winner?.id };
     }
     return { gid, outcome: "failed", reason: "INSERT_FAILED", detail: insertErr.message };
@@ -567,7 +701,7 @@ serve(async (req) => {
     // would quietly write live orders — which is exactly what a caller
     // experimenting with an unknown mode does not expect.
     const KNOWN_MODES = [
-      "sync-now", "order", "reconcile", "remap-items", "backfill-components",
+      "sync-now", "order", "reconcile", "refresh", "remap-items", "backfill-components",
     ];
     if (!KNOWN_MODES.includes(mode)) {
       return json({
@@ -673,6 +807,20 @@ serve(async (req) => {
       const mins = Number(body?.sinceMinutes) || 30;
       const since = new Date(Date.now() - mins * 60_000).toISOString();
       nodes = await fetchOrders(Math.min(Number(body?.first) || 50, 100), since, "created_at");
+    } else if (mode === "refresh") {
+      // Orders TOUCHED in the window — updated_at, and fetchOrders sorts by
+      // UPDATED_AT to match. This is the catch-up sweep the fetchOrders
+      // docblock describes: a payment captured hours after checkout never
+      // re-enters a created_at window, so reconcile can never see it.
+      //
+      // Kept as a SEPARATE mode from reconcile on purpose. Reconcile's job is
+      // "no placed order is ever lost"; an updated_at filter there would let a
+      // re-touched old order occupy a page slot and push a genuinely NEW order
+      // off the end — measured on the live store, not theoretical. Two modes,
+      // two windows, no interference.
+      const mins = Number(body?.sinceMinutes) || 1440; // 24h
+      const since = new Date(Date.now() - mins * 60_000).toISOString();
+      nodes = await fetchOrders(Math.min(Number(body?.first) || 100, 100), since, "updated_at");
     } else {
       // sync-now
       const days = Number(body?.sinceDays) || 0;
@@ -690,6 +838,9 @@ serve(async (req) => {
           shopify_order_id: orderRow.shopify_order_id,
           delivery_date: orderRow.delivery_date,
           delivery_name: orderRow.delivery_name,
+          // The two a dry-run `refresh` is actually about.
+          shopify_financial_status: orderRow.shopify_financial_status,
+          shopify_tags: orderRow.shopify_tags,
           payment_mode: orderRow.payment_mode,
           grand_total: orderRow.grand_total,
           advance_payment: orderRow.advance_payment,
@@ -711,10 +862,14 @@ serve(async (req) => {
       return json({ success: true, mode, dryRun: true, count: preview.length, preview });
     }
 
+    // A refresh sweep must never CREATE an order -- its updated_at window is
+    // full of old orders we never ingested. See the ingestOrder docblock.
+    const refreshOnly = mode === "refresh";
+
     const results = [];
     for (const node of nodes) {
       try {
-        results.push(await ingestOrder(node, colorMap));
+        results.push(await ingestOrder(node, colorMap, refreshOnly));
       } catch (e) {
         results.push({ gid: node?.id, outcome: "failed", detail: (e as Error).message });
       }
@@ -725,18 +880,23 @@ serve(async (req) => {
       return acc;
     }, {});
 
-    // Log only what the reconcile poll actually RECOVERED. It runs every 15
-    // minutes and almost always finds nothing new (the webhook got there
-    // first), so logging every run would bury the real signal — an order that
-    // only arrived because the webhook was missed.
-    if (mode === "reconcile") {
+    // Log only what the polls actually CHANGED. Both run on a schedule and
+    // almost always find nothing to do (reconcile: the webhook got there first;
+    // refresh: most orders' payment state is settled), so logging every run
+    // would bury the real signal under thousands of no-op rows.
+    //
+    // `already_exists` is deliberately never logged — for refresh that is the
+    // overwhelmingly common outcome and means "checked, nothing moved".
+    if (mode === "reconcile" || mode === "refresh") {
       for (const r of results as any[]) {
-        if (r.outcome === "inserted" || r.outcome === "failed") {
+        if (r.outcome === "inserted" || r.outcome === "refreshed" || r.outcome === "failed") {
           await logSync({
             shopify_order_id: r.gid,
-            mode: "reconcile",
+            mode,
             outcome: r.outcome,
-            error: r.detail || null,
+            // On a refresh, record WHICH fields moved — that is the whole
+            // audit value ("this order went PENDING -> PAID at 14:02").
+            error: r.detail || (r.changed ? `changed: ${r.changed.join(", ")}` : null),
           });
         }
       }
