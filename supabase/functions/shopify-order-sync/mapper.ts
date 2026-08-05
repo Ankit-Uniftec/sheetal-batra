@@ -68,8 +68,27 @@ const opt = (variant: any, ...names: string[]): string => {
  * variants): "Size" (4429), "Kurta Size" (396) and "Age" (45, kidswear).
  * Reading only "Size" would leave 18 products with a null size.
  */
+const SIZE_OPTION_NAMES = ["Size", "Kurta Size", "Age"];
+
 const resolveSize = (variant: any): string =>
   opt(variant, "Size") || opt(variant, "Kurta Size") || opt(variant, "Age");
+
+/**
+ * WHICH axis the resolved size came from, so the UI can label it honestly — an
+ * Age value reads "5-6 YEARS" and must not be shown as "Size:".
+ *
+ * Must walk the SAME precedence as resolveSize: a variant carrying both Size
+ * and Age takes the Size value, so checking Age first would label it "Age" and
+ * print a size under the wrong heading. Returns "" when the variant has no
+ * size axis at all.
+ */
+const resolveSizeLabel = (variant: any): string => {
+  const name = SIZE_OPTION_NAMES.find((n) => opt(variant, n));
+  if (!name) return "";
+  // "Kurta Size" is the same axis under a product-specific name, not a second
+  // measurement — label it plainly as Size.
+  return name === "Age" ? "Age" : "Size";
+};
 
 /**
  * Does this variant include a dupatta?
@@ -268,11 +287,31 @@ function mapLineItem(
 
     additionals: [],
     size: size || null,
+
+    // Which axis the size CAME FROM, so the UI can label it honestly. An Age
+    // value reads "5-6 YEARS" and must not be shown as "Size:". Live order
+    // vocabulary (198 line items): Size 174, Kurta Size 24, Age 7. Values
+    // include "Custom" and "Free Size" — both REAL sizes, not missing data.
+    size_label: resolveSizeLabel(variant) || null,
+
+    // Heavy / Light, kept as its own field rather than only inside the `notes`
+    // prose. The warehouse needs to know which dupatta weight to pull, and
+    // parsing it back out of a joined string would be exactly the kind of
+    // text-scraping this mapper avoids everywhere else. "" when plain.
+    dupatta_weight: qualifier || null,
+
     quantity: Number(node?.quantity) || 1,
     price,
 
-    // Web customers don't supply measurements (ready-to-wear). The warehouse
-    // PDF renders the section empty, which is correct here.
+    // Web customers don't supply measurements — the website sells STANDARD
+    // SIZES, not made-to-measure. This is a store-model fact, not a gap:
+    // the Shopify metafield catalogue has no bust/waist/hip/length field at
+    // all, and line items carry no measurement customAttributes.
+    //
+    // The size is the real production input, and it is carried in `size` /
+    // `size_label` above. Warehouse-facing surfaces must therefore render a
+    // SIZE section here and suppress the measurements section entirely rather
+    // than printing an empty "Body Measurements" heading.
     measurements: {},
     image_url: clean(product?.featuredImage?.url) || null,
     notes: noteBits.join(" | "),
@@ -589,6 +628,22 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
 
     web_order_status: blockers.length > 0 ? "needs_review" : "ready",
     web_order_issues: issues.length > 0 ? issues : null,
+
+    // ── Shopify's own payment state, stored VERBATIM for the warehouse to see.
+    //
+    // Both were already fetched (ORDER_FIELDS asks for displayFinancialStatus
+    // and tags) and already sat in shopify_raw; they were simply never mapped.
+    //
+    // Deliberately NOT folded into isCod / payment_mode above. That derivation
+    // treats any PENDING order as COD, which over-matches; these two carry what
+    // Shopify actually said, with nothing inferred. See 64_shopify_payment_fields.sql.
+    shopify_financial_status: clean(node?.displayFinancialStatus) || null,
+
+    // Array, not a boolean: "COD" and "COD Confirmed" are distinct operational
+    // states, and keeping the raw list means a new tag needs no code change.
+    shopify_tags: Array.isArray(node?.tags)
+      ? node.tags.map(clean).filter(Boolean)
+      : [],
   };
 
   return { orderRow, items, blockers, deliveryDate, isCod };

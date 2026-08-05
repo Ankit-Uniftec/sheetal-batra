@@ -637,6 +637,12 @@ serve(async (req) => {
           .update({
             items,
             shopify_order_name: orderRow.shopify_order_name,
+            // Payment state Shopify already told us, backfilled from the same
+            // stored raw node. Still no Shopify call, and still no money —
+            // these are order-state strings, not amounts. See
+            // 64_shopify_payment_fields.sql.
+            shopify_financial_status: orderRow.shopify_financial_status,
+            shopify_tags: orderRow.shopify_tags,
             web_order_status: orderRow.web_order_status,
             web_order_issues: orderRow.web_order_issues,
           })

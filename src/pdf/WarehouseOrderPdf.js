@@ -754,19 +754,23 @@ const BarcodePlaceholder = ({ label }) => (
   </View>
 );
 
-// Measurements Display Component - NOW WITH Top/Bottom LABELS
-const MeasurementsDisplay = ({ measurements }) => {
-  if (!measurements || typeof measurements !== "object") {
-    return null;
-  }
-
-  const categories = Object.keys(measurements).filter((category) => {
+// The measurement categories that actually carry a value. Shared by the
+// renderer and by MeasurementsSection's decision to render at all, so the
+// heading and the grid can never disagree about whether there is anything here.
+const populatedMeasurementCategories = (measurements) => {
+  if (!measurements || typeof measurements !== "object") return [];
+  return Object.keys(measurements).filter((category) => {
     const fields = measurements[category];
     if (!fields || typeof fields !== "object") return false;
     return Object.values(fields).some((val) =>
       val !== "" && val !== " " && val !== undefined && val !== null
     );
   });
+};
+
+// Measurements Display Component - NOW WITH Top/Bottom LABELS
+const MeasurementsDisplay = ({ measurements }) => {
+  const categories = populatedMeasurementCategories(measurements);
 
   if (categories.length === 0) {
     return null;
@@ -801,6 +805,46 @@ const MeasurementsDisplay = ({ measurements }) => {
         );
       })}
     </View>
+  );
+};
+
+/**
+ * MeasurementsSection — heading + body as ONE unit, for both Document branches.
+ *
+ * The gold "Body Measurements" bar used to be rendered inline and
+ * UNCONDITIONALLY while MeasurementsDisplay returned null when there was
+ * nothing to show, so any order without measurements printed a gold heading
+ * over blank space. Shopify orders hit that on EVERY work order: the website
+ * sells standard sizes, so the mapper stores `measurements: {}` — Shopify has
+ * no measurement data at all (no such metafield exists, and line items carry
+ * none).
+ *
+ * Nothing replaces the section when it is empty. The size is already printed
+ * in the Product Details block above (see `hasSize` in ProductItem), so a
+ * second Size section here was the same value twice under a redundant heading.
+ *
+ * The test is on the DATA, not the channel: a retail order that happens to
+ * have no measurements also stops printing an empty bar, and any order that
+ * has them renders exactly as before.
+ *
+ * Both Document branches call this one component — the same consolidation
+ * InfoGrid received, and for the same reason: these two blocks were duplicated
+ * verbatim and duplicated blocks in this file have already drifted once.
+ */
+const MeasurementsSection = ({ item, isAlteration }) => {
+  if (populatedMeasurementCategories(item?.measurements).length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <View style={warehouseStyles.measurementsBar}>
+        <Text style={warehouseStyles.sectionTitle}>
+          {isAlteration ? "Updated Body Measurements" : "Body Measurements"}
+        </Text>
+      </View>
+      <MeasurementsDisplay measurements={item.measurements} />
+    </>
   );
 };
 
@@ -951,13 +995,10 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
               </View>
             )}
 
-            {/* Measurements Section */}
-            <View style={warehouseStyles.measurementsBar}>
-              <Text style={warehouseStyles.sectionTitle}>
-                {isAlteration ? "Updated Body Measurements" : "Body Measurements"}
-              </Text>
-            </View>
-            <MeasurementsDisplay measurements={item.measurements} />
+            {/* Measurements. Heading and body live in ONE component so they
+                can't disagree — renders nothing at all when there are none
+                (e.g. Shopify), instead of a heading over blank space. */}
+            <MeasurementsSection item={item} isAlteration={isAlteration} />
 
             {/* Component barcode — rendered IN-FLOW (not `fixed`/absolute) so it
                 sits under the component's details and never duplicates onto an
@@ -1050,13 +1091,8 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             </View>
           )}
 
-          {/* Measurements */}
-          <View style={warehouseStyles.measurementsBar}>
-            <Text style={warehouseStyles.sectionTitle}>
-              {isAlteration ? "Updated Body Measurements" : "Body Measurements"}
-            </Text>
-          </View>
-          <MeasurementsDisplay measurements={item.measurements} />
+          {/* Measurements — same shared component as the branch above. */}
+          <MeasurementsSection item={item} isAlteration={isAlteration} />
 
           {/* Fallback barcodes — in-flow (not `fixed`) so they don't duplicate
               onto an overflow page. */}
