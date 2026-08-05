@@ -10,6 +10,17 @@ import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import ProductionOverview from "../../components/ProductionOverview";
+import StageCountCards from "../../components/StageCountCards";
+import ProductionHeadVendors from "../../components/ProductionHeadVendors";
+import "../../components/ProductionHeadVendors.css";
+import QcHistoryTable from "../../components/QcHistoryTable";
+import QcHistoryPanel from "../../components/QcHistoryPanel";
+import ReJourneyPanel from "../../components/ReJourneyPanel";
+import CompletePicker from "../../components/CompletePicker";
+import { fetchQcRecords } from "../../utils/qcHistory";
+import { fetchReJourneys } from "../../utils/reJourneys";
+import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 import useTabParam from "../../hooks/useTabParam";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import StoreCalendarTab from "../StoreManagerDashboard/StoreCalendarTab";
@@ -19,7 +30,7 @@ import {
   enrichComponentsWithMovements,
   getOrderStatusLabel,
   normalizeOrderStatus,
-  getStageGroupKey,
+  classifyComponentForStageCard,
   STAGE_GROUPS,
   PRODUCTION_STAGES,
 } from "../../utils/barcodeService";
@@ -54,6 +65,15 @@ import "./ShopifyOrdersDashboard.css";
  * screen exists to not have. Same convention as RetailManagerDashboard's
  * "no PII" orders tab.
  *
+ * ═══ IT IS ALSO A PRODUCTION-HEAD SCREEN ════════════════════════════════
+ * The Shopify role owns the website channel end-to-end, exactly as the Offline
+ * Production Head owns retail on WarehouseDashboard.jsx. So it carries the same
+ * production toolset, scoped to Shopify orders: the component/stage Production
+ * Overview, per-order QC Report, Mark as Completed, Vendor / External, QC
+ * History and Re-journeys. Those surfaces are shared components — do not fork
+ * them here; a rule change must land in the shared component so every channel
+ * moves together.
+ *
  * Layout/naming follow the retail order card (AssociateDashboard) — uppercase
  * header strip, Title-case "Label:" detail rows — minus those two fields.
  * Orders are identified by their order-number prefix, which is the
@@ -70,11 +90,17 @@ const ORDERS_PER_PAGE = 10;
 const ORDER_NO_PREFIX_FILTER =
   "order_no.like.SB-SHOPIFY-%,order_no.like.SB-SHOP-%";
 
+// Tab order mirrors the retail order dashboard's sidebar (Overview → orders →
+// calendar → vendor/QC tools) so someone who works both screens finds the same
+// things in the same place.
 const TABS = [
   { key: "overview", label: "Overview" },
   { key: "orders", label: "Orders" },
   { key: "needs-review", label: "Needs Review" },
   { key: "calendar", label: "Calendar" },
+  { key: "vendors", label: "Vendor / External" },
+  { key: "qc-history", label: "QC History" },
+  { key: "rejourneys", label: "Re-journeys" },
 ];
 
 // Warehouse-relevant lookups only. Client Name and Phone are deliberately NOT
@@ -250,6 +276,21 @@ export default function ShopifyOrdersDashboard() {
   const { control: ordersPeriodControl, inPeriod: inOrdersPeriod } =
     usePeriodFilter("all", { variant: "select", label: "" });
 
+  // QC report modal — the order whose report is open, plus its qc_records.
+  const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
+  const [qcReportRecords, setQcReportRecords] = useState([]);
+  const [qcReportLoading, setQcReportLoading] = useState(false);
+
+  // QC History / Re-journeys tabs, both scoped to this screen's Shopify orders.
+  const [qcHistory, setQcHistory] = useState([]);
+  const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
+  const [reJourneys, setReJourneys] = useState([]);
+  const [reJourneysLoading, setReJourneysLoading] = useState(false);
+
+  // Mark as Completed — multi-product orders open the picker first.
+  const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
+  const [completing, setCompleting] = useState(null);
+
   // ── Role guard. PrivateRoute only checks authentication, so every dashboard
   // self-guards on its role (the app's documented two-place convention).
   useEffect(() => {
@@ -303,7 +344,7 @@ export default function ShopifyOrdersDashboard() {
         for (let i = 0; i < ids.length; i += 100) {
           const { data: chunk, error: compErr } = await supabase
             .from("order_components")
-            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, re_journey_count, stage_pass_counts")
+            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_active, is_rework, is_delayed, qc_status, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts")
             .in("order_id", ids.slice(i, i + 100));
           if (compErr) { console.error("Shopify component fetch failed:", compErr); break; }
           comps = comps.concat(chunk || []);
@@ -390,6 +431,88 @@ export default function ShopifyOrdersDashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
+  };
+
+  // ── QC Report: every QC check (QC 1 + Final QC) recorded against this order's
+  // pieces, oldest first so the report reads as the order's QC story. Same query
+  // and modal as the retail order dashboard (WarehouseDashboard.jsx:533).
+  const openQcReport = async (e, order) => {
+    e.stopPropagation();
+    setQcReportOrder({ id: order.id, order_no: order.order_no });
+    setQcReportLoading(true);
+    setQcReportRecords([]);
+    try {
+      const { data, error } = await supabase
+        .from("qc_records")
+        .select("id, barcode, component_id, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at")
+        .eq("order_id", order.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      setQcReportRecords(data || []);
+    } catch (err) {
+      console.error("Failed to load QC report:", err);
+      setQcReportRecords([]);
+    }
+    setQcReportLoading(false);
+  };
+
+  // ── Mark as Completed.
+  //
+  // Identical rule to the retail order dashboard: production is finished, the
+  // pieces become ready for Packaging & Dispatch. Final QC is MANDATORY and this
+  // screen cannot override it — allowOverride stays false (its default), which
+  // is the Production Manager's privilege alone (see manualComplete.js). A piece
+  // short of Final QC therefore surfaces the RPC's own refusal as an error,
+  // rather than an override prompt.
+  const runManualComplete = async (order, picked) => {
+    setCompleting(order.id);
+    try {
+      const res = await runManualCompleteWithOverride({
+        orderId: order.id,
+        by: user?.email || "",
+        picked,
+      });
+      if (res.cancelled) return false;
+    } catch (err) {
+      showPopup({
+        title: "Could not complete",
+        message: err.message || "Could not complete the order.",
+        type: "error",
+      });
+      return false;
+    } finally {
+      setCompleting(null);
+    }
+    // Reload so the order's status and every piece's stage reflect the change.
+    await loadOrders();
+    return true;
+  };
+
+  const markManualComplete = async (e, order) => {
+    e.stopPropagation();
+    const components = componentsByOrder[order.id] || [];
+    const productIdxs = [...new Set(components.map((c) => c.item_index ?? 0))]
+      .sort((a, b) => a - b);
+
+    // Multi-product order → pick which product is finished; one finished product
+    // can complete while the others are still in production.
+    if (productIdxs.length > 1) {
+      setCompletePicker({ order, productIdxs });
+      return;
+    }
+    const ok = await new Promise((resolve) => {
+      showPopup({
+        type: "confirm",
+        title: "Mark as Completed",
+        message: `Mark order ${order.order_no} as completed? Its pieces become ready for Packaging & Dispatch. Final QC must have passed on every piece.`,
+        confirmText: "Yes, complete it",
+        cancelText: "Cancel",
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
+    if (!ok) return;
+    await runManualComplete(order, null);
   };
 
   // ── CSV export.
@@ -510,6 +633,75 @@ export default function ShopifyOrdersDashboard() {
     return ts.length ? ts[ts.length - 1] : null;
   }, [orders]);
 
+  // ── Production Overview tab -------------------------------------------------
+  // Every Shopify order id — the scope for QC History, Re-journeys and Movement
+  // History. This screen only ever loads Shopify orders, so its whole order set
+  // IS the channel scope (no scopeOrdersToDesignation needed as on the shared
+  // warehouse dashboard, which loads every channel and narrows afterwards).
+  const orderIds = useMemo(() => orders.map((o) => o.id), [orders]);
+
+  // Flat piece list, and the same list narrowed to the Overview period. Stage
+  // cards read the NARROWED set, filtered by the PIECE's own scan time
+  // (stage_updated_at) rather than its order's placement date — so a scan made
+  // today on an old order shows under "Today", which is what the floor means by
+  // the question. `allComponents` is kept whole so order-level lookups still see
+  // pieces scanned outside the window.
+  const allComponents = useMemo(
+    () => Object.values(componentsByOrder).flat(),
+    [componentsByOrder]
+  );
+  const productionComponents = useMemo(
+    () => allComponents.filter((c) => inPeriod(c.stage_updated_at || c.created_at)),
+    [allComponents, inPeriod]
+  );
+  // The order-level half of the production block shares the Overview's own
+  // period-scoped order set (periodOrders) — same filter, so no second memo.
+  const productionOrders = periodOrders;
+
+  // order_id -> status, for classifyComponentForStageCard: a bypass-completed
+  // order's pieces belong under Packaging & Dispatch. Built from ALL orders (not
+  // the period-narrowed set) so an old order's piece scanned today still
+  // resolves its status.
+  const orderStatusById = useMemo(() => {
+    const m = {};
+    orders.forEach((o) => { m[o.id] = o.status; });
+    return m;
+  }, [orders]);
+
+  // Clicking a stage card filters the Orders tab to that stage and jumps there —
+  // same drill-through as the retail order dashboard. The Orders tab's own
+  // stageKeysByOrder is built with the same classifier, so the list it lands on
+  // matches the number on the card.
+  const handleStageCardClick = (stageKey) => {
+    setStageFilter([stageKey]);
+    setActiveTab("orders");
+  };
+
+  // ── QC History tab. Loaded on open (not with the orders) so the screen's first
+  // paint isn't waiting on a query most sessions never look at.
+  useEffect(() => {
+    if (activeTab !== "qc-history" || !orderIds.length) return;
+    let cancelled = false;
+    (async () => {
+      setQcHistoryLoading(true);
+      const recs = await fetchQcRecords({ orderIds });
+      if (!cancelled) { setQcHistory(recs); setQcHistoryLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, orderIds]);
+
+  // ── Re-journeys tab — the pieces currently back in rework after a QC fail.
+  useEffect(() => {
+    if (activeTab !== "rejourneys" || !orderIds.length) return;
+    let cancelled = false;
+    (async () => {
+      setReJourneysLoading(true);
+      const rows = await fetchReJourneys({ orderIds });
+      if (!cancelled) { setReJourneys(rows); setReJourneysLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, orderIds]);
+
   // One search predicate, used by both the Orders and Needs Review tabs.
   const matchesSearch = useCallback((o, field, query) => {
     const q = query.trim().toLowerCase();
@@ -538,18 +730,20 @@ export default function ShopifyOrdersDashboard() {
     Object.entries(componentsByOrder).forEach(([orderId, comps]) => {
       const keys = new Set();
       comps.forEach((c) => {
-        // getStageGroupKey returns null for order_received (deliberate, for
-        // order-level logic), so map that bucket explicitly — "not started yet"
-        // is a filter the floor wants.
-        const key = c.current_stage === "order_received"
-          ? "order_received"
-          : getStageGroupKey(c.current_stage);
+        // Same classifier the Production Overview stage cards use, so clicking a
+        // card lands on exactly the orders it counted. It matters for a piece
+        // out at a vendor: the cards bucket it by the stage it went OUT for,
+        // while its current_stage is still the one it left at — reading
+        // current_stage here would send the drill-through to a different list
+        // than the card's own number. It also buckets order_received, which
+        // getStageGroupKey deliberately maps to null for order-level logic.
+        const key = classifyComponentForStageCard(c, orderStatusById[orderId])?.key;
         if (key) keys.add(key);
       });
       map[orderId] = keys;
     });
     return map;
-  }, [componentsByOrder]);
+  }, [componentsByOrder, orderStatusById]);
 
   // All 10 logical stages, always. Unlike the Needs Review issue filter (whose
   // codes are unbounded), the stage list is a fixed, ordered pipeline — showing
@@ -810,6 +1004,26 @@ export default function ShopifyOrdersDashboard() {
               >
                 View Journey
               </button>
+              {/* QC 1 + Final QC results for this order. Always offered, even
+                  before any QC has happened — the modal says so, and "has this
+                  been checked yet?" is itself the question being asked. */}
+              <button className="sho-ghost-btn" onClick={(e) => openQcReport(e, order)}>
+                QC Report
+              </button>
+              {/* Production-finished bypass, for an order that can't complete
+                  through the normal scan flow. Hidden once the order is already
+                  finished or cancelled — same condition as the retail dashboard. */}
+              {!["completed", "delivered", "cancelled"].includes(
+                normalizeOrderStatus(order.status)
+              ) && (
+                  <button
+                    className="sho-complete-btn"
+                    onClick={(e) => markManualComplete(e, order)}
+                    disabled={completing === order.id}
+                  >
+                    {completing === order.id ? "Completing…" : "Mark as Completed"}
+                  </button>
+                )}
             </div>
           </>
         )}
@@ -843,6 +1057,42 @@ export default function ShopifyOrdersDashboard() {
           components={journeyOrder.components}
           onClose={() => setJourneyOrder(null)}
         />
+      )}
+
+      {/* Which product of a multi-product order is finished. */}
+      {completePicker && (
+        <CompletePicker
+          order={completePicker.order}
+          components={componentsByOrder[completePicker.order.id] || []}
+          productIdxs={completePicker.productIdxs}
+          onConfirm={(picked) => runManualComplete(completePicker.order, picked)}
+          onClose={() => setCompletePicker(null)}
+        />
+      )}
+
+      {/* QC REPORT MODAL — same shape as the retail order dashboard's. */}
+      {qcReportOrder && (
+        <div className="sho-modal-overlay" onClick={() => setQcReportOrder(null)}>
+          <div className="sho-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sho-modal-head">
+              <h3 className="sho-modal-title">QC Report — {qcReportOrder.order_no}</h3>
+              <button
+                className="sho-modal-close"
+                onClick={() => setQcReportOrder(null)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="sho-modal-body">
+              <QcHistoryTable
+                records={qcReportRecords}
+                loading={qcReportLoading}
+                emptyText="No QC checks recorded for this order yet."
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* HEADER */}
@@ -898,6 +1148,13 @@ export default function ShopifyOrdersDashboard() {
             </div>
           ) : (
             <>
+              {/* ═══ OVERVIEW ══════════════════════════════════════════════
+                  Order counts first, then production: how many orders came in,
+                  then where their physical pieces actually are. One period
+                  control governs both — they answer the same question ("how did
+                  this window go?") at two levels of detail, so splitting them
+                  across two tabs, each with its own timeline, only invited the
+                  two halves to disagree about which window you were looking at. */}
               {activeTab === "overview" && (
                 <>
                   <h2 className="sho-section-title">Overview</h2>
@@ -917,6 +1174,34 @@ export default function ShopifyOrdersDashboard() {
                     {lastSynced ? `Last synced ${formatDate(lastSynced)}` : "Not synced yet"}
                     {" · "}{orders.length} Shopify orders in total
                   </p>
+
+                  {/* ─── Production — component tracking. The same pair the
+                      retail order dashboard shows: piece counts per stage
+                      (in-house vs out at a vendor), then the shared operational
+                      metric cards. */}
+                  <h3 className="sho-subsection-title">Production</h3>
+                  {/* A plain caption, not .sho-hint — that yellow callout box is
+                      for the Needs Review warning, and reusing it here would
+                      flag a normal section as something needing attention. */}
+                  <p className="sho-caption">
+                    Every physical piece of every Shopify order, by the stage it
+                    is at right now. Click a stage to see those orders.
+                  </p>
+                  {/* Stage cards filter by each piece's own scan time, so a scan
+                      made today on an older order still counts under "Today" —
+                      while the cards above count orders by placement date. Both
+                      read the one period selected at the top of the tab. */}
+                  <StageCountCards
+                    components={productionComponents}
+                    orderStatusById={orderStatusById}
+                    onStageClick={handleStageCardClick}
+                  />
+                  <ProductionOverview
+                    orders={productionOrders}
+                    components={productionComponents}
+                    allComponents={allComponents}
+                    totalLabel="Total Shopify Orders"
+                  />
                 </>
               )}
 
@@ -1136,6 +1421,48 @@ export default function ShopifyOrdersDashboard() {
                     storeLabel="Shopify"
                     showClient={false}
                     showSalesperson={false}
+                  />
+                </>
+              )}
+
+              {/* ═══ VENDOR / EXTERNAL ═══════════════════════════════════════
+                  Configure External Movement, Report Vendor Failure, Vendors and
+                  Movement History — the shared Production-Head panel, unchanged.
+                  Scoped by orderIds rather than channel: Shopify orders are
+                  non-B2B, so channel="retail" alone would also surface every
+                  store and exhibition trip, which is not this screen's channel. */}
+              {activeTab === "vendors" && (
+                <ProductionHeadVendors
+                  currentUserEmail={user?.email || ""}
+                  orderIds={orderIds}
+                />
+              )}
+
+              {/* ═══ QC HISTORY ══════════════════════════════════════════════
+                  Channel filter hidden: every record here is already Shopify, so
+                  the control would be a dropdown with one option. */}
+              {activeTab === "qc-history" && (
+                <>
+                  <h2 className="sho-section-title">QC History</h2>
+                  <QcHistoryPanel
+                    records={qcHistory}
+                    loading={qcHistoryLoading}
+                    showChannelFilter={false}
+                  />
+                </>
+              )}
+
+              {/* ═══ RE-JOURNEYS — pieces sent back for rework after a QC fail ═══ */}
+              {activeTab === "rejourneys" && (
+                <>
+                  <h2 className="sho-section-title">Re-journeys</h2>
+                  <p className="sho-caption">
+                    Shopify pieces currently back in rework after failing QC.
+                  </p>
+                  <ReJourneyPanel
+                    rows={reJourneys}
+                    loading={reJourneysLoading}
+                    showChannelFilter={false}
                   />
                 </>
               )}

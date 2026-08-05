@@ -190,6 +190,17 @@
     margin: 0 0 20px 0;
 }
 
+/* Second-level heading within a tab (e.g. "Production" under Overview).
+   Smaller and darker than the tab title so the hierarchy reads at a glance;
+   the generous top margin is what separates the two blocks. */
+.sho-subsection-title {
+    font-family: "Athleas", serif !important;
+    font-size: 18px;
+    font-weight: 600;
+    color: #8B7355;
+    margin: 34px 0 6px 0;
+}
+
 .sho-loading {
     display: flex;
     flex-direction: column;
@@ -246,6 +257,16 @@
     font-size: 13px;
     color: #8B7355;
     margin: 0 0 16px;
+}
+
+/* Neutral explanatory line under a heading. Unlike .sho-hint (a yellow callout
+   reserved for things needing attention), this carries no alarm colour — it
+   just explains what the section below is. */
+.sho-caption {
+    font-size: 13px;
+    color: #90876f;
+    margin: 0 0 14px;
+    line-height: 1.5;
 }
 
 .sho-synced {
@@ -950,6 +971,98 @@
 
 .sho-clickable:hover {
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Mark as Completed ──────────────────────────────────────────
+   Deliberately warmer than the neutral .sho-ghost-btn beside it: this is the
+   one button on the card that changes production state, so it should not read
+   as just another view action. */
+.sho-complete-btn {
+    padding: 6px 12px;
+    background: #fff6ee;
+    color: #a35a1f;
+    border: 1px solid #e0a96d;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.sho-complete-btn:hover:not(:disabled) {
+    background: #e0a96d;
+    color: #fff;
+}
+
+.sho-complete-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ─── Modal (QC Report) ──────────────────────────────────────────
+   z-index sits above the sidebar (200) so the overlay covers it on mobile,
+   where the sidebar is a fixed drawer. */
+.sho-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.sho-modal {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 720px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.sho-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid #ece6d4;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    border-radius: 12px 12px 0 0;
+}
+
+.sho-modal-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #6b5a2e;
+}
+
+.sho-modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    color: #888;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.sho-modal-close:hover {
+    color: #333;
+}
+
+/* Wide children (the QC table) scroll inside the modal rather than stretching it. */
+.sho-modal-body {
+    padding: 12px 16px;
+    overflow-x: auto;
 }
 
 /* ─── Responsive ─────────────────────────────────────────────── */

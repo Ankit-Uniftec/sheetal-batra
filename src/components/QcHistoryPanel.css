@@ -23,8 +23,31 @@
    The search box takes the leftover space; selects/dates stay fixed. */
 .qch-filters > input[type="text"] { flex: 1 1 180px; min-width: 160px; }
 .qch-filters > select.qch-input { flex: 0 0 auto; width: auto; min-width: 120px; }
-/* The shared PeriodFilter (.pfx) sits inline in the bar without its own bottom margin. */
-.qch-filters .pfx { margin-bottom: 0; }
+
+/* The shared PeriodFilter (.pfx) is ITSELF a wrapping flex row ("Date:" + its
+   select) with a 16px bottom margin for standalone use. Nested inside this bar
+   that made it a flex ITEM whose own width is content-derived: squeezed by the
+   greedy search box beside it, it wrapped internally — stacking the "Date:"
+   caption ABOVE its select and pushing that select off the line every other
+   control sits on.
+   `display: contents` dissolves the wrapper entirely, so the label and the
+   select become direct children of .qch-filters and lay out on the shared row
+   like every other control. This is the same fix .sho-toolbar already uses, and
+   it is order-independent — it does not rely on out-specifying PeriodFilter.css,
+   whose chunk can load after this one. In the "select" variant the custom
+   From/To inputs are siblings of the select (not wrapped in .pfx-custom), so
+   they are unwrapped onto the row too and need no extra handling. */
+.qch-filters .pfx {
+  display: contents;
+}
+
+/* Match the panel's own 38px control height, so the period select lines up with
+   the neighbouring selects instead of sitting a couple of pixels short. */
+.qch-filters .pfx-select,
+.qch-filters .pfx-date {
+  height: 38px;
+  box-sizing: border-box;
+}
 
 .qch-clear {
   border: 1px solid #e0d8c6;
