@@ -94,7 +94,15 @@ const friendlyMovementError = (res) =>
 // channel: "retail" | "b2b" | undefined. When set, Movement History shows only
 // that channel's movements — the retail PH must not see B2B trips and vice
 // versa. Undefined = all channels (unchanged).
-const ProductionHeadVendors = ({ currentUserEmail, channel }) => {
+//
+// orderIds: optional array of order ids. When given, Movement History is further
+// narrowed to those orders only. `channel` is too coarse for a single-channel
+// screen that lives inside "retail" (Shopify orders are non-B2B, so channel
+// alone would show every store/exhibition trip too); passing the screen's own
+// order ids is the exact scope. An EMPTY array means "this screen has no orders",
+// which correctly yields no movements — so the prop must be left undefined, not
+// [], by callers that don't want scoping.
+const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
   const { showPopup, PopupComponent } = usePopup();
 
   const [tab, setTab] = useState("movement"); // 'movement' | 'vendors' | 'failure'
@@ -151,6 +159,11 @@ const ProductionHeadVendors = ({ currentUserEmail, channel }) => {
 
   useEffect(() => { loadVendors(); }, [loadVendors]);
 
+  // Identity-stable key for the orderIds scope. A parent that rebuilds the array
+  // each render (e.g. orders.map(o => o.id)) would otherwise give loadMovements a
+  // new identity every render, and the effect below would refetch forever.
+  const orderIdsKey = Array.isArray(orderIds) ? orderIds.join(",") : null;
+
   const loadMovements = useCallback(async () => {
     setMovementsLoading(true);
     try {
@@ -159,12 +172,18 @@ const ProductionHeadVendors = ({ currentUserEmail, channel }) => {
       // is_b2b is resolved per movement inside fetchAllMovements.
       if (channel === "retail") rows = rows.filter((m) => !m.is_b2b);
       else if (channel === "b2b") rows = rows.filter((m) => m.is_b2b);
+      // Explicit order scope, when the caller gave one. Read from the key so the
+      // filter always matches the identity this callback was memoised on.
+      if (orderIdsKey !== null) {
+        const idSet = new Set(orderIdsKey ? orderIdsKey.split(",") : []);
+        rows = rows.filter((m) => m.order_id && idSet.has(String(m.order_id)));
+      }
       setMovements(rows);
       setMovPage(1);
     }
     catch (e) { console.error("Failed to load movements:", e); }
     setMovementsLoading(false);
-  }, [channel]);
+  }, [channel, orderIdsKey]);
 
   // Distinct vendor names present in the history (for its vendor filter).
   const movVendorOptions = useMemo(() => {
