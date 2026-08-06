@@ -901,6 +901,20 @@
   border-radius: 8px;
 }
 
+/* Master-barcode packaging: explains why pieces are pre-ticked rather than
+   scanned one by one, and that unticking holds a piece back. */
+.wd-pack-master-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #8b7355;
+  text-align: center;
+  background: #faf7f0;
+  border: 1px solid #eee4cf;
+  border-radius: 8px;
+}
+
 .wd-pack-scope-title {
   margin: 0 0 10px;
   font-size: 13px;

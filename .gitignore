@@ -42,3 +42,9 @@ supabase/.branches
 supabase/.temp
 supabase/.env*
 .dup/
+
+# Working notes and API dumps. Contains real customer PII (names, phones,
+# addresses from live Shopify orders) and a live project anon JWT in
+# prod-cron.sql. Untracked until now only because files were staged by
+# name -- one `git add -A` would have committed the lot.
+scratchpad/
