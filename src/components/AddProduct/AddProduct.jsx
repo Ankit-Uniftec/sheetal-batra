@@ -155,6 +155,11 @@ export default function AddProduct({ onProductAdded }) {
   // types. When true, orders for this product generate a separate dupatta
   // component + barcode (the order form pre-fills a per-item toggle from this).
   const [hasDupatta, setHasDupatta] = useState(false);
+  // Default dupatta colour. Its own list (`dupatta_colors` table) — deliberately
+  // separate from the `colors` table, since dupattas are often a contrast piece.
+  // Pre-fills the order form's Dupatta Color dropdown, so the name must match a
+  // row in that table exactly. Blank falls back to Default Color on save.
+  const [defaultDupattaColor, setDefaultDupattaColor] = useState("");
 
   // Normal-only
   const [availableSizes, setAvailableSizes] = useState([]);
@@ -182,6 +187,9 @@ export default function AddProduct({ onProductAdded }) {
   // match of a row in this table so ProductForm can find its hex and
   // pre-fill swatches when the product is later selected.
   const [colorList, setColorList] = useState([]);
+  // Names from the `dupatta_colors` table — the canonical dupatta colour list,
+  // used for the manual dropdown and to validate the CSV column.
+  const [dupattaColorList, setDupattaColorList] = useState([]);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -222,6 +230,13 @@ export default function AddProduct({ onProductAdded }) {
         .order("name", { ascending: true });
       if (!alive) return;
       setColorList(colorData || []);
+
+      const { data: dupColorData } = await supabase
+        .from("dupatta_colors")
+        .select("name")
+        .order("name", { ascending: true });
+      if (!alive) return;
+      setDupattaColorList((dupColorData || []).map((d) => d.name).filter(Boolean));
     })();
     return () => { alive = false; };
   }, []);
@@ -244,6 +259,7 @@ export default function AddProduct({ onProductAdded }) {
     setDefaultTop(""); setDefaultBottom(""); setDefaultColor("");
     setStoreCategory(DEFAULT_STORE_CATEGORY);
     setHasDupatta(false);
+    setDefaultDupattaColor("");
     setAvailableSizes([]); setInventory("0"); setIsMto(false);
     setShopifyProductId("");
     setVariants([{ size: "", price: "", inventory: "0", shopify_variant_id: "" }]);
@@ -299,6 +315,12 @@ export default function AddProduct({ onProductAdded }) {
       default_color: defaultColor.trim() || null,
       store_category: storeCategory || DEFAULT_STORE_CATEGORY,
       has_dupatta: hasDupatta,
+      // Only meaningful with a dupatta. Blank falls back to the product's own
+      // default colour — same rule the bulk SQL import used — so the order form
+      // always has something to pre-fill instead of an empty dropdown.
+      default_dupatta_color: hasDupatta
+        ? (defaultDupattaColor.trim() || defaultColor.trim() || null)
+        : null,
       sync_enabled: productType === "lxrts",
       is_custom_piece: productType === "custom_piece",
     };
@@ -425,6 +447,8 @@ export default function AddProduct({ onProductAdded }) {
           default_color: p.default_color || "",
           store_category: p.store_category || DEFAULT_STORE_CATEGORY,
           has_dupatta: p.has_dupatta ? "yes" : "no",
+          default_dupatta_color: p.default_dupatta_color || "",
+          is_custom_piece: p.is_custom_piece ? "yes" : "no",
           available_size: (p.available_size || []).join("|"),
           inventory: inv,
         };
@@ -465,7 +489,7 @@ export default function AddProduct({ onProductAdded }) {
       }
 
       // Validate each row
-      const results = parsed.data.map((row, i) => validateRow(row, i + 2)); // +2 = 1-based + header offset
+      const results = parsed.data.map((row, i) => validateRow(row, i + 2, dupattaColorList)); // +2 = 1-based + header offset
       const errorCount = results.filter((r) => !r.ok).length;
       setCsvParsed(parsed);
       setCsvValidation({ results, errorCount });
@@ -524,6 +548,9 @@ export default function AddProduct({ onProductAdded }) {
         default_bottom: r.default_bottom,
         default_color: r.default_color,
         store_category: r.store_category || DEFAULT_STORE_CATEGORY,
+        has_dupatta: r.has_dupatta,
+        default_dupatta_color: r.default_dupatta_color,
+        is_custom_piece: r.is_custom_piece,
         sync_enabled: false,
         inventory: r.inventory ?? 0,
         available_size: r.available_size,
@@ -796,6 +823,28 @@ export default function AddProduct({ onProductAdded }) {
                 Tick if this outfit comes with a dupatta. Orders then track the dupatta as its own piece with a separate barcode.
               </span>
             </div>
+
+            {/* Dupatta colour — only relevant once the product has a dupatta.
+                Its own list (dupatta_colors), separate from Default Color,
+                because the dupatta is often a deliberate contrast piece. */}
+            {hasDupatta && (
+              <div className="ap-field">
+                <label>Dupatta Color</label>
+                <select
+                  className="ap-input"
+                  value={defaultDupattaColor}
+                  onChange={(e) => setDefaultDupattaColor(e.target.value)}
+                >
+                  <option value="">— Same as Default Color —</option>
+                  {dupattaColorList.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <span className="ap-help">
+                  Pre-fills the Dupatta Color on the order form. Leave blank to use the Default Color.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ── Sizes + inventory (Normal and Custom Piece both use this shape) ── */}
