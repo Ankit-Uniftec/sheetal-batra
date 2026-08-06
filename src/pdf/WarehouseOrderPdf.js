@@ -1,5 +1,6 @@
 import React from "react";
 import { getWarehouseDateObj } from "../utils/warehouseDate";
+import { standardSizeMeasurementsByCategory } from "../utils/b2bSizeChart";
 import {
   Document,
   Page,
@@ -811,28 +812,39 @@ const MeasurementsDisplay = ({ measurements }) => {
 /**
  * MeasurementsSection — heading + body as ONE unit, for both Document branches.
  *
- * The gold "Body Measurements" bar used to be rendered inline and
- * UNCONDITIONALLY while MeasurementsDisplay returned null when there was
- * nothing to show, so any order without measurements printed a gold heading
- * over blank space. Shopify orders hit that on EVERY work order: the website
- * sells standard sizes, so the mapper stores `measurements: {}` — Shopify has
- * no measurement data at all (no such metafield exists, and line items carry
- * none).
+ * Measurements come from one of two places, and render IDENTICALLY either way
+ * — same gold "Body Measurements" bar, same Top / Bottom boxes:
  *
- * Nothing replaces the section when it is empty. The size is already printed
- * in the Product Details block above (see `hasSize` in ProductItem), so a
- * second Size section here was the same value twice under a redundant heading.
+ *   1. The order HAS measurements → print them. Real measurements always win;
+ *      they are what the customer was actually measured to.
+ *   2. It does not, but it has a STANDARD SIZE (every Shopify order) → fill
+ *      them from the house size chart, exactly as the retail order form
+ *      auto-fills when an associate picks a size. A web "L" and a store "L"
+ *      are the same garment and now print the same work order.
+ *   3. Neither → print nothing at all.
  *
- * The test is on the DATA, not the channel: a retail order that happens to
- * have no measurements also stops printing an empty bar, and any order that
- * has them renders exactly as before.
+ * Case 3 is why the heading lives in here. The gold bar used to render inline
+ * and UNCONDITIONALLY while MeasurementsDisplay returned null when empty, so an
+ * order with nothing to show printed a heading over blank space.
+ *
+ * The test is on the DATA, not the channel: a retail order with no stored
+ * measurements but a standard size gets the chart values too, which is right —
+ * that is what it was ordered as.
  *
  * Both Document branches call this one component — the same consolidation
  * InfoGrid received, and for the same reason: these two blocks were duplicated
  * verbatim and duplicated blocks in this file have already drifted once.
  */
 const MeasurementsSection = ({ item, isAlteration }) => {
-  if (populatedMeasurementCategories(item?.measurements).length === 0) {
+  const stored = populatedMeasurementCategories(item?.measurements).length > 0;
+
+  // Only consult the chart when nothing was measured. Yields {} for Custom /
+  // Free Size / kids ages / unknown sizes, which collapses the whole section.
+  const measurements = stored
+    ? item.measurements
+    : standardSizeMeasurementsByCategory(item);
+
+  if (populatedMeasurementCategories(measurements).length === 0) {
     return null;
   }
 
@@ -843,7 +855,7 @@ const MeasurementsSection = ({ item, isAlteration }) => {
           {isAlteration ? "Updated Body Measurements" : "Body Measurements"}
         </Text>
       </View>
-      <MeasurementsDisplay measurements={item.measurements} />
+      <MeasurementsDisplay measurements={measurements} />
     </>
   );
 };
