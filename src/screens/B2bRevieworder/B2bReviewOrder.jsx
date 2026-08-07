@@ -284,20 +284,20 @@ export default function B2bReviewOrder() {
 
                 resultOrderNo = updatedOrder.order_no;
 
-                // Merchandiser edits stay approved, so the order is in the
-                // warehouse — make sure barcode components exist. Idempotent:
-                // a no-op if they were already generated. Non-blocking.
-                if (autoApprove) {
-                    try {
-                        const { ensureOrderComponents } = await import("../../utils/barcodeService");
-                        await ensureOrderComponents({
-                            id: editingOrderId,
-                            order_no: updatedOrder.order_no,
-                            items: orderPayload.items,
-                        });
-                    } catch (compErr) {
-                        console.warn("B2B barcode generation skipped:", compErr.message);
-                    }
+                // Barcodes belong to the order, not to its approval state, so an
+                // executive edit that resets the order to "pending" keeps them
+                // too. Idempotent: a no-op if they were already generated, which
+                // is the normal case here since placement mints them.
+                // Non-blocking.
+                try {
+                    const { ensureOrderComponents } = await import("../../utils/barcodeService");
+                    await ensureOrderComponents({
+                        id: editingOrderId,
+                        order_no: updatedOrder.order_no,
+                        items: orderPayload.items,
+                    });
+                } catch (compErr) {
+                    console.warn("B2B barcode generation skipped:", compErr.message);
                 }
 
                 // Update approval record if executive re-submits
@@ -367,19 +367,19 @@ export default function B2bReviewOrder() {
                 if (orderError) throw orderError;
                 insertedOrderId = insertedOrderData.id;
 
-                // Auto-approved orders (merchandiser-created, and all stock orders)
-                // enter the warehouse immediately — generate barcode components
-                // now. Stock components mint as B2BSTOCK-NNNNNN-TOP etc., derived
-                // from the new order-number prefix. (Pending orders get theirs when
-                // a merchandiser approves.) Non-blocking: a barcode failure must
+                // Every B2B order mints its barcode components at placement time,
+                // approval-pending included. The barcode identifies the physical
+                // garment and is derived purely from order_no + items, both of
+                // which are final at this point — waiting for approval only meant
+                // a warehouse PDF pulled in between came out silently barcode-less.
+                // Stock components mint as B2BSTOCK-NNNNNN-TOP etc., derived from
+                // the new order-number prefix. Non-blocking: a barcode failure must
                 // not stop order placement.
-                if (autoApprove) {
-                    try {
-                        const { ensureOrderComponents } = await import("../../utils/barcodeService");
-                        await ensureOrderComponents(insertedOrderData);
-                    } catch (compErr) {
-                        console.warn("B2B barcode generation skipped:", compErr.message);
-                    }
+                try {
+                    const { ensureOrderComponents } = await import("../../utils/barcodeService");
+                    await ensureOrderComponents(insertedOrderData);
+                } catch (compErr) {
+                    console.warn("B2B barcode generation skipped:", compErr.message);
                 }
 
                 resultOrderNo = finalOrderNo;

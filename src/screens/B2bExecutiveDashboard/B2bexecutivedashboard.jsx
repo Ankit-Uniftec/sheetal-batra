@@ -472,9 +472,14 @@ export default function B2bExecutiveDashboard() {
                                                 <button className="b2b-pdf-btn" onClick={(e) => handleDownloadPdf(e, order)} disabled={pdfLoading === order.id}>
                                                     {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Customer PDF"}
                                                 </button>
-                                                <button className="b2b-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
-                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
-                                                </button>
+                                                {/* The warehouse doc is a production work order \u2014 it only
+                                                    means anything once a merchandiser has approved and the
+                                                    order is actually going into the warehouse. */}
+                                                {order.approval_status === "approved" && (
+                                                    <button className="b2b-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
+                                                        {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
 
