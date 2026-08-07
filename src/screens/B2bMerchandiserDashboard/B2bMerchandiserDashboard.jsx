@@ -11,7 +11,7 @@ import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
-import { enrichComponentsWithMovements, getOrderChannelKey, getOrderStatusLabel } from "../../utils/barcodeService";
+import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
 import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
@@ -657,10 +657,15 @@ export default function B2bMerchandiserDashboard() {
     };
 
     // ==================== CANCEL ORDER (24h, any channel, no approval) ====================
-    // Keep every channel key that getOrderChannelKey can return, or the || fallback
-    // shows a raw key ("shopify") to the user. See getOrderChannelLabel in
-    // barcodeService for the shared version of this map.
-    const CHANNEL_LABELS = { comms: "Comms", b2b: "B2B", private: "Private", exhibition: "Exhibition", stock: "Stock", shopify: "Shopify", offline: "Store" };
+    // Channel badge label. This used to be a hand-copied CHANNEL_LABELS map,
+    // which went stale the moment a channel was added (it still said
+    // stock: "Stock" after the three-way stock split) and showed the user a raw
+    // key. getOrderChannelLabel is the shared authority and cannot drift.
+    //
+    // NOT CHANNEL_KEY_LABELS: that map is keyed for the STORED channel_key
+    // vocabulary (delhi | ludhiana), while getOrderChannelKey returns the JS one
+    // (offline). Indexing it with a JS key renders a raw "offline" for every
+    // store order.
     const hoursSince = (ts) => (ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : Infinity);
     const orderAmount = (o) => Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
 
@@ -1267,7 +1272,7 @@ export default function B2bMerchandiserDashboard() {
 
                         {cancelOrder && (() => {
                             const o = cancelOrder;
-                            const channel = getOrderChannelKey(o);
+                            const channelLabel = getOrderChannelLabel(o);
                             const hrs = hoursSince(o.created_at);
                             const isCancelled = (o.status || "").toLowerCase() === "cancelled";
                             const withinWindow = hrs < 24;
@@ -1276,7 +1281,7 @@ export default function B2bMerchandiserDashboard() {
                                 <div className="merch-modal" style={{ maxWidth: 560, margin: 0, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" }}>
                                     <div className="merch-modal-top">
                                         <h3>{o.order_no}</h3>
-                                        <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, background: "#f0ece2", color: "#6b5842" }}>{CHANNEL_LABELS[channel] || channel}</span>
+                                        <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, background: "#f0ece2", color: "#6b5842" }}>{channelLabel}</span>
                                     </div>
                                     <div className="merch-modal-body">
                                         {/* Eligibility banner */}

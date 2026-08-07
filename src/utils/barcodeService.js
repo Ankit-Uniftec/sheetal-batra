@@ -195,7 +195,8 @@ export function getStageTextColor() {
 // order-history list (offline heads still look up any order).
 //
 // Returns the channel key for an order, matching the designation buckets:
-//   'comms' | 'b2b' | 'private' | 'exhibition' | 'stock' | 'offline' (= store)
+//   'comms' | 'b2b' | 'private' | 'exhibition' | 'offline' (= store)
+//   | 'retail_stock' | 'b2b_stock' | 'shopify_stock'
 //
 // The ORDER NUMBER PREFIX is the authoritative signal — SB-<PREFIX>-MMYY-NNNNNN
 // — because it is stamped at placement from the store the order was raised in
@@ -227,13 +228,20 @@ export function getStageTextColor() {
 // INTERNAL STOCK IS PER-CHANNEL. Stock is an order for warehouse inventory (no
 // customer, no pricing) and each channel raises its own, with its own prefix so
 // the printed barcode says which channel it belongs to:
-//   STOCK    — retail/SA stock, raised from the Associate dashboard
-//   B2BSTOCK — B2B stock, raised by the merchandiser
-// Both map to the ONE 'stock' key: they are the same thing for reporting, and
-// keeping a single key means channel breakdowns/revenue charts (CHANNEL_SEGMENTS
-// below) don't grow a segment per channel. Where B2B stock must be told apart —
-// the B2B dashboards, the Inventory stock tabs — the is_b2b flag does it.
-// A future SHOPIFYSTOCK slots in the same way; see db/barcode_system/v2/54_b2b_stock_orders.sql.
+//   STOCK        — retail/SA stock, raised from the Associate dashboard
+//   B2BSTOCK     — B2B stock, raised by the merchandiser
+//   SHOPIFYSTOCK — Shopify stock
+// Each maps to its OWN key (retail_stock | b2b_stock | shopify_stock) and its own
+// revenue segment. They used to collapse into one 'stock' key, with the is_b2b
+// flag telling B2B stock apart wherever it mattered; that workaround is gone —
+// the three are distinct businesses and each reports on its own line.
+// The bare 'stock' key is RETIRED: nothing returns it. See
+// db/barcode_system/v2/68_split_stock_channel_keys.sql.
+//
+// A stock order raised through a store's NORMAL flow keeps that store's prefix
+// (SB-LDHC-…) while being stock. It resolves to retail_stock — never to the
+// store — so it can never be counted as store revenue. That protection is the
+// entire reason db/…/v2/61 stores the channel instead of inferring it in JS.
 //
 // Only the SEGMENT COUNT matters to the parsers here — getOrderPrefix and
 // generateOrderComponents read order_no by dash position, never by character
@@ -255,9 +263,15 @@ const CHANNEL_BY_ORDER_PREFIX = {
   // "offline" and reports as Delhi/Ludhiana STORE revenue — the GEN trap
   // described in db/website_orders.sql.
   SHOP: "shopify",
-  STOCK: "stock",     // internal stock orders, not a customer channel
-  B2BSTOCK: "stock",  // B2B internal stock — same channel key as STOCK (see above)
+  // Internal stock — not customer channels. One key per flavour (see above).
+  STOCK: "retail_stock",
+  B2BSTOCK: "b2b_stock",
+  SHOPIFYSTOCK: "shopify_stock",
 };
+
+// The stock channel keys, in display order. Used by the resolvers below to tell
+// a stock prefix from a store prefix without re-listing the keys at each site.
+export const STOCK_CHANNEL_KEYS = ["retail_stock", "b2b_stock", "shopify_stock"];
 
 // "SB-DLC-0726-003625" → "DLC"
 export function getOrderPrefix(order) {
@@ -415,7 +429,10 @@ export function getOrderProgressStatusKey(label) {
 export function getOrderChannelLabel(order) {
   // Stock flag first — see getOrderChannelKey; a stock order raised through a
   // store keeps that store's prefix but must not report as store revenue.
-  if (order?.is_stock_order === true) return "Stock";
+  // Which stock is a prefix question, so defer to the one resolver.
+  if (order?.is_stock_order === true) {
+    return CHANNEL_KEY_LABELS[getOrderChannelKey(order)] || "Retail Stock";
+  }
   const prefix = getOrderPrefix(order);
   if (prefix === "DLC") return "Delhi Store";
   if (prefix === "LDHC") return "Ludhiana Store";
@@ -425,7 +442,11 @@ export function getOrderChannelLabel(order) {
   if (key === "private") return "Private";
   if (key === "exhibition") return "Exhibition";
   if (key === "shopify") return "Shopify";
-  if (key === "stock") return "Stock";
+  // Stock by PREFIX but without the flag — a row whose is_stock_order was never
+  // set. The number is the authoritative signal, so label it as the key says
+  // rather than falling through to the store fallback below and reporting a
+  // SB-B2BSTOCK- order as "Store".
+  if (STOCK_CHANNEL_KEYS.includes(key)) return CHANNEL_KEY_LABELS[key];
   // offline with an unknown/missing prefix — try the store name.
   const store = (order?.salesperson_store || "").trim().toLowerCase();
   if (store.includes("delhi")) return "Delhi Store";
@@ -450,7 +471,9 @@ export const CHANNEL_KEY_LABELS = {
   private: "Private",
   comms: "Comms",
   exhibition: "Exhibition",
-  stock: "Stock",
+  retail_stock: "Retail Stock",
+  b2b_stock: "B2B Stock",
+  shopify_stock: "Shopify Stock",
   store: "Store", // offline with an unrecognised prefix
 };
 
@@ -463,9 +486,26 @@ export const CHANNEL_SEGMENTS = [
   { label: "Private", color: "#8e24aa" },
   { label: "Comms", color: "#1565c0" },
   { label: "Exhibition", color: "#6d4c41" },
-  { label: "Stock", color: "#546e7a" },
+  // Internal stock, one segment per flavour. Retail keeps the original slate.
+  { label: "Retail Stock", color: "#546e7a" },
+  { label: "B2B Stock", color: "#8d6e63" },
+  { label: "Shopify Stock", color: "#5c6bc0" },
   { label: "Store", color: "#2e7d32" }, // offline fallback (unknown prefix)
 ];
+
+// The channels a USER may pick from — CHANNEL_SEGMENTS minus "Store".
+//
+// "Store" is not a channel anyone places an order in. It is the fallback label
+// for an offline order whose order_no prefix we couldn't recognise (missing or
+// malformed number), so it is a DATA-QUALITY bucket, not a business one, and
+// offering it as a filter just adds a dead option to every dropdown.
+//
+// It stays in CHANNEL_SEGMENTS on purpose: breakdowns and revenue charts must
+// still account for such an order, or their parts stop summing to the total.
+// Show it in a BREAKDOWN, hide it from a PICKER.
+export const CHANNEL_FILTER_SEGMENTS = CHANNEL_SEGMENTS.filter(
+  (s) => s.label !== "Store"
+);
 
 // Distinct channels present in a set of rows carrying channel_key, as
 // { key, label }, ordered by the CHANNEL_SEGMENTS sequence so every channel
@@ -489,10 +529,15 @@ export function distinctChannelKeys(rows = []) {
 export function getOrderChannelKey(order) {
   if (!order) return null;
 
-  // The stock FLAG outranks the prefix: internal stock is sometimes raised
-  // through a store's normal flow, so it carries that store's prefix (e.g.
-  // SB-LDHC-…) while being stock. The flag is what dashboards filter on.
-  if (order.is_stock_order === true) return "stock";
+  // The stock FLAG outranks the prefix, but WHICH stock is a prefix question.
+  // Internal stock is sometimes raised through a store's normal flow, so it
+  // carries that store's prefix (e.g. SB-LDHC-…) while being stock: such an
+  // order is RETAIL stock, and must never fall through to the store branches
+  // below and report as store revenue. See db/…/v2/61 header.
+  if (order.is_stock_order === true) {
+    const stockKey = CHANNEL_BY_ORDER_PREFIX[getOrderPrefix(order)];
+    return STOCK_CHANNEL_KEYS.includes(stockKey) ? stockKey : "retail_stock";
+  }
 
   const byPrefix = CHANNEL_BY_ORDER_PREFIX[getOrderPrefix(order)];
   if (byPrefix) return byPrefix;
@@ -524,8 +569,22 @@ export function getChannelKeyForDesignation(designation) {
 // Channels a designation owns. Exhibition is its own channel for badges and
 // revenue, but it is not its own production workload — the offline head runs
 // store AND exhibition, so scoping must accept both.
+//
+// STOCK IS SPLIT BY WHO RUNS IT, not by the fact that it's stock:
+//   b2b_stock     → the B2B head, alongside their ordinary B2B orders. It is
+//                   placed by the merchandiser and reviewed on the B2B
+//                   dashboards, so the B2B head is who actually runs it.
+//   retail_stock  → the offline head, as before.
+//   shopify_stock → the offline head. There is no Shopify production head
+//                   designation, and an unowned channel is a queue nobody
+//                   watches. Revisit if that designation is ever created.
+//
+// Every stock key must appear in exactly one bucket here. Drop one and those
+// orders vanish from every head's queue with no error — nothing throws, the
+// list is just quietly shorter.
 const CHANNELS_OWNED_BY_DESIGNATION = {
-  offline: ["offline", "exhibition", "stock"],
+  offline: ["offline", "exhibition", "retail_stock", "shopify_stock"],
+  b2b: ["b2b", "b2b_stock"],
 };
 
 // Filter orders to the channel(s) a designation owns. If the designation isn't

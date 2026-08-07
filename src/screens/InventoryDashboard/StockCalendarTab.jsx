@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { getOrderChannelKey } from "../../utils/barcodeService";
 import "./StockCalendarTab.css";
 
 const MONTHS = [
@@ -36,17 +37,17 @@ export default function StockCalendarTab({ onOpenOrder }) {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      // RETAIL stock only — B2B stock orders carry is_stock_order = true too but
-      // are a B2B-channel concern. Same filter as StockOrdersTab; see the note
-      // there on why `.not(is_b2b, is, true)` and not `.eq(is_b2b, false)`.
+      // RETAIL stock only — B2B and Shopify stock carry is_stock_order = true
+      // too but are their own channels. Same filter as StockOrdersTab; see the
+      // note there on why this is a channel check and no longer an is_b2b one.
       const { data, error } = await fetchAllRows("orders", (q) =>
-        q.select("*").eq("is_stock_order", true).not("is_b2b", "is", true).order("delivery_date", { ascending: true })
+        q.select("*").eq("is_stock_order", true).order("delivery_date", { ascending: true })
       );
       if (error) {
         console.error("Stock calendar fetch error:", error);
         setOrders([]);
       } else {
-        setOrders(data || []);
+        setOrders((data || []).filter((o) => getOrderChannelKey(o) === "retail_stock"));
       }
       setLoading(false);
     })();

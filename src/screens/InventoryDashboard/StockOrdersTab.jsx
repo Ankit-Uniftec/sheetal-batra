@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { getOrderChannelKey } from "../../utils/barcodeService";
 import { usePopup } from "../../components/Popup";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
 import Paginator from "../../components/Paginator";
@@ -93,19 +94,23 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
 
   const fetchStockOrders = async () => {
     setLoading(true);
-    // RETAIL stock only. B2B stock orders (SB-B2BSTOCK-…) also carry
-    // is_stock_order = true but belong to the B2B channel and are managed from
-    // the B2B Merchandiser Dashboard — they must not appear in this retail view.
-    // `.not(is_b2b, is, true)` rather than `.eq(is_b2b, false)` because legacy
-    // rows have is_b2b NULL, which an equality filter would silently drop.
+    // RETAIL stock only. B2B (SB-B2BSTOCK-…) and Shopify (SB-SHOPIFYSTOCK-…)
+    // stock also carry is_stock_order = true but are their own channels, managed
+    // from their own dashboards — they must not appear in this retail view.
+    //
+    // The flag narrows server-side; the CHANNEL decides which flavour. This used
+    // to be `.not(is_b2b, is, true)`, a flag workaround from when all stock
+    // shared one 'stock' key — it needed that awkward form because legacy rows
+    // have is_b2b NULL, which `.eq(is_b2b, false)` silently drops. The channel
+    // split makes the question directly answerable, NULLs and all.
     const { data, error } = await fetchAllRows("orders", (q) =>
-      q.select("*").eq("is_stock_order", true).not("is_b2b", "is", true).order("created_at", { ascending: false })
+      q.select("*").eq("is_stock_order", true).order("created_at", { ascending: false })
     );
     if (error) {
       console.error("Stock order fetch error:", error);
       setOrders([]);
     } else {
-      setOrders(data || []);
+      setOrders((data || []).filter((o) => getOrderChannelKey(o) === "retail_stock"));
     }
     setLoading(false);
   };
