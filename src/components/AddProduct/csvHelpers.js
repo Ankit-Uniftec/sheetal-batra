@@ -24,6 +24,8 @@ export const CSV_COLUMNS = [
   "default_color",
   "store_category",  // "All Stores" (default), "Delhi", or "Ludhiana"
   "has_dupatta",     // "yes"/"no" (blank = no) — generates a separate dupatta barcode
+  "default_dupatta_color", // pre-fills the order form's Dupatta Color; blank falls back to default_color
+  "is_custom_piece", // "yes"/"no" (blank = no) — bespoke / non-standard SKU
   "available_size",  // pipe-separated, e.g. "XS|S|M|L"
   "inventory",       // number or "MTO" (unlimited stock — saves as 9999)
 ];
@@ -42,6 +44,8 @@ export const TEMPLATE_DEMO_ROWS = [
     default_color: "Burnt Orange",
     store_category: "All Stores",
     has_dupatta: "no",
+    default_dupatta_color: "",
+    is_custom_piece: "no",
     available_size: "XS|S|M|L|XL|XXL",
     inventory: "MTO",
   },
@@ -140,7 +144,11 @@ const splitPipes = (s) =>
 // ─── Per-row validation (Normal products only) ────────────────────
 // Returns { ok: true, normalized } or { ok: false, errors: [string, ...] }.
 // `normalized` is a clean object ready to insert.
-export const validateRow = (row, rowIndex) => {
+// `dupattaColorNames` is the canonical list from the `dupatta_colors` table.
+// Pass it so a typo'd colour is rejected at validation instead of silently
+// saving a name that resolves to nothing in the order form's dropdown.
+// Omitted/empty => the name is accepted as-is (no list to check against).
+export const validateRow = (row, rowIndex, dupattaColorNames = []) => {
   const errors = [];
   if (!row.name || !row.name.trim()) {
     errors.push(`Row ${rowIndex}: name is required.`);
@@ -188,6 +196,32 @@ export const validateRow = (row, rowIndex) => {
     errors.push(`Row ${rowIndex}: available_size required (or set inventory to 'MTO').`);
   }
 
+  // Dupatta: colour only means something when has_dupatta is on. Validate the
+  // name against dupatta_colors (case-insensitive, normalized to canonical
+  // casing) so it matches what the order form's dropdown can resolve. Blank
+  // falls back to default_color — the same rule the SQL import used.
+  const hasDupatta = parseBoolCell(row.has_dupatta);
+  const rawDupColor = (row.default_dupatta_color || "").trim();
+  let dupattaColor = null;
+  if (hasDupatta) {
+    if (rawDupColor) {
+      if (dupattaColorNames.length > 0) {
+        const match = dupattaColorNames.find((c) => c.toLowerCase() === rawDupColor.toLowerCase());
+        if (!match) {
+          errors.push(`Row ${rowIndex}: default_dupatta_color '${rawDupColor}' is not a known dupatta colour.`);
+        } else {
+          dupattaColor = match;
+        }
+      } else {
+        dupattaColor = rawDupColor;
+      }
+    } else {
+      dupattaColor = (row.default_color || "").trim() || null;
+    }
+  } else if (rawDupColor) {
+    errors.push(`Row ${rowIndex}: default_dupatta_color is set but has_dupatta is not 'yes'.`);
+  }
+
   if (errors.length > 0) return { ok: false, errors };
 
   return {
@@ -203,7 +237,9 @@ export const validateRow = (row, rowIndex) => {
       default_bottom: (row.default_bottom || "").trim() || null,
       default_color: (row.default_color || "").trim() || null,
       store_category: storeCategory,
-      has_dupatta: parseBoolCell(row.has_dupatta),
+      has_dupatta: hasDupatta,
+      default_dupatta_color: dupattaColor,
+      is_custom_piece: parseBoolCell(row.is_custom_piece),
       available_size: availableSizes.length > 0 ? availableSizes : null,
       inventory,
     },

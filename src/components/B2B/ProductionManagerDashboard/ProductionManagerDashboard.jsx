@@ -33,7 +33,7 @@ import PeriodFilter, { usePeriodFilter, periodLabel } from "../../../components/
 import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfLazy";
-import { PRODUCTION_STAGES, getStageLabel, getStageColor, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_SEGMENTS, getOrderStatusLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../../utils/barcodeService";
+import { PRODUCTION_STAGES, getStageLabel, getStageColor, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_FILTER_SEGMENTS, getOrderStatusLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../../utils/barcodeService";
 import { computeChannelBreakdown, computeStatusStats, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady, isOrderStillRunning } from "../../../utils/productionMetrics";
 import downloadCsv from "../../../utils/downloadCsv";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -154,7 +154,10 @@ const STORE_FILTER_OPTIONS = [
     { value: "Private", label: "Private", color: "#8e24aa", match: (o) => getOrderChannelKey(o) === "private" },
     { value: "Comms", label: "Comms", color: "#1565c0", match: (o) => getOrderChannelKey(o) === "comms" },
     { value: "Exhibition", label: "Exhibition", color: "#6d4c41", match: (o) => getOrderChannelKey(o) === "exhibition" },
-    { value: "Stock", label: "Stock", color: "#546e7a", match: (o) => getOrderChannelKey(o) === "stock" },
+    // Internal stock, one option per flavour — the single 'stock' key is retired.
+    { value: "Retail Stock", label: "Retail Stock", color: "#546e7a", match: (o) => getOrderChannelKey(o) === "retail_stock" },
+    { value: "B2B Stock", label: "B2B Stock", color: "#8d6e63", match: (o) => getOrderChannelKey(o) === "b2b_stock" },
+    { value: "Shopify Stock", label: "Shopify Stock", color: "#5c6bc0", match: (o) => getOrderChannelKey(o) === "shopify_stock" },
 ];
 
 // "Currently running late" — the single source of truth for every delayed
@@ -2455,12 +2458,12 @@ export default function ProductionManagerDashboard() {
                                         />
                                     </div>
                                     {/* The one channel filter for this list (Shopify included).
-                                        CHANNEL_SEGMENTS ends with a bare "Store" fallback used
-                                        only to label orders whose prefix is unknown — it is not a
-                                        real channel, so it is dropped from the picker. */}
+                                        CHANNEL_FILTER_SEGMENTS is CHANNEL_SEGMENTS minus the bare
+                                        "Store" fallback — see barcodeService for why a picker
+                                        hides it and a breakdown still counts it. */}
                                     <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="pm-filter-select" style={{ flex: "0 0 auto" }}>
                                         <option value="all">All Channels</option>
-                                        {CHANNEL_SEGMENTS.filter(seg => seg.label !== "Store").map(seg => (
+                                        {CHANNEL_FILTER_SEGMENTS.map(seg => (
                                             <option key={seg.label} value={seg.label}>{seg.label}</option>
                                         ))}
                                     </select>
@@ -2741,7 +2744,7 @@ export default function ProductionManagerDashboard() {
                                         onChange={(e) => setProdChannel(e.target.value)}
                                     >
                                         <option value="all">All Channels</option>
-                                        {CHANNEL_SEGMENTS.map(seg => (
+                                        {CHANNEL_FILTER_SEGMENTS.map(seg => (
                                             <option key={seg.label} value={seg.label}>{seg.label}</option>
                                         ))}
                                     </select>
@@ -3058,7 +3061,7 @@ export default function ProductionManagerDashboard() {
                                             onChange={(e) => setDispatchChannel(e.target.value)}
                                         >
                                             <option value="all">All Channels</option>
-                                            {CHANNEL_SEGMENTS.map(seg => (
+                                            {CHANNEL_FILTER_SEGMENTS.map(seg => (
                                                 <option key={seg.label} value={seg.label}>{seg.label}</option>
                                             ))}
                                         </select>
@@ -3586,7 +3589,7 @@ export default function ProductionManagerDashboard() {
                                             onChange={(e) => setDrChannel(e.target.value)}
                                         >
                                             <option value="all">All Channels</option>
-                                            {CHANNEL_SEGMENTS.map(seg => (
+                                            {CHANNEL_FILTER_SEGMENTS.map(seg => (
                                                 <option key={seg.label} value={seg.label}>{seg.label}</option>
                                             ))}
                                         </select>
@@ -3990,7 +3993,7 @@ export default function ProductionManagerDashboard() {
                                         <div className="pm-cal-scope">
                                             <select className="pm-dispatch-channel" value={calChannel} onChange={(e) => setCalChannel(e.target.value)}>
                                                 <option value="all">All Channels</option>
-                                                {CHANNEL_SEGMENTS.map(seg => (
+                                                {CHANNEL_FILTER_SEGMENTS.map(seg => (
                                                     <option key={seg.label} value={seg.label}>{seg.label}</option>
                                                 ))}
                                             </select>

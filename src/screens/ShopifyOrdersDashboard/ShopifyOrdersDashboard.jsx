@@ -253,6 +253,58 @@ const codTags = (order) =>
 // Does this order carry any COD tag at all? Used by the filter.
 const isCodTagged = (order) => codTags(order).length > 0;
 
+// Has a COD order been CONFIRMED? GoKwik adds "COD Confirmed" alongside the
+// plain "COD" tag once the customer verifies the order by call or WhatsApp.
+// Matched on the whole tag so a bare "COD" can never satisfy it.
+const isCodConfirmed = (order) =>
+  codTags(order).some((t) => /^cod\s+confirmed\b/i.test(String(t).trim()));
+
+// ─── Payment hold: is this order cleared to be worked on? ──────────────────
+//
+// The Orders tab is the WORK QUEUE — everything on it is cleared to cut. An
+// order whose money is not settled sits in Needs Review until it is, because
+// the one irreversible thing here is cutting cloth for an order that is never
+// paid for.
+//
+// Two ways to clear, matching how the business actually takes money:
+//   • Prepaid  — Shopify says PAID.
+//   • COD      — Shopify says PENDING and stays that way (it collects on
+//                delivery, so it never flips to PAID). The confirmation call is
+//                what makes it real, so "COD Confirmed" clears it.
+//
+// Anything else — PENDING with no confirmation, a bare "COD" tag still awaiting
+// the call, AUTHORIZED, PARTIALLY_PAID — is held.
+//
+// REFUNDED / VOIDED / CANCELLED are deliberately NOT holds. Those are
+// end-states, not "waiting for money", and an order cancelled mid-production is
+// its own operational decision — sweeping it in here would misrepresent it as a
+// payment problem.
+//
+// Reads ONLY Shopify's own words. Nothing here uses the mapper's isCod
+// derivation, which treats every PENDING order as COD and over-matches.
+const PAYMENT_END_STATES = new Set([
+  "REFUNDED", "VOIDED", "PARTIALLY_REFUNDED", "CANCELLED",
+]);
+
+const isPaymentHeld = (order) => {
+  const s = String(order?.shopify_financial_status || "").toUpperCase();
+  // No status at all: nothing to judge. Don't invent a hold — a missing value
+  // is a sync gap, not evidence the order is unpaid.
+  if (!s) return false;
+  if (s === "PAID" || PAYMENT_END_STATES.has(s)) return false;
+  // Everything below is money-not-settled. A confirmed COD is the one case the
+  // business treats as good to work on despite that.
+  return !isCodConfirmed(order);
+};
+
+// The single routing rule for the two order tabs. An order is held back from
+// the work queue either because it could not be MAPPED (mapper blockers) or
+// because its PAYMENT is unsettled. Both land in Needs Review; the card says
+// which applies. Every count, filter and tab split reads this one predicate, so
+// they can never disagree.
+const needsReviewOrder = (order) =>
+  order?.web_order_status === "needs_review" || isPaymentHeld(order);
+
 const COD_FILTER_OPTIONS = [
   { value: "all", label: "All orders" },
   { value: "cod", label: "COD only" },
@@ -264,17 +316,40 @@ const COD_FILTER_OPTIONS = [
 // blocked and who fixes it in full prose; nobody reads a wall of text on a
 // production screen. The mapper's own `detail` already names the offending
 // product, so the label only has to say what is missing.
+// Informational, not a blocker: every cleanly-mapped order carries it. Shown
+// inside the modal as provenance for the delivery date, never as a problem.
+const DERIVED_CODE = "DELIVERY_DATE_DERIVED";
+
 const ISSUE_LABELS = {
   DUPATTA_UNKNOWN: "Dupatta unknown — needs custom.has_dupatta in Shopify",
   PRODUCT_STYLE_MISSING: "Garment breakdown missing — needs custom.top_style / bottom_style",
   DELIVERY_DATE_UNRESOLVED: "No delivery date — needs custom.shipping_timeline",
   NO_LINE_ITEMS: "No products on the order",
   CUSTOMER_UNRESOLVED: "No contact details on the order",
+  PAYMENT_NOT_CONFIRMED: "Payment not confirmed — do not start production",
 };
 
-// Informational, not a blocker: every cleanly-mapped order carries it. Shown
-// inside the modal as provenance for the delivery date, never as a problem.
-const DERIVED_CODE = "DELIVERY_DATE_DERIVED";
+// A SYNTHETIC issue code. Every other code above is a mapper blocker stored on
+// the row in web_order_issues; this one is derived live from Shopify's payment
+// state, because payment changes after ingest and must never be frozen into the
+// row. Expressing it as an issue lets the hold flow through the existing list,
+// filter dropdown and export instead of needing a parallel path of its own.
+const PAYMENT_CODE = "PAYMENT_NOT_CONFIRMED";
+
+// The full issue list for an order: the stored mapper blockers PLUS the live
+// payment hold. One function so the inline list, the filter dropdown and the
+// CSV export all show the same reasons.
+const reviewIssues = (order) => {
+  const stored = (order?.web_order_issues || []).filter((i) => i.code !== DERIVED_CODE);
+  if (!isPaymentHeld(order)) return stored;
+  const state = String(order?.shopify_financial_status || "").toUpperCase();
+  // Say what Shopify actually reports, so the reason is checkable against
+  // Shopify admin rather than being a bare "unpaid".
+  const detail = isCodTagged(order)
+    ? `COD awaiting confirmation (Shopify: ${state})`
+    : `Shopify payment status: ${state}`;
+  return [{ code: PAYMENT_CODE, detail }, ...stored];
+};
 
 export default function ShopifyOrdersDashboard() {
   const navigate = useNavigate();
@@ -631,8 +706,7 @@ export default function ShopifyOrdersDashboard() {
         if (withIssues) {
           return [
             ...base,
-            (o.web_order_issues || [])
-              .filter((i) => i.code !== DERIVED_CODE)
+            reviewIssues(o)
               .map((i) => `${ISSUE_LABELS[i.code] || i.code}${i.detail ? `: ${i.detail}` : ""}`)
               .join(" | "),
           ];
@@ -655,12 +729,15 @@ export default function ShopifyOrdersDashboard() {
   };
 
   // ── Derived data
+  // The work queue and the review queue are strict complements of ONE
+  // predicate, so an order can never appear on both tabs or fall through the
+  // gap between them.
   const readyOrders = useMemo(
-    () => orders.filter((o) => o.web_order_status !== "needs_review"),
+    () => orders.filter((o) => !needsReviewOrder(o)),
     [orders]
   );
   const needsReview = useMemo(
-    () => orders.filter((o) => o.web_order_status === "needs_review"),
+    () => orders.filter((o) => needsReviewOrder(o)),
     [orders]
   );
 
@@ -814,21 +891,28 @@ export default function ShopifyOrdersDashboard() {
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
 
-  // Payment states actually PRESENT in the data, so the dropdown never offers a
+  // Payment states actually PRESENT on this tab, so the dropdown never offers a
   // filter that returns nothing — same rule as issueCodeOptions below. Built off
-  // every order (not the filtered set) so ticking one option doesn't make the
-  // others vanish from the list.
+  // every order ON THE TAB (not the filtered set) so ticking one option doesn't
+  // make the others vanish from the list.
+  //
+  // Scoped to readyOrders, not all orders: unsettled states (PENDING, AUTHORIZED)
+  // now live on Needs Review, so offering them here would be a filter that can
+  // only ever return nothing.
   const paymentOptions = useMemo(() => {
     const states = new Set();
-    orders.forEach((o) => {
+    readyOrders.forEach((o) => {
       const s = String(o.shopify_financial_status || "").toUpperCase();
       if (s) states.add(s);
     });
     return [...states].sort();
-  }, [orders]);
+  }, [readyOrders]);
 
+  // Filters run over readyOrders, NOT the full set: an order held back from the
+  // work queue (unmapped, or payment unsettled) must not reappear here just
+  // because it matches a search or a stage tick.
   const filteredOrders = useMemo(() => {
-    const rows = orders.filter((o) => {
+    const rows = readyOrders.filter((o) => {
       if (!matchesSearch(o, searchField, search)) return false;
       if (!inOrdersPeriod(o.created_at)) return false;
       // Payment filters run BEFORE the stage early-return below — putting them
@@ -850,9 +934,10 @@ export default function ShopifyOrdersDashboard() {
       if (!keys || keys.size === 0) return stageFilter.includes("order_received");
       return stageFilter.some((k) => keys.has(k));
     });
-    // Copy before sorting — .sort mutates, and `orders` is state.
+    // `rows` is already a fresh array from .filter, so sorting it in place is
+    // safe — it never touches the `orders` state array.
     return rows.sort(SORTERS[sortBy] || SORTERS.newest);
-  }, [orders, search, searchField, matchesSearch, inOrdersPeriod, stageFilter,
+  }, [readyOrders, search, searchField, matchesSearch, inOrdersPeriod, stageFilter,
       stageKeysByOrder, sortBy, paymentFilter, codFilter]);
 
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
@@ -873,9 +958,7 @@ export default function ShopifyOrdersDashboard() {
   const issueCodeOptions = useMemo(() => {
     const codes = new Set();
     needsReview.forEach((o) =>
-      (o.web_order_issues || []).forEach((i) => {
-        if (i.code !== DERIVED_CODE) codes.add(i.code);
-      })
+      reviewIssues(o).forEach((i) => codes.add(i.code))
     );
     return [...codes].sort();
   }, [needsReview]);
@@ -884,7 +967,7 @@ export default function ShopifyOrdersDashboard() {
     () => needsReview.filter((o) => {
       if (!matchesSearch(o, reviewSearchField, reviewSearch)) return false;
       if (issueFilter === "all") return true;
-      return (o.web_order_issues || []).some((i) => i.code === issueFilter);
+      return reviewIssues(o).some((i) => i.code === issueFilter);
     }),
     [needsReview, reviewSearch, reviewSearchField, issueFilter, matchesSearch]
   );
@@ -929,7 +1012,13 @@ export default function ShopifyOrdersDashboard() {
   const renderCard = (order, context = "orders") => {
     const item = order.items?.[0] || {};
     const extra = (order.items?.length || 0) - 1;
-    const flagged = order.web_order_status === "needs_review";
+    // Two distinct reasons an order is flagged, kept apart on the card: the
+    // mapper could not map it, or its payment is not settled. Same tab, but a
+    // warehouse manager needs to know which — one is a data fix, the other is
+    // a wait.
+    const mappingFlagged = order.web_order_status === "needs_review";
+    const paymentFlagged = isPaymentHeld(order);
+    const flagged = mappingFlagged || paymentFlagged;
     const components = componentsByOrder[order.id] || [];
     const imgSrc = item.image_url || "";
     const onReviewTab = context === "needs-review";
@@ -989,7 +1078,10 @@ export default function ShopifyOrdersDashboard() {
             {codTags(order).map((tag) => (
               <Badge key={tag} variant="info">{tag}</Badge>
             ))}
-            {flagged && <Badge variant="warning">Needs Review</Badge>}
+            {paymentFlagged && (
+              <Badge variant="warning">Awaiting Payment</Badge>
+            )}
+            {mappingFlagged && <Badge variant="warning">Needs Review</Badge>}
             <button
               className="sho-ghost-btn"
               onClick={(e) => handleWarehousePdf(e, order)}
@@ -1138,14 +1230,12 @@ export default function ShopifyOrdersDashboard() {
             so it should be readable without another click. */}
         {onReviewTab && (
           <ul className="sho-issues">
-            {(order.web_order_issues || [])
-              .filter((i) => i.code !== DERIVED_CODE)
-              .map((i, n) => (
-                <li key={n}>
-                  <strong>{ISSUE_LABELS[i.code] || i.code}</strong>
-                  {i.detail ? <span className="sho-issue-detail"> — {i.detail}</span> : null}
-                </li>
-              ))}
+            {reviewIssues(order).map((i, n) => (
+              <li key={n}>
+                <strong>{ISSUE_LABELS[i.code] || i.code}</strong>
+                {i.detail ? <span className="sho-issue-detail"> — {i.detail}</span> : null}
+              </li>
+            ))}
           </ul>
         )}
       </div>
@@ -1498,7 +1588,7 @@ export default function ShopifyOrdersDashboard() {
                   <h2 className="sho-section-title">Needs Review</h2>
                   {needsReview.length === 0 ? (
                     <div className="sho-empty">
-                      Nothing needs review — every order mapped cleanly.
+                      Nothing needs review — every order mapped cleanly and its payment is confirmed.
                     </div>
                   ) : (
                     <>

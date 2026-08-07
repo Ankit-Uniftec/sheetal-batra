@@ -53,6 +53,11 @@ import {
 //   { mode: "sync-now",  sinceDays?, first? }   dashboard "Sync now" button
 //   { mode: "order",     id: "gid://..." }      re-ingest/refresh one order
 //   { mode: "refresh",   sinceMinutes?, first? } catch-up sweep on updated_at
+//   { mode: "refresh-raw", limit?, dryRun? }    re-fetch orders whose STORED
+//                                               snapshot predates a query
+//                                               change, so remap-items has the
+//                                               new fields to replay. Driven
+//                                               off our table, not a window.
 //   { mode: "remap-items" }                     re-run the mapper over stored
 //                                               shopify_raw (no Shopify call)
 //   { mode: "backfill-components" }             mint components for older rows
@@ -148,6 +153,12 @@ const ORDER_FIELDS = `
             handle
             title
             featuredImage { url }
+            # Product TAGS. The catalogue team marks dupatta inclusion here
+            # ("WITH DUPATTA" / "WITHOUT DUPATTA") on products that have no
+            # With/Without-Dupatta Style option — the Set products that would
+            # otherwise quarantine as DUPATTA_UNKNOWN. Read as a fallback in
+            # resolveDupatta; see the resolution order there.
+            tags
             topStyle:     metafield(namespace: "custom", key: "top_style")         { value }
             bottomStyle:  metafield(namespace: "custom", key: "bottom_style")      { value }
             shipTimeline: metafield(namespace: "custom", key: "shipping_timeline") { value }
@@ -330,6 +341,36 @@ async function resolveProfileId(
 // ─── Refresh an order that already exists ───────────────────
 
 /**
+ * Is the STORED snapshot missing fields the query now asks for?
+ *
+ * `shopify_raw` is what `remap-items` replays, so a snapshot captured before a
+ * query change cannot answer questions the mapper has since learned to ask. The
+ * product-tag dupatta signal is exactly that case: every order ingested before
+ * `tags` was added to ORDER_FIELDS stores product nodes with no `tags` key, and
+ * re-mapping them just re-quarantines them as DUPATTA_UNKNOWN.
+ *
+ * Detected STRUCTURALLY — "does the product node have a tags key at all" — not
+ * by comparing values. An absent key means the field was never fetched; an
+ * empty array means Shopify was asked and said "no tags". Those are different,
+ * and only the first is staleness.
+ *
+ * Deliberately NOT a deep diff of the whole blob. Shopify re-serialises nodes
+ * with incidental churn, so a blanket comparison would rewrite every order on
+ * every sweep — the write amplification the change-detection exists to prevent.
+ */
+function rawIsStale(storedRaw: any): boolean {
+  const edges = storedRaw?.lineItems?.edges;
+  if (!Array.isArray(edges) || edges.length === 0) return false;
+  return edges.some((e: any) => {
+    const product = e?.node?.variant?.product;
+    // No product node at all (deleted product) tells us nothing about the
+    // snapshot's age — don't call that stale or it never stops refreshing.
+    if (!product) return false;
+    return !("tags" in product);
+  });
+}
+
+/**
  * Payment state moves AFTER the order reaches us. A COD order becomes
  * "COD Confirmed" when GoKwik confirms it; a PENDING order becomes PAID when
  * the customer actually pays. Without this, the dashboard badge means "was
@@ -354,7 +395,13 @@ async function resolveProfileId(
  * log and churn the table for nothing.
  */
 async function refreshExistingOrder(
-  existing: { id: string; order_no?: string; shopify_financial_status?: string | null; shopify_tags?: string[] | null },
+  existing: {
+    id: string;
+    order_no?: string;
+    shopify_financial_status?: string | null;
+    shopify_tags?: string[] | null;
+    shopify_raw?: any;
+  },
   node: any,
   gid: string,
   colorMap?: Map<string, string>,
@@ -387,6 +434,12 @@ async function refreshExistingOrder(
     nextSorted.length === prevSorted.length &&
     nextSorted.every((t, i) => t === prevSorted[i]);
   if (!sameTags) changed.push("shopify_tags");
+
+  // A snapshot that predates a query change must be rewritten even when the
+  // payment state is identical. Without this the fresh node is fetched, found
+  // "unchanged", and thrown away — leaving remap-items replaying a blob that
+  // can never answer the new question.
+  if (rawIsStale(existing.shopify_raw)) changed.push("shopify_raw");
 
   if (changed.length === 0) return { ...base, outcome: "already_exists" };
 
@@ -439,11 +492,12 @@ async function ingestOrder(
   // this check would burn a number on every duplicate webhook delivery,
   // leaving gaps that read as deleted orders in an audit.
   //
-  // The payment columns come back too so refreshExistingOrder can diff without
-  // a second round trip.
+  // The payment columns and the stored raw come back too so
+  // refreshExistingOrder can diff both payment state and snapshot staleness
+  // without a second round trip.
   const { data: existing } = await supabase
     .from("orders")
-    .select("id, order_no, shopify_financial_status, shopify_tags")
+    .select("id, order_no, shopify_financial_status, shopify_tags, shopify_raw")
     .eq("shopify_order_id", gid)
     .maybeSingle();
   if (existing?.id) {
@@ -517,7 +571,7 @@ async function ingestOrder(
     if ((insertErr as any).code === "23505") {
       const { data: winner } = await supabase
         .from("orders")
-        .select("id, order_no, shopify_financial_status, shopify_tags")
+        .select("id, order_no, shopify_financial_status, shopify_tags, shopify_raw")
         .eq("shopify_order_id", gid)
         .maybeSingle();
       // Refresh here too, for the same reason as the pre-check above: the
@@ -562,33 +616,48 @@ async function ingestOrder(
  * the activate_components RPC, exactly like every other channel.
  */
 async function ensureComponents(order: any): Promise<number> {
-  // Count rather than limit(1): the caller reports this number, and a
-  // truncated "1" for an already-minted order reads as though components were
-  // lost. `head: true` fetches no rows.
-  const { count, error: checkErr } = await supabase
+  // Fetch the BARCODES that already exist, not just a count.
+  //
+  // This used to bail whenever the order had any components at all, which made
+  // it all-or-nothing: an order that gained a line item after ingestion (a
+  // Shopify-side edit, or a refresh that captured a second variant the original
+  // ingest missed) kept the barcodes for its ORIGINAL items and never got any
+  // for the new one. Seen on a real order: two sizes of the same outfit, 4
+  // pieces expected, 2 minted, and no error anywhere.
+  //
+  // Now it mints only what is MISSING, keyed on the barcode — which is already
+  // the unique physical identity of a piece — so it stays idempotent for the
+  // common case (nothing missing, nothing written) while actually closing a gap
+  // when there is one. It never deletes: a barcode that no longer matches the
+  // items may already be printed and on a garment, so removing it is a human
+  // decision, not a sync one.
+  const { data: existing, error: checkErr } = await supabase
     .from("order_components")
-    .select("id", { count: "exact", head: true })
+    .select("barcode")
     .eq("order_id", order.id);
   if (checkErr) {
     console.error("ensureComponents: check failed", checkErr.message);
     return 0;
   }
-  if ((count || 0) > 0) return count as number;
 
+  const have = new Set((existing || []).map((c: any) => c.barcode));
   const components = buildOrderComponents(order);
-  if (components.length === 0) return 0;
+  if (components.length === 0) return have.size;
+
+  const missing = components.filter((c: any) => !have.has(c.barcode));
+  if (missing.length === 0) return have.size;
 
   const { data, error } = await supabase
     .from("order_components")
-    .insert(components)
+    .insert(missing)
     .select("id");
   if (error) {
     // Non-fatal: the order itself is already saved and correct. Losing the
     // components is recoverable (re-run the sync); losing the order is not.
     console.error(`ensureComponents: insert failed for ${order.order_no}`, error.message);
-    return 0;
+    return have.size;
   }
-  return data?.length || 0;
+  return have.size + (data?.length || 0);
 }
 
 // ─── Webhook verification ───────────────────────────────────
@@ -701,7 +770,8 @@ serve(async (req) => {
     // would quietly write live orders — which is exactly what a caller
     // experimenting with an unknown mode does not expect.
     const KNOWN_MODES = [
-      "sync-now", "order", "reconcile", "refresh", "remap-items", "backfill-components",
+      "sync-now", "order", "reconcile", "refresh", "refresh-raw", "remap-items",
+      "backfill-components",
     ];
     if (!KNOWN_MODES.includes(mode)) {
       return json({
@@ -744,6 +814,105 @@ serve(async (req) => {
     // API and cannot change money, dates or identity — only the derived item
     // fields. For rolling out a mapper fix (e.g. colours as {hex,name}) without
     // deleting and re-ingesting.
+    // ── refresh-raw: re-fetch orders whose STORED SNAPSHOT predates a query
+    // change, one Shopify call each, driven off OUR table rather than a window.
+    //
+    // Why this exists rather than widening `refresh`: that sweep pages Shopify
+    // by updated_at, capped at 100 orders with no cursor, and most of that page
+    // is orders we never ingested. Backfilling ~125 stale snapshots through it
+    // would need pagination on the shared path that also carries reconcile —
+    // the lost-order safety net — for a one-off catch-up. This mode instead
+    // SELECTS exactly the orders that need it, so it cannot miss one and cannot
+    // touch anything else.
+    //
+    // Refresh-only by construction: every row comes from our own table, so
+    // there is nothing here to create. It writes only what refreshExistingOrder
+    // writes (payment state + the snapshot) — never items, order_no or dates.
+    //
+    // Run `remap-items` AFTERWARDS to actually re-derive items/issues from the
+    // now-complete snapshots; this mode only makes that replay possible.
+    if (mode === "refresh-raw") {
+      // TWO different bounds, and conflating them is a bug:
+      //
+      //   scan  — how many rows to READ. Must cover the whole table, or older
+      //           stale orders are never even looked at. Cheap: one query.
+      //   batch — how many to REFRESH. Each costs a sequential Shopify call, so
+      //           this is a TIME budget; 200 exceeded the edge runtime's limit
+      //           on a real backlog and the isolate was killed mid-flight.
+      //
+      // Capping the SELECT at the batch size would re-scan the same newest N
+      // rows every run and never drain the tail.
+      const batchSize = Math.min(Number(body?.limit) || 40, 200);
+      const scanSize = Math.min(Number(body?.scan) || 1000, 5000);
+      const { data: rows, error } = await supabase
+        .from("orders")
+        .select("id, order_no, shopify_order_id, shopify_financial_status, shopify_tags, shopify_raw")
+        .or(ORDER_NO_PREFIX_FILTER)
+        .not("shopify_order_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(scanSize);
+      if (error) throw error;
+
+      // Only rows that HAVE a snapshot can have a stale one. A NULL shopify_raw
+      // is a different problem (never ingested with a raw node) and is not
+      // something re-fetching here would fix.
+      const stale = (rows || []).filter(
+        (o: any) => o?.shopify_raw != null && rawIsStale(o.shopify_raw),
+      );
+      // A dry run must not call Shopify at all. Fetching first and THEN checking
+      // dryRun meant a 200-order backlog made 200 sequential API calls just to
+      // report a count — long enough for the edge runtime to kill the isolate,
+      // which surfaces as a 500 with NO log line because the catch never runs.
+      if (body?.dryRun) {
+        return json({
+          success: true,
+          mode,
+          dryRun: true,
+          scanned: (rows || []).length,
+          stale: stale.length,
+          would_refresh: stale.map((o: any) => o.order_no),
+        });
+      }
+
+      // Bound the WORK, not just the scan: `limit` caps rows read, but the
+      // sequential Shopify calls are what cost time. Process at most `limit`
+      // of them and report the remainder so the caller knows to re-run.
+      const batch = stale.slice(0, batchSize);
+      const remaining = stale.length - batch.length;
+
+      const out = [];
+      for (const o of batch) {
+        const gid = String(o.shopify_order_id);
+        try {
+          const node = await fetchOrderById(gid);
+          if (!node) {
+            out.push({ order_no: o.order_no, outcome: "failed", reason: "NOT_FOUND_IN_SHOPIFY" });
+            continue;
+          }
+          const r = await refreshExistingOrder(o as any, node, gid, colorMap);
+          out.push({ order_no: o.order_no, outcome: (r as any).outcome, changed: (r as any).changed });
+        } catch (e) {
+          out.push({ order_no: o.order_no, outcome: "failed", detail: (e as Error).message });
+        }
+      }
+
+      const summary = out.reduce((acc: Record<string, number>, r: any) => {
+        acc[r.outcome] = (acc[r.outcome] || 0) + 1;
+        return acc;
+      }, {});
+      return json({
+        success: true,
+        mode,
+        scanned: (rows || []).length,
+        stale: stale.length,
+        processed: batch.length,
+        // Non-zero means there is more to do: run the same call again.
+        remaining,
+        summary,
+        results: out,
+      });
+    }
+
     if (mode === "remap-items") {
       const { data: rows, error } = await supabase
         .from("orders")
@@ -904,7 +1073,14 @@ serve(async (req) => {
 
     return json({ success: true, mode, fetched: nodes.length, summary, results });
   } catch (error) {
-    return json({ success: false, error: (error as Error).message }, 500);
+    // LOG the stack, not just the message. Returning the message to the caller
+    // without printing anything left a 500 with no corresponding log line —
+    // undiagnosable from the dashboard, which is where these are read.
+    console.error("shopify-order-sync failed:", (error as Error)?.stack || error);
+    return json({
+      success: false,
+      error: (error as Error)?.message || String(error),
+    }, 500);
   }
 });
 
