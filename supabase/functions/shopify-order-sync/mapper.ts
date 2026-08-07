@@ -108,16 +108,75 @@ const resolveSizeLabel = (variant: any): string => {
  *
  *   1. The variant's Style option. AUTHORITATIVE: it is what the customer
  *      actually chose at checkout. 142 of 250 live products have one.
- *   2. The product's `custom.has_dupatta` metafield, for the 108 products with
- *      no Style option (almost all "Set" products — Lehenga Set, Anarkali Set —
- *      where the dupatta is always included so no choice was ever offered).
- *   3. Neither → we do not know. The caller quarantines (DUPATTA_UNKNOWN).
+ *   2. The product's TAGS — "WITH DUPATTA", which the catalogue team sets on
+ *      the products that include one. Below the Style option, which is the
+ *      customer's own checkout choice and outranks anything on the product.
+ *   3. Neither → NO dupatta. Per the catalogue team's rule, they tag the
+ *      products that have one, so an untagged product does not. Absence is an
+ *      answer, not a gap.
+ *
+ * `custom.has_dupatta` is deliberately NOT a source: the rule is tag and
+ * variant only.
+ *
+ * ⚠ Accepted trade-off: an untagged product that DOES include a dupatta ships
+ * without one, silently — no barcode, no flag, the error surfaces at the
+ * customer. The catalogue team owns tagging and has accepted this.
  *
  * NOTHING is inferred from the product NAME. A name is marketing copy: it is
  * re-worded for SEO, carries live misspellings ("Dupataa") and synonyms
  * ("Odhni"), and any such drift would silently drop a barcode with no error.
  * Production data must come from a field, never from prose.
  */
+/**
+ * Dupatta inclusion from the product's TAGS, or null when the tags say nothing.
+ *
+ * The catalogue team tags products "WITH DUPATTA" / "WITHOUT DUPATTA" (seen in
+ * Shopify admin on Set products, which have only Color and Size options and so
+ * carry no Style choice to read). This is the same kind of signal as the
+ * "COD" / "COD Confirmed" order tags: a curated field, not prose.
+ *
+ * Tri-state on purpose — true / false / null. A product with no dupatta tag at
+ * all must fall through to the next source, NOT default to false: silently
+ * answering "no dupatta" would drop a real piece from production with no error.
+ *
+ * Case-insensitive and whitespace-tolerant (live tags are "WITH DUPATTA" but a
+ * hand-typed "With dupatta " must work too), and tolerant of the "Dupataa"
+ * misspelling already documented in the Style values.
+ *
+ * WITHOUT is checked FIRST, for the reason spelled out in resolveDupatta:
+ * "without".startsWith("with") is true, so a naive with-check marks every
+ * Without-Dupatta product as having one and mints a phantom DUP barcode that
+ * blocks packaging.
+ *
+ * Only tags that are ABOUT a dupatta are considered. A marketing tag that
+ * merely contains the word (e.g. "Dupatta Sale") is ignored rather than being
+ * read as an inclusion claim — the same anchoring discipline as COD_TAG_RE on
+ * the dashboard.
+ */
+const DUPATTA_TAG_RE = /^(with|without)\s+dupat[a-z]*$/i;
+
+export function dupattaFromTags(product: any): boolean | null {
+  const tags: string[] = Array.isArray(product?.tags) ? product.tags : [];
+  let sawWith = false;
+  let sawWithout = false;
+
+  for (const raw of tags) {
+    const t = clean(raw).replace(/\s+/g, " ");
+    const m = t.match(DUPATTA_TAG_RE);
+    if (!m) continue;
+    if (/without/i.test(m[1])) sawWithout = true;
+    else sawWith = true;
+  }
+
+  // Contradictory tagging on one product. Return null so the line quarantines
+  // for a human instead of us picking a side — exactly the DUPATTA_UNKNOWN
+  // path, which is what "we do not know" already means here.
+  if (sawWith && sawWithout) return null;
+  if (sawWith) return true;
+  if (sawWithout) return false;
+  return null;
+}
+
 const resolveDupatta = (variant: any, product: any): boolean => {
   const style = opt(variant, "Style").toLowerCase();
 
@@ -131,28 +190,77 @@ const resolveDupatta = (variant: any, product: any): boolean => {
     return /\bwith\b/.test(style);
   }
 
-  // 2. Product-level metafield. Shopify returns metafield values as strings,
-  //    so a boolean metafield arrives as "true"/"false".
-  return isTruthyMetafield(mf(product, "hasDupatta"));
+  // 2. Product TAGS ("WITH DUPATTA" / "WITHOUT DUPATTA").
+  const tagged = dupattaFromTags(product);
+  if (tagged !== null) return tagged;
+
+  // 3. Neither said anything → NO dupatta.
+  //
+  // The catalogue team's rule: they tag WITH DUPATTA on the products that have
+  // one, so an untagged product is a product without one. Absence of a tag is
+  // an answer here, not a gap — which is why nothing quarantines any more.
+  //
+  // The `custom.has_dupatta` metafield is deliberately NOT consulted: the rule
+  // is tag-and-variant only. It stays in ORDER_FIELDS (harmless, and it costs a
+  // query change to bring back) but no longer influences production.
+  return false;
 };
 
-/** Shopify metafield values are strings — "true"/"1"/"yes" all mean true. */
-const isTruthyMetafield = (v: string): boolean =>
-  ["true", "1", "yes", "y"].includes(clean(v).toLowerCase());
-
 /**
- * True when nothing tells us whether this line includes a dupatta: no dupatta
- * Style option AND no `custom.has_dupatta` metafield.
+ * True when nothing tells us whether this line includes a dupatta.
  *
- * Assuming "no" would lose a real piece from production; assuming "yes" would
- * mint a phantom component that blocks packaging. So the order is flagged for
- * a human instead. Populating `custom.has_dupatta` on the ~108 products that
- * need it retires this path with no code change.
+ * DELIBERATELY NARROW, per the catalogue team's stated rule: the only signals
+ * are the variant's Style option and the product's WITH/WITHOUT DUPATTA tag.
+ * A product carrying NEITHER is taken to have NO dupatta — absence of the tag
+ * IS the answer, not a missing one.
+ *
+ * So this now returns true only when a line has no product node at all (a
+ * manual/custom line item typed into Shopify, where there is nothing to read a
+ * tag from). Everything with a real product resolves.
+ *
+ * ⚠ The trade-off this accepts, recorded because it is invisible at runtime:
+ * an untagged product that DOES include a dupatta ships without one. The
+ * dupatta gets no barcode, is never made, and nothing flags it — the error
+ * surfaces at the customer, not on the floor. The catalogue team owns tagging
+ * WITH DUPATTA and has accepted that consequence; this code no longer
+ * second-guesses an untagged product.
+ *
+ * MUST stay in lockstep with resolveDupatta: if this says "known" the resolver
+ * has to actually decide, or a line would mint no dupatta while claiming the
+ * answer was known.
  */
 export function isDupattaUnknown(variant: any, product: any): boolean {
-  const style = opt(variant, "Style").toLowerCase();
-  if (style && /dupat/.test(style)) return false;        // explicit choice exists
-  return clean(mf(product, "hasDupatta")) === "";        // no metafield either
+  // No product at all — a manual line item. Nothing to tag, nothing to read.
+  return !product;
+}
+
+/**
+ * Is this product an ACCESSORY sold on its own — a dupatta, odhni, scarf —
+ * rather than an outfit?
+ *
+ * Recognised from Shopify's own CATEGORY tags ("Odhanis/Dupattas",
+ * "CATEGORIES_Accessories"), which the catalogue already carries. Same
+ * discipline as the dupatta tag: a curated field, never the product name.
+ *
+ * Note these are a DIFFERENT KIND of tag from WITH DUPATTA. That one is a
+ * claim about an outfit ("this kurta set comes with a dupatta"); this one is a
+ * claim about what the product IS ("this product is a dupatta"). They must not
+ * be conflated — which is why dupattaFromTags deliberately ignores these.
+ *
+ * Deliberately tag-driven and NOT "has no top_style and no bottom_style".
+ * A missing metafield means nobody filled it in; treating that as "accessory"
+ * would silently mint ONE barcode for a real two-piece outfit whose metafields
+ * were never populated. An untagged accessory keeps flagging, which is the
+ * safe direction: a human sees it rather than the floor cutting the wrong thing.
+ *
+ * Anchored on the whole tag, so a marketing tag that merely mentions accessories
+ * cannot promote an outfit into this path.
+ */
+const ACCESSORY_TAG_RE = /^(odhanis\/dupattas|categories_accessories|accessories)$/i;
+
+export function isAccessoryProduct(product: any): boolean {
+  const tags: string[] = Array.isArray(product?.tags) ? product.tags : [];
+  return tags.some((t) => ACCESSORY_TAG_RE.test(clean(t).replace(/\s+/g, " ")));
 }
 
 /** The Heavy/Light qualifier, so the distinction isn't lost. "" when plain. */
@@ -211,13 +319,21 @@ function mapLineItem(
   const top = normaliseStyle(mf(product, "topStyle"));
   const bottom = normaliseStyle(mf(product, "bottomStyle"));
 
+  // An ACCESSORY sold on its own (dupatta / odhni / scarf) legitimately has no
+  // top_style and no bottom_style — it is one piece, not an outfit. Recognised
+  // from Shopify's category tag, so this is a positive signal, not an inference
+  // from the metafields being empty.
+  const isAccessory = isAccessoryProduct(product);
+
   // Both missing → we cannot derive the pieces. The fallback in
   // generateOrderComponents would mint ONE "top" component named after the
   // product, which for a two-piece garment puts it into production with one
   // barcode instead of two — physically unscannable at a station. Flag it
-  // rather than guessing. (~1-2% of the catalogue: standalone accessories
-  // like "Light Silk Organza Dupatta" and "Blush Heirloom Potli".)
-  if (!isPresent(top) && !isPresent(bottom)) {
+  // rather than guessing. (~1-2% of the catalogue.)
+  //
+  // Accessories are exempt: for them "no styles" is the correct shape, and they
+  // mint a single dupatta component below instead.
+  if (!isAccessory && !isPresent(top) && !isPresent(bottom)) {
     blockers.push({
       code: "PRODUCT_STYLE_MISSING",
       detail: `No top_style/bottom_style on "${clean(node?.title)}" (${clean(product?.id)})`,
@@ -230,7 +346,7 @@ function mapLineItem(
   if (isDupattaUnknown(variant, product)) {
     blockers.push({
       code: "DUPATTA_UNKNOWN",
-      detail: `No Style option and no custom.has_dupatta metafield on "${clean(node?.title)}" — confirm before production`,
+      detail: `Line item "${clean(node?.title)}" has no Shopify product (manual/custom line) — no Style option or tag to read a dupatta from; confirm before production`,
     });
   }
 
@@ -238,7 +354,10 @@ function mapLineItem(
   const color = opt(variant, "Color");
   const colorObj = toColorObject(color, hexByColorName);
   const qualifier = dupattaQualifier(variant);
-  const includesDupatta = resolveDupatta(variant, product);
+  // An accessory IS a dupatta/odhni rather than an outfit that includes one, so
+  // it carries the piece by definition — that single DUP component is the whole
+  // order. For everything else the tag/Style resolution decides.
+  const includesDupatta = isAccessory || resolveDupatta(variant, product);
 
   // Per-unit price. discountedUnitPriceSet reflects line discounts; fall back
   // to the original when absent.
@@ -406,14 +525,17 @@ export function buildOrderComponents(order: any) {
   items.forEach((item: any, itemIndex: number) => {
     const suffix = itemIndex > 0 ? String(itemIndex + 1) : "";
 
-    // An item that names no piece at all still needs one row to track, so the
-    // product_name fallback stays for that case — but only then. Minting a
-    // phantom piece would block packaging, which requires every ACTIVE
-    // component to clear Final QC.
-    const namesNoPiece =
-      !isPresent(clean(item?.top)) &&
-      !isPresent(clean(item?.bottom)) &&
-      !item?.includes_dupatta;
+    // No top and no bottom. Two shapes land here:
+    //   • dupatta-only  — an accessory order (Odhanis/Dupattas). The DUP piece
+    //     below IS the order, so no TOP fallback is wanted.
+    //   • names NOTHING — neither piece nor dupatta. That still needs one row
+    //     to track, so the product_name TOP fallback covers it.
+    // Minting a phantom piece would block packaging, which requires every
+    // ACTIVE component to clear Final QC — hence the split.
+    const noTopOrBottom =
+      !isPresent(clean(item?.top)) && !isPresent(clean(item?.bottom));
+    const dupattaOnly = noTopOrBottom && !!item?.includes_dupatta;
+    const namesNoPiece = noTopOrBottom && !item?.includes_dupatta;
 
     if (isPresent(clean(item?.top)) || (namesNoPiece && item?.product_name)) {
       components.push({
@@ -445,7 +567,13 @@ export function buildOrderComponents(order: any) {
         order_no: orderNo,
         barcode: `${storeCode}-${seqPart}-DUP${suffix}`,
         component_type: "dupatta",
-        component_label: "Dupatta",
+        // On an accessory-only order this DUP piece IS the whole order, so the
+        // label carries the product name — a worker holding the tag needs to
+        // know WHICH dupatta. When it accompanies an outfit, the generic label
+        // is right: the top/bottom components already name the garment.
+        component_label: dupattaOnly
+          ? (item?.product_name || "Dupatta")
+          : "Dupatta",
         item_index: itemIndex,
         extra_index: null,
       });
