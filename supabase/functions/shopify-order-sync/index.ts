@@ -616,33 +616,48 @@ async function ingestOrder(
  * the activate_components RPC, exactly like every other channel.
  */
 async function ensureComponents(order: any): Promise<number> {
-  // Count rather than limit(1): the caller reports this number, and a
-  // truncated "1" for an already-minted order reads as though components were
-  // lost. `head: true` fetches no rows.
-  const { count, error: checkErr } = await supabase
+  // Fetch the BARCODES that already exist, not just a count.
+  //
+  // This used to bail whenever the order had any components at all, which made
+  // it all-or-nothing: an order that gained a line item after ingestion (a
+  // Shopify-side edit, or a refresh that captured a second variant the original
+  // ingest missed) kept the barcodes for its ORIGINAL items and never got any
+  // for the new one. Seen on a real order: two sizes of the same outfit, 4
+  // pieces expected, 2 minted, and no error anywhere.
+  //
+  // Now it mints only what is MISSING, keyed on the barcode — which is already
+  // the unique physical identity of a piece — so it stays idempotent for the
+  // common case (nothing missing, nothing written) while actually closing a gap
+  // when there is one. It never deletes: a barcode that no longer matches the
+  // items may already be printed and on a garment, so removing it is a human
+  // decision, not a sync one.
+  const { data: existing, error: checkErr } = await supabase
     .from("order_components")
-    .select("id", { count: "exact", head: true })
+    .select("barcode")
     .eq("order_id", order.id);
   if (checkErr) {
     console.error("ensureComponents: check failed", checkErr.message);
     return 0;
   }
-  if ((count || 0) > 0) return count as number;
 
+  const have = new Set((existing || []).map((c: any) => c.barcode));
   const components = buildOrderComponents(order);
-  if (components.length === 0) return 0;
+  if (components.length === 0) return have.size;
+
+  const missing = components.filter((c: any) => !have.has(c.barcode));
+  if (missing.length === 0) return have.size;
 
   const { data, error } = await supabase
     .from("order_components")
-    .insert(components)
+    .insert(missing)
     .select("id");
   if (error) {
     // Non-fatal: the order itself is already saved and correct. Losing the
     // components is recoverable (re-run the sync); losing the order is not.
     console.error(`ensureComponents: insert failed for ${order.order_no}`, error.message);
-    return 0;
+    return have.size;
   }
-  return data?.length || 0;
+  return have.size + (data?.length || 0);
 }
 
 // ─── Webhook verification ───────────────────────────────────
