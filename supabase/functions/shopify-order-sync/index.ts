@@ -817,28 +817,61 @@ serve(async (req) => {
     // Run `remap-items` AFTERWARDS to actually re-derive items/issues from the
     // now-complete snapshots; this mode only makes that replay possible.
     if (mode === "refresh-raw") {
-      const limit = Math.min(Number(body?.limit) || 200, 500);
+      // TWO different bounds, and conflating them is a bug:
+      //
+      //   scan  — how many rows to READ. Must cover the whole table, or older
+      //           stale orders are never even looked at. Cheap: one query.
+      //   batch — how many to REFRESH. Each costs a sequential Shopify call, so
+      //           this is a TIME budget; 200 exceeded the edge runtime's limit
+      //           on a real backlog and the isolate was killed mid-flight.
+      //
+      // Capping the SELECT at the batch size would re-scan the same newest N
+      // rows every run and never drain the tail.
+      const batchSize = Math.min(Number(body?.limit) || 40, 200);
+      const scanSize = Math.min(Number(body?.scan) || 1000, 5000);
       const { data: rows, error } = await supabase
         .from("orders")
         .select("id, order_no, shopify_order_id, shopify_financial_status, shopify_tags, shopify_raw")
         .or(ORDER_NO_PREFIX_FILTER)
         .not("shopify_order_id", "is", null)
         .order("created_at", { ascending: false })
-        .limit(limit);
+        .limit(scanSize);
       if (error) throw error;
 
-      const stale = (rows || []).filter((o: any) => rawIsStale(o.shopify_raw));
+      // Only rows that HAVE a snapshot can have a stale one. A NULL shopify_raw
+      // is a different problem (never ingested with a raw node) and is not
+      // something re-fetching here would fix.
+      const stale = (rows || []).filter(
+        (o: any) => o?.shopify_raw != null && rawIsStale(o.shopify_raw),
+      );
+      // A dry run must not call Shopify at all. Fetching first and THEN checking
+      // dryRun meant a 200-order backlog made 200 sequential API calls just to
+      // report a count — long enough for the edge runtime to kill the isolate,
+      // which surfaces as a 500 with NO log line because the catch never runs.
+      if (body?.dryRun) {
+        return json({
+          success: true,
+          mode,
+          dryRun: true,
+          scanned: (rows || []).length,
+          stale: stale.length,
+          would_refresh: stale.map((o: any) => o.order_no),
+        });
+      }
+
+      // Bound the WORK, not just the scan: `limit` caps rows read, but the
+      // sequential Shopify calls are what cost time. Process at most `limit`
+      // of them and report the remainder so the caller knows to re-run.
+      const batch = stale.slice(0, batchSize);
+      const remaining = stale.length - batch.length;
+
       const out = [];
-      for (const o of stale) {
+      for (const o of batch) {
         const gid = String(o.shopify_order_id);
         try {
           const node = await fetchOrderById(gid);
           if (!node) {
             out.push({ order_no: o.order_no, outcome: "failed", reason: "NOT_FOUND_IN_SHOPIFY" });
-            continue;
-          }
-          if (body?.dryRun) {
-            out.push({ order_no: o.order_no, outcome: "would_refresh" });
             continue;
           }
           const r = await refreshExistingOrder(o as any, node, gid, colorMap);
@@ -857,6 +890,9 @@ serve(async (req) => {
         mode,
         scanned: (rows || []).length,
         stale: stale.length,
+        processed: batch.length,
+        // Non-zero means there is more to do: run the same call again.
+        remaining,
         summary,
         results: out,
       });
@@ -1022,7 +1058,14 @@ serve(async (req) => {
 
     return json({ success: true, mode, fetched: nodes.length, summary, results });
   } catch (error) {
-    return json({ success: false, error: (error as Error).message }, 500);
+    // LOG the stack, not just the message. Returning the message to the caller
+    // without printing anything left a 500 with no corresponding log line —
+    // undiagnosable from the dashboard, which is where these are read.
+    console.error("shopify-order-sync failed:", (error as Error)?.stack || error);
+    return json({
+      success: false,
+      error: (error as Error)?.message || String(error),
+    }, 500);
   }
 });
 
