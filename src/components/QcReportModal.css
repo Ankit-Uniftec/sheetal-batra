@@ -1,0 +1,25 @@
+/* QcReportModal — shared by Warehouse, Shopify + B2B Merchandiser dashboards.
+   Deliberately mirrors ComponentJourneyModal.css so the two modals that open
+   from the same order card read as one pair. */
+
+/* z-index sits above every host dashboard's sidebar drawer — the B2B
+   merchandiser's is itself 1000 on mobile, so 1000 alone would let the drawer
+   paint over the overlay. */
+.qcr-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 1200;
+  padding: 20px;
+}
+.qcr-modal {
+  background: #fff; border-radius: 12px; width: 96%; max-width: 760px;
+  max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.qcr-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid #eee; flex-shrink: 0; background: #fff;
+}
+.qcr-title { margin: 0; font-size: 17px; color: #6b5a2e; }
+.qcr-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #888; line-height: 1; }
+/* The QC table is wide — it scrolls inside the modal rather than stretching it. */
+.qcr-body { padding: 12px 16px; overflow-y: auto; overflow-x: auto; min-height: 0; flex: 1; }

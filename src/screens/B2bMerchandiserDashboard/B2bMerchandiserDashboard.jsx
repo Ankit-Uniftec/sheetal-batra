@@ -11,6 +11,9 @@ import { usePopup } from "../../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
+import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import QcReportModal from "../../components/QcReportModal";
+import { isB2bMerchandiserEmail } from "../../utils/appEnvironment";
 import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
@@ -54,6 +57,13 @@ export default function B2bMerchandiserDashboard() {
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
     const [components, setComponents] = useState([]); // order_components for the journey row
+    // Production visibility on the order card (shared ComponentJourneyModal /
+    // QcReportModal, the same two the Production Heads use). Reserved for the
+    // B2B merchandiser who owns vendor production — her login address differs
+    // between the PROD and UAT Supabase projects, so it is resolved per
+    // environment rather than hardcoded (see utils/appEnvironment.js).
+    const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+    const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
     const [vendors, setVendors] = useState([]);
     const [vendorMap, setVendorMap] = useState({});
     const [sizeCharts, setSizeCharts] = useState([]);
@@ -275,6 +285,10 @@ export default function B2bMerchandiserDashboard() {
         ));
         return map;
     }, [components]);
+
+    // Only the designated B2B merchandiser gets the production journey / QC
+    // surfaces on the order card; every other merchandiser sees the card as before.
+    const canViewProduction = useMemo(() => isB2bMerchandiserEmail(user?.email), [user]);
 
     const uniqueMerchandisers = useMemo(() => {
         const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
@@ -1146,10 +1160,25 @@ export default function B2bMerchandiserDashboard() {
                                                 ))}
                                             </div>
                                         )}
-                                        {order.approval_status === "pending" && (
+                                        {(order.approval_status === "pending" || (canViewProduction && order.approval_status === "approved")) && (
                                             <div className="merch-ocard-actions" onClick={(e) => e.stopPropagation()}>
-                                                <button className="merch-btn-approve" onClick={() => setApprovalModal({ order, action: "approve" })}>{"\u2713"} Approve</button>
-                                                <button className="merch-btn-reject" onClick={() => setApprovalModal({ order, action: "reject" })}>{"\u2715"} Reject</button>
+                                                {order.approval_status === "pending" ? (
+                                                    <>
+                                                        <button className="merch-btn-approve" onClick={() => setApprovalModal({ order, action: "approve" })}>{"\u2713"} Approve</button>
+                                                        <button className="merch-btn-reject" onClick={() => setApprovalModal({ order, action: "reject" })}>{"\u2715"} Reject</button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {/* Barcodes are only minted at approval, so a pending order has
+                                                            no journey to show \u2014 hence approved-only. */}
+                                                        {componentsByOrder[order.id]?.length > 0 && (
+                                                            <button className="merch-btn-journey" onClick={() => setJourneyOrder({ order_no: order.order_no, components: componentsByOrder[order.id] })}>View Journey</button>
+                                                        )}
+                                                        {/* Offered even before any QC has happened \u2014 the modal says so,
+                                                            and "has this been checked yet?" is itself the question. */}
+                                                        <button className="merch-btn-qc" onClick={() => setQcReportOrder({ id: order.id, order_no: order.order_no })}>QC Report</button>
+                                                    </>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -1553,6 +1582,22 @@ export default function B2bMerchandiserDashboard() {
             </div>
 
             <button className="merch-add-btn" onClick={() => navigate("/b2b-vendor-selection")}>+</button>
+
+            {/* ===== PRODUCTION JOURNEY / QC REPORT (shared modals) ===== */}
+            {journeyOrder && (
+                <ComponentJourneyModal
+                    orderNo={journeyOrder.order_no}
+                    components={journeyOrder.components}
+                    onClose={() => setJourneyOrder(null)}
+                />
+            )}
+            {qcReportOrder && (
+                <QcReportModal
+                    orderId={qcReportOrder.id}
+                    orderNo={qcReportOrder.order_no}
+                    onClose={() => setQcReportOrder(null)}
+                />
+            )}
 
             {/* ===== APPROVAL MODAL ===== */}
             {approvalModal && (
