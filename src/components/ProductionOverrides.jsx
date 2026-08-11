@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import {
   advanceComponentStage,
@@ -8,6 +8,7 @@ import {
   fetchMovementHistory,
   enrichComponentsWithMovements,
   describeTransition,
+  buildStagePassMap,
   getStagesOutsideLabel,
   recordOverride,
   PRODUCTION_STAGES,
@@ -25,6 +26,9 @@ const ProductionOverrides = ({ currentUserEmail }) => {
   const [orderComponents, setOrderComponents] = useState([]);
   const [history, setHistory] = useState([]);
   const [movements, setMovements] = useState([]);
+  // Pass number per timeline row, rebuilt from this component's scan history so
+  // a re-journeyed stage reads "Cloth Issued (2)" on the row itself.
+  const historyPassMap = useMemo(() => buildStagePassMap(history), [history]);
   const [loading, setLoading] = useState(false);
   const [actionResult, setActionResult] = useState(null);
 
@@ -497,7 +501,7 @@ const ProductionOverrides = ({ currentUserEmail }) => {
               <h4>Stage History</h4>
               <div className="pm-timeline">
                 {history.map((t) => {
-                  const d = describeTransition(t, movements);
+                  const d = describeTransition(t, movements, historyPassMap);
                   return (
                   <div key={t.id} className="pm-timeline-item">
                     <div className="pm-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />
