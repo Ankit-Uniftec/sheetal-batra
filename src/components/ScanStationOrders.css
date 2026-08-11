@@ -1,0 +1,256 @@
+/* ScanStationOrders — the read-only "All Orders" tab on the Scan Station.
+   Matches the ssp- page chrome (glass panels, gold accents, Futura). Scoped
+   under .sso-panel so nothing here can leak into the other tabs. */
+
+/* NOTE: backdrop-filter here is deliberate (the translucent glass panel the
+   ssp- page chrome uses), but it makes .sso-panel a CONTAINING BLOCK for any
+   position:fixed descendant. Anything full-screen — modal, drawer, toast —
+   must therefore be portalled to <body>, or it gets clipped inside this panel.
+   Both shared modals in ScanStationOrders.jsx are portalled for this reason. */
+.sso-panel {
+  background: #ffffffb0;
+  border: 1px solid #d4d4d4;
+  border-radius: 12px;
+  padding: 20px;
+  backdrop-filter: blur(10px);
+  font-family: "Futura", sans-serif;
+}
+
+/* ---------- filters ---------- */
+.sso-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sso-input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+  color: #333;
+  box-sizing: border-box;
+}
+
+/* A <select> centres its own text; the search <input> needs the height applied
+   as line-height or the placeholder sits at the top of the box. */
+.sso-filters input.sso-input {
+  line-height: 38px;
+}
+
+.sso-search {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.sso-input:focus {
+  outline: none;
+  border-color: #d5b85a;
+}
+
+/* The shared PeriodFilter is a nested flex row with its own bottom margin and
+   slightly smaller control metrics. Inside this toolbar it must behave as one
+   more inline control, so the margin is dropped and its select is matched to
+   .sso-input's height/typography — otherwise the Date dropdown sits a few
+   pixels high and short next to the others. */
+.sso-filters .pfx {
+  margin-bottom: 0;
+  gap: 10px;
+}
+
+.sso-filters .pfx-select,
+.sso-filters .pfx-date {
+  height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+  border-color: #d4d4d4;
+  box-sizing: border-box;
+}
+
+/* ---------- status pills ---------- */
+.sso-status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sso-status-tab {
+  padding: 7px 14px;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  background: #fff;
+  color: #4a4030;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sso-status-tab:hover {
+  background: #faf6e8;
+}
+
+.sso-status-tab.active {
+  background: #d5b85a;
+  border-color: #d5b85a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.sso-count {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+/* ---------- list ---------- */
+.sso-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sso-empty {
+  text-align: center;
+  color: #888;
+  font-size: 14px;
+  padding: 32px 12px;
+  margin: 0;
+}
+
+.sso-error {
+  color: #c62828;
+}
+
+.sso-card {
+  background: #fff;
+  border: 1px solid #e4e4e4;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.sso-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.sso-order-no {
+  font-weight: 700;
+  font-size: 15px;
+  color: #2c2c2c;
+  letter-spacing: 0.3px;
+}
+
+.sso-channel {
+  font-size: 11px;
+  color: #6b6b6b;
+  background: #f3f3f3;
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+/* Derived order status (Order Received -> Delivered). Never a stage badge. */
+.sso-status {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.sso-status-received { background: #eef2f7; color: #4a5b6d; }
+.sso-status-inprod { background: #fff4e0; color: #a96b13; }
+.sso-status-completed { background: #e8f5e9; color: #2e7d32; }
+.sso-status-dispatched { background: #e3f2fd; color: #1565c0; }
+.sso-status-delivered { background: #ede7f6; color: #5330a8; }
+.sso-status-cancelled { background: #ffebee; color: #c62828; }
+.sso-status-exchange { background: #fce4ec; color: #ad1457; }
+
+.sso-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 10px;
+}
+
+/* ---------- per-piece stage badges ---------- */
+.sso-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sso-stage-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.sso-comp-label {
+  font-size: 11px;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.sso-stages-loading,
+.sso-stages-none {
+  font-size: 12px;
+  color: #999;
+  font-style: italic;
+}
+
+/* ---------- actions (read-only: journey + QC report only) ---------- */
+.sso-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sso-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sso-journey-btn {
+  background: #d5b85a;
+  color: #fff;
+}
+.sso-journey-btn:hover { background: #c4a94d; }
+
+.sso-qc-btn {
+  background: #fff;
+  color: #4a4030;
+  border-color: #d4d4d4;
+}
+.sso-qc-btn:hover { background: #faf6e8; border-color: #d5b85a; }
+
+@media (max-width: 768px) {
+  .sso-panel { padding: 14px; }
+  .sso-search { flex-basis: 100%; }
+  .sso-status { margin-left: 0; }
+  .sso-card-actions .sso-btn { flex: 1 1 auto; }
+}
