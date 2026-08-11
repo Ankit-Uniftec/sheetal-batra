@@ -46,9 +46,13 @@ const PURPOSE_OPTIONS = [
   "Others",
 ];
 
+// Production owners a Comms order can be assigned to. The email (not the name)
+// is what gets stored on the order as comms_order_assign, so these must be the
+// real prod login addresses.
 const ORDER_ASSIGN_OPTIONS = [
   { name: "Manish Batra", email: "manish@alliedengineering.net.in" },
   { name: "Khushnuma Khan", email: "productionoffline1@gmail.com" },
+  { name: "Tara Gupta", email: "production1.sheetalbatra@gmail.com" },
 ];
 
 const LOCATION_OPTIONS = [

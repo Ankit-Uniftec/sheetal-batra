@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import config from "../../config/config";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+// This screen is warehouse-facing, so the date shown is the T-2 production
+// deadline, not the customer promise — same rule and same helper as the
+// Warehouse and Production Manager dashboards. See utils/warehouseDate.js.
+import { getWarehouseDate } from "../../utils/warehouseDate";
 import { usePopup } from "../../components/Popup";
 import Paginator from "../../components/Paginator";
 import Badge from "../../components/Badge";
@@ -666,7 +670,7 @@ export default function ShopifyOrdersDashboard() {
     setExporting(true);
     try {
       const headers = [
-        "Order No", "Shopify Order No", "Order Date", "Delivery Date",
+        "Order No", "Shopify Order No", "Order Date", "Warehouse Date (T-2)", "Customer Delivery Date",
         "Status", "Payment", "Tags", "Qty", "Products",
         "Size", "Top", "Bottom", "Dupatta",
         ...(withIssues ? ["Issues"] : ["Pieces", "Piece Stages"]),
@@ -690,6 +694,7 @@ export default function ShopifyOrdersDashboard() {
           o.order_no || "",
           o.shopify_order_name || "",
           formatDate(o.created_at) || "",
+          getWarehouseDate(o.delivery_date, o.created_at, ""),
           o.delivery_date ? formatDate(o.delivery_date) : "",
           getOrderStatusLabel(o.status),
           // Payment STATE only — Shopify's own word, no amounts. Lets the floor
@@ -1050,8 +1055,15 @@ export default function ShopifyOrdersDashboard() {
             </div>
             <div className="sho-header-item">
               <span className="sho-header-label">DELIVERY:</span>
-              <span className="sho-header-value">
-                {order.delivery_date ? formatDate(order.delivery_date) : "—"}
+              <span
+                className="sho-header-value"
+                title={
+                  order.delivery_date
+                    ? `Warehouse deadline (T-2). Customer date: ${formatDate(order.delivery_date)}`
+                    : undefined
+                }
+              >
+                {getWarehouseDate(order.delivery_date, order.created_at)}
               </span>
             </div>
           </div>

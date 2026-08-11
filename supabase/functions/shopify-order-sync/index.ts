@@ -4,6 +4,7 @@ import {
   buildOrderComponents,
   mapShopifyOrder,
   normalizeColorKey,
+  setDeliveryMatrix,
   SHOPIFY_STORE_KEY,
 } from "./mapper.ts";
 
@@ -153,6 +154,13 @@ const ORDER_FIELDS = `
             handle
             title
             featuredImage { url }
+            # Shopify standard-taxonomy category, e.g.
+            # "Apparel & Accessories > Clothing > Traditional & Ceremonial Clothing".
+            # THE delivery-date signal: category x price band -> days, per the
+            # client's matrix (see resolveDeliveryDate in mapper.ts). Null on
+            # ~25% of the live catalogue, which flags those orders as
+            # DELIVERY_DATE_UNRESOLVED until the category is set in Shopify.
+            category { fullName }
             # Product TAGS. The catalogue team marks dupatta inclusion here
             # ("WITH DUPATTA" / "WITHOUT DUPATTA") on products that have no
             # With/Without-Dupatta Style option — the Set products that would
@@ -196,6 +204,34 @@ async function loadColorHexMap(): Promise<Map<string, string>> {
     if (c?.name && c?.hex) map.set(normalizeColorKey(c.name), c.hex);
   }
   return map;
+}
+
+/**
+ * Delivery-date matrix: category x price band -> days. Client-owned numbers
+ * (category_shopify.xlsx), kept in a table so revising them is an UPDATE
+ * rather than a redeploy.
+ *
+ * On ANY failure — table missing, RLS, empty — the mapper keeps its identical
+ * hardcoded copy. That is a genuine equivalent, not a degraded guess, so a
+ * missing table cannot silently change a single delivery date.
+ */
+async function loadDeliveryMatrix(): Promise<void> {
+  const { data, error } = await supabase
+    .from("shopify_delivery_matrix")
+    .select("category, d10_25k, d25_40k, d40_75k, d75k_up");
+  if (error) {
+    console.error(
+      "loadDeliveryMatrix failed (using built-in matrix):",
+      error.message,
+    );
+    return;
+  }
+  setDeliveryMatrix(
+    (data || []).map((r: any) => ({
+      category: r.category,
+      days: [r.d10_25k, r.d25_40k, r.d40_75k, r.d75k_up],
+    })),
+  );
 }
 
 async function shopifyGraphql(query: string) {
@@ -366,7 +402,11 @@ function rawIsStale(storedRaw: any): boolean {
     // No product node at all (deleted product) tells us nothing about the
     // snapshot's age — don't call that stale or it never stops refreshing.
     if (!product) return false;
-    return !("tags" in product);
+    // Absent KEY, not an empty value: a product with no tags still has the
+    // "tags" key once the query asked for it. Both keys are checked because
+    // each was added to ORDER_FIELDS separately — a snapshot may carry tags
+    // (dupatta work) but predate category (delivery-date matrix).
+    return !("tags" in product) || !("category" in product);
   });
 }
 
@@ -738,6 +778,7 @@ serve(async (req) => {
 
       try {
         const colorMap = await loadColorHexMap();
+        await loadDeliveryMatrix();
         const node = await fetchOrderById(gid);
         if (!node) {
           await logSync({ shopify_order_id: gid, mode: `webhook:${topic}`, outcome: "failed", error: "order not found on re-fetch" });
@@ -771,7 +812,7 @@ serve(async (req) => {
     // experimenting with an unknown mode does not expect.
     const KNOWN_MODES = [
       "sync-now", "order", "reconcile", "refresh", "refresh-raw", "remap-items",
-      "backfill-components",
+      "backfill-components", "redate",
     ];
     if (!KNOWN_MODES.includes(mode)) {
       return json({
@@ -808,6 +849,8 @@ serve(async (req) => {
 
     // Colour name → hex, loaded once and shared by every order in this run.
     const colorMap = await loadColorHexMap();
+    // Delivery-date matrix, likewise loaded once per invocation.
+    await loadDeliveryMatrix();
 
     // ── remap: re-run the mapper over shopify_raw for orders already ingested,
     // and rewrite items[]. Uses the STORED raw node, so it touches no Shopify
@@ -961,6 +1004,112 @@ serve(async (req) => {
 
       const flagged = out.filter((r) => r.status === "needs_review").length;
       return json({ success: true, mode, orders: out.length, flagged, results: out });
+    }
+
+    // ── redate: recompute delivery_date from the STORED shopify_raw and write
+    // ONLY that column. No Shopify call.
+    //
+    // WHY THIS IS ITS OWN MODE, AND NOT PART OF remap-items
+    // remap-items deliberately never writes delivery_date: re-deriving items[]
+    // must not silently move a deadline the floor is already working to. That
+    // guard is right, and it stays. But when the RULE itself changes — as it
+    // did when delivery dates moved from the shipping_timeline metafield to the
+    // category x price matrix — existing orders keep dates computed under the
+    // old rule forever. This is the deliberate, separately-invoked way to
+    // restate them.
+    //
+    // ALWAYS DRY-RUN FIRST. `dryRun: true` returns every before/after with no
+    // write, which is the only way to see the real blast radius before
+    // committing to it.
+    if (mode === "redate") {
+      const { data: rows, error } = await supabase
+        .from("orders")
+        .select("id, order_no, created_at, delivery_date, shopify_raw, status")
+        .or(ORDER_NO_PREFIX_FILTER)
+        .not("shopify_raw", "is", null)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+
+      // Orders past order_received have components on the floor being scanned
+      // to a deadline. Moving their date mid-production changes a live SLA and
+      // every escalation timer hanging off it. Skipped unless explicitly asked
+      // for, and reported either way so the count is never silently hidden.
+      const includeInProduction = body?.includeInProduction === true;
+
+      const changes = [];
+      const skipped = [];
+      const unresolved = [];
+
+      for (const o of rows || []) {
+        const { orderRow } = mapShopifyOrder(o.shopify_raw, colorMap);
+        const next = orderRow.delivery_date as string | null;
+        const prev = o.delivery_date as string | null;
+
+        // The mapper could not resolve a date under the new rule (no category
+        // on some line item). Never blank out a date the floor already has —
+        // that would strip a working deadline and replace it with nothing.
+        if (!next) {
+          if (prev) unresolved.push({ order_no: o.order_no, kept: prev });
+          continue;
+        }
+        if (next === prev) continue;
+
+        if (o.status !== "order_received" && !includeInProduction) {
+          skipped.push({
+            order_no: o.order_no,
+            status: o.status,
+            from: prev,
+            to: next,
+          });
+          continue;
+        }
+
+        const days = prev
+          ? Math.round(
+            (new Date(next).getTime() - new Date(prev).getTime()) / 86400000,
+          )
+          : null;
+        changes.push({ order_no: o.order_no, from: prev, to: next, days });
+      }
+
+      if (body?.dryRun) {
+        return json({
+          success: true,
+          mode,
+          dryRun: true,
+          scanned: (rows || []).length,
+          would_change: changes.length,
+          earlier: changes.filter((c) => (c.days ?? 0) < 0).length,
+          later: changes.filter((c) => (c.days ?? 0) > 0).length,
+          skipped_in_production: skipped.length,
+          unresolved_kept_existing: unresolved.length,
+          changes,
+          skipped,
+          unresolved,
+        });
+      }
+
+      let updated = 0;
+      const failures = [];
+      for (const c of changes) {
+        const row = (rows || []).find((r: any) => r.order_no === c.order_no);
+        const { error: upErr } = await supabase
+          .from("orders")
+          .update({ delivery_date: c.to })
+          .eq("id", row.id);
+        if (upErr) failures.push({ order_no: c.order_no, error: upErr.message });
+        else updated++;
+      }
+
+      return json({
+        success: true,
+        mode,
+        scanned: (rows || []).length,
+        updated,
+        skipped_in_production: skipped.length,
+        unresolved_kept_existing: unresolved.length,
+        ...(failures.length ? { failures } : {}),
+      });
     }
 
     // Gather the orders to process.

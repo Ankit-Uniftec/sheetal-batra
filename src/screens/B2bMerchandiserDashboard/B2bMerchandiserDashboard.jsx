@@ -1103,9 +1103,13 @@ export default function B2bMerchandiserDashboard() {
                                                 <button className="merch-pdf-btn" onClick={(e) => handleDownloadPdf(e, order)} disabled={pdfLoading === order.id}>
                                                     {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Customer PDF"}
                                                 </button>
-                                                <button className="merch-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
-                                                    {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
-                                                </button>
+                                                {/* Production work order \u2014 only once this order is approved
+                                                    and actually headed into the warehouse. */}
+                                                {order.approval_status === "approved" && (
+                                                    <button className="merch-pdf-btn" onClick={(e) => handleDownloadWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
+                                                        {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="merch-ocard-content">
