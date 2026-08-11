@@ -764,7 +764,16 @@ export default function ReviewDetail() {
 
     // 6️⃣ REDUCE INVENTORY
     try {
-      const items = normalizedOrder.items || order.items || [];
+      // Stock orders are PROCUREMENT — they buy pieces INTO inventory, so
+      // placement must not reserve or subtract anything. Without this guard a
+      // stock order for 10 pieces REMOVED 10, the exact opposite of intent, and
+      // nothing ever added them back: restoreOrderInventory.js:22-25 skips stock
+      // orders on the stated assumption that placement never decremented — an
+      // assumption this line is what makes true.
+      //
+      // The credit happens once, on completion, via the stock_receipts ledger in
+      // db/barcode_system/v2/71_stock_order_receipts.sql.
+      const items = (isStockOrder ? [] : normalizedOrder.items || order.items || []);
 
       for (const item of items) {
         if (!item.product_id) {

@@ -5,13 +5,23 @@ import Logo from "../../images/logo.png";
 import ScanStation from "../../components/ScanStation";
 import "../../components/ScanStation.css";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
+import ScanStationOrders from "../../components/ScanStationOrders";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import "./ScanStationPage.css";
 import useTabParam from "../../hooks/useTabParam";
 
 // Standalone Scan Station page — for workers whose only role is
 // `scan_station`. They land here on login. A small sidebar switches between
-// the Scan Station (scanning) and their own QC History.
+// the Scan Station (scanning), All Orders (read-only lookup + journey) and
+// their own QC History.
+
+// Header title per tab. A ternary covered the original two tabs; a map keeps
+// adding a tab from silently mislabelling the header.
+const TAB_TITLES = {
+  scan: "Scan Station",
+  orders: "All Orders",
+  qc_history: "QC History",
+};
 
 export default function ScanStationPage() {
   const navigate = useNavigate();
@@ -106,7 +116,7 @@ export default function ScanStationPage() {
             <span /><span /><span />
           </button>
           <img src={Logo} alt="Logo" className="ssp-logo" />
-          <h1 className="ssp-title">{activeTab === "qc_history" ? "QC History" : "Scan Station"}</h1>
+          <h1 className="ssp-title">{TAB_TITLES[activeTab] || "Scan Station"}</h1>
         </div>
         <div className="ssp-header-right">
           {userName && <span className="ssp-user">{userName}</span>}
@@ -117,6 +127,10 @@ export default function ScanStationPage() {
         <aside className={`ssp-sidebar ${showSidebar ? "open" : ""}`}>
           <nav className="ssp-nav">
             <button className={`ssp-nav-item ${activeTab === "scan" ? "active" : ""}`} onClick={() => { setActiveTab("scan"); setShowSidebar(false); }}>Scan Station</button>
+            {/* All Orders is open to every scan-station worker, not just QC:
+                the tab is a read-only lookup and a cloth-issue worker needs the
+                same "what has this piece been through?" answer. */}
+            <button className={`ssp-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders</button>
             {canDoQc && (
               <button className={`ssp-nav-item ${activeTab === "qc_history" ? "active" : ""}`} onClick={() => { setActiveTab("qc_history"); setShowSidebar(false); }}>QC History</button>
             )}
@@ -131,6 +145,7 @@ export default function ScanStationPage() {
               allowedStations={assignedStations}
             />
           )}
+          {activeTab === "orders" && <ScanStationOrders />}
           {activeTab === "qc_history" && canDoQc && (
             <div className="ssp-qc-history">
               <h2 className="ssp-section-title">My QC History</h2>

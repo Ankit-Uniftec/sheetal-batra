@@ -15,6 +15,7 @@ import {
     fetchMovementHistory,
     enrichComponentsWithMovements,
     describeTransition,
+    buildStagePassMap,
     getStagesOutsideLabel,
     PRODUCTION_STAGES,
     SCAN_STATIONS,
@@ -202,6 +203,9 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     const [componentHistory, setComponentHistory] = useState([]);
     const [componentMovements, setComponentMovements] = useState([]);
     const [orderComponents, setOrderComponents] = useState([]);
+    // Pass number per timeline row, rebuilt from this component's scan history
+    // so a re-journeyed stage reads "Cloth Issued (2)" on the row itself.
+    const historyPassMap = useMemo(() => buildStagePassMap(componentHistory), [componentHistory]);
 
     // QC popup. `qcStage` distinguishes QC 1 ("qc1") from Final QC ("final").
     const [qcPopup, setQcPopup] = useState({
@@ -1538,7 +1542,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                 <h4>Stage History</h4>
                                 <div className="wd-timeline">
                                     {componentHistory.map((t) => {
-                                        const d = describeTransition(t, componentMovements);
+                                        const d = describeTransition(t, componentMovements, historyPassMap);
                                         return (
                                         <div key={t.id} className="wd-timeline-item">
                                             <div className="wd-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />

@@ -16,7 +16,7 @@ import "../components/ProductionHeadVendors.css";
 import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import ComponentStageBadge from "../components/ComponentStageBadge";
-import QcHistoryTable from "../components/QcHistoryTable";
+import QcReportModal from "../components/QcReportModal";
 import QcHistoryPanel from "../components/QcHistoryPanel";
 import { fetchQcRecords } from "../utils/qcHistory";
 import ReJourneyPanel from "../components/ReJourneyPanel";
@@ -195,10 +195,9 @@ const WarehouseDashboard = () => {
   // Component tracking per order
   const [orderComponentsMap, setOrderComponentsMap] = useState({});
   const [componentLoadingMap, setComponentLoadingMap] = useState({});
-  // QC report modal: the order whose QC report is open + its qc_records.
+  // QC report modal: the order whose QC report is open. The shared
+  // QcReportModal loads the qc_records itself.
   const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
-  const [qcReportRecords, setQcReportRecords] = useState([]);
-  const [qcReportLoading, setQcReportLoading] = useState(false);
   // QC History tab (channel-scoped to this PH's orders).
   const [qcHistory, setQcHistory] = useState([]);
   const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
@@ -528,26 +527,9 @@ const WarehouseDashboard = () => {
     return () => { cancelled = true; };
   }, [isWarehouseProdHead, activeTab, scopedOrders]);
 
-  // Open the QC report for an order — loads every QC check (QC 1 + Final QC)
-  // recorded for its components, newest stage first per component.
-  const openQcReport = async (order) => {
-    setQcReportOrder({ id: order.id, order_no: order.order_no });
-    setQcReportLoading(true);
-    setQcReportRecords([]);
-    try {
-      const { data, error } = await supabase
-        .from("qc_records")
-        .select("id, barcode, component_id, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at")
-        .eq("order_id", order.id)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      setQcReportRecords(data || []);
-    } catch (err) {
-      console.error("Failed to load QC report:", err);
-      setQcReportRecords([]);
-    }
-    setQcReportLoading(false);
-  };
+  // Open the QC report for an order — every QC check (QC 1 + Final QC) recorded
+  // for its components. The shared QcReportModal does the fetching.
+  const openQcReport = (order) => setQcReportOrder({ id: order.id, order_no: order.order_no });
 
   // Open the full-journey modal (shared ComponentJourneyModal fetches the
   // transition + movement data itself).
@@ -1170,20 +1152,13 @@ const WarehouseDashboard = () => {
     <div className="wd-dashboard-wrapper">
       {PopupComponent}
 
-      {/* ===== QC REPORT MODAL ===== */}
+      {/* ===== QC REPORT MODAL (shared) ===== */}
       {qcReportOrder && (
-        <div className="wd-qc-overlay" onClick={() => setQcReportOrder(null)}>
-          <div className="wd-qc-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="wd-qc-modal-head">
-              <h3 className="wd-qc-modal-title">QC Report — {qcReportOrder.order_no}</h3>
-              <button className="wd-qc-modal-close" onClick={() => setQcReportOrder(null)}>×</button>
-            </div>
-
-            <div style={{ padding: "12px 16px" }}>
-              <QcHistoryTable records={qcReportRecords} loading={qcReportLoading} emptyText="No QC checks recorded for this order yet." />
-            </div>
-          </div>
-        </div>
+        <QcReportModal
+          orderId={qcReportOrder.id}
+          orderNo={qcReportOrder.order_no}
+          onClose={() => setQcReportOrder(null)}
+        />
       )}
 
       {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}

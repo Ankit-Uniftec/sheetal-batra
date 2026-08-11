@@ -901,6 +901,24 @@
 @media (max-width: 900px)  { .pm-dispatch-kpis { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
 @media (max-width: 560px)  { .pm-dispatch-kpis { grid-template-columns: 1fr; gap: 12px; } }
 
+/* Channel-wise bifurcation: Awaiting Dispatch / Dispatched side by side.
+   Both cards reuse the .pm-channel-* styling from the Overview breakdowns, so
+   only the two-up layout and the selected-row highlight are new here. */
+.pm-dispatch-channel-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 18px 0;
+    align-items: start;
+}
+/* A single card (only one side has data) shouldn't stretch to half width. */
+.pm-dispatch-channel-split > .pm-channel-card:only-child { grid-column: 1 / -1; }
+@media (max-width: 900px) { .pm-dispatch-channel-split { grid-template-columns: 1fr; gap: 12px; } }
+
+/* The row whose channel is currently filtering the tab below. */
+.pm-channel-row-active { background: #f5edd4; }
+.pm-channel-row-click.pm-channel-row-active:hover { background: #efe4c2; }
+
 /* ==================== DELIVERY CALENDAR ==================== */
 
 .pm-cal-bar {

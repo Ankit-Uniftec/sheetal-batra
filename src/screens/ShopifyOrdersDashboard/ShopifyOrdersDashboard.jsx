@@ -18,7 +18,7 @@ import ProductionOverview from "../../components/ProductionOverview";
 import StageCountCards from "../../components/StageCountCards";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
-import QcHistoryTable from "../../components/QcHistoryTable";
+import QcReportModal from "../../components/QcReportModal";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
 import ReJourneyPanel from "../../components/ReJourneyPanel";
 import CompletePicker from "../../components/CompletePicker";
@@ -409,9 +409,8 @@ export default function ShopifyOrdersDashboard() {
     usePeriodFilter("all", { variant: "select", label: "" });
 
   // QC report modal — the order whose report is open, plus its qc_records.
+  // The shared QcReportModal loads the qc_records itself.
   const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
-  const [qcReportRecords, setQcReportRecords] = useState([]);
-  const [qcReportLoading, setQcReportLoading] = useState(false);
 
   // QC History / Re-journeys tabs, both scoped to this screen's Shopify orders.
   const [qcHistory, setQcHistory] = useState([]);
@@ -566,26 +565,11 @@ export default function ShopifyOrdersDashboard() {
   };
 
   // ── QC Report: every QC check (QC 1 + Final QC) recorded against this order's
-  // pieces, oldest first so the report reads as the order's QC story. Same query
-  // and modal as the retail order dashboard (WarehouseDashboard.jsx:533).
-  const openQcReport = async (e, order) => {
+  // pieces. The shared QcReportModal fetches and renders it, so this screen and
+  // the retail order dashboard show the identical report.
+  const openQcReport = (e, order) => {
     e.stopPropagation();
     setQcReportOrder({ id: order.id, order_no: order.order_no });
-    setQcReportLoading(true);
-    setQcReportRecords([]);
-    try {
-      const { data, error } = await supabase
-        .from("qc_records")
-        .select("id, barcode, component_id, result, which_qc, fail_reason, outcome, rejourney_number, scrap_loss_amount, scrap_location, inspected_by, created_at")
-        .eq("order_id", order.id)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      setQcReportRecords(data || []);
-    } catch (err) {
-      console.error("Failed to load QC report:", err);
-      setQcReportRecords([]);
-    }
-    setQcReportLoading(false);
   };
 
   // ── Mark as Completed.
@@ -1277,29 +1261,13 @@ export default function ShopifyOrdersDashboard() {
         />
       )}
 
-      {/* QC REPORT MODAL — same shape as the retail order dashboard's. */}
+      {/* QC REPORT MODAL (shared) — identical to the retail order dashboard's. */}
       {qcReportOrder && (
-        <div className="sho-modal-overlay" onClick={() => setQcReportOrder(null)}>
-          <div className="sho-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sho-modal-head">
-              <h3 className="sho-modal-title">QC Report — {qcReportOrder.order_no}</h3>
-              <button
-                className="sho-modal-close"
-                onClick={() => setQcReportOrder(null)}
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <div className="sho-modal-body">
-              <QcHistoryTable
-                records={qcReportRecords}
-                loading={qcReportLoading}
-                emptyText="No QC checks recorded for this order yet."
-              />
-            </div>
-          </div>
-        </div>
+        <QcReportModal
+          orderId={qcReportOrder.id}
+          orderNo={qcReportOrder.order_no}
+          onClose={() => setQcReportOrder(null)}
+        />
       )}
 
       {/* HEADER */}

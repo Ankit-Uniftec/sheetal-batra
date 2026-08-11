@@ -207,14 +207,19 @@ const distinctItemIndexes = (comps = []) =>
     )].sort((a, b) => a - b);
 
 // ==================== CHANNEL BREAKDOWN ROW ====================
-const ChannelRow = ({ label, count, percentage, color, onClick }) => (
+// `active` marks the row whose channel is currently driving the surrounding
+// tab (the Dispatch breakdown doubles as the channel picker, so the PM needs to
+// see which row is the live filter). `title` is overridable because the row now
+// has two callers meaning two different things by a click.
+const ChannelRow = ({ label, count, percentage, color, onClick, active = false, title }) => (
     <div
-        className={`pm-channel-row ${onClick ? "pm-channel-row-click" : ""}`}
+        className={`pm-channel-row ${onClick ? "pm-channel-row-click" : ""} ${active ? "pm-channel-row-active" : ""}`}
         onClick={onClick}
         role={onClick ? "button" : undefined}
         tabIndex={onClick ? 0 : undefined}
+        aria-pressed={onClick ? active : undefined}
         onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(e); } } : undefined}
-        title={onClick ? `View ${label} delayed orders` : undefined}
+        title={onClick ? (title || `View ${label} delayed orders`) : undefined}
     >
         <div className="pm-channel-label">
             <span className="pm-channel-dot" style={{ background: color }}></span>
@@ -1397,6 +1402,99 @@ export default function ProductionManagerDashboard() {
             onTimePct, onTimeSample: rated.length, onTimeOrders: onTimeRated,
         };
     }, [components, orderById, dispatchPeriodRange, dispatchChannel]);
+
+    // ==================== DISPATCH BY CHANNEL ====================
+    // The client's ask: bifurcate "Order Completed" (= awaiting dispatch, pieces
+    // done with production) and "Packaging and Dispatched" (= shipped) CHANNEL
+    // WISE, so the PM sees the split in one view instead of cycling the channel
+    // dropdown ten times.
+    //
+    // Why this can't just read dispatchData: that memo applies `channelOk`
+    // INSIDE itself, so its pending/dispatched lists are already narrowed to the
+    // selected channel — a breakdown built on them would collapse to one row.
+    // This memo therefore re-walks the components with the SAME grouping rules
+    // but NO channel filter, which is exactly the point: the breakdown is the
+    // comparison view and stays whole while the rest of the tab is filtered.
+    //
+    // Everything else (out-of-flow pieces, cancelled orders, which DATE each
+    // side is scoped by) is kept identical to dispatchData so the rows sum to
+    // the AWAITING DISPATCH hero and the Dispatched KPI when the dropdown is on
+    // "All Channels". If those rules ever drift, the parts stop matching the
+    // whole and the card silently lies — change both together.
+    //
+    // Deps deliberately EXCLUDE dispatchChannel: the counts don't depend on it,
+    // so picking a channel doesn't recompute anything.
+    const dispatchByChannel = useMemo(() => {
+        const from = dispatchPeriodRange ? dispatchPeriodRange.start.getTime() : null;
+        const to = dispatchPeriodRange ? dispatchPeriodRange.end.getTime() : null;
+        const inWindow = (t) => {
+            if (from == null && to == null) return true;
+            if (t == null) return false;
+            return t >= from && t <= to;
+        };
+        // Latest scan time among a set of pieces — the same "when did this
+        // happen" signal dispatchData uses for readySince / at.
+        const latestScan = (comps) => comps.reduce((latest, c) => {
+            const t = c.stage_updated_at ? new Date(c.stage_updated_at).getTime() : NaN;
+            return Number.isFinite(t) && (latest == null || t > latest) ? t : latest;
+        }, null);
+
+        const OUT_OF_FLOW = new Set(["disposed", "scrapped"]);
+        const byOrder = new Map();
+        components.forEach((c) => {
+            if (OUT_OF_FLOW.has(c.current_stage)) return;
+            let g = byOrder.get(c.order_id);
+            if (!g) { g = { ready: [], dispatched: [] }; byOrder.set(c.order_id, g); }
+            if (READY_TO_DISPATCH.has(c.current_stage)) g.ready.push(c);
+            else if (c.current_stage === "dispatched") g.dispatched.push(c);
+        });
+
+        // Collect the qualifying ORDERS on each side (orders, not pieces — an
+        // order is the unit a PM dispatches, matching the hero/KPI numbers).
+        const awaitingOrders = [];
+        const dispatchedOrders = [];
+        byOrder.forEach((g, orderId) => {
+            const o = orderById[orderId];
+            if (!o) return;
+            // Awaiting = ready pieces, live order, scoped by when it became ready.
+            if (g.ready.length > 0 && o.status !== "cancelled" && inWindow(latestScan(g.ready))) {
+                awaitingOrders.push(o);
+            }
+            // Dispatched = shipped pieces, scoped by when it actually shipped.
+            if (g.dispatched.length > 0 && inWindow(latestScan(g.dispatched))) {
+                dispatchedOrders.push(o);
+            }
+        });
+
+        // Bucket by the shared channel definitions so the parts sum to the
+        // total, then drop empty channels and sort worst/biggest first — the
+        // same shape delayedByChannel produces, so ChannelRow consumes it as-is.
+        const bucket = (list) => {
+            const total = list.length;
+            const rows = STORE_FILTER_OPTIONS.map((opt) => {
+                const count = list.filter(opt.match).length;
+                return {
+                    key: opt.value,
+                    label: opt.label,
+                    color: opt.color,
+                    count,
+                    percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+                };
+            }).filter((r) => r.count > 0);
+            rows.sort((a, b) => b.count - a.count);
+            return { total, rows };
+        };
+
+        return { awaiting: bucket(awaitingOrders), dispatched: bucket(dispatchedOrders) };
+    }, [components, orderById, dispatchPeriodRange]);
+
+    // Clicking a channel row drives the tab's existing channel <select>. The row
+    // key IS the getOrderChannelLabel value (STORE_FILTER_OPTIONS.value is kept
+    // identical to it), so channelOk picks it up with no mapping. Clicking the
+    // already-selected channel clears back to "all".
+    const handleDispatchChannelClick = useCallback((key) => {
+        setDispatchChannel((cur) => (cur === key ? "all" : key));
+    }, [setDispatchChannel]);
 
     // NOTE: the full-scope productionMetrics/productionOpts/visibleQcRecords
     // memos that used to live here are gone. The Production tab now has its own
@@ -3127,6 +3225,72 @@ export default function ProductionManagerDashboard() {
                                             onClick={d.partialCount > 0 ? () => setDispatchFilter(dispatchFilter === "partial" ? "all" : "partial") : undefined}
                                         />
                                     </div>
+
+                                    {/* ===== CHANNEL-WISE BIFURCATION =====
+                                        The two states this tab is about, split per channel:
+                                        Awaiting Dispatch (production finished, not yet out) and
+                                        Dispatched (actually shipped).
+
+                                        These ALWAYS show every channel, even when the dropdown
+                                        above is narrowed to one — that's what makes them the
+                                        comparison view. Clicking a row sets the dropdown, so the
+                                        card doubles as the channel picker; the active row is
+                                        highlighted so it's obvious which one is driving the
+                                        queue below. With "All Channels" selected the row counts
+                                        sum to the AWAITING DISPATCH hero and the Dispatched KPI. */}
+                                    {(dispatchByChannel.awaiting.total > 0 || dispatchByChannel.dispatched.total > 0) && (
+                                        <div className="pm-dispatch-channel-split">
+                                            {dispatchByChannel.awaiting.total > 0 && (
+                                                <div className="pm-channel-card" style={{ borderLeft: "4px solid #8B7355" }}>
+                                                    <p className="pm-card-title">
+                                                        Awaiting Dispatch by Channel{" "}
+                                                        <span className="pm-muted" style={{ fontSize: 12, fontWeight: 400 }}>
+                                                            ({dispatchByChannel.awaiting.total} order{dispatchByChannel.awaiting.total === 1 ? "" : "s"} waiting)
+                                                        </span>
+                                                    </p>
+                                                    <div className="pm-channel-body">
+                                                        {dispatchByChannel.awaiting.rows.map(r => (
+                                                            <ChannelRow
+                                                                key={r.key}
+                                                                label={r.label}
+                                                                count={r.count}
+                                                                percentage={r.percentage}
+                                                                color={r.color}
+                                                                active={dispatchChannel === r.key}
+                                                                title={dispatchChannel === r.key ? "Clear the channel filter" : `Filter this tab to ${r.label}`}
+                                                                onClick={() => handleDispatchChannelClick(r.key)}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {dispatchByChannel.dispatched.total > 0 && (
+                                                <div className="pm-channel-card" style={{ borderLeft: "4px solid #2e7d32" }}>
+                                                    <p className="pm-card-title">
+                                                        Dispatched by Channel{" "}
+                                                        <span className="pm-muted" style={{ fontSize: 12, fontWeight: 400 }}>
+                                                            ({dispatchByChannel.dispatched.total} order{dispatchByChannel.dispatched.total === 1 ? "" : "s"}
+                                                            {d.periodScoped ? `, ${dispatchPeriodLabel.toLowerCase()}` : ", all time"})
+                                                        </span>
+                                                    </p>
+                                                    <div className="pm-channel-body">
+                                                        {dispatchByChannel.dispatched.rows.map(r => (
+                                                            <ChannelRow
+                                                                key={r.key}
+                                                                label={r.label}
+                                                                count={r.count}
+                                                                percentage={r.percentage}
+                                                                color={r.color}
+                                                                active={dispatchChannel === r.key}
+                                                                title={dispatchChannel === r.key ? "Clear the channel filter" : `Filter this tab to ${r.label}`}
+                                                                onClick={() => handleDispatchChannelClick(r.key)}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* ===== CONTROLS ===== */}
                                     <div className="pm-dispatch-controls">

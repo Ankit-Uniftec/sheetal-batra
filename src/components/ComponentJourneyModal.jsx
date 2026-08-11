@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import ComponentStageBadge from "./ComponentStageBadge";
 import formatDate from "../utils/formatDate";
 import {
@@ -7,6 +7,7 @@ import {
   getStageMaxDays,
   getStagesOutsideLabel,
   describeTransition,
+  buildStagePassMap,
   fetchTransitionHistory,
   fetchMovementHistory,
 } from "../utils/barcodeService";
@@ -106,6 +107,14 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
   }, [components]);
 
   const selected = journeyData.find((d) => d.component.id === selectedId) || journeyData[0];
+
+  // Pass number per timeline row, rebuilt from the selected component's own
+  // scan history so a re-journeyed stage reads "Cloth Issued (2)" on the row
+  // itself — matching the badge above, which only ever shows the current pass.
+  const passMap = useMemo(
+    () => buildStagePassMap(selected?.transitions),
+    [selected?.transitions]
+  );
 
   return (
     <div className="cjm-overlay" onClick={onClose}>
@@ -232,7 +241,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                           // vendor movement (+ headline). The security gate doesn't
                           // change the stage, so it reads "Sent to Vendor (Dyeing)"
                           // instead of "Stage → same Stage".
-                          const d = describeTransition(t, movements);
+                          const d = describeTransition(t, movements, passMap);
                           return (
                             <div key={t.id} className="cjm-timeline-item">
                               <div className="cjm-timeline-dot" style={{ backgroundColor: getStageColor(t.to_stage) }} />

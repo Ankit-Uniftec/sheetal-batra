@@ -682,6 +682,61 @@ export function getStagesOutsideLabel(steps) {
 }
 
 // ------------------------------------------------------------
+// buildStagePassMap — the pass number each transition row belongs to, so a
+// timeline can read "Dyeing (2)" exactly where the badge does.
+//
+// The badge takes its number from order_components.stage_pass_counts, a stored
+// tally that only ever describes the piece RIGHT NOW. A timeline needs the
+// number as it was at each historical row, so we rebuild it from the same
+// event the DB counts: a `rejourney` transition INTO a stage is what bumps
+// that stage's tally (51_per_stage_rejourney_count.sql). Walking the rows in
+// scan order and counting those re-entries per to_stage reproduces the stored
+// tally exactly by the last row — so the newest number in the timeline always
+// agrees with the badge, and no extra fetch is needed.
+//
+// ONLY the re-journey TARGET is counted, never a stage merely passed through
+// again on the way forward — the client's rule, and the same one the SQL
+// applies. So a piece re-journeyed to Cloth Issue that then walks forward to
+// Dyeing shows "Cloth Issue (2)" and a plain "Dyeing".
+//
+//   transitions  the component's stage_transitions rows in ASCENDING scan
+//                order (what fetchTransitionHistory returns)
+//
+// Returns a Map of transition id -> pass number (2, 3, …) for rows that sit on
+// a repeat pass of their stage. First-pass rows are absent, so a normal piece's
+// timeline renders exactly as before.
+// ------------------------------------------------------------
+export function buildStagePassMap(transitions) {
+  const passById = new Map();
+  if (!Array.isArray(transitions)) return passById;
+
+  // How many times each stage has been re-journeyed to SO FAR in the walk.
+  const rejourneysByStage = new Map();
+
+  for (const t of transitions) {
+    if (!t) continue;
+
+    // The security gate doesn't change the stage — a vendor trip is part of
+    // whatever pass is already running, so it never bumps a count. Number it
+    // by the stage it went out for, which is its unchanged current stage.
+    const isGate = t.transition_type === "security_exit" || t.transition_type === "security_entry";
+
+    if (t.transition_type === "rejourney" && t.to_stage && !isGate) {
+      rejourneysByStage.set(t.to_stage, (rejourneysByStage.get(t.to_stage) || 0) + 1);
+    }
+
+    // The row is on pass N+1 of the stage it lands in (or, for a gate scan,
+    // the stage it is sitting at). Rows that land in a stage never re-journeyed
+    // to stay unnumbered.
+    const stage = isGate ? (t.to_stage || t.from_stage) : t.to_stage;
+    const n = rejourneysByStage.get(stage) || 0;
+    if (n > 0 && t.id != null) passById.set(t.id, n + 1);
+  }
+
+  return passById;
+}
+
+// ------------------------------------------------------------
 // describeTransition — the ONE place that classifies a stage_transitions row
 // as an INTERNAL production scan vs an EXTERNAL vendor movement, and builds its
 // human headline. Every timeline (journey modal, scan station, overrides) uses
@@ -692,14 +747,18 @@ export function getStagesOutsideLabel(steps) {
 //   movements optional external_movements[] for this component — lets us name
 //             the stage a vendor trip was for ("Sent to Vendor (Dyeing)") by
 //             matching the scan time to the movement's exit/entry_scan_at.
+//   passMap   optional Map from buildStagePassMap(transitions) — appends the
+//             pass number to the stage this row landed in ("Dyeing (2)"), so a
+//             re-journeyed pass is visible on the row itself and not only on
+//             the component's badge. Omit it and headlines read as before.
 //
-// Returns { kind: 'internal' | 'external', headline, tagLabel, showType }.
+// Returns { kind: 'internal' | 'external', headline, tagLabel, showType, pass }.
 //   kind      drives the Internal (green) / External (orange) tag
 //   headline  the primary line ("Cloth Issued → Dyeing" or "Sent to Vendor (Dyeing)")
 //   tagLabel  "Internal Scan" | "External / Vendor"
 //   showType  whether to append the raw "(manual_override)" etc. suffix
 // ------------------------------------------------------------
-export function describeTransition(t, movements) {
+export function describeTransition(t, movements, passMap) {
   const isExit = t.transition_type === "security_exit";
   const isEntry = t.transition_type === "security_entry";
   const external = isExit || isEntry;
@@ -732,15 +791,22 @@ export function describeTransition(t, movements) {
   const fromLabel = clothIn ? CLOTH_ISSUE_PENDING_LABEL : getStageLabel(t.from_stage);
   const toLabel = clothRejourney ? CLOTH_ISSUE_PENDING_LABEL : getStageLabel(t.to_stage);
 
+  // Which pass of its stage this row is on — 2, 3, … on a re-journeyed piece,
+  // undefined on a first pass. Rendered as the same "(2)" the badge shows, so
+  // the floor reads one number in both places.
+  const pass = passMap instanceof Map ? passMap.get(t.id) : undefined;
+  const passTag = pass ? ` (${pass})` : "";
+
   const headline = isExit
-    ? `Sent to Vendor${stageForTrip ? ` (${stageForTrip})` : ""}`
+    ? `Sent to Vendor${stageForTrip ? ` (${stageForTrip})` : ""}${passTag}`
     : isEntry
-      ? `Returned to Warehouse${stageForTrip ? ` (${stageForTrip})` : ""}`
-      : `${t.from_stage ? `${fromLabel} → ` : ""}${toLabel}`;
+      ? `Returned to Warehouse${stageForTrip ? ` (${stageForTrip})` : ""}${passTag}`
+      : `${t.from_stage ? `${fromLabel} → ` : ""}${toLabel}${passTag}`;
 
   return {
     kind: external ? "external" : "internal",
     headline,
+    pass,
     tagLabel: external ? "External / Vendor" : "Internal Scan",
     // only show the raw type suffix for non-scan internal rows (e.g. manual_override)
     showType: !external && t.transition_type && t.transition_type !== "scan",

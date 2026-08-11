@@ -48,3 +48,12 @@ supabase/.env*
 # prod-cron.sql. Untracked until now only because files were staged by
 # name -- one `git add -A` would have committed the lot.
 scratchpad/
+
+# Ad-hoc data exports/imports dropped in the repo root while working (product
+# catalogue dumps, B2B and Shopify spreadsheets, colour-code PDFs). These are
+# live production data -- real SKUs, pricing and customer-facing content -- and
+# are regenerated on demand, so they are working files, not source. Same reason
+# delivery_report_*.csv above is ignored.
+/*.xlsx
+/*.csv
+/*.pdf

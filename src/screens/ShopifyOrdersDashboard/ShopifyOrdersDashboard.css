@@ -1011,68 +1011,8 @@
 }
 
 /* ─── Modal (QC Report) ──────────────────────────────────────────
-   z-index sits above the sidebar (200) so the overlay covers it on mobile,
-   where the sidebar is a fixed drawer. */
-.sho-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 20px;
-}
-
-.sho-modal {
-    background: #fff;
-    border-radius: 12px;
-    width: 100%;
-    max-width: 720px;
-    max-height: 85vh;
-    overflow-y: auto;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-}
-
-.sho-modal-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 16px 20px;
-    border-bottom: 1px solid #ece6d4;
-    position: sticky;
-    top: 0;
-    background: #fff;
-    border-radius: 12px 12px 0 0;
-}
-
-.sho-modal-title {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: #6b5a2e;
-}
-
-.sho-modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    line-height: 1;
-    color: #888;
-    cursor: pointer;
-    padding: 0 4px;
-}
-
-.sho-modal-close:hover {
-    color: #333;
-}
-
-/* Wide children (the QC table) scroll inside the modal rather than stretching it. */
-.sho-modal-body {
-    padding: 12px 16px;
-    overflow-x: auto;
-}
+   Moved to the shared components/QcReportModal (+ .css), which carries the
+   overlay/head/body rules that used to live here as .sho-modal-*. */
 
 /* ─── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 900px) {
