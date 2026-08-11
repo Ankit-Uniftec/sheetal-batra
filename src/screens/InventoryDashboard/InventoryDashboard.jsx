@@ -7,6 +7,7 @@ import "./InventoryDashboard.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
+import InventoryOverviewTab from "./InventoryOverviewTab";
 import StockOrdersTab from "./StockOrdersTab";
 import StockCalendarTab from "./StockCalendarTab";
 import WarehouseTab from "../../components/stock/WarehouseTab";
@@ -91,6 +92,12 @@ export default function InventoryDashboard() {
   const [stockFilters, setStockFilters] = useState([]); // 'out' | 'low' | 'in'
   const [syncFilter, setSyncFilter] = useState("all"); // 'all' | 'lxrts' | 'regular'
 
+  // Per-channel stock balance — { productId: { retail_stock: 12, b2b_stock: 5 } }.
+  // The live balance from db/…/v2/72: raised when a stock order for that channel
+  // completes, lowered when that channel sells. Separate from products.inventory,
+  // which stays the single global number every other dashboard reads.
+  const [channelStock, setChannelStock] = useState({});
+
   // ==================== NEW LXRTS STATES ====================
   const [variantInventory, setVariantInventory] = useState({}); // { productId: { S: 4, M: 2, ... } }
   const [expandedProducts, setExpandedProducts] = useState({}); // { productId: true/false }
@@ -129,11 +136,34 @@ export default function InventoryDashboard() {
     }
     setLoading(false);
 
+    fetchChannelStock();
+
     // After products load, sync LXRTS inventory from Shopify
     const lxrtsProducts = (data || []).filter((p) => p.sync_enabled);
     if (lxrtsProducts.length > 0) {
       fetchAllLxrtsInventory(lxrtsProducts);
     }
+  };
+
+  // Channel balances for every product, folded into a lookup keyed by product.
+  // Paged past the 1000-row cap: one row per (product, channel), so this grows
+  // to roughly 3x the product count.
+  const fetchChannelStock = async () => {
+    const { data, error } = await fetchAllRows("product_channel_stock", (q) =>
+      q.select("product_id, channel_key, quantity"));
+
+    if (error) {
+      // Non-blocking: the channel columns simply read 0 until 72 is applied.
+      console.error("Error fetching channel stock:", error);
+      return;
+    }
+
+    const map = {};
+    (data || []).forEach((row) => {
+      if (!map[row.product_id]) map[row.product_id] = {};
+      map[row.product_id][row.channel_key] = row.quantity || 0;
+    });
+    setChannelStock(map);
   };
 
   // ==================== LXRTS SHOPIFY SYNC ON LOAD ====================
@@ -603,6 +633,7 @@ export default function InventoryDashboard() {
       <div className={`inv-layout ${showSidebar ? "inv-sidebar-open" : ""}`}>
         <aside className={`inv-sidebar ${showSidebar ? "open" : ""}`}>
           <nav className="inv-menu">
+            <a className={`inv-menu-item ${activeTab === "overview" ? "active" : ""}`} onClick={() => { setActiveTab("overview"); setShowSidebar(false); }}>Overview</a>
             <a className={`inv-menu-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</a>
             <a className={`inv-menu-item ${activeTab === "stockOrders" ? "active" : ""}`} onClick={() => { setActiveTab("stockOrders"); setShowSidebar(false); }}>Stock Orders</a>
             <a className={`inv-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
@@ -615,6 +646,14 @@ export default function InventoryDashboard() {
 
         {/* Main Content */}
         <div className="inv-content">
+        {/* ==================== OVERVIEW TAB ==================== */}
+        {/* Channel-wise stock bifurcation. Fed from the same `products` and
+            `channelStock` this screen already loads, so opening the tab costs
+            no extra fetch. */}
+        {activeTab === "overview" && (
+          <InventoryOverviewTab products={products} channelStock={channelStock} />
+        )}
+
         {/* ==================== INVENTORY TAB ==================== */}
         {activeTab === "inventory" && (<>
         {/* LXRTS Sync Banner */}
@@ -794,6 +833,12 @@ export default function InventoryDashboard() {
                 <th>Bottom</th>
                 <th>Bottom Color</th>
                 <th>Base Price</th>
+                {/* Channel-wise stock (db/…/v2/72). A negative is shown in red
+                    rather than hidden — it means stock left without a matching
+                    stock order, or a sale was booked to the wrong channel. */}
+                <th className="inv-th-channel">Retail</th>
+                <th className="inv-th-channel">B2B</th>
+                <th className="inv-th-channel">Shopify</th>
                 <th>Inventory</th>
                 {/* <th>Sync</th> */}
               </tr>
@@ -801,7 +846,7 @@ export default function InventoryDashboard() {
             <tbody>
               {currentProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="inv-no-data">
+                  <td colSpan="13" className="inv-no-data">
                     {searchTerm || stockFilters.length > 0 || syncFilter !== "all"
                       ? "No products match your filters"
                       : "No products found"}
@@ -890,6 +935,18 @@ export default function InventoryDashboard() {
                         <td className="inv-price">
                           ₹{formatIndianNumber(product.base_price || 0)}
                         </td>
+
+                        {/* Channel-wise stock — retail / B2B / Shopify */}
+                        {["retail_stock", "b2b_stock", "shopify_stock"].map((key) => {
+                          const qty = channelStock[product.id]?.[key] || 0;
+                          return (
+                            <td key={key} className="inv-channel-cell">
+                              <span className={`inv-channel-qty ${qty < 0 ? "negative" : qty === 0 ? "zero" : ""}`}>
+                                {qty}
+                              </span>
+                            </td>
+                          );
+                        })}
 
                         {/* Inventory Cell */}
                         <td className="inv-inventory-cell">
@@ -984,7 +1041,7 @@ export default function InventoryDashboard() {
                       {/* ==================== EXPANDED VARIANT ROW (LXRTS ONLY) ==================== */}
                       {isSyncEnabled && isExpanded && (
                         <tr className="inv-variant-row">
-                          <td colSpan="10">
+                          <td colSpan="13">
                             <div className="inv-variant-container">
                               <div className="inv-variant-header">
                                 <span className="inv-variant-title">Size Variants — {product.name}</span>

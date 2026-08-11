@@ -1,0 +1,320 @@
+/* ============================================================
+   Inventory Overview — channel-wise stock bifurcation.
+
+   Visual language follows the Production Manager dashboard's channel
+   breakdown (dot + count + proportional bar + %) so "channel-wise" reads
+   the same everywhere in the app. Gold (#d5b85a) is the brand accent.
+
+   Scoped under .ivo-tab: this screen is lazy-loaded, and React.lazy breaks
+   the shared-base-then-override cascade, so every rule here is namespaced
+   rather than relying on load order.
+   ============================================================ */
+
+.ivo-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Per-channel totals ── */
+.ivo-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.ivo-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #fff;
+  padding: 18px 20px;
+  border: 1px solid #e6e6e6;
+  /* The channel's own colour, set inline per card. */
+  border-top: 3px solid #ccc;
+  border-radius: 10px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.ivo-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.ivo-stat-total {
+  border-top-color: #d5b85a;
+  background: #fffdf6;
+}
+
+.ivo-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+}
+
+.ivo-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #333;
+}
+
+.ivo-stat-value.negative {
+  color: #c62828;
+}
+
+.ivo-stat-sub {
+  font-size: 12px;
+  color: #999;
+}
+
+/* ── Negative-balance warning ── */
+.ivo-warning {
+  padding: 12px 16px;
+  background: #fff4f4;
+  border: 1px solid #ef9a9a;
+  border-left: 4px solid #c62828;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #8e2020;
+  line-height: 1.5;
+}
+
+/* ── Cards ── */
+.ivo-card {
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.ivo-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.ivo-card-title {
+  font-family: "Athleas", serif;
+  font-size: 16px;
+  color: #d5b85a;
+  margin: 0 0 16px 0;
+}
+
+.ivo-card-header .ivo-card-title {
+  margin: 0;
+}
+
+.ivo-empty-inline {
+  color: #999;
+  font-style: italic;
+  font-size: 14px;
+  margin: 0;
+  padding: 12px 0;
+}
+
+/* ── Proportional split rows ── */
+.ivo-channel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ivo-channel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ivo-channel-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ivo-channel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ivo-channel-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.ivo-channel-count {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 48px;
+  text-align: right;
+}
+
+.ivo-channel-count.negative {
+  color: #c62828;
+}
+
+.ivo-channel-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ivo-channel-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.ivo-channel-pct {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: right;
+  color: #555;
+}
+
+/* ── Toolbar ── */
+.ivo-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ivo-search,
+.ivo-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  outline: none;
+}
+
+.ivo-search {
+  min-width: 220px;
+}
+
+.ivo-search:focus,
+.ivo-select:focus {
+  border-color: #d5b85a;
+}
+
+.ivo-select {
+  cursor: pointer;
+}
+
+/* ── Table ── */
+.ivo-table-wrap {
+  /* Wide content scrolls inside its own container so the page body never
+     scrolls sideways on a phone. */
+  overflow-x: auto;
+}
+
+.ivo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ivo-table th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid #eee;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+  white-space: nowrap;
+}
+
+.ivo-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f2f2f2;
+}
+
+.ivo-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.ivo-th-num,
+.ivo-td-num {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ivo-sku {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 12px;
+  color: #555;
+}
+
+.ivo-name {
+  min-width: 200px;
+}
+
+.ivo-qty {
+  display: inline-block;
+  min-width: 30px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.ivo-qty.zero {
+  background: #f5f5f5;
+  color: #9e9e9e;
+}
+
+/* A negative is a discrepancy worth chasing, so it is loud on purpose. */
+.ivo-qty.negative {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+
+.ivo-total-negative {
+  color: #c62828;
+}
+
+@media (max-width: 768px) {
+  .ivo-channel-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ivo-channel-label {
+    min-width: unset;
+  }
+
+  .ivo-channel-right {
+    flex-wrap: wrap;
+  }
+
+  .ivo-search {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .ivo-stat-value {
+    font-size: 24px;
+  }
+}
