@@ -575,7 +575,11 @@ export default function B2bProductForm() {
     // Continue
     const handleContinue = () => {
         let finalItems = [...orderItems];
-        if (orderItems.length === 0 && selectedProduct) {
+        // Fires whenever a product is still pending in the form — NOT just when
+        // the cart is empty. Gating on `orderItems.length === 0` silently
+        // dropped the pending product from `items` on any order that already
+        // had one. Mirrors the same fix in ProductForm.js.
+        if (selectedProduct) {
             if (!deliveryDate) { showPopup({ title: "Delivery Date Required", message: "Please select a delivery date.", type: "warning" }); return; }
             let finalExtras = [...selectedExtrasWithColors];
             if (selectedExtra && selectedExtraColor.name) {
