@@ -108,6 +108,16 @@ const hasValidColorName = (color) => {
   return false;
 };
 
+// Dupatta colour may be stored either as a plain string or as a { hex, name }
+// object, depending on how the item was built. hasValidColorName() above only
+// understands the object form, so it would drop a string colour entirely.
+const dupattaColorName = (color) => {
+  if (!color) return "";
+  if (typeof color === "string") return color.trim();
+  if (typeof color === "object") return String(color.name || "").trim();
+  return "";
+};
+
 // Custom styles for this component
 const pdfStyles = StyleSheet.create({
   // Watermark styles - half visible on page edge, maintain aspect ratio
@@ -227,6 +237,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
   const hasTop = item?.top && item.top.trim() !== "";
   const hasBottom = item?.bottom && item.bottom.trim() !== "";
   const hasExtras = item?.extras && item.extras.length > 0;
+  const hasDupatta = item?.includes_dupatta === true;
   const hasAdditionals = item?.additionals && item.additionals.filter(a => a.name && a.name.trim() !== "").length > 0;
 
   return (
@@ -252,7 +263,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
         <View style={styles.productGrid}>
           {/* Top - only if present */}
           {hasTop && (
-            <View style={[styles.productField, { width: "25%" }]}>
+            <View style={[styles.productField, { width: "20%" }]}>
               <Text style={styles.label}>Top</Text>
               <Text style={styles.value}>{safeString(item.top)}</Text>
               {item?.top_color?.hex && (
@@ -268,7 +279,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
 
           {/* Bottom - only if present */}
           {hasBottom && (
-            <View style={[styles.productField, { width: "25%" }]}>
+            <View style={[styles.productField, { width: "20%" }]}>
               <Text style={styles.label}>Bottom</Text>
               <Text style={styles.value}>{safeString(item.bottom)}</Text>
               {item?.bottom_color?.hex && (
@@ -282,9 +293,25 @@ const ProductItem = ({ item, order, showPricing = true }) => {
             </View>
           )}
 
+          {/* Dupatta - only if present. Mirrors the warehouse doc, which has
+              always printed it; without this the customer copy silently omits
+              a piece the customer paid for. dupatta_color may be a plain
+              string or a { hex, name } object, so read the name defensively. */}
+          {hasDupatta && (
+            <View style={[styles.productField, { width: "20%" }]}>
+              <Text style={styles.label}>Dupatta</Text>
+              <Text style={styles.value}>{dupattaColorName(item?.dupatta_color) || "Included"}</Text>
+              {item?.dupatta_color?.hex && (
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+                  <View style={[styles.colorSwatch, { backgroundColor: item.dupatta_color.hex }]} />
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Extras - only if present */}
           {hasExtras && (
-            <View style={[styles.productField, { width: "30%" }]}>
+            <View style={[styles.productField, { width: "25%" }]}>
               <Text style={styles.label}>Extras</Text>
               {item.extras.map((extra, idx) => (
                 <View key={idx} style={{ marginBottom: 2 }}>
@@ -303,7 +330,7 @@ const ProductItem = ({ item, order, showPricing = true }) => {
           )}
 
           {/* Category */}
-          <View style={[styles.productField, { width: "20%" }]}>
+          <View style={[styles.productField, { width: "15%" }]}>
             <Text style={styles.label}>Category</Text>
             <Text style={styles.value}>{safeString(category)}</Text>
           </View>
