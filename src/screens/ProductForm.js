@@ -1368,7 +1368,11 @@ export default function ProductForm() {
       // Paginate past Supabase's 1000-row default cap — the catalog exceeds
       // 1000 products, so an un-paged fetch silently dropped late-alphabet
       // products (everything after ~"W" went missing from the dropdown).
-      const { data: productsData, error } = await fetchAllRows("products", (q) =>
+      // products_live, not products: excludes reserved-but-unfilled rows minted
+      // for pre-printed barcodes (name IS NULL). They would otherwise render as
+      // blank, selectable dropdown options that create an order line with no
+      // name and no price. See db/…/v2/74_reserve_sku_rows.sql.
+      const { data: productsData, error } = await fetchAllRows("products_live", (q) =>
         q.select(`
         *,
         product_extra_prices (*)
@@ -2562,8 +2566,14 @@ export default function ProductForm() {
 
     let finalItems = [...orderItems];
 
-    // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT"
-    if (orderItems.length === 0 && selectedProduct) {
+    // AUTO ADD LAST PRODUCT IF USER DIDN'T CLICK "ADD PRODUCT".
+    // Fires whenever a product is still pending in the form — NOT just when the
+    // cart is empty. Gating this on `orderItems.length === 0` silently dropped
+    // the pending product from `items` on any order that already had one, while
+    // the payable total (computed further down from finalItems) still counted
+    // it: the customer was billed for a garment production never received a
+    // barcode for.
+    if (selectedProduct) {
       // Validate delivery date for this product. Comms orders capture it once
       // on CommsOrderForm (auto-stamped; field hidden here), so skip.
       if (!isCommsOrder && !deliveryDate) {
@@ -2593,6 +2603,21 @@ export default function ProductForm() {
           price: extraDetails?.price || 0,
         });
       }
+
+      // Same mixing guard the manual "Add Product" path applies. Now that this
+      // block can run with a non-empty cart, a pending product could otherwise
+      // slip a Gifting item into a Regular order (or vice versa) at submit time.
+      if (orderItems.length > 0) {
+        const existingIsGifting = orderItems[0].is_gifting || false;
+        if (existingIsGifting !== isGiftingOrder) {
+          showPopup({
+            title: "Cannot Mix Order Types",
+            message: "Regular and Gifting items cannot be part of the same order. Please place them as separate orders.",
+            type: "warning",
+          });
+          return;
+        }
+      }
       finalItems.push({
         _id: makeId(), // Ensure a unique ID for the item
         product_id: selectedProduct.id,
@@ -2614,6 +2639,11 @@ export default function ProductForm() {
         image_url: selectedProduct.image_url || selectedProduct.image || null,
         notes: comments, // Initialize notes as empty for auto-added products
         isKids: isKidsProduct,
+        // `category` and `is_custom_piece` were missing here while the manual
+        // "Add Product" path set both — an auto-added item rendered with no
+        // category on the PDFs and lost its custom-piece flag.
+        category: isKidsProduct ? "Kids" : "Women",
+        is_custom_piece: isCustomPieceMode || selectedProduct.is_custom_piece === true,
         is_gifting: isGiftingOrder,
         order_type: getOrderType(),
         payment_order_type: getPaymentOrderType(),

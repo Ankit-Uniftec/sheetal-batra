@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../Popup";
@@ -11,6 +11,10 @@ import {
   validateRow,
 } from "./csvHelpers";
 import { STORE_CATEGORIES, DEFAULT_STORE_CATEGORY } from "../../utils/storeCategory";
+import useSkuScan from "../../hooks/useSkuScan";
+import BarcodeExportPanel from "./BarcodeExportPanel";
+import SkuTypeChooser from "./SkuTypeChooser";
+import ScannedProductCard from "./ScannedProductCard";
 import "./AddProduct.css";
 
 // Standard size order for sorting variant rows + the size multi-select.
@@ -29,6 +33,13 @@ const fetchNextSku = async () => {
   // Done in JS because Supabase JS client doesn't expose RAW expressions.
   // Paged past Supabase's 1000-row cap — a capped scan under-counts the max
   // and would mint DUPLICATE SKUs once products exceed 1000 (they do).
+  //
+  // MUST read `products`, NOT `products_live`. Reserved-but-unfilled rows
+  // (name IS NULL, minted by reserve_sku_rows for pre-printed barcodes) are
+  // exactly the rows holding already-printed numbers. Hiding them here mints a
+  // SKU that a physical sticker already carries — and since the 23505 retry
+  // re-runs this same scan, it returns the same colliding number and the insert
+  // fails permanently. See db/…/v2/74_reserve_sku_rows.sql.
   const { data, error } = await fetchAllRows("products", (q) => q
     .select("sku_id")
     .like("sku_id", "SKU-%"));
@@ -125,7 +136,7 @@ export default function AddProduct({ onProductAdded }) {
   const { showPopup, PopupComponent } = usePopup();
 
   // Mode toggles
-  const [mode, setMode] = useState("manual");           // 'manual' | 'csv'
+  const [mode, setMode] = useState("manual");           // 'manual' | 'csv' | 'barcodes'
   // 'normal' = regular off-the-rack | 'lxrts' = Shopify-synced | 'custom_piece' = bespoke / made-to-order.
   // LXRTS and Custom Piece are mutually exclusive product types — a single product
   // can never be both. Custom Piece persists `is_custom_piece: true` on the row;
@@ -135,6 +146,15 @@ export default function AddProduct({ onProductAdded }) {
   // Auto-SKU
   const [sku, setSku] = useState("");
   const [skuLoading, setSkuLoading] = useState(true);
+
+  // ─── Scanned pre-printed barcode ───
+  // scannedRow is the reserved `products` row (sku_id set, everything else
+  // NULL) behind a scanned tag. When set, the form FILLS THAT ROW: save is an
+  // UPDATE, not an INSERT, so there stays exactly one row per printed barcode.
+  const [scanning, setScanning] = useState(false);            // scanner armed?
+  const [scannedRow, setScannedRow] = useState(null);         // reserved row being filled
+  const [typeChooser, setTypeChooser] = useState(null);       // { sku, row } awaiting a type pick
+  const [scannedProduct, setScannedProduct] = useState(null); // already-filled -> details card
 
   // Common form fields
   // Extras are stored in a separate `extras` table and are uniform across all
@@ -263,6 +283,82 @@ export default function AddProduct({ onProductAdded }) {
     setAvailableSizes([]); setInventory("0"); setIsMto(false);
     setShopifyProductId("");
     setVariants([{ size: "", price: "", inventory: "0", shopify_variant_id: "" }]);
+    // Drop the scanned tag and go back to auto-SKU. This must happen after a
+    // successful fill: that garment is catalogued now, so keeping its SKU
+    // locked would make the very next save collide on the unique key.
+    setScannedRow(null);
+    refreshSku();
+  };
+
+  // ─── Scanned pre-printed barcode ───
+  // Three outcomes: a reserved row (fill it in), an already-filled product
+  // (show it), or a code we never issued (say so plainly rather than silently
+  // opening a blank form, which would invent a product for a stray barcode).
+  const handleScanResult = useCallback((result) => {
+    switch (result.type) {
+      case "reserved":
+        setScannedProduct(null);
+        setTypeChooser({ sku: result.sku, row: result.row });
+        break;
+
+      case "filled":
+        setTypeChooser(null);
+        setScannedProduct(result.product);
+        break;
+
+      case "unknown":
+        showPopup({
+          type: "warning",
+          title: "Unrecognised Barcode",
+          message: `${result.sku} isn't one of our reserved barcodes. Use "Export Barcodes" to print tags — only those can be filled in by scanning.`,
+          confirmText: "OK",
+        });
+        break;
+
+      case "error":
+        // Never fall through to the create flow on a failed lookup: the SKU may
+        // well exist, and creating it again would duplicate a live product.
+        console.error("SKU lookup failed:", result.error);
+        showPopup({
+          type: "error",
+          title: "Lookup Failed",
+          message: `Couldn't check ${result.sku}. Check your connection and scan again.`,
+          confirmText: "OK",
+        });
+        break;
+
+      default:
+        // A production barcode (…-TOP / a master order no) — not ours to handle.
+        break;
+    }
+    // showPopup only ever calls setState; excluded from deps so the scanner's
+    // document listener doesn't rebind on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Armed only while Scan Code is active on the manual form. The listener is
+  // document-level, so leaving it on elsewhere would swallow keystrokes.
+  const { resolving: scanResolving } = useSkuScan({
+    enabled: scanning && mode === "manual",
+    onResult: handleScanResult,
+  });
+
+  // Picking a type moves the reserved row into the form. The SKU is now fixed:
+  // it is printed on a physical garment, so it cannot be re-rolled.
+  const startFillingScanned = (chosenType) => {
+    if (!typeChooser) return;
+    setProductType(chosenType);
+    setScannedRow(typeChooser.row);
+    setSku(typeChooser.sku);
+    setSkuLoading(false);
+    setTypeChooser(null);
+    setScannedProduct(null);
+  };
+
+  const cancelScannedFill = () => {
+    setTypeChooser(null);
+    setScannedProduct(null);
+    setScannedRow(null);
     refreshSku();
   };
 
@@ -323,6 +419,11 @@ export default function AddProduct({ onProductAdded }) {
         : null,
       sync_enabled: productType === "lxrts",
       is_custom_piece: productType === "custom_piece",
+      // Always a real product by the time it is saved. On the scanned-tag path
+      // this is what LIFTS the reservation: without it the row would keep
+      // is_draft = true and stay invisible behind products_live — saved, but
+      // missing from the order form and every dashboard.
+      is_draft: false,
     };
 
     if (productType === "normal" || productType === "custom_piece") {
@@ -337,33 +438,66 @@ export default function AddProduct({ onProductAdded }) {
       productRow.available_size = null;
     }
 
-    // Insert with one retry if SKU race-collides.
-    let attempt = 0;
     let inserted = null;
     let lastError = null;
-    while (attempt < 2 && !inserted) {
+
+    if (scannedRow) {
+      // FILLING A PRE-PRINTED TAG — the row already exists, so this is an
+      // UPDATE. Inserting would create a second row for one physical barcode.
+      //
+      // No SKU-bump retry here, deliberately. A scanned SKU is a physical fact
+      // printed on a garment; quietly moving this product to a different number
+      // would leave a sticker that lies about what it is attached to. If the row
+      // was filled in by someone else meanwhile, say so and stop.
       const { data, error } = await supabase
         .from("products")
-        .insert(productRow)
+        .update(productRow)
+        .eq("id", scannedRow.id)
+        .eq("is_draft", true)   // still unfilled — guards against a concurrent fill
         .select()
-        .single();
-      if (!error) { inserted = data; break; }
-      lastError = error;
-      // PG unique violation = 23505. PostgREST surfaces code "23505" or message includes 'duplicate'.
-      const isDup = error.code === "23505" || /duplicate|unique/i.test(error.message || "");
-      if (!isDup) break;
-      // Bump SKU and retry once
-      try {
-        const fresh = await fetchNextSku();
-        productRow.sku_id = fresh;
-        setSku(fresh);
-      } catch { break; }
-      attempt += 1;
+        .maybeSingle();
+
+      if (error) {
+        lastError = error;
+      } else if (!data) {
+        lastError = new Error(
+          `${sku} was filled in by someone else while this form was open. Re-scan the tag to see the current product.`
+        );
+      } else {
+        inserted = data;
+      }
+    } else {
+      // Insert with one retry if SKU race-collides.
+      let attempt = 0;
+      while (attempt < 2 && !inserted) {
+        const { data, error } = await supabase
+          .from("products")
+          .insert(productRow)
+          .select()
+          .single();
+        if (!error) { inserted = data; break; }
+        lastError = error;
+        // PG unique violation = 23505. PostgREST surfaces code "23505" or message includes 'duplicate'.
+        const isDup = error.code === "23505" || /duplicate|unique/i.test(error.message || "");
+        if (!isDup) break;
+        // Bump SKU and retry once
+        try {
+          const fresh = await fetchNextSku();
+          productRow.sku_id = fresh;
+          setSku(fresh);
+        } catch { break; }
+        attempt += 1;
+      }
     }
 
     if (!inserted) {
-      console.error("Insert failed:", lastError);
-      showPopup({ type: "error", title: "Insert Failed", message: lastError?.message || "Could not save product.", confirmText: "OK" });
+      console.error("Save failed:", lastError);
+      showPopup({
+        type: "error",
+        title: scannedRow ? "Could Not Save" : "Insert Failed",
+        message: lastError?.message || "Could not save product.",
+        confirmText: "OK",
+      });
       setSubmitting(false);
       return;
     }
@@ -381,13 +515,28 @@ export default function AddProduct({ onProductAdded }) {
         }));
       const { error: varErr } = await supabase.from("product_variants").insert(variantRows);
       if (varErr) {
-        // Rollback the product so the form can be retried cleanly.
-        await supabase.from("products").delete().eq("id", inserted.id);
+        // Roll back so the form can be retried cleanly.
+        if (scannedRow) {
+          // A pre-printed tag: put the row back to reserved rather than
+          // deleting it. Deleting would destroy a reservation whose barcode is
+          // already stuck on a garment — the SKU would then read as unknown on
+          // the next scan and, worse, be re-mintable to a different product.
+          // Restoring is_draft is enough: that is what marks a row reserved,
+          // and the stale field values are overwritten on the next attempt.
+          await supabase
+            .from("products")
+            .update({ is_draft: true })
+            .eq("id", inserted.id);
+        } else {
+          await supabase.from("products").delete().eq("id", inserted.id);
+        }
         console.error("Variants insert failed:", varErr);
         showPopup({
           type: "error",
           title: "Variants Failed",
-          message: `Product was rolled back. Variant error: ${varErr.message}`,
+          message: scannedRow
+            ? `Nothing was saved — ${sku} is still reserved and can be scanned again. Variant error: ${varErr.message}`
+            : `Product was rolled back. Variant error: ${varErr.message}`,
           confirmText: "OK",
         });
         setSubmitting(false);
@@ -397,8 +546,10 @@ export default function AddProduct({ onProductAdded }) {
 
     showPopup({
       type: "success",
-      title: "Product Added",
-      message: `${inserted.name} (${inserted.sku_id}) saved successfully.`,
+      title: scannedRow ? "Barcode Filled In" : "Product Added",
+      message: scannedRow
+        ? `${inserted.name} is now linked to ${inserted.sku_id}. That tag will show these details from now on.`
+        : `${inserted.name} (${inserted.sku_id}) saved successfully.`,
       confirmText: "OK",
     });
     if (onProductAdded) onProductAdded(inserted);
@@ -426,8 +577,11 @@ export default function AddProduct({ onProductAdded }) {
   const handleExportAll = async () => {
     setCsvExporting(true);
     try {
-      // Paged past Supabase's 1000-row cap
-      const { data: prods, error: pErr } = await fetchAllRows("products", (q) => q
+      // Paged past Supabase's 1000-row cap.
+      // products_live: this export is for editing real products, so reserved-
+      // but-unfilled barcode rows (name IS NULL) would just be blank lines.
+      // Those get filled in by scanning the tag, not via CSV.
+      const { data: prods, error: pErr } = await fetchAllRows("products_live", (q) => q
         .select("*")
         .eq("sync_enabled", false)
         .order("sku_id", { ascending: true }));
@@ -512,6 +666,8 @@ export default function AddProduct({ onProductAdded }) {
     let nextSkuNum = 0;
     try {
       // Paged past Supabase's 1000-row cap — duplicate-SKU risk, see above.
+      // MUST read `products`, NOT `products_live` — same reason as fetchNextSku:
+      // reserved barcode rows hold printed numbers and must be counted past.
       const { data: skuData } = await fetchAllRows("products", (q) => q
         .select("sku_id")
         .like("sku_id", "SKU-%"));
@@ -620,7 +776,7 @@ export default function AddProduct({ onProductAdded }) {
     <div className="add-product-root">
       {PopupComponent}
 
-      {/* ── Mode toggle (Manual / CSV) ── */}
+      {/* ── Mode toggle (Manual / CSV / Barcodes) ── */}
       <div className="ap-modebar">
         <button
           type="button"
@@ -630,11 +786,63 @@ export default function AddProduct({ onProductAdded }) {
         <button
           type="button"
           className={`ap-mode-btn ${mode === "csv" ? "active" : ""}`}
-          onClick={() => setMode("csv")}
+          onClick={() => { setMode("csv"); setScanning(false); }}
         >CSV Import / Export</button>
+        <button
+          type="button"
+          className={`ap-mode-btn ${mode === "barcodes" ? "active" : ""}`}
+          onClick={() => { setMode("barcodes"); setScanning(false); }}
+        >Export Barcodes</button>
+
+        {/* Arming the scanner is a mode OF the manual form, not a separate
+            screen — a scanned tag lands straight in the form below. */}
+        <button
+          type="button"
+          className={`ap-mode-btn ap-scan-btn ${scanning && mode === "manual" ? "active" : ""}`}
+          onClick={() => {
+            setMode("manual");
+            setScanning((on) => {
+              if (on) { setTypeChooser(null); setScannedProduct(null); }
+              return !on;
+            });
+          }}
+        >
+          {scanning && mode === "manual" ? "Scanning… (click to stop)" : "Scan Code"}
+        </button>
       </div>
 
-      {/* ── Product type toggle (Normal / LXRTS / Custom Piece) ── */}
+      {scanning && mode === "manual" && (
+        <div className="ap-scan-strip">
+          {scanResolving
+            ? "Looking that up…"
+            : scannedRow
+              ? `Filling in ${sku} — complete the form below and save.`
+              : "Ready — scan a printed SKU tag."}
+        </div>
+      )}
+
+      {/* Scanned a tag with no details yet — which kind of product is it? */}
+      {typeChooser && (
+        <SkuTypeChooser
+          sku={typeChooser.sku}
+          onPick={startFillingScanned}
+          onCancel={cancelScannedFill}
+        />
+      )}
+
+      {/* Scanned a tag that is already a real product — read-only. */}
+      {scannedProduct && mode === "manual" && (
+        <ScannedProductCard
+          product={scannedProduct}
+          onScanAnother={() => setScannedProduct(null)}
+        />
+      )}
+
+      {mode === "barcodes" && <BarcodeExportPanel />}
+
+      {/* ── Product type toggle (Normal / LXRTS / Custom Piece) ──
+          Hidden on the barcode sheet, which has no product type. */}
+      {mode !== "barcodes" && (
       <div className="ap-typebar">
         <label className={`ap-type-pill ${productType === "normal" ? "active" : ""}`}>
           <input
@@ -667,6 +875,7 @@ export default function AddProduct({ onProductAdded }) {
           <span>Custom Piece</span>
         </label>
       </div>
+      )}
 
       {mode === "manual" && (
         <form className="ap-form" onSubmit={handleSubmit}>
@@ -676,10 +885,28 @@ export default function AddProduct({ onProductAdded }) {
             <div className="ap-field">
               <label>SKU</label>
               <div className="ap-sku-row">
-                <input className="ap-input" value={skuLoading ? "Generating…" : sku} readOnly />
-                <button type="button" className="ap-mini-btn" onClick={refreshSku} title="Re-fetch the next available SKU">↻</button>
+                <input
+                  className={`ap-input ${scannedRow ? "ap-input-locked" : ""}`}
+                  value={skuLoading ? "Generating…" : sku}
+                  readOnly
+                />
+                {scannedRow ? (
+                  // No re-roll: this number is printed on the garment in hand.
+                  <button
+                    type="button"
+                    className="ap-mini-btn"
+                    onClick={cancelScannedFill}
+                    title="Discard this scan and go back to a new product"
+                  >✕</button>
+                ) : (
+                  <button type="button" className="ap-mini-btn" onClick={refreshSku} title="Re-fetch the next available SKU">↻</button>
+                )}
               </div>
-              <span className="ap-help">Auto-generated. Refresh if you suspect another product was just added.</span>
+              <span className="ap-help">
+                {scannedRow
+                  ? "Locked — from the scanned tag. Saving fills in this barcode."
+                  : "Auto-generated. Refresh if you suspect another product was just added."}
+              </span>
             </div>
 
             <div className="ap-field">

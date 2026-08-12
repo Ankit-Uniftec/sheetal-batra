@@ -80,7 +80,10 @@ export default function CommsInventory({ profile, showPopup }) {
     (async () => {
       setLoading(true);
       const [{ data: prods }, { data: vars }, { data: blks }] = await Promise.all([
-        fetchAllRows("products", (q) => q.select("id, name, sku_id, image_url, inventory, default_top, default_bottom, default_color, base_price, sync_enabled").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
+        // products_live, not products: reserved-but-unfilled barcode rows
+        // (name IS NULL) would show as blank rows here and in the CSV that
+        // goes out to PR partners. See v2/74_reserve_sku_rows.sql.
+        fetchAllRows("products_live", (q) => q.select("id, name, sku_id, image_url, inventory, default_top, default_bottom, default_color, base_price, sync_enabled").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
         fetchAllRows("product_variants", (q) => q.select("id, product_id, size, color, inventory")), // Paged past Supabase's 1000-row cap — full variants table
         supabase.from("comms_inventory_blocks").select("*").eq("status", "active"),
       ]);

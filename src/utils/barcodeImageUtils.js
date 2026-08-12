@@ -61,6 +61,28 @@ export function generateMasterBarcodeDataUrl(text) {
 }
 
 /**
+ * Generate a large barcode for a printable SKU label (pre-printed garment tags).
+ *
+ * Bigger than the component/master presets on purpose: these are cut out and
+ * stuck on fabric, then scanned by a handheld gun at an awkward angle, so the
+ * bars need both width and height to stay readable. Sized for the 2-across x
+ * 3-down A4 grid (~98 x 88mm cells) — see src/pdf/SkuBarcodeSheetPdf.js.
+ *
+ * displayValue is inherited as true, so the SKU text prints under the bars and
+ * the label cell needs no separate <Text>. That also means a damaged label can
+ * still be typed in by hand.
+ */
+export function generateLabelBarcodeDataUrl(text) {
+  return generateBarcodeDataUrl(text, {
+    width: 3,
+    height: 110,
+    fontSize: 18,
+    textMargin: 8,
+    margin: 10,
+  });
+}
+
+/**
  * Generate all barcode images for an order's components
  * Returns an object ready to pass to WarehouseOrderPdf
  * 

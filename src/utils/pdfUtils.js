@@ -2,10 +2,11 @@ import { pdf } from "@react-pdf/renderer";
 import { supabase } from "../lib/supabaseClient";
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
 import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
+import SkuBarcodeSheetPdf from "../pdf/SkuBarcodeSheetPdf";
 // Full-resolution copy reserved for PDF embedding — logo.png (used by screens)
 // is downscaled for the web and must not end up inside generated PDFs.
 import Logo from "../images/logo-pdf.png";
-import { generateOrderBarcodeImages } from "./barcodeImageUtils";
+import { generateOrderBarcodeImages, generateLabelBarcodeDataUrl } from "./barcodeImageUtils";
 import { fetchOrderComponents } from "./barcodeService";
 
 // Resolves the "client name" for a PDF header. B2B orders have no
@@ -527,4 +528,51 @@ export const clearPdfUrls = async (orderId) => {
     console.error("Error clearing PDF URLs:", err);
     return false;
   }
+};
+
+
+/**
+ * Open a printable sheet of pre-allocated SKU barcodes in a new tab.
+ *
+ * Unlike every other generator in this file, this does NOT upload to the
+ * `invoices` bucket. That bucket exists so order documents stay re-openable
+ * from their order row; a label sheet has no row to hang off, is thrown away
+ * once it's printed and cut, and can be regenerated from the reserved-SKU list
+ * at any time. Uploading would leave permanent orphans in a bucket with no
+ * cleanup, plus a network round trip on what should be instant.
+ *
+ * Throws on failure rather than alert()-ing like its older neighbours here —
+ * the caller owns the popup (usePopup), per the app-wide convention.
+ *
+ * @param {string[]} skus  e.g. ["SKU-1051", …]. Already reserved in `products`
+ *                         by reserve_sku_rows() before this is called.
+ * @returns {Promise<number>} how many labels were rendered
+ */
+export const downloadSkuBarcodeSheet = async (skus) => {
+  const list = (skus || []).filter(Boolean);
+  if (list.length === 0) throw new Error("No SKUs to print.");
+
+  const labels = list.map((sku) => ({
+    sku,
+    image: generateLabelBarcodeDataUrl(sku),
+  }));
+
+  const printedOn = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  const blob = await pdf(
+    <SkuBarcodeSheetPdf labels={labels} printedOn={printedOn} />
+  ).toBlob();
+
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+
+  // Revoke late: revoking immediately can race the new tab's fetch of the blob
+  // and leave the user staring at a blank viewer.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+  return labels.length;
 };

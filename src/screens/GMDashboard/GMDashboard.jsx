@@ -254,7 +254,10 @@ export default function GMDashboard() {
         try {
             const [ordersRes, productsRes, spRes, vendorsRes, consignmentRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
+                // products_live, not products: reserved-but-unfilled barcode rows
+                // (name IS NULL) have NULL inventory, which reads as 0 and would
+                // inflate the out-of-stock count. See v2/74_reserve_sku_rows.sql.
+                fetchAllRows("products_live", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
                 supabase.from("vendors").select("*"),
                 supabase.from("consignment_inventory").select("*"),

@@ -327,7 +327,9 @@ export default function B2bProductForm() {
         // Paginate past the 1000-row cap so the full catalog (1000+ products)
         // shows in the dropdown, not just the first 1000 (late-alphabet
         // products were silently dropping off).
-        fetchAllRows("products", (q) => q.select("*, product_extra_prices (*)").order("name")).then(({ data }) => setProducts(data || []));
+        // products_live excludes reserved-but-unfilled barcode rows (name IS NULL)
+        // so they can't be picked as a blank, priceless line. See v2/74.
+        fetchAllRows("products_live", (q) => q.select("*, product_extra_prices (*)").order("name")).then(({ data }) => setProducts(data || []));
         supabase.from("colors").select("name, hex").order("name").then(({ data }) => setColors(data || []));
         // hex was added in migration 47; fall back to name-only if it is not
         // there yet so this keeps working before the migration runs.
@@ -575,7 +577,11 @@ export default function B2bProductForm() {
     // Continue
     const handleContinue = () => {
         let finalItems = [...orderItems];
-        if (orderItems.length === 0 && selectedProduct) {
+        // Fires whenever a product is still pending in the form — NOT just when
+        // the cart is empty. Gating on `orderItems.length === 0` silently
+        // dropped the pending product from `items` on any order that already
+        // had one. Mirrors the same fix in ProductForm.js.
+        if (selectedProduct) {
             if (!deliveryDate) { showPopup({ title: "Delivery Date Required", message: "Please select a delivery date.", type: "warning" }); return; }
             let finalExtras = [...selectedExtrasWithColors];
             if (selectedExtra && selectedExtraColor.name) {
