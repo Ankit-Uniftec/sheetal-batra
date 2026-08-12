@@ -931,7 +931,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
 
   return (
     <Document>
-      {/* If we have component barcodes, one page per component (disabled in prod via SHOW_BARCODES) */}
+      {/* If we have component barcodes, one page per component */}
       {SHOW_BARCODES && componentBarcodes && componentBarcodes.length > 0 ? (
         componentBarcodes.map((comp, compIdx) => (
           <Page key={compIdx} size="A4" style={warehouseStyles.page}>

@@ -344,6 +344,23 @@ export default function OrderDetailPage() {
 
       if (insertError) throw insertError;
 
+      // Mint barcodes for the alteration's garment pieces. Every alteration
+      // runs a production flow and is tracked by scan — alteration_location
+      // says *where* that happens (store vs warehouse), not *whether* the
+      // piece is tracked. Barcodes carry the parent sequence plus the
+      // alteration suffix (DLC-003625A-TOP) so a piece on the floor reads
+      // back to its parent order. Non-blocking: the alteration row is
+      // already persisted, so a component failure can't lose the order.
+      try {
+        const { ensureOrderComponents } = await import("../utils/barcodeService");
+        await ensureOrderComponents({
+          ...insertedOrder,
+          items: alterationOrder.items,
+        });
+      } catch (compError) {
+        console.error("Alteration component generation failed:", compError);
+      }
+
       // Update local state
       setAlterations(prev => [...prev, insertedOrder]);
 
