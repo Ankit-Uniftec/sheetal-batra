@@ -30,15 +30,6 @@ import CompletePicker from "../components/CompletePicker";
 import { runManualCompleteWithOverride } from "../utils/manualComplete";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../components/PeriodFilter";
 
-// Status options for alterations
-const ALTERATION_STATUS_OPTIONS = [
-  { value: "order_received", label: "Order Received", color: "#ff9800" },
-  { value: "in_production", label: "In Production", color: "#2196f3" },
-  { value: "ready", label: "Ready", color: "#4caf50" },
-  { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
-  { value: "delivered", label: "Delivered", color: "#388e3c" },
-];
-
 // Warehouse production stages (manual dropdown)
 // const WAREHOUSE_STAGES = [
 //   { value: "order_received", label: "Order Received", color: "#9e9e9e" },
@@ -115,7 +106,6 @@ const WarehouseDashboard = () => {
   const [activeTab, setActiveTab] = useTabParam("orders");
   const [showSidebar, setShowSidebar] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(null);
-  const [statusUpdating, setStatusUpdating] = useState(null);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   // Stations the logged-in warehouse user is allowed to scan at. Empty array
   // means no restriction (passed-through ScanStation will show all stations).
@@ -622,25 +612,26 @@ const WarehouseDashboard = () => {
 
       const status = o.status?.toLowerCase();
 
+      // Alterations are NOT filtered by alteration_location. Every alteration
+      // mints barcodes and runs the production flow; the location says where
+      // the work happens, not whether it's tracked. In-store alterations used
+      // to be hidden here because they had no components to show.
       switch (statusTab) {
         case "unfulfilled":
           // All orders that are still being worked on (not completed/delivered/cancelled)
           return status !== "completed" &&
             status !== "delivered" &&
-            status !== "cancelled" &&
-            (!o.is_alteration || o.alteration_location === "Warehouse");
+            status !== "cancelled";
         case "completed":
           // Finished orders
-          return (status === "completed" || status === "delivered") &&
-            (!o.is_alteration || o.alteration_location === "Warehouse");
+          return status === "completed" || status === "delivered";
         case "cancelled":
-          return status === "cancelled" &&
-            (!o.is_alteration || o.alteration_location === "Warehouse");
+          return status === "cancelled";
         case "alteration":
-          return o.is_alteration && o.alteration_location === "Warehouse";
+          return o.is_alteration;
         default:
-          // "all" - show everything except in-store alterations
-          return !o.is_alteration || o.alteration_location === "Warehouse";
+          // "all"
+          return true;
       }
     });
   }, [visibleOrders, statusTab]);
@@ -787,26 +778,22 @@ const WarehouseDashboard = () => {
   // Tab counts
   const tabCounts = useMemo(() => {
     const validOrders = visibleOrders.filter(o => !isLxrtsOrder(o));
+    // Must mirror filteredByStatus exactly — no alteration_location gate — or
+    // the tab badges disagree with the lists they label.
     return {
-      all: validOrders.filter(o => !o.is_alteration || o.alteration_location === "Warehouse").length,
+      all: validOrders.length,
       unfulfilled: validOrders.filter(o => {
         const status = o.status?.toLowerCase();
         return status !== "completed" &&
           status !== "delivered" &&
-          status !== "cancelled" &&
-          (!o.is_alteration || o.alteration_location === "Warehouse");
+          status !== "cancelled";
       }).length,
       completed: validOrders.filter(o => {
         const status = o.status?.toLowerCase();
-        return (status === "completed" || status === "delivered") &&
-          (!o.is_alteration || o.alteration_location === "Warehouse");
+        return status === "completed" || status === "delivered";
       }).length,
-      cancelled: validOrders.filter(o => {
-        const status = o.status?.toLowerCase();
-        return status === "cancelled" &&
-          (!o.is_alteration || o.alteration_location === "Warehouse");
-      }).length,
-      alteration: validOrders.filter(o => o.is_alteration && o.alteration_location === "Warehouse").length,
+      cancelled: validOrders.filter(o => o.status?.toLowerCase() === "cancelled").length,
+      alteration: validOrders.filter(o => o.is_alteration).length,
     };
   }, [visibleOrders]);
 
@@ -1068,29 +1055,9 @@ const WarehouseDashboard = () => {
   //   return stage || { label: stageValue || "Order Received", color: "#9e9e9e" };
   // };
 
-  const updateAlterationStatus = async (orderId, newStatus) => {
-    setStatusUpdating(orderId);
-    try {
-      const updateData = { status: newStatus };
-      if (newStatus === "delivered") {
-        updateData.delivered_at = new Date().toISOString();
-      }
-      const { error } = await supabase
-        .from("orders")
-        .update(updateData)
-        .eq("id", orderId);
-      if (!error) {
-        fetchOrders();
-      } else {
-        console.error("Status update failed:", error);
-        showPopup({ title: "Status update", message: "Failed to update status", type: "error", confirmText: "Ok" });
-      }
-    } catch (err) {
-      console.error("Error updating status:", err);
-    } finally {
-      setStatusUpdating(null);
-    }
-  };
+  // updateAlterationStatus REMOVED: it hand-wrote orders.status for warehouse
+  // alterations, which now derive their status from component scans like any
+  // other order. See the note on the alteration details grid below.
 
   const handleGeneratePdf = async (order) => {
     setPdfLoading(order.id);
@@ -1141,11 +1108,6 @@ const WarehouseDashboard = () => {
       other: "Other",
     };
     return types[type] || type || "-";
-  };
-
-  const getStatusColor = (status) => {
-    const option = ALTERATION_STATUS_OPTIONS.find(o => o.value === status);
-    return option?.color || "#666";
   };
 
   return (
@@ -1669,22 +1631,14 @@ const WarehouseDashboard = () => {
                                 <span className="wd-alt-label">Location:</span>
                                 <span className="wd-alt-value">{order.alteration_location || "-"}</span>
                               </div>
-                              <div className="wd-alteration-field">
-                                <span className="wd-alt-label">Status:</span>
-                                <select
-                                  className="wd-status-select"
-                                  value={order.status === "pending" ? "order_received" : (order.status || "order_received")}
-                                  onChange={(e) => updateAlterationStatus(order.id, e.target.value)}
-                                  disabled={statusUpdating === order.id}
-                                  style={{ borderColor: getStatusColor(order.status) }}
-                                >
-                                  {ALTERATION_STATUS_OPTIONS.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
+                              {/* Status is NOT editable here. Warehouse alterations
+                                  mint scannable components like any other order, so
+                                  their status derives from component scans. A manual
+                                  dropdown existed only while alterations had no
+                                  barcodes; keeping it would let a hand-picked value
+                                  race the scan-derived one. In-store alterations
+                                  (which have no components) never reach this
+                                  dashboard — they're filtered out of every tab. */}
                             </div>
 
                             {order.alteration_notes && (
@@ -1798,9 +1752,11 @@ const WarehouseDashboard = () => {
                             </div>
 
                             {/* Per-component barcode stage tracker — shows each
-                                component's live production stage (re-enabled with the scan flow). */}
-                            {!isAlteration && (
-                              <div className="wd-component-tracker">
+                                component's live production stage (re-enabled with the scan flow).
+                                Alterations included: they mint barcodes and run the same
+                                production flow, so they get the same stage badges,
+                                journey and QC report as any other order. */}
+                            <div className="wd-component-tracker">
                                 {order.status === "cancelled" ? (
                                   <div className="wd-order-status-badge wd-status-cancelled">Cancelled</div>
                                 ) : componentLoadingMap[order.id] ? (
@@ -1873,8 +1829,7 @@ const WarehouseDashboard = () => {
                                     Mark as Completed
                                   </button>
                                 )}
-                              </div>
-                            )}
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -1063,14 +1063,34 @@ const hasGarmentOption = (v) => {
   return s !== "" && !["na", "n/a", "n.a.", "none", "-"].includes(s.toLowerCase());
 };
 
+// Barcode root ("<STORE>-<SEQ>") for an order number.
+//
+// Regular:     SB-DLC-0425-000376    → DLC-000376
+// Alteration:  SB-DLC-0425-000376-A  → DLC-000376A
+//              SB-DLC-0425-000376-A2 → DLC-000376A2
+//
+// Alterations append "-A"/"-A<n>" to the parent order_no, so the naive
+// `split("-").pop()` returns "A" instead of the sequence — which would mint
+// DLC-A-TOP and collide across every alteration in the store. Parse by dash
+// position (never by character offset — store codes vary in length) and fold
+// the alteration suffix into the sequence so the alteration's pieces stay
+// visibly tied to their parent while remaining globally unique.
+export function getBarcodeRoot(orderNo) {
+  const parts = (orderNo || "").split("-");
+  // ["SB", "DLC", "0425", "000376"] or [..., "000376", "A2"]
+  const storeCode = parts[1] || "SB";
+  const last = parts[parts.length - 1] || "";
+  const isAlterationSuffix = /^A\d*$/i.test(last) && parts.length > 4;
+  const seqPart = isAlterationSuffix
+    ? `${parts[parts.length - 2] || "000000"}${last.toUpperCase()}`
+    : (last || "000000");
+  return { storeCode, seqPart };
+}
+
 export async function generateOrderComponents(order) {
   const components = [];
   const orderNo = order.order_no;
-  // Extract store code from order_no: "SB-DLC-0425-000376" → "DLC"
-  const storeCode = orderNo?.split("-")[1] || "SB";
-
-  // Get the sequence number part: last 6 digits
-  const seqPart = orderNo?.split("-").pop() || "000000";
+  const { storeCode, seqPart } = getBarcodeRoot(orderNo);
 
   const items = Array.isArray(order.items) ? order.items : [order.items];
 
