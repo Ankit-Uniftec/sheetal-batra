@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { usePopup } from "../components/Popup";
 import { supabase } from "../lib/supabaseClient";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
+import { isSkuBarcode } from "../utils/barcodeKind";
 import {
     advanceComponentStage,
     activateComponents,
@@ -45,6 +46,13 @@ const TERMINAL_STAGES = ["disposed", "scrapped", "dispatched"];
 // no component suffix, unlike a piece barcode (DLC-003625-TOP / -BTM / -DUP /
 // -EX1, optionally "-EX1-2" for an extra of product 2). Printed on every
 // warehouse work order next to the per-piece codes.
+//
+// This stays a NEGATIVE test on purpose — callers rely on "not a piece" falling
+// through to the master lookup, which is also what produces the friendly
+// "no order found" for a typo. Product SKU tags (SKU-1040) are the one thing
+// that must NOT reach here: they are not pieces, so this would call them
+// masters and send them into an ilike '%SKU-1040%' order lookup. handleScan
+// peels those off up front via isSkuBarcode — see the guard at its top.
 const isMasterBarcode = (barcode) => !/-(TOP|BTM|DUP|EX\d+)\d*(?:-\d+)?$/i.test(barcode || "");
 
 // Look up the order a master barcode refers to. Returns null when nothing
@@ -318,6 +326,21 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             return;
         }
         lastScanRef.current = { barcode, ts: now };
+
+        // A product SKU tag (SKU-1040) is not a production barcode. Peel it off
+        // BEFORE isMasterBarcode sees it: that test is negative ("not a piece"),
+        // so it would call this a master and run an ilike '%SKU-1040%' order
+        // lookup, reporting a confusing "no order found". These tags are
+        // pre-printed stickers for catalogue entry (Inventory > Add Product),
+        // and they only ever reach a scan station by mistake.
+        if (isSkuBarcode(barcode)) {
+            setScanResult({
+                success: false,
+                error: "PRODUCT_SKU_SCANNED",
+                message: `${barcode} is a product SKU tag, not a production barcode. Scan the garment's piece barcode (…-TOP / -BTM / -DUP) or the order's master barcode instead.`,
+            });
+            return;
+        }
 
         setIsProcessing(true);
         setScanResult(null);

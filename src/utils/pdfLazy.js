@@ -18,3 +18,6 @@ export const generateAllPdfs = async (...args) =>
 
 export const clearPdfUrls = async (...args) =>
   (await import("./pdfUtils")).clearPdfUrls(...args);
+
+export const downloadSkuBarcodeSheet = async (...args) =>
+  (await import("./pdfUtils")).downloadSkuBarcodeSheet(...args);

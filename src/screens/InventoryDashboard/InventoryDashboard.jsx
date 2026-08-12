@@ -125,7 +125,13 @@ export default function InventoryDashboard() {
   const fetchProducts = async () => {
     setLoading(true);
     // Paged past Supabase's 1000-row cap — products exceed 1000.
-    const { data, error } = await fetchAllRows("products", (q) => q
+    // products_live, not products: reserved-but-unfilled barcode rows
+    // (name IS NULL) have NULL inventory, so the "out of stock first" sort
+    // below would pin every unfilled barcode to the top of the list, and the
+    // Overview tab would render them as nameless rows. The Add Product tab
+    // reads the base table directly for its reserved-SKU list.
+    // See db/…/v2/74_reserve_sku_rows.sql.
+    const { data, error } = await fetchAllRows("products_live", (q) => q
       .select("*")
       .order("name", { ascending: true }));
 

@@ -565,3 +565,214 @@ select.ap-input { cursor: pointer; }
   font-size: 11px;
   color: #444;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Pre-printed SKU barcodes — export sheet, scan-to-fill, details
+   ══════════════════════════════════════════════════════════════ */
+
+/* Scanner arm button sits at the far right of the mode bar: it's an action,
+   not a peer of the Manual/CSV/Barcodes modes. */
+.ap-scan-btn { margin-left: auto; }
+
+.ap-scan-strip {
+  margin: -8px 0 16px;
+  padding: 10px 14px;
+  border: 1px dashed #d5b85a;
+  border-radius: 8px;
+  background: #fdf9ef;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a6d1f;
+}
+
+/* A locked SKU came off a physical tag and can't be re-rolled — styled
+   distinctly from an ordinary read-only field so that reads as deliberate. */
+.ap-input-locked {
+  background: #fdf9ef !important;
+  border-color: #d5b85a !important;
+  color: #8a6d1f !important;
+  font-weight: 700;
+}
+
+/* ── Export panel ── */
+.ap-barcode-panel { padding: 4px 2px 8px; }
+
+.ap-barcode-controls {
+  display: flex;
+  align-items: flex-end;   /* button sits on the input's baseline, not the label's */
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.ap-barcode-controls .ap-field { max-width: 200px; }
+
+/* The field stacks label / input / help-text, so its bottom edge is the hint,
+   not the input. Lift the button by the hint's height (~12px line + 4px gap)
+   so it lines up with the INPUT it acts on. */
+.ap-barcode-controls .ap-btn-primary { margin-bottom: 20px; }
+
+.ap-barcode-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 10px 0 14px;
+}
+
+/* Auto-width pill for a LABELLED action. Distinct from .ap-mini-btn, which is
+   a fixed 38x38 square sized for a single glyph and mangles any real text. */
+.ap-text-btn {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.ap-text-btn:hover:not(:disabled) { border-color: #d5b85a; color: #d5b85a; }
+
+.ap-text-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ap-reserved-grid {
+  display: grid;
+  /* auto-FIT + a max-width would stretch these to fill the row; auto-FILL with
+     a fixed track keeps each chip label-sized however wide the screen is. */
+  grid-template-columns: repeat(auto-fill, 132px);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ap-reserved-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ap-reserved-chip:hover { border-color: #d5b85a; }
+
+.ap-reserved-chip.selected {
+  border-color: #d5b85a;
+  background: #fdf9ef;
+  color: #8a6d1f;
+}
+
+.ap-reserved-chip input { cursor: pointer; }
+
+/* ── Type chooser (scanned an unfilled tag) ── */
+.ap-type-chooser { max-width: 520px; }
+
+.ap-type-chooser-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ap-type-chooser-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid #d4d4d4;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ap-type-chooser-btn:hover {
+  border-color: #d5b85a;
+  background: #fdf9ef;
+}
+
+.ap-type-chooser-btn strong { font-size: 14px; color: #333; }
+.ap-type-chooser-btn span { font-size: 12px; color: #777; }
+
+/* ── Scanned an already-filled tag ── */
+.ap-scanned-card {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid #d5b85a;
+  border-radius: 10px;
+  background: #fffdf7;
+}
+
+.ap-scanned-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.ap-scanned-head h3 { margin: 4px 0 0; font-size: 17px; color: #333; }
+
+.ap-scanned-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #8a6d1f;
+}
+
+.ap-scanned-tag {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #d5b85a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ap-scanned-body { display: flex; gap: 18px; flex-wrap: wrap; }
+
+.ap-scanned-img {
+  width: 120px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.ap-scanned-rows {
+  flex: 1 1 260px;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 20px;
+}
+
+.ap-scanned-row { display: flex; flex-direction: column; gap: 2px; }
+.ap-scanned-row dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; color: #999; }
+.ap-scanned-row dd { margin: 0; font-size: 14px; font-weight: 600; color: #333; }
+
+.ap-scanned-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+@media (max-width: 640px) {
+  .ap-scan-btn { margin-left: 0; }
+  .ap-barcode-controls { align-items: stretch; }
+  .ap-barcode-controls .ap-btn-primary { margin-bottom: 0; }
+  .ap-reserved-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}

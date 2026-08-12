@@ -182,7 +182,9 @@ export default function AssistantCmoDashboard() {
       ].join(", ");
       const [ordersRes, productsRes, profilesRes, consRes] = await Promise.all([
         fetchAllRows("orders", (q) => q.select(ORDER_COLUMNS).order("created_at", { ascending: false })),
-        fetchAllRows("products", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
+        // products_live, not products: reserved-but-unfilled barcode rows
+        // (name IS NULL) would inflate the product count tile. See v2/74.
+        fetchAllRows("products_live", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
         // Paginate profiles past Supabase's 1000-row cap — the client book is
         // built from profiles, so a cap here silently dropped clients.
         fetchAllRows("profiles", (q) => q.select("id, full_name, phone, email, dob, loyalty_points, created_at")),

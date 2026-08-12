@@ -50,7 +50,10 @@ export default function StockExchangeTab() {
     // Fetch warehouses and products for the form
     const [whRes, prodRes] = await Promise.all([
       supabase.from("warehouses").select("id, name").eq("is_active", true).order("name"),
-      fetchAllRows("products", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
+      // products_live, not products: reserved-but-unfilled barcode rows
+      // (name IS NULL) would appear as nameless options in the transfer
+      // dropdown. See db/…/v2/74_reserve_sku_rows.sql.
+      fetchAllRows("products_live", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
     ]);
 
     setWarehouses(whRes.data || []);

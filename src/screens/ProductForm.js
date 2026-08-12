@@ -1368,7 +1368,11 @@ export default function ProductForm() {
       // Paginate past Supabase's 1000-row default cap — the catalog exceeds
       // 1000 products, so an un-paged fetch silently dropped late-alphabet
       // products (everything after ~"W" went missing from the dropdown).
-      const { data: productsData, error } = await fetchAllRows("products", (q) =>
+      // products_live, not products: excludes reserved-but-unfilled rows minted
+      // for pre-printed barcodes (name IS NULL). They would otherwise render as
+      // blank, selectable dropdown options that create an order line with no
+      // name and no price. See db/…/v2/74_reserve_sku_rows.sql.
+      const { data: productsData, error } = await fetchAllRows("products_live", (q) =>
         q.select(`
         *,
         product_extra_prices (*)

@@ -33,7 +33,10 @@ export default function WarehouseTab() {
     setLoading(true);
     const [whRes, prodRes] = await Promise.all([
       supabase.from("warehouses").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-      fetchAllRows("products", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
+      // products_live, not products: reserved-but-unfilled barcode rows
+      // (name IS NULL) would appear as nameless options in the assign-stock
+      // dropdown. See db/…/v2/74_reserve_sku_rows.sql.
+      fetchAllRows("products_live", (q) => q.select("id, name, sku_id").order("name")), // Paged past Supabase's 1000-row cap
     ]);
 
     if (whRes.error) console.error("Error fetching warehouses:", whRes.error);
