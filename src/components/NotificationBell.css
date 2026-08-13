@@ -162,20 +162,37 @@
   padding: 10px 20px;
   border-bottom: 1px solid #eee;
   flex-shrink: 0;
+  /* Wrap rather than squeeze: in a narrow drawer the two controls stack
+     instead of collapsing the search box to an unusable stub. */
+  flex-wrap: wrap;
 }
+/* Same pattern as the QC History / Re-journey filter bars: the text box takes
+   the leftover space, the select stays its own width.
+   flex-basis 180px (not 0) matters — a <select> has a wide intrinsic
+   min-content width and, unlike an input, will not shrink below it. With
+   `flex: 1` + basis 0 the select won out and starved the input, which is why
+   the search box rendered as a tiny square beside a full-width dropdown. */
 .notif-search-input {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 180px;
+  min-width: 140px;
   padding: 7px 10px;
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 13px;
   outline: none;
+  /* Without this the input renders at its default ~177px size and ignores the
+     padding in its box width. */
+  box-sizing: border-box;
 }
 .notif-search-input:focus {
   border-color: #d5b85a;
 }
 .notif-priority-select {
+  /* Fixed: never grow into the search box's space, never shrink below legible. */
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 120px;
+  max-width: 45%;
   padding: 7px 8px;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -183,6 +200,7 @@
   background: #fff;
   color: #444;
   outline: none;
+  box-sizing: border-box;
 }
 .notif-priority-select:focus {
   border-color: #d5b85a;

@@ -64,19 +64,28 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
     const [activeFilter, setActiveFilter] = useState("all"); // 'all' | 'unread'
     const [notifSearch, setNotifSearch] = useState("");
     const [priorityFilter, setPriorityFilter] = useState("all"); // 'all' | 'normal' | 'urgent' | 'escalation'
+    // Debounced copy of notifSearch — this is what actually hits the DB, so a
+    // fast typist fires one query instead of one per keystroke.
+    const [searchTerm, setSearchTerm] = useState("");
     const drawerRef = useRef(null);
 
-    // Text search (title/message) + priority filter over the fetched list
+    useEffect(() => {
+        const t = setTimeout(() => setSearchTerm(notifSearch.trim()), 300);
+        return () => clearTimeout(t);
+    }, [notifSearch]);
+
+    // Priority filter only. The TEXT search is done by the DB (see
+    // getNotifications): filtering text here would only ever search the rows
+    // already fetched, which is the bug this replaced — anything beyond the
+    // most recent 50 was unfindable.
     const visibleNotifications = useMemo(() => {
-        const q = notifSearch.trim().toLowerCase();
         return notifications.filter((notif) => {
             const n = notif.notification;
             if (!n) return false;
             if (priorityFilter !== "all" && (n.priority || "normal") !== priorityFilter) return false;
-            if (q && !`${n.title || ""} ${n.message || ""}`.toLowerCase().includes(q)) return false;
             return true;
         });
-    }, [notifications, notifSearch, priorityFilter]);
+    }, [notifications, priorityFilter]);
 
     // Fetch notifications
     const fetchNotifications = useCallback(async () => {
@@ -86,6 +95,7 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
             const data = await getNotifications(userEmail, {
                 unreadOnly: activeFilter === "unread",
                 limit: 50,
+                search: searchTerm,
             });
             setNotifications(data);
             const count = await getUnreadCount(userEmail);
@@ -95,7 +105,7 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
         } finally {
             setLoading(false);
         }
-    }, [userEmail, activeFilter]);
+    }, [userEmail, activeFilter, searchTerm]);
 
     // Initial load
     useEffect(() => {
@@ -288,11 +298,18 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
                                 <div className="notif-empty">
                                     <span className="notif-empty-icon">🔔</span>
                                     <p>
-                                        {notifications.length > 0
-                                            ? "No notifications match your search"
-                                            : activeFilter === "unread"
-                                                ? "No unread notifications"
-                                                : "No notifications yet"}
+                                        {/* Order matters: with server-side search a
+                                            no-match query returns ZERO rows, so
+                                            `notifications.length > 0` is false and the
+                                            old wording claimed the user had none at
+                                            all. Test the search term first. */}
+                                        {searchTerm
+                                            ? `No notifications match “${searchTerm}”`
+                                            : priorityFilter !== "all"
+                                                ? "No notifications at this priority"
+                                                : activeFilter === "unread"
+                                                    ? "No unread notifications"
+                                                    : "No notifications yet"}
                                     </p>
                                 </div>
                             ) : (

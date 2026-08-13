@@ -528,9 +528,19 @@ export const sendNotification = async (type, options = {}) => {
 // ==========================================
 // FETCH: Get notifications for current user
 // ==========================================
+// `search` searches the notification's title and message ACROSS ALL of the
+// user's notifications, not just the page the drawer has loaded. It must be
+// server-side: the drawer fetches the 50 most recent, so filtering in JS made
+// anything older unfindable — the search silently reported "no match" for
+// notifications that exist. The limit still applies to the RESULTS, so a broad
+// term stays bounded.
 export const getNotifications = async (email, options = {}) => {
-    const { unreadOnly = false, limit = 50 } = options;
+    const { unreadOnly = false, limit = 50, search = "" } = options;
+    const q = String(search || "").trim();
 
+    // !inner ONLY when searching: an inner join drops recipient rows whose
+    // notification doesn't match, which is exactly what a search wants. Without
+    // a search term the join stays a left join, so behaviour is unchanged.
     let query = supabase
         .from("notification_recipients")
         .select(`
@@ -539,7 +549,7 @@ export const getNotifications = async (email, options = {}) => {
       read_at,
       channel,
       created_at,
-      notification:notification_id (
+      notification:notification_id${q ? "!inner" : ""} (
         id,
         type,
         title,
@@ -558,6 +568,23 @@ export const getNotifications = async (email, options = {}) => {
 
     if (unreadOnly) {
         query = query.eq("read", false);
+    }
+
+    // Filter on the JOINED notification row. PostgREST needs the embedded
+    // resource named for both the filter and the inner join; without
+    // `!inner` the or() would match nothing.
+    if (q) {
+        // Commas and parens are the or() syntax's own delimiters — a search for
+        // "a,b" would otherwise be parsed as two conditions and error.
+        // Collapse runs of whitespace too: "a,b" becomes "a b", and a doubled
+        // space inside an ilike pattern would fail to match the real text.
+        const safe = q.replace(/[,()]/g, " ").replace(/\s+/g, " ").trim();
+        if (safe) {
+            query = query.or(
+                `title.ilike.%${safe}%,message.ilike.%${safe}%,order_no.ilike.%${safe}%`,
+                { referencedTable: "notification" }
+            );
+        }
     }
 
     const { data, error } = await query;
