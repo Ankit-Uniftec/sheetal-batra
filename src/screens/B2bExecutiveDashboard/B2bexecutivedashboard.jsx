@@ -115,17 +115,14 @@ export default function B2bExecutiveDashboard() {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-        const salesOrders = periodOrders.filter(o => o.b2b_order_type !== "Consignment");
         const consignmentOrders = periodOrders.filter(o => o.b2b_order_type === "Consignment");
-        const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const consignmentValue = consignmentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = periodOrders.length;
         const pendingOrders = periodOrders.filter(o => o.approval_status === "pending");
         // Explicitly-named windows stay absolute — they say what they are.
         const thisMonthOrders = orders.filter(o => o.created_at >= monthStart);
         const todayOrders = orders.filter(o => formatDate(o.created_at) === formatDate(new Date()));
 
-        return { salesRevenue, consignmentValue, consignmentCount: consignmentOrders.length, totalOrders, pendingOrders, thisMonthOrders, todayOrders };
+        return { consignmentCount: consignmentOrders.length, totalOrders, pendingOrders, thisMonthOrders, todayOrders };
     }, [orders, periodOrders]);
 
     const ordersByDate = useMemo(() => {
@@ -314,9 +311,6 @@ export default function B2bExecutiveDashboard() {
                 {activeTab === "dashboard" && (
                     <>
                         {/* Row 1: Stat Cards */}
-                        <div className="b2b-cell b2b-total-revenue">
-                            <StatCard title="Sales Revenue" value={`₹${formatIndianNumber(stats.salesRevenue)}`} change={`Consignment: ₹${formatIndianNumber(stats.consignmentValue)} (${stats.consignmentCount})`} />
-                        </div>
                         <div className="b2b-cell b2b-total-orders">
                             <StatCard title="Sales Orders" value={formatIndianNumber(stats.totalOrders - stats.consignmentCount)} change={`Pending: ${stats.pendingOrders.length}`} />
                         </div>

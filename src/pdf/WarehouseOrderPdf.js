@@ -1,6 +1,7 @@
 import React from "react";
 import { getWarehouseDateObj } from "../utils/warehouseDate";
 import { standardSizeMeasurementsByCategory } from "../utils/b2bSizeChart";
+import { mergeOrderNotes } from "../utils/orderNotes";
 import {
   Document,
   Page,
@@ -549,7 +550,12 @@ const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isU
   rows.push(
     { label: "DELIVERY TO:", value: order.delivery_location || order.delivery_city || order.mode_of_delivery },
     { label: "CLIENT NAME:", value: clientNameForHeader },
-    { label: "DELIVERY DATE:", value: getWarehouseDate(itemDeliveryDate, order.created_at), highlight: !isUrgent, urgent: isUrgent },
+    // "DISPATCH DATE", not "delivery": this field is getWarehouseDate() — the
+    // T-2 production deadline (customer delivery_date minus 2 days), which is
+    // when the piece must LEAVE, not when the customer receives it. The old
+    // label named the customer's date while printing the warehouse's, which
+    // read as a two-day reprieve that does not exist.
+    { label: "DISPATCH DATE:", value: getWarehouseDate(itemDeliveryDate, order.created_at), highlight: !isUrgent, urgent: isUrgent },
     { label: "ORDER PRIORITY:", value: isUrgent ? "🔥 URGENT" : (order.order_flag || order.priority || "NORMAL"), urgent: isUrgent },
     { label: "ORDER DATE:", value: formatDate(order.created_at) },
   );
@@ -924,9 +930,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
   // For B2B orders, delivery_name is empty; caller resolves the vendor brand
   // and passes it as resolvedClientName. Falls back to delivery_name for retail.
   const clientNameForHeader = resolvedClientName || order.delivery_name;
-  const notes = [...new Set([item.notes, order.comments, order.delivery_notes]
-    .filter(n => n && n.trim() !== ""))]
-    .join(" | ");
+  const notes = mergeOrderNotes(order, item);
   const hasNotes = notes && notes.trim() !== "";
 
   return (

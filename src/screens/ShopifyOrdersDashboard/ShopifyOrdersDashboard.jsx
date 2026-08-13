@@ -29,6 +29,7 @@ import useTabParam from "../../hooks/useTabParam";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import StoreCalendarTab from "../StoreManagerDashboard/StoreCalendarTab";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
+import { mergeOrderNotes } from "../../utils/orderNotes";
 import { downloadCsv } from "../../utils/downloadCsv";
 import {
   enrichComponentsWithMovements,
@@ -56,18 +57,19 @@ import "./ShopifyOrdersDashboard.css";
  * breakdown and the state of each physical piece — NOT who bought it or what
  * they paid. So, deliberately:
  *
- *   • NO client identity — no name, phone, email or address. Not rendered, and
+ *   • The CLIENT NAME is shown (order card + Calendar). Production staff need
+ *     to identify whose garment they are handling. This is a deliberate change
+ *     from the original rule — it is NOT an oversight, so please don't "fix" it
+ *     back. Only the name: phone, email and address remain unfetched.
+ *   • NO other client identity — no phone, email or address. Not rendered, and
  *     not even SELECTED (see ORDER_LIST_COLUMNS): data that never reaches the
  *     browser cannot leak through devtools or a later well-meaning edit.
  *   • NO money — no amount, no COD balance, no revenue stat.
  *   • NO order-detail navigation — cards are inert. /order/:id shows the full
  *     customer-facing record, so this screen must not link to it.
- *   • The Calendar passes showClient={false} / showSalesperson={false} to the
- *     shared StoreCalendarTab, whose Client column would otherwise leak a name.
  *
- * If you are about to add an Amount or Client row here, that is the thing this
- * screen exists to not have. Same convention as RetailManagerDashboard's
- * "no PII" orders tab.
+ * If you are about to add an Amount, a phone or an address row here, that is
+ * the thing this screen exists to not have.
  *
  * ═══ IT IS ALSO A PRODUCTION-HEAD SCREEN ════════════════════════════════
  * The Shopify role owns the website channel end-to-end, exactly as the Offline
@@ -107,13 +109,15 @@ const TABS = [
   { key: "rejourneys", label: "Re-journeys" },
 ];
 
-// Warehouse-relevant lookups only. Client Name and Phone are deliberately NOT
-// offered: finding an order by customer is exactly the lookup this screen must
-// not provide. Barcode is here because matching a physical tag to an order is
-// the floor's real need.
+// Warehouse-relevant lookups. Client Name is offered because the card now shows
+// it — a field you can read but not search is a worse screen, and the privacy
+// argument for withholding it went when the name became visible. Phone/email
+// are still NOT offered and still not fetched. Barcode is here because matching
+// a physical tag to an order is the floor's real need.
 const SEARCH_FIELDS = [
   { value: "order_no", label: "Order Number" },
   { value: "shopify_order_name", label: "Shopify Order No" },
+  { value: "client", label: "Client Name" },
   { value: "product", label: "Product" },
   { value: "barcode", label: "Barcode" },
 ];
@@ -121,7 +125,7 @@ const SEARCH_FIELDS = [
 // Only the columns this screen reads.
 //
 // Every customer-identity and money column is deliberately absent —
-// delivery_name/email/phone/city, grand_total, net_total,
+// delivery_email/phone/city, grand_total, net_total,
 // grand_total_after_discount, advance_payment, remaining_payment, payment_mode.
 // This is the substantive half of "hide the client details": not selecting them
 // means they never reach the client at all.
@@ -137,6 +141,14 @@ const SEARCH_FIELDS = [
 const ORDER_LIST_COLUMNS = [
   "id", "order_no", "created_at", "delivery_date", "status",
   "total_quantity", "items", "warehouse_stage",
+  // Order notes. `comments` is the field Shopify orders actually populate
+  // (delivery_notes is null on every website order); both are fetched because
+  // the warehouse PDF merges the same pair, and the card must not disagree
+  // with the document the floor prints from it.
+  "comments", "delivery_notes",
+  // delivery_name only — the buyer's NAME is shown so the floor can identify
+  // whose garment it is. Their email/phone/address stay unfetched.
+  "delivery_name",
   "warehouse_urls",
   "shopify_order_id", "shopify_order_name", "shopify_synced_at",
   "shopify_financial_status", "shopify_tags",
@@ -654,7 +666,9 @@ export default function ShopifyOrdersDashboard() {
     setExporting(true);
     try {
       const headers = [
-        "Order No", "Shopify Order No", "Order Date", "Warehouse Date (T-2)", "Customer Delivery Date",
+        // "Dispatch Date (T-2)" matches the card and the warehouse PDF; the
+        // customer's own date is the separate column beside it.
+        "Order No", "Shopify Order No", "Order Date", "Dispatch Date (T-2)", "Customer Delivery Date",
         "Status", "Payment", "Tags", "Qty", "Products",
         "Size", "Top", "Bottom", "Dupatta",
         ...(withIssues ? ["Issues"] : ["Pieces", "Piece Stages"]),
@@ -835,6 +849,8 @@ export default function ShopifyOrdersDashboard() {
         // Tolerate the "#" being typed or not.
         return (o.shopify_order_name || "").toLowerCase().replace("#", "")
           .includes(q.replace("#", ""));
+      case "client":
+        return (o.delivery_name || "").toLowerCase().includes(q);
       case "product":
         return (o.items || []).some((i) =>
           (i.product_name || "").toLowerCase().includes(q));
@@ -1010,6 +1026,8 @@ export default function ShopifyOrdersDashboard() {
     const flagged = mappingFlagged || paymentFlagged;
     const components = componentsByOrder[order.id] || [];
     const imgSrc = item.image_url || "";
+    // Same merge the warehouse PDF uses, so card and document always agree.
+    const notes = mergeOrderNotes(order, item);
     const onReviewTab = context === "needs-review";
     const linkToReview = flagged && !onReviewTab;
 
@@ -1033,17 +1051,28 @@ export default function ShopifyOrdersDashboard() {
               <span className="sho-header-label">SHOPIFY ORDER NO:</span>
               <span className="sho-header-value">{order.shopify_order_name || "—"}</span>
             </div>
+            {/* Client name. Shown so the floor can identify whose garment this
+                is — a deliberate change from this screen's original no-identity
+                rule (see the header block). The name only; no phone/email/address. */}
+            <div className="sho-header-item">
+              <span className="sho-header-label">CLIENT:</span>
+              <span className="sho-header-value">{order.delivery_name || "—"}</span>
+            </div>
             <div className="sho-header-item">
               <span className="sho-header-label">ORDER DATE:</span>
               <span className="sho-header-value">{formatDate(order.created_at) || "—"}</span>
             </div>
             <div className="sho-header-item">
-              <span className="sho-header-label">DELIVERY:</span>
+              {/* DISPATCH, not delivery: the value is getWarehouseDate() —
+                  the T-2 deadline for the piece to leave, not the date the
+                  customer receives it. The tooltip still surfaces the customer
+                  date, which is the only place it appears on this screen. */}
+              <span className="sho-header-label">DISPATCH DATE:</span>
               <span
                 className="sho-header-value"
                 title={
                   order.delivery_date
-                    ? `Warehouse deadline (T-2). Customer date: ${formatDate(order.delivery_date)}`
+                    ? `Dispatch deadline (T-2). Customer delivery date: ${formatDate(order.delivery_date)}`
                     : undefined
                 }
               >
@@ -1155,6 +1184,21 @@ export default function ShopifyOrdersDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Order notes — only when there is one. Merged the SAME way as the
+            warehouse PDF (WarehouseOrderPdf), de-duped and " | "-joined, so the
+            card and the document the floor prints from it never disagree.
+            Rendered verbatim: these carry real production instructions (dispatch
+            dates, size corrections, matching-dupatta asks), and paraphrasing or
+            truncating one risks losing the instruction. white-space:pre-wrap in
+            the CSS keeps the author's line breaks, which is how they separate
+            distinct instructions. */}
+        {notes && (
+          <div className="sho-notes">
+            <span className="sho-order-label">Notes:</span>
+            <p className="sho-notes-text">{notes}</p>
+          </div>
+        )}
 
         {/* Production pieces — one barcode per physical component. These run
             the same stage pipeline as every other channel.
@@ -1650,16 +1694,24 @@ export default function ShopifyOrdersDashboard() {
               {activeTab === "calendar" && (
                 <>
                   <h2 className="sho-section-title">Delivery Calendar</h2>
-                  {/* showClient/showSalesperson off: this shared component's
-                      day-detail table renders delivery_name, which this screen
-                      must not show. The SA on a website order is always the
-                      constant "Website", so that column carries nothing either.
-                      No onOpenOrder — cards and rows open nothing here. */}
+                  {/* showClient ON: the client name is shown on this screen —
+                      a deliberate change from the original no-identity rule
+                      (see the header block), matching the order card.
+                      showSalesperson stays off: the SA on a website order is
+                      always the constant "Website", so that column carries no
+                      information here.
+                      No onOpenOrder — cards and rows open nothing here.
+                      showShopifyNo + onDownloadPdf on: the floor works a
+                      delivery day from this tab, and needs to identify the
+                      website order and pull its work order without leaving it.
+                      Same handler as the Orders tab, so both stay in step. */}
                   <StoreCalendarTab
                     orders={readyOrders}
                     storeLabel="Shopify"
-                    showClient={false}
                     showSalesperson={false}
+                    showShopifyNo
+                    onDownloadPdf={handleWarehousePdf}
+                    pdfLoadingId={warehousePdfLoading}
                   />
                 </>
               )}

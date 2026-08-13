@@ -228,6 +228,47 @@
   font-weight: 600;
 }
 
+/* Selected-day search — filters the day's rows, not the month grid */
+.scal-search {
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 8px 11px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #333;
+  border: 1px solid #e2e2e2;
+  border-radius: 6px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.scal-search:focus {
+  outline: none;
+  border-color: #d5b85a;
+}
+
+.scal-pdf-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #333;
+  background: #fff;
+  border: 1px solid #d5b85a;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scal-pdf-btn:hover:not(:disabled) {
+  background: #faf8f3;
+}
+
+.scal-pdf-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 @media (max-width: 768px) {
   .scal-cell {
     min-height: 52px;

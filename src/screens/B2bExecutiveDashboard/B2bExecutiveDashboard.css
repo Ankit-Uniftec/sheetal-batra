@@ -130,19 +130,14 @@
 }
 
 /* Row 1 */
-.b2b-total-revenue {
+.b2b-total-orders {
   grid-row: 1;
   grid-column: 2;
 }
 
-.b2b-total-orders {
-  grid-row: 1;
-  grid-column: 3;
-}
-
 .b2b-total-pending {
   grid-row: 1;
-  grid-column: 4;
+  grid-column: 3 / 5;
 }
 
 /* Row 2 Alerts */
