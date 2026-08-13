@@ -841,6 +841,28 @@
 }
 
 /* ─── Production components (one chip per scannable piece) ───── */
+/* Order notes — production instructions from the website order. */
+.sho-notes {
+    margin: 0 16px 14px;
+    padding: 10px 12px;
+    background: #faf8f3;
+    border-left: 3px solid #d5b85a;
+    border-radius: 4px;
+}
+
+.sho-notes-text {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #333;
+    /* Authors separate distinct instructions with line breaks ("4 aug dispatch
+
+       no buffer"); collapsing them would run two instructions together.
+       break-word so a pasted URL cannot widen the card. */
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+}
+
 .sho-comp-journey {
     display: grid;
     /* Wide enough for a full SHOPIFY-000119-TOP barcode plus its stage badge.
