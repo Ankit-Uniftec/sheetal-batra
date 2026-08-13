@@ -1315,13 +1315,28 @@ export async function fetchAllVendors() {
   return data;
 }
 
-// Production Manager requests a new vendor (pending until Manish approves)
-export async function requestVendor({ vendorName, vendorLocation, requestedBy }) {
+// Production Manager requests a new vendor (pending until Manish approves).
+// stageStep is REQUIRED: the Production Head's movement picker filters vendors by
+// stage_number, so a vendor saved without one can never be selected for an
+// external movement and shows as "Stage not set" everywhere. Fail loudly here
+// rather than writing a half-formed row.
+export async function requestVendor({ vendorName, vendorLocation, stageStep, requestedBy }) {
+  // Number(null) and Number("") are both 0, and step 0 is Security Gate — a
+  // loose lookup would silently save a stage-less vendor as a gate vendor.
+  // Require a real production step (1..10) explicitly.
+  const step = Number(stageStep);
+  const station = Number.isInteger(step) && step >= 1 && step <= 10
+    ? SCAN_STATIONS.find((s) => s.step === step)
+    : null;
+  if (!station) throw new Error(`Vendor stage is required and must be a valid production stage (got: ${stageStep}).`);
+  const stationLabel = station.label;
   const { data, error } = await supabase
     .from("production_vendors")
     .insert({
       vendor_name: vendorName,
       vendor_location: vendorLocation,
+      stage_number: step,
+      stage_name: stationLabel,
       status: "pending",
       requested_by: requestedBy,
     })
