@@ -122,18 +122,46 @@ export default function B2bProductionDashboard() {
 
             setUser(user);
 
+            // Comms orders reach this dashboard by ASSIGNMENT, and the Comms
+            // form stores the owner's designation (not an email — those dropdown
+            // addresses are not real logins). Match on this head's designation,
+            // and on the legacy email for the handful of rows written before
+            // the form changed.
+            const COMMS_ASSIGN_DESIGNATION = "B2B Production Head";
+            const COMMS_ASSIGN_LEGACY_EMAIL = "production1.sheetalbatra@gmail.com";
+
             const [profileResult, ordersResult] = await Promise.all([
                 supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
                 // Paged: Supabase caps unpaged queries at 1000 rows — with newest-first
                 // ordering that silently dropped the OLDEST B2B orders once the total
                 // crossed 1000 (the legacy Jan-Feb orders vanished from page 50 onward).
-                fetchAllRows("orders", (q) => q.select("*").eq("is_b2b", true).order("created_at", { ascending: false }))
+                // Also pulls Comms orders assigned to THIS production head. Comms
+                // orders stay is_b2b = false (they must keep reporting as Comms
+                // revenue on the SB-COM- prefix) — the Comms order form's "Order
+                // Assign" is what puts the order on this dashboard. See the
+                // designation constants above for why it is matched by
+                // designation and not by email.
+                fetchAllRows("orders", (q) => q
+                    .select("*")
+                    .or(`is_b2b.eq.true,comms_order_assign.eq."${COMMS_ASSIGN_DESIGNATION}",comms_order_assign.eq.${COMMS_ASSIGN_LEGACY_EMAIL}`)
+                    .order("created_at", { ascending: false }))
             ]);
 
             if (profileResult.data) setProfile(profileResult.data);
+            // A rejected orders query used to fall straight through the
+            // `if (ordersResult.data)` below and render as an EMPTY dashboard —
+            // indistinguishable from "no orders", with nothing in the console.
+            if (ordersResult.error) console.error("orders fetch failed:", ordersResult.error.message);
             if (ordersResult.data) {
-                // Production head only sees approved orders
-                const approvedOrders = ordersResult.data.filter(o => o.approval_status === "approved");
+                // Production head only sees approved orders. B2B orders always
+                // carry an approval_status; a Comms order only gets one when it
+                // trips the >Rs 35,000 gate (CommsReviewOrder writes null below
+                // it), so a null status on a Comms row means "no approval needed"
+                // — treat it as approved or every assigned Comms order vanishes.
+                const approvedOrders = ordersResult.data.filter(o =>
+                    o.approval_status === "approved" ||
+                    (o.is_comms && !o.approval_status)
+                );
                 setOrders(approvedOrders);
                 const vendorIds = [...new Set(approvedOrders.map(o => o.vendor_id).filter(Boolean))];
                 if (vendorIds.length > 0) {
@@ -329,7 +357,10 @@ export default function B2bProductionDashboard() {
         if (prodFilter === "cancelled") filtered = filtered.filter(o => (o.status || "").toLowerCase() === "cancelled");
         else if (prodFilter !== "all") filtered = filtered.filter(o => (o.status || "").toLowerCase() !== "cancelled" && getStageBucket(o) === prodFilter);
         if (allTypeFilter === "stock") filtered = filtered.filter(o => isB2bStockOrderRow(o));
-        else if (allTypeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type === allTypeFilter);
+        // Like "stock", "comms" is not a b2b_order_type — an assigned Comms
+        // order carries a null type and is identified by is_comms.
+        else if (allTypeFilter === "comms") filtered = filtered.filter(o => o.is_comms);
+        else if (allTypeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && !o.is_comms && o.b2b_order_type === allTypeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
@@ -366,7 +397,8 @@ export default function B2bProductionDashboard() {
         // "stock" is not a b2b_order_type — internal stock orders carry a null
         // type and are identified by the is_stock_order flag instead.
         if (type === "stock") result = result.filter(o => isB2bStockOrderRow(o));
-        else if (type !== "all") result = result.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type === type);
+        else if (type === "comms") result = result.filter(o => o.is_comms);
+        else if (type !== "all") result = result.filter(o => !isB2bStockOrderRow(o) && !o.is_comms && o.b2b_order_type === type);
         if (search.trim()) {
             const q = search.toLowerCase();
             result = result.filter(o =>
@@ -644,6 +676,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                         </div>
                         {filteredQueue.length === 0 ? (
@@ -668,6 +701,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                         </div>
                         {filteredInprod.length === 0 ? (
@@ -696,6 +730,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                             <select value={dispatchSection} onChange={(e) => { setDispatchSection(e.target.value); setDispatchPage(1); }} className="prod-filter-select">
                                 <option value="ready">Ready for Dispatch</option>
@@ -736,6 +771,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Consignment">Consignment</option>
                                 <option value="Client Order">Client Order</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
                                 <option value="all">All Merchandisers</option>
