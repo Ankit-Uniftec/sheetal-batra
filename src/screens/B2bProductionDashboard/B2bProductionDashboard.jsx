@@ -357,7 +357,10 @@ export default function B2bProductionDashboard() {
         if (prodFilter === "cancelled") filtered = filtered.filter(o => (o.status || "").toLowerCase() === "cancelled");
         else if (prodFilter !== "all") filtered = filtered.filter(o => (o.status || "").toLowerCase() !== "cancelled" && getStageBucket(o) === prodFilter);
         if (allTypeFilter === "stock") filtered = filtered.filter(o => isB2bStockOrderRow(o));
-        else if (allTypeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type === allTypeFilter);
+        // Like "stock", "comms" is not a b2b_order_type — an assigned Comms
+        // order carries a null type and is identified by is_comms.
+        else if (allTypeFilter === "comms") filtered = filtered.filter(o => o.is_comms);
+        else if (allTypeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && !o.is_comms && o.b2b_order_type === allTypeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
@@ -394,7 +397,8 @@ export default function B2bProductionDashboard() {
         // "stock" is not a b2b_order_type — internal stock orders carry a null
         // type and are identified by the is_stock_order flag instead.
         if (type === "stock") result = result.filter(o => isB2bStockOrderRow(o));
-        else if (type !== "all") result = result.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type === type);
+        else if (type === "comms") result = result.filter(o => o.is_comms);
+        else if (type !== "all") result = result.filter(o => !isB2bStockOrderRow(o) && !o.is_comms && o.b2b_order_type === type);
         if (search.trim()) {
             const q = search.toLowerCase();
             result = result.filter(o =>
@@ -672,6 +676,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                         </div>
                         {filteredQueue.length === 0 ? (
@@ -696,6 +701,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                         </div>
                         {filteredInprod.length === 0 ? (
@@ -724,6 +730,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Buyout">Buyout</option>
                                 <option value="Consignment">Consignment</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                             <select value={dispatchSection} onChange={(e) => { setDispatchSection(e.target.value); setDispatchPage(1); }} className="prod-filter-select">
                                 <option value="ready">Ready for Dispatch</option>
@@ -764,6 +771,7 @@ export default function B2bProductionDashboard() {
                                 <option value="Consignment">Consignment</option>
                                 <option value="Client Order">Client Order</option>
                                 <option value="stock">Stock</option>
+                                <option value="comms">Comms</option>
                             </select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
                                 <option value="all">All Merchandisers</option>
