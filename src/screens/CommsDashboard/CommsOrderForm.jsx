@@ -46,13 +46,21 @@ const PURPOSE_OPTIONS = [
   "Others",
 ];
 
-// Production owners a Comms order can be assigned to. The email (not the name)
-// is what gets stored on the order as comms_order_assign, so these must be the
-// real prod login addresses.
+// Production owners a Comms order can be assigned to.
+//
+// The stored value is the owner's DESIGNATION, not their email. These three
+// addresses are not login addresses — none of them exists in `salesperson` —
+// so an order assigned by email could never be matched back to the production
+// head who actually logs in (the B2B head signs in as a different address
+// entirely). Designation is how the rest of the app already resolves
+// production ownership; see getChannelKeyForDesignation in barcodeService.
+//
+// `legacyEmail` is only for reading rows written before this change — the
+// dashboards accept either. Do not write it on new orders.
 const ORDER_ASSIGN_OPTIONS = [
-  { name: "Manish Batra", email: "manish@alliedengineering.net.in" },
-  { name: "Khushnuma Khan", email: "productionoffline1@gmail.com" },
-  { name: "Tara Gupta", email: "production1.sheetalbatra@gmail.com" },
+  { name: "Manish Batra", designation: "Production Manager", legacyEmail: "manish@alliedengineering.net.in" },
+  { name: "Khushnuma Khan", designation: "Offline Production Head", legacyEmail: "productionoffline1@gmail.com" },
+  { name: "Tara Gupta", designation: "B2B Production Head", legacyEmail: "production1.sheetalbatra@gmail.com" },
 ];
 
 const LOCATION_OPTIONS = [
@@ -435,7 +443,7 @@ export default function CommsOrderForm() {
             <select className="cof-input" value={orderAssign} onChange={(e) => setOrderAssign(e.target.value)}>
               <option value="">Select production owner…</option>
               {ORDER_ASSIGN_OPTIONS.map((p) => (
-                <option key={p.email} value={p.email}>{p.name}</option>
+                <option key={p.designation} value={p.designation}>{p.name}</option>
               ))}
             </select>
           </div>
