@@ -457,167 +457,103 @@ function mapLineItem(
  * fulfillmentOrders → [] (so fulfillBy is unavailable at ingestion, and would
  * be anyway since fulfilment hasn't started).
  *
- * The date is DERIVED: order date + N days, where N comes from a client-supplied
- * matrix of PRODUCT CATEGORY × PRICE BAND (category_shopify.xlsx). Shopify's
- * standard taxonomy `product.category.fullName` is the category signal.
+ * The date is DERIVED: order date + N days, where N comes from the ORDER TOTAL
+ * alone (see DELIVERY_BANDS). Product category is NOT part of the rule — the
+ * client instructed that the amount is the only input. An earlier version used
+ * a PRODUCT CATEGORY × PRICE BAND matrix from category_shopify.xlsx; that axis
+ * is gone, and Shopify's `product.category.fullName` no longer affects any date.
  *
- * This deliberately REPLACED the per-product `custom.shipping_timeline`
- * metafield. The two disagreed substantially — lehengas carried 32-34d in the
- * metafield against the matrix's 22-25d, and scarves/belts carried 7d against
- * 10-19d/5-18d. The matrix is the client's stated rule and wins outright; the
- * metafield is no longer read anywhere.
+ * Both versions deliberately REPLACED the per-product `custom.shipping_timeline`
+ * metafield, which disagreed substantially with the client's stated rule. The
+ * metafield is not read anywhere.
  */
 
-/** Price bands, in matrix column order. `max` is INCLUSIVE. */
-const PRICE_BANDS = [
-  { key: "10-25k",  max: 25_000 },
-  { key: "25-40k",  max: 40_000 },
-  { key: "40-75k",  max: 75_000 },
-  { key: "75k+",    max: Infinity },
+/**
+ * Delivery bands: ORDER TOTAL -> days. `max` is INCLUSIVE.
+ *
+ * WHAT CHANGED (client instruction)
+ * Delivery days used to be looked up by PRODUCT CATEGORY x price band, from
+ * category_shopify.xlsx. The client has since said the date must depend on the
+ * AMOUNT ONLY. Category is no longer read, so the Shopify taxonomy no longer
+ * affects any delivery date.
+ *
+ * The days below are the row every clothing category already carried
+ * (10/14/18/22), so garment orders are unaffected. Accessories, which used to
+ * carry their own faster/slower rows (clutch & belt 5/10/18/18, scarves
+ * 10/12/15/19), now follow the same schedule as everything else — that is the
+ * intended consequence of dropping category, not an oversight.
+ *
+ * This also removes the single largest source of blocked orders: an untagged
+ * or wrongly-tagged product used to yield DELIVERY_DATE_UNRESOLVED and hold
+ * the whole order. An amount always exists, so a date can always be computed.
+ *
+ * Bands are on the ORDER TOTAL, once — not per line item. Measured on 122 UAT
+ * orders when this was per-unit, every band overshot its ceiling, because a
+ * multi-piece order priced each piece separately and landed them all in a
+ * cheaper column.
+ */
+const DELIVERY_BANDS = [
+  { key: "10-25k", max: 25_000, days: 10 },
+  { key: "25-40k", max: 40_000, days: 14 },
+  { key: "40-75k", max: 75_000, days: 18 },
+  { key: "75k+",   max: Infinity, days: 22 },
 ] as const;
 
-/**
- * Days by category → price band. Mirrors category_shopify.xlsx.
- *
- * Keys are Shopify taxonomy `fullName` values, lower-cased. Lookup walks from
- * the most specific node UP the tree, so a product tagged at the parent
- * ("...> Traditional & Ceremonial Clothing") still resolves via that parent's
- * row — which matters, because 146/250 live products are tagged at exactly
- * that parent rather than at the Kurtas/Lehengas leaves.
- *
- * The DB table `shopify_delivery_matrix` overrides this at runtime when
- * present (see loadDeliveryMatrix). This literal is the fallback so the
- * function is correct before the migration is applied, and if the table is
- * ever emptied.
- */
-const DELIVERY_MATRIX_DEFAULT: Record<string, [number, number, number, number]> = {
-  "apparel & accessories > clothing > traditional & ceremonial clothing > kurtas & kurta sets": [10, 14, 18, 22],
-  "apparel & accessories > clothing > traditional & ceremonial clothing > saris & lehengas > lehengas": [10, 14, 18, 25],
-  "apparel & accessories > clothing > traditional & ceremonial clothing > saris & lehengas": [10, 14, 18, 22],
-  "apparel & accessories > clothing > traditional & ceremonial clothing": [10, 14, 18, 22],
-  "apparel & accessories > handbags, wallets & cases > handbags > clutch bags": [5, 10, 18, 18],
-  "apparel & accessories > handbags, wallets & cases > handbags": [5, 10, 18, 18],
-  "apparel & accessories > clothing accessories > scarves & shawls": [10, 12, 15, 19],
-  "apparel & accessories > clothing accessories > traditional clothing accessories": [10, 14, 18, 22],
-  "apparel & accessories > clothing accessories > belts": [5, 10, 18, 18],
-  "apparel & accessories > clothing accessories": [10, 14, 18, 22],
-  "apparel & accessories > clothing > baby & toddler clothing": [10, 14, 18, 22],
-  "apparel & accessories > clothing > dresses": [10, 14, 18, 22],
-  "gift cards": [0, 0, 0, 0],
-};
+/** Runtime copy, so the DB table can revise the numbers without a redeploy. */
+let DELIVERY_DAYS: number[] = DELIVERY_BANDS.map((b) => b.days);
 
 /**
- * Runtime matrix. Starts as the literal above; replaced wholesale by
- * loadDeliveryMatrix() when the DB table has rows, so the client can revise
- * the numbers with an UPDATE instead of a redeploy.
+ * Override the day counts from the DB (shopify_delivery_matrix, single row).
+ * Ignores anything malformed and keeps the built-in numbers, so a bad row can
+ * never silently move every delivery date.
  */
-let DELIVERY_MATRIX: Record<string, number[]> = { ...DELIVERY_MATRIX_DEFAULT };
-
-export function setDeliveryMatrix(rows: Array<{ category: string; days: number[] }>) {
-  if (!Array.isArray(rows) || rows.length === 0) return; // keep the default
-  const next: Record<string, number[]> = {};
-  for (const r of rows) {
-    const key = clean(r?.category).toLowerCase();
-    if (!key || !Array.isArray(r?.days) || r.days.length !== 4) continue;
-    next[key] = r.days.map(Number);
-  }
-  if (Object.keys(next).length > 0) DELIVERY_MATRIX = next;
+export function setDeliveryDays(days: unknown): void {
+  if (!Array.isArray(days) || days.length !== DELIVERY_BANDS.length) return;
+  const next = days.map(Number);
+  if (next.some((n) => !Number.isFinite(n) || n < 0)) return;
+  DELIVERY_DAYS = next;
 }
 
-/** The band index for a price. Below the first band uses the first column. */
+/** The band index for an amount. Below the first band uses the first column. */
 function priceBandIndex(amount: number): number {
-  for (let i = 0; i < PRICE_BANDS.length; i++) {
-    if (amount <= PRICE_BANDS[i].max) return i;
+  for (let i = 0; i < DELIVERY_BANDS.length; i++) {
+    if (amount <= DELIVERY_BANDS[i].max) return i;
   }
-  return PRICE_BANDS.length - 1;
+  return DELIVERY_BANDS.length - 1;
 }
 
 /**
- * Days for a category, walking from the tagged node UP to its ancestors.
- * Returns null when neither the node nor any ancestor is in the matrix
- * (including `Uncategorized` and a null category).
+ * Delivery date = order date + N days, where N comes from the order total
+ * alone. Category and line items are not consulted.
  */
-function matrixDaysFor(fullName: string, bandIdx: number): { days: number; matched: string } | null {
-  const parts = clean(fullName).split(">").map((s) => s.trim()).filter(Boolean);
-  for (let end = parts.length; end > 0; end--) {
-    const key = parts.slice(0, end).join(" > ").toLowerCase();
-    const row = DELIVERY_MATRIX[key];
-    if (row) return { days: Number(row[bandIdx]), matched: parts.slice(0, end).join(" > ") };
-  }
-  return null;
-}
-
 function resolveDeliveryDate(
   createdAt: string,
-  lineNodes: any[],
   orderTotal: number,
-  blockers: Blocker[]
+  blockers: Blocker[],
 ): { date: string | null; basis: string | null } {
-  // The band comes from the ORDER TOTAL, once, not from each line item's own
-  // price. The matrix columns are labelled by what the customer spends
-  // ("10 - 25k", "25K - 40K"), which is the order, not the piece.
+  // A non-finite or negative total is the one case that still cannot yield an
+  // honest date. Never invent one: it drives the T-2 production deadline, the
+  // delivery calendar and delay escalations, so a wrong date is worse than a
+  // flagged order.
   //
-  // Measured on 122 UAT orders when this was per-unit: every band overshot its
-  // ceiling — a 10-day order (band <=25k) reached 60,525 and a 14-day order
-  // (<=40k) reached 106,500, because a multi-piece order priced each piece
-  // separately and landed them all in a cheaper column. One order at 73,725
-  // was pushed the other way, into the >75k column, by a single costly line.
+  // A total of exactly 0 is ALLOWED and takes the first band (10 days). Zero is
+  // a real, correct amount here — gifted, fully-discounted and replacement
+  // orders come through at 0 — and the cheapest band is the right floor for
+  // them. One such order exists in UAT today (SB-SHOPIFY-0826-000175), blocked
+  // under the old category rule and now dated.
+  if (!Number.isFinite(orderTotal) || orderTotal < 0) {
+    blockers.push({
+      code: "DELIVERY_DATE_UNRESOLVED",
+      detail: `Order total is not a usable amount (${orderTotal}), so no delivery date can be derived.`,
+    });
+    return { date: null, basis: null };
+  }
+
   const bandIdx = priceBandIndex(orderTotal);
-  const bandKey = PRICE_BANDS[bandIdx].key;
-  let maxDays = -1;
-  let basisTitle = "";
-  let basisCategory = "";
-  let basisBand = "";
-  const uncategorised: string[] = [];
-
-  for (const node of lineNodes) {
-    const product = node?.variant?.product || {};
-    const fullName = clean(product?.category?.fullName);
-    const title = clean(node?.title);
-
-    const hit = fullName ? matrixDaysFor(fullName, bandIdx) : null;
-    if (!hit || !Number.isFinite(hit.days)) {
-      uncategorised.push(`${title || "(untitled)"}${fullName ? ` [${fullName}]` : " [no category]"}`);
-      continue;
-    }
-
-    // MAX across line items: the order ships as one parcel, so the slowest
-    // piece sets the date.
-    if (hit.days > maxDays) {
-      maxDays = hit.days;
-      basisTitle = title;
-      basisCategory = hit.matched;
-      basisBand = bandKey;
-    }
-  }
-
-  // ANY line item without a usable category blocks the whole order. A partial
-  // date would be computed from a subset of the parcel and could be earlier
-  // than the slowest piece actually needs — the exact failure the MAX rule
-  // exists to prevent.
-  if (uncategorised.length > 0) {
-    // Never invent a date: it drives the T-2 production deadline, the delivery
-    // calendar and delay escalations. A wrong date is worse than a flagged one.
-    blockers.push({
-      code: "DELIVERY_DATE_UNRESOLVED",
-      detail:
-        `No delivery-matrix category on: ${uncategorised.join("; ")}. ` +
-        `Set the product category in Shopify (standard taxonomy).`,
-    });
-    return { date: null, basis: null };
-  }
-
-  if (maxDays < 0) {
-    blockers.push({
-      code: "DELIVERY_DATE_UNRESOLVED",
-      detail: "Order has no line items to derive a delivery date from",
-    });
-    return { date: null, basis: null };
-  }
-
+  const days = DELIVERY_DAYS[bandIdx];
   return {
-    date: addDays(createdAt, maxDays),
-    basis: `createdAt + ${maxDays}d (${basisCategory} @ ${basisBand}; slowest item: ${basisTitle})`,
+    date: addDays(createdAt, days),
+    basis: `createdAt + ${days}d (order total ${orderTotal} @ ${DELIVERY_BANDS[bandIdx].key})`,
   };
 }
 
@@ -760,7 +696,6 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
   const createdAt: string = clean(node?.createdAt) || new Date().toISOString();
   const { date: deliveryDate, basis } = resolveDeliveryDate(
     createdAt,
-    lineNodes,
     money(node?.totalPriceSet),
     blockers,
   );
