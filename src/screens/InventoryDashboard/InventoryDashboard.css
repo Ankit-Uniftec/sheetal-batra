@@ -327,6 +327,36 @@
   color: #2e7d32;
 }
 
+/* Row actions (Edit / Duplicate) — outline buttons so a column of them doesn't
+   compete with the inventory figure, which is what the row is scanned for. */
+.inv-th-actions {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.inv-actions-cell {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.inv-row-action {
+  padding: 5px 10px;
+  margin: 0 2px;
+  border: 1px solid #d5b85a;
+  border-radius: 6px;
+  background: #fff;
+  color: #8a6d1f;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.inv-row-action:hover {
+  background: #d5b85a;
+  color: #fff;
+}
+
 /* Channel-wise stock (retail / B2B / Shopify) — db/…/v2/72.
    Narrow, centred numeric columns; deliberately quieter than the Inventory cell
    so the row still reads inventory-first. */

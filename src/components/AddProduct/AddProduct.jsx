@@ -11,6 +11,7 @@ import {
   validateRow,
 } from "./csvHelpers";
 import { STORE_CATEGORIES, DEFAULT_STORE_CATEGORY } from "../../utils/storeCategory";
+import { fetchShopifyInventory, adjustShopifyInventory } from "../../utils/shopifyInventory";
 import useSkuScan from "../../hooks/useSkuScan";
 import BarcodeExportPanel from "./BarcodeExportPanel";
 import SkuTypeChooser from "./SkuTypeChooser";
@@ -132,7 +133,7 @@ function ChipInput({ value, onChange, suggestions = [], placeholder = "Type and 
 }
 
 // ─── AddProduct (main reusable component) ────────────────────────────
-export default function AddProduct({ onProductAdded }) {
+export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed }) {
   const { showPopup, PopupComponent } = usePopup();
 
   // Mode toggles
@@ -147,12 +148,24 @@ export default function AddProduct({ onProductAdded }) {
   const [sku, setSku] = useState("");
   const [skuLoading, setSkuLoading] = useState(true);
 
-  // ─── Scanned pre-printed barcode ───
-  // scannedRow is the reserved `products` row (sku_id set, everything else
-  // NULL) behind a scanned tag. When set, the form FILLS THAT ROW: save is an
-  // UPDATE, not an INSERT, so there stays exactly one row per printed barcode.
+  // ─── What this form is doing right now ───
+  // 'create'  → INSERT a brand-new product, SKU auto-generated (the default).
+  // 'fillTag' → UPDATE a reserved row behind a scanned pre-printed barcode.
+  //             SKU is locked: it is printed on a garment.
+  // 'edit'    → UPDATE an already-live product. SKU locked for the same reason.
+  //
+  // Kept as an explicit mode rather than inferred from `editTarget` because the
+  // two UPDATE paths differ in more than the row: fillTag guards on is_draft,
+  // edit must NOT (a live product isn't a draft, so that filter would match
+  // zero rows and every edit would look like a lost race).
+  const [formMode, setFormMode] = useState("create");
+  // The `products` row being updated — set for both 'fillTag' and 'edit'.
+  const [editTarget, setEditTarget] = useState(null);
+  // Variant ids present when an LXRTS product was loaded, so save can tell an
+  // edited row from a new one and spot the ones that were removed.
+  const [loadedVariantIds, setLoadedVariantIds] = useState([]);
+
   const [scanning, setScanning] = useState(false);            // scanner armed?
-  const [scannedRow, setScannedRow] = useState(null);         // reserved row being filled
   const [typeChooser, setTypeChooser] = useState(null);       // { sku, row } awaiting a type pick
   const [scannedProduct, setScannedProduct] = useState(null); // already-filled -> details card
 
@@ -283,12 +296,130 @@ export default function AddProduct({ onProductAdded }) {
     setAvailableSizes([]); setInventory("0"); setIsMto(false);
     setShopifyProductId("");
     setVariants([{ size: "", price: "", inventory: "0", shopify_variant_id: "" }]);
-    // Drop the scanned tag and go back to auto-SKU. This must happen after a
-    // successful fill: that garment is catalogued now, so keeping its SKU
-    // locked would make the very next save collide on the unique key.
-    setScannedRow(null);
+    setLoadedVariantIds([]);
+    // Drop the scanned tag / edited product and go back to auto-SKU. This must
+    // happen after a successful fill: that garment is catalogued now, so keeping
+    // its SKU locked would make the very next save collide on the unique key.
+    setEditTarget(null);
+    setFormMode("create");
     refreshSku();
   };
+
+  // ─── Load an existing product back into the form ───
+  // The inverse of the productRow assembly in handleSubmit. Two callers:
+  //
+  //   mode 'edit'      → update that same row. SKU comes from the product and
+  //                      is locked; a live SKU may already be printed on a tag.
+  //   mode 'duplicate' → copy the details onto a FRESH SKU. Deliberately leaves
+  //                      formMode at 'create', so the existing insert branch
+  //                      (with its 23505 retry) handles the save unchanged and
+  //                      nothing is written until the user hits Save.
+  const loadProductIntoForm = async (product, { mode }) => {
+    if (!product) return;
+    const isEdit = mode === "edit";
+
+    // Derive the type toggle from the flags — the same mapping handleSubmit
+    // writes, read backwards.
+    const type = product.sync_enabled
+      ? "lxrts"
+      : product.is_custom_piece
+        ? "custom_piece"
+        : "normal";
+    setProductType(type);
+
+    // basePrice/inventory back controlled number inputs and are string state:
+    // a null here would make React flip the input to uncontrolled mid-edit.
+    setName(product.name || "");
+    setImageUrl(product.image_url || "");
+    setBasePrice(product.base_price != null ? String(product.base_price) : "");
+    setTopOptions(product.top_options || []);
+    setBottomOptions(product.bottom_options || []);
+    setDefaultTop(product.default_top || "");
+    setDefaultBottom(product.default_bottom || "");
+    setDefaultColor(product.default_color || "");
+    setStoreCategory(product.store_category || DEFAULT_STORE_CATEGORY);
+    setHasDupatta(!!product.has_dupatta);
+    setDefaultDupattaColor(product.default_dupatta_color || "");
+    setAvailableSizes(product.available_size || []);
+
+    // 9999 is the made-to-order sentinel, not a real count.
+    const mto = product.inventory === 9999;
+    setIsMto(mto);
+    setInventory(mto ? "0" : String(product.inventory ?? 0));
+
+    setShopifyProductId(product.shopify_product_id || "");
+
+    // LXRTS keeps per-size data in its own table, so the variant grid needs a
+    // second read. Only for LXRTS: a normal product has no variant rows.
+    if (type === "lxrts") {
+      const { data: vars, error: varErr } = await supabase
+        .from("product_variants")
+        .select("id, size, price, inventory, shopify_variant_id")
+        .eq("product_id", product.id);
+
+      if (varErr) {
+        console.error("Variant load failed:", varErr);
+        showPopup({
+          type: "error",
+          title: "Could Not Load Sizes",
+          message: `${product.sku_id}'s size variants couldn't be loaded, so saving now would wipe them. Close this and try again. (${varErr.message})`,
+          confirmText: "OK",
+        });
+        return;
+      }
+
+      const rows = (vars || [])
+        .slice()
+        .sort((a, b) => SIZE_OPTIONS.indexOf(a.size) - SIZE_OPTIONS.indexOf(b.size))
+        .map((v) => ({
+          // Duplicating drops the id so every row inserts fresh against the new
+          // product. Keeping it would make the save diff update the ORIGINAL
+          // product's variants instead.
+          id: isEdit ? v.id : undefined,
+          size: v.size || "",
+          price: v.price != null ? String(v.price) : "",
+          inventory: String(v.inventory ?? 0),
+          shopify_variant_id: v.shopify_variant_id || "",
+        }));
+
+      setVariants(rows.length > 0
+        ? rows
+        : [{ size: "", price: "", inventory: "0", shopify_variant_id: "" }]);
+      setLoadedVariantIds(isEdit ? rows.map((r) => r.id).filter(Boolean) : []);
+    } else {
+      setVariants([{ size: "", price: "", inventory: "0", shopify_variant_id: "" }]);
+      setLoadedVariantIds([]);
+    }
+
+    // Anything the form was showing about a scan is stale now.
+    setTypeChooser(null);
+    setScannedProduct(null);
+    setScanning(false);
+    setMode("manual");
+
+    if (isEdit) {
+      setEditTarget(product);
+      setFormMode("edit");
+      setSku(product.sku_id || "");
+      setSkuLoading(false);
+    } else {
+      setEditTarget(null);
+      setFormMode("create");
+      refreshSku();   // a copy is a new garment and needs its own number
+    }
+  };
+
+  // A prefill handed down by the parent (Duplicate/Edit from the catalogue).
+  // Consumed immediately: without that, hitting Reset and coming back to this
+  // tab would silently re-apply the same product over the cleared form.
+  useEffect(() => {
+    if (!prefill?.product) return;
+    loadProductIntoForm(prefill.product, { mode: prefill.mode || "duplicate" });
+    onPrefillConsumed?.();
+    // loadProductIntoForm is recreated every render (it closes over ~20
+    // setters, all stable); depending on it would re-run this on each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
 
   // ─── Scanned pre-printed barcode ───
   // Three outcomes: a reserved row (fill it in), an already-filled product
@@ -348,18 +479,19 @@ export default function AddProduct({ onProductAdded }) {
   const startFillingScanned = (chosenType) => {
     if (!typeChooser) return;
     setProductType(chosenType);
-    setScannedRow(typeChooser.row);
+    setEditTarget(typeChooser.row);
+    setFormMode("fillTag");
     setSku(typeChooser.sku);
     setSkuLoading(false);
     setTypeChooser(null);
     setScannedProduct(null);
   };
 
+  // Back out of a scan or an edit: clears the form and returns to auto-SKU.
   const cancelScannedFill = () => {
     setTypeChooser(null);
     setScannedProduct(null);
-    setScannedRow(null);
-    refreshSku();
+    resetForm();
   };
 
   // ─── Validation ───
@@ -441,27 +573,34 @@ export default function AddProduct({ onProductAdded }) {
     let inserted = null;
     let lastError = null;
 
-    if (scannedRow) {
-      // FILLING A PRE-PRINTED TAG — the row already exists, so this is an
-      // UPDATE. Inserting would create a second row for one physical barcode.
+    if (formMode === "fillTag" || formMode === "edit") {
+      // The row already exists, so this is an UPDATE. Inserting would create a
+      // second row for one physical barcode.
       //
-      // No SKU-bump retry here, deliberately. A scanned SKU is a physical fact
-      // printed on a garment; quietly moving this product to a different number
-      // would leave a sticker that lies about what it is attached to. If the row
-      // was filled in by someone else meanwhile, say so and stop.
-      const { data, error } = await supabase
+      // No SKU-bump retry on either path, deliberately. A scanned or already-
+      // catalogued SKU is a physical fact printed on a garment; quietly moving
+      // the product to a different number would leave a sticker that lies about
+      // what it is attached to.
+      let q = supabase
         .from("products")
         .update(productRow)
-        .eq("id", scannedRow.id)
-        .eq("is_draft", true)   // still unfilled — guards against a concurrent fill
-        .select()
-        .maybeSingle();
+        .eq("id", editTarget.id);
+
+      // Only the fill path guards on is_draft — it is what catches a tag that
+      // someone else filled in while this form was open. An edit targets a live
+      // product, which is by definition NOT a draft, so the same filter there
+      // would match zero rows and make every successful edit report a lost race.
+      if (formMode === "fillTag") q = q.eq("is_draft", true);
+
+      const { data, error } = await q.select().maybeSingle();
 
       if (error) {
         lastError = error;
       } else if (!data) {
         lastError = new Error(
-          `${sku} was filled in by someone else while this form was open. Re-scan the tag to see the current product.`
+          formMode === "fillTag"
+            ? `${sku} was filled in by someone else while this form was open. Re-scan the tag to see the current product.`
+            : `${sku} could not be found — it may have been removed while this form was open.`
         );
       } else {
         inserted = data;
@@ -494,7 +633,7 @@ export default function AddProduct({ onProductAdded }) {
       console.error("Save failed:", lastError);
       showPopup({
         type: "error",
-        title: scannedRow ? "Could Not Save" : "Insert Failed",
+        title: formMode === "create" ? "Insert Failed" : "Could Not Save",
         message: lastError?.message || "Could not save product.",
         confirmText: "OK",
       });
@@ -502,21 +641,161 @@ export default function AddProduct({ onProductAdded }) {
       return;
     }
 
-    // For LXRTS, insert the variant rows. If this fails we roll back the product.
+    // Advisory notes appended to the success popup — the save worked, but
+    // something about the Shopify stock reconciliation is worth knowing.
+    const stockNotes = [];
+
+    // For LXRTS, write the variant rows.
     if (productType === "lxrts") {
-      const variantRows = variants
-        .filter((v) => v.size && v.size.trim())
-        .map((v) => ({
-          product_id: inserted.id,
-          size: v.size.trim().toUpperCase(),
-          price: v.price ? Number(v.price) : Number(basePrice),
-          inventory: Number(v.inventory) || 0,
-          shopify_variant_id: v.shopify_variant_id?.trim() || null,
-        }));
-      const { error: varErr } = await supabase.from("product_variants").insert(variantRows);
+      const filled = variants.filter((v) => v.size && v.size.trim());
+      const toRow = (v) => ({
+        product_id: inserted.id,
+        size: v.size.trim().toUpperCase(),
+        price: v.price ? Number(v.price) : Number(basePrice),
+        inventory: Number(v.inventory) || 0,
+        shopify_variant_id: v.shopify_variant_id?.trim() || null,
+      });
+
+      let varErr = null;
+
+      // Shopify holds the real stock for an LXRTS product — the SA order form
+      // reads its sizes straight from there (ProductForm.js), and the Inventory
+      // tab overwrites product_variants to match on every load. So this form
+      // reconciles rather than asserts: read Shopify once, up front.
+      //
+      // Read as late as possible: the edit path below turns these numbers into
+      // deltas, and a sale between the read and the push lands Shopify on the
+      // wrong figure.
+      const shopifyQty = await fetchShopifyInventory(inserted.id);
+      // null = Shopify unreachable. Never read as "no stock" — that would zero
+      // a live catalogue. Keep the typed numbers and say they're unverified.
+      const shopifyDown = shopifyQty === null;
+      // Sizes Shopify doesn't know: a name mismatch ("Small" vs "S"), or a size
+      // that genuinely isn't on the store. Nothing here can create a Shopify
+      // variant (the edge fn has no such action), so these are reported, not
+      // fixed — silence is what lets them drift from Shopify forever.
+      const unsyncedSizes = [];
+      const syncFailures = [];
+
+      if (formMode === "edit") {
+        // Editing: diff against what was loaded. A blind insert here would add a
+        // second row for every size the product already had.
+        const kept = filled.filter((v) => v.id);
+        const added = filled.filter((v) => !v.id);
+        const keptIds = new Set(kept.map((v) => v.id));
+        const removedIds = loadedVariantIds.filter((id) => !keptIds.has(id));
+
+        for (const v of kept) {
+          const row = toRow(v);
+          const live = shopifyDown ? undefined : shopifyQty[row.size];
+
+          // Push the stock change to Shopify. Computed against Shopify's CURRENT
+          // number rather than the one this form loaded: "reduce" is a relative
+          // delta, so diffing against a stale value moves the store's count to
+          // the wrong place. Positive reduces, negative increases.
+          if (live === undefined) {
+            if (!shopifyDown) unsyncedSizes.push(row.size);
+          } else if (live !== row.inventory) {
+            const res = await adjustShopifyInventory(
+              inserted.id, row.size, live - row.inventory
+            );
+            if (!res.ok) syncFailures.push(`${row.size}: ${res.error}`);
+          }
+
+          const { error } = await supabase
+            .from("product_variants")
+            .update(row)
+            .eq("id", v.id);
+          if (error) { varErr = error; break; }
+        }
+
+        if (!varErr && added.length > 0) {
+          // A size added here has no Shopify variant to adjust — pushing a delta
+          // would move some OTHER size's stock or fail outright. Treat it exactly
+          // like the create path: take Shopify's number if the size exists there,
+          // otherwise keep what was typed and flag it as non-syncing.
+          const rows = added.map((v) => {
+            const row = toRow(v);
+            const live = shopifyDown ? undefined : shopifyQty[row.size];
+            if (live === undefined) {
+              if (!shopifyDown) unsyncedSizes.push(row.size);
+            } else {
+              row.inventory = live;
+            }
+            return row;
+          });
+          const { error } = await supabase.from("product_variants").insert(rows);
+          if (error) varErr = error;
+        }
+
+        // Removing a size drops OUR row only. The Shopify variant belongs to the
+        // store; deleting it here is not this form's call.
+        if (!varErr && removedIds.length > 0) {
+          const { error } = await supabase
+            .from("product_variants")
+            .delete()
+            .in("id", removedIds);
+          if (error) varErr = error;
+        }
+
+        if (varErr) {
+          // NO ROLLBACK on an edit. The create/fill rollback below deletes or
+          // re-drafts the product — on a live catalogue row that would hide a
+          // real product from every dashboard over a variant error. The product
+          // update stands; report what didn't land and let the user retry.
+          console.error("Variant save failed:", varErr);
+          showPopup({
+            type: "warning",
+            title: "Sizes Not Fully Saved",
+            message: `${inserted.name} was updated, but its size variants were not: ${varErr.message}\n\nRe-open the product and check the sizes.`,
+            confirmText: "OK",
+          });
+          if (onProductAdded) onProductAdded(inserted);
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        // Creating: the product already exists on Shopify with real stock, so we
+        // PULL rather than push. Pushing the typed number would ADD to what is
+        // already there ("reduce" is relative, there is no absolute set) — type 4
+        // against a Shopify 4 and the store would read 8.
+        const rows = filled.map((v) => {
+          const row = toRow(v);
+          const live = shopifyDown ? undefined : shopifyQty[row.size];
+          if (live === undefined) {
+            if (!shopifyDown) unsyncedSizes.push(row.size);
+          } else {
+            row.inventory = live;   // Shopify wins
+          }
+          return row;
+        });
+        const { error } = await supabase.from("product_variants").insert(rows);
+        varErr = error;
+      }
+
+      // Stock notes are advisory: the product saved fine, only its numbers are
+      // provisional. Collected and shown once rather than one popup per size.
+      if (!varErr) {
+        if (shopifyDown) {
+          stockNotes.push(
+            "Shopify couldn't be reached, so the stock figures above are unverified and were not synced. They'll be corrected the next time the Inventory tab loads."
+          );
+        }
+        if (unsyncedSizes.length > 0) {
+          stockNotes.push(
+            `These sizes aren't on Shopify, so their stock won't sync: ${[...new Set(unsyncedSizes)].join(", ")}. Check the size names match the Shopify variants exactly.`
+          );
+        }
+        if (syncFailures.length > 0) {
+          stockNotes.push(
+            `Saved here, but Shopify wasn't updated for: ${syncFailures.join("; ")}. Those sizes will revert on the next sync.`
+          );
+        }
+      }
+
       if (varErr) {
         // Roll back so the form can be retried cleanly.
-        if (scannedRow) {
+        if (formMode === "fillTag") {
           // A pre-printed tag: put the row back to reserved rather than
           // deleting it. Deleting would destroy a reservation whose barcode is
           // already stuck on a garment — the SKU would then read as unknown on
@@ -534,7 +813,7 @@ export default function AddProduct({ onProductAdded }) {
         showPopup({
           type: "error",
           title: "Variants Failed",
-          message: scannedRow
+          message: formMode === "fillTag"
             ? `Nothing was saved — ${sku} is still reserved and can be scanned again. Variant error: ${varErr.message}`
             : `Product was rolled back. Variant error: ${varErr.message}`,
           confirmText: "OK",
@@ -544,16 +823,37 @@ export default function AddProduct({ onProductAdded }) {
       }
     }
 
+    const wasEdit = formMode === "edit";
+    const baseMessage = formMode === "fillTag"
+      ? `${inserted.name} is now linked to ${inserted.sku_id}. That tag will show these details from now on.`
+      : wasEdit
+        ? `${inserted.name} (${inserted.sku_id}) updated successfully.`
+        : `${inserted.name} (${inserted.sku_id}) saved successfully.`;
+
+    // A stock note downgrades this to a warning: the product saved, but its
+    // Shopify figures need attention and shouldn't read as a clean success.
     showPopup({
-      type: "success",
-      title: scannedRow ? "Barcode Filled In" : "Product Added",
-      message: scannedRow
-        ? `${inserted.name} is now linked to ${inserted.sku_id}. That tag will show these details from now on.`
-        : `${inserted.name} (${inserted.sku_id}) saved successfully.`,
+      type: stockNotes.length > 0 ? "warning" : "success",
+      title: formMode === "fillTag"
+        ? "Barcode Filled In"
+        : wasEdit ? "Product Updated" : "Product Added",
+      message: stockNotes.length > 0
+        ? `${baseMessage}\n\n${stockNotes.join("\n\n")}`
+        : baseMessage,
       confirmText: "OK",
     });
     if (onProductAdded) onProductAdded(inserted);
-    resetForm();
+    // An edit keeps the product on screen — clearing the form the instant it
+    // saves reads as "the edit vanished". The user leaves via Done / Reset.
+    // Refresh editTarget so a second save in the same session diffs against
+    // what is now in the database.
+    if (wasEdit) {
+      // Re-load rather than patch state by hand: rows just inserted have no id
+      // yet, and saving twice in one sitting would insert them all over again.
+      await loadProductIntoForm(inserted, { mode: "edit" });
+    } else {
+      resetForm();
+    }
     setSubmitting(false);
   };
 
@@ -815,9 +1115,21 @@ export default function AddProduct({ onProductAdded }) {
         <div className="ap-scan-strip">
           {scanResolving
             ? "Looking that up…"
-            : scannedRow
+            : formMode === "fillTag"
               ? `Filling in ${sku} — complete the form below and save.`
               : "Ready — scan a printed SKU tag."}
+        </div>
+      )}
+
+      {/* Editing a live product — the form below is an UPDATE, not a new row. */}
+      {formMode === "edit" && (
+        <div className="ap-edit-strip">
+          <span>
+            Editing <strong>{sku}</strong> — changes overwrite this product.
+          </span>
+          <button type="button" className="ap-edit-strip-done" onClick={cancelScannedFill}>
+            Done
+          </button>
         </div>
       )}
 
@@ -830,11 +1142,12 @@ export default function AddProduct({ onProductAdded }) {
         />
       )}
 
-      {/* Scanned a tag that is already a real product — read-only. */}
+      {/* Scanned a tag that is already a real product — details, plus Edit. */}
       {scannedProduct && mode === "manual" && (
         <ScannedProductCard
           product={scannedProduct}
           onScanAnother={() => setScannedProduct(null)}
+          onEdit={(p) => loadProductIntoForm(p, { mode: "edit" })}
         />
       )}
 
@@ -886,26 +1199,31 @@ export default function AddProduct({ onProductAdded }) {
               <label>SKU</label>
               <div className="ap-sku-row">
                 <input
-                  className={`ap-input ${scannedRow ? "ap-input-locked" : ""}`}
+                  className={`ap-input ${formMode !== "create" ? "ap-input-locked" : ""}`}
                   value={skuLoading ? "Generating…" : sku}
                   readOnly
                 />
-                {scannedRow ? (
-                  // No re-roll: this number is printed on the garment in hand.
+                {formMode !== "create" ? (
+                  // No re-roll on either path: this number is printed on the
+                  // garment in hand, so it can't be moved to another product.
                   <button
                     type="button"
                     className="ap-mini-btn"
                     onClick={cancelScannedFill}
-                    title="Discard this scan and go back to a new product"
+                    title={formMode === "edit"
+                      ? "Stop editing and go back to a new product"
+                      : "Discard this scan and go back to a new product"}
                   >✕</button>
                 ) : (
                   <button type="button" className="ap-mini-btn" onClick={refreshSku} title="Re-fetch the next available SKU">↻</button>
                 )}
               </div>
               <span className="ap-help">
-                {scannedRow
+                {formMode === "fillTag"
                   ? "Locked — from the scanned tag. Saving fills in this barcode."
-                  : "Auto-generated. Refresh if you suspect another product was just added."}
+                  : formMode === "edit"
+                    ? "Locked — editing an existing product. Its SKU can't change."
+                    : "Auto-generated. Refresh if you suspect another product was just added."}
               </span>
             </div>
 
@@ -1157,6 +1475,14 @@ export default function AddProduct({ onProductAdded }) {
               </div>
 
               <h3 className="ap-section-title">Size Variants</h3>
+              <p className="ap-help ap-variant-note">
+                This product must already exist on Shopify. <strong>Shopify owns the stock:</strong>{" "}
+                {formMode === "edit"
+                  ? "changing Inventory here updates Shopify to match."
+                  : "on save, Inventory is replaced with Shopify's live figure — so a number typed here is only a placeholder."}{" "}
+                Sizes are matched to Shopify <strong>by name</strong>; a size Shopify doesn't
+                have will never sync, and can't be created from here.
+              </p>
               <div className="ap-table-wrapper">
                 <table className="ap-variant-table">
                   <thead>
@@ -1229,7 +1555,9 @@ export default function AddProduct({ onProductAdded }) {
               Reset
             </button>
             <button type="submit" className="ap-btn-primary" disabled={submitting || skuLoading}>
-              {submitting ? "Saving…" : "Save Product"}
+              {submitting
+                ? "Saving…"
+                : formMode === "edit" ? "Update Product" : "Save Product"}
             </button>
           </div>
         </form>
