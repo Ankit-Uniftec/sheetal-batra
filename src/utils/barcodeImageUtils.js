@@ -61,24 +61,41 @@ export function generateMasterBarcodeDataUrl(text) {
 }
 
 /**
- * Generate a large barcode for a printable SKU label (pre-printed garment tags).
+ * Generate a barcode for a printable SKU tag on 50 x 25mm thermal label stock
+ * (see src/pdf/SkuBarcodeSheetPdf.js — one label per PDF page).
  *
- * Bigger than the component/master presets on purpose: these are cut out and
- * stuck on fabric, then scanned by a handheld gun at an awkward angle, so the
- * bars need both width and height to stay readable. Sized for the 2-across x
- * 3-down A4 grid (~98 x 88mm cells) — see src/pdf/SkuBarcodeSheetPdf.js.
+ * ⚠ THESE NUMBERS ARE MIRRORED IN SkuBarcodeSheetPdf.js (CANVAS_MODULE_PX,
+ * CANVAS_MARGIN_PX, CANVAS_HEIGHT_PX). That file sizes the <Image> from them so
+ * one barcode module lands on exactly 2 printer dots. Change one side without
+ * the other and the bars drift off the dot grid — which prints as an uneven
+ * symbol and shows up as intermittent scan failures, not an obvious error.
  *
- * displayValue is inherited as true, so the SKU text prints under the bars and
- * the label cell needs no separate <Text>. That also means a damaged label can
- * still be typed in by hand.
+ *   width 2       module (narrowest bar) width in canvas px. The PDF scales the
+ *                 image so this becomes 2 dots (9.9 mil) on a 203 DPI head.
+ *   height 90     bars only, excluding the text line. Renders ~15mm tall on a
+ *                 25mm label — plenty for a handheld gun, and short enough to
+ *                 leave room around the die cut.
+ *   fontSize 16   the SKU printed under the bars (displayValue defaults true),
+ *                 so a damaged label can still be typed in by hand.
+ *   textMargin 4  gap between bars and text; part of CANVAS_HEIGHT_PX.
+ *   margin 6      jsbarcode's white quiet zone, baked into the PNG. This is the
+ *                 scanner-critical inset — the PDF page adds only a small
+ *                 die-cut allowance on top (QUIET_ZONE there).
+ *
+ * Why 2 dots and not 3: at 3 dots (14.8 mil) a 4-digit SKU just fits the 47mm
+ * printable width, but a 5-digit one needs 50.3mm and overflows. 9.9 mil is
+ * still well above the ~5 mil floor where cheap guns start misreading.
+ *
+ * If the label stock or printer DPI changes, re-tune this ALONGSIDE
+ * SkuBarcodeSheetPdf.js. The two are one decision, not two.
  */
 export function generateLabelBarcodeDataUrl(text) {
   return generateBarcodeDataUrl(text, {
-    width: 3,
-    height: 110,
-    fontSize: 18,
-    textMargin: 8,
-    margin: 10,
+    width: 2,
+    height: 90,
+    fontSize: 16,
+    textMargin: 4,
+    margin: 6,
   });
 }
 

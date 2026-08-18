@@ -158,9 +158,10 @@ export default function BarcodeExportPanel({ onReserved }) {
 
       <div className="ap-section-title">Export Barcodes</div>
       <p className="ap-help">
-        Reserves the next SKU numbers and opens a printable A4 sheet (6 tags per
-        page). Stick them on the garments, then use <strong>Scan Code</strong> to
-        fill in each product's details.
+        Reserves the next SKU numbers and opens a PDF sized for the{" "}
+        <strong>50 × 25mm label roll</strong> — one tag per page, so the label
+        printer feeds one sticker each. Stick them on the garments, then use{" "}
+        <strong>Scan Code</strong> to fill in each product's details.
       </p>
 
       <div className="ap-barcode-controls">
