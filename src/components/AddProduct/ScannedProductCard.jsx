@@ -1,14 +1,13 @@
 import React from "react";
 
 /**
- * ScannedProductCard — read-only details for a tag whose product already exists.
+ * ScannedProductCard — details for a tag whose product already exists.
  *
- * Scanning a filled-in barcode is a "what is this garment?" question, not an
- * edit. Deliberately read-only: AddProduct is a create/fill form and has no
- * update path for an already-live product, so offering fields here would imply
- * an ability that doesn't exist.
+ * Scanning a filled-in barcode is a "what is this garment?" question first, so
+ * the card stays read-only. Editing is a deliberate second step: `onEdit` hands
+ * the product back to AddProduct, which loads it into the form in edit mode.
  */
-export default function ScannedProductCard({ product, onScanAnother, onViewInInventory }) {
+export default function ScannedProductCard({ product, onScanAnother, onEdit, onViewInInventory }) {
   if (!product) return null;
 
   const inv = product.inventory === 9999 ? "Made to order" : (product.inventory ?? 0);
@@ -55,7 +54,12 @@ export default function ScannedProductCard({ product, onScanAnother, onViewInInv
       </div>
 
       <div className="ap-scanned-actions">
-        <button type="button" className="ap-btn-primary" onClick={onScanAnother}>Scan another</button>
+        {onEdit && (
+          <button type="button" className="ap-btn-primary" onClick={() => onEdit(product)}>
+            Edit product
+          </button>
+        )}
+        <button type="button" className="ap-btn-secondary" onClick={onScanAnother}>Scan another</button>
         {onViewInInventory && (
           <button type="button" className="ap-btn-secondary" onClick={() => onViewInInventory(product)}>
             View in Inventory

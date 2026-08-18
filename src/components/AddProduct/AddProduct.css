@@ -585,6 +585,49 @@ select.ap-input { cursor: pointer; }
   color: #8a6d1f;
 }
 
+/* Explains who owns LXRTS stock. Sits directly above the variant grid, where
+   the Inventory column would otherwise read as authoritative — it isn't. */
+.ap-variant-note {
+  display: block;
+  margin: -4px 0 12px;
+  line-height: 1.5;
+}
+
+/* Editing a live product. Solid (not dashed like the scan strip) because this
+   is a committed state rather than a "waiting for a scan" one — the form below
+   overwrites a real catalogue row. */
+.ap-edit-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: -8px 0 16px;
+  padding: 10px 14px;
+  border: 1px solid #d5b85a;
+  border-radius: 8px;
+  background: #fdf9ef;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a6d1f;
+}
+
+.ap-edit-strip-done {
+  padding: 6px 14px;
+  border: 1px solid #d5b85a;
+  border-radius: 6px;
+  background: #fff;
+  color: #8a6d1f;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ap-edit-strip-done:hover {
+  background: #d5b85a;
+  color: #fff;
+}
+
 /* A locked SKU came off a physical tag and can't be re-rolled — styled
    distinctly from an ordinary read-only field so that reads as deliberate. */
 .ap-input-locked {

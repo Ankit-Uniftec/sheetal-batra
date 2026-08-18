@@ -77,6 +77,17 @@ export default function InventoryDashboard() {
   // briefly highlight the matching card.
   const [highlightOrderId, setHighlightOrderId] = useState(null);
 
+  // Edit/Duplicate from a catalogue row: hands the product to the Add Product
+  // tab, which loads it into its form. Shaped { product, mode } — 'edit'
+  // updates that row, 'duplicate' copies it onto a fresh SKU. Nothing is
+  // written here; the Add Product form's Save does the writing.
+  const [prefillProduct, setPrefillProduct] = useState(null);
+
+  const openInAddProduct = (product, mode) => {
+    setPrefillProduct({ product, mode });
+    setActiveTab("addProduct");
+  };
+
   // ==================== EXISTING STATES ====================
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -846,13 +857,14 @@ export default function InventoryDashboard() {
                 <th className="inv-th-channel">B2B</th>
                 <th className="inv-th-channel">Shopify</th>
                 <th>Inventory</th>
+                <th className="inv-th-actions">Actions</th>
                 {/* <th>Sync</th> */}
               </tr>
             </thead>
             <tbody>
               {currentProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="13" className="inv-no-data">
+                  <td colSpan="14" className="inv-no-data">
                     {searchTerm || stockFilters.length > 0 || syncFilter !== "all"
                       ? "No products match your filters"
                       : "No products found"}
@@ -1025,6 +1037,24 @@ export default function InventoryDashboard() {
                           )}
                         </td>
 
+                        {/* Row actions — both open the Add Product tab with this
+                            product loaded. Duplicate lands there on a fresh SKU,
+                            so nothing is written until that form is saved. */}
+                        <td className="inv-actions-cell">
+                          <button
+                            type="button"
+                            className="inv-row-action"
+                            onClick={() => openInAddProduct(product, "edit")}
+                            title="Edit this product's details"
+                          >Edit</button>
+                          <button
+                            type="button"
+                            className="inv-row-action"
+                            onClick={() => openInAddProduct(product, "duplicate")}
+                            title="Create a new product from a copy of this one"
+                          >Duplicate</button>
+                        </td>
+
                         {/* Sync Toggle */}
                         {/* <td className="inv-sync-cell">
                           {isShopifyProduct ? (
@@ -1047,7 +1077,7 @@ export default function InventoryDashboard() {
                       {/* ==================== EXPANDED VARIANT ROW (LXRTS ONLY) ==================== */}
                       {isSyncEnabled && isExpanded && (
                         <tr className="inv-variant-row">
-                          <td colSpan="13">
+                          <td colSpan="14">
                             <div className="inv-variant-container">
                               <div className="inv-variant-header">
                                 <span className="inv-variant-title">Size Variants — {product.name}</span>
@@ -1167,7 +1197,11 @@ export default function InventoryDashboard() {
         {activeTab === "warehouses" && <WarehouseTab />}
         {activeTab === "exchanges" && <StockExchangeTab />}
         {activeTab === "addProduct" && (
-          <AddProduct onProductAdded={() => fetchProducts()} />
+          <AddProduct
+            onProductAdded={() => fetchProducts()}
+            prefill={prefillProduct}
+            onPrefillConsumed={() => setPrefillProduct(null)}
+          />
         )}
 
       </div>
