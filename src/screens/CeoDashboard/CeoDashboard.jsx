@@ -327,9 +327,11 @@ export default function CEODashboard() {
     // Helper functions
     const getPaymentStatus = (order) => {
         const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-        const advance = order.advance_payment || 0;
-        if (advance >= total) return "paid";
-        if (advance > 0) return "partial";
+        // total_paid = everything received. advance_payment is the order-time
+        // advance only and would under-report any balance collected later.
+        const paid = Number(order.total_paid ?? order.advance_payment) || 0;
+        if (paid >= total) return "paid";
+        if (paid > 0) return "partial";
         return "unpaid";
     };
 
@@ -1138,8 +1140,9 @@ export default function CEODashboard() {
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
             clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             clientSales[client].orders += 1;
-            clientSales[client].advance += Number(o.advance_payment || 0);
-            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));
+            // Collections, not the order-time advance — read total_paid.
+            clientSales[client].advance += Number(o.total_paid ?? o.advance_payment) || 0;
+            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - (Number(o.total_paid ?? o.advance_payment) || 0));
             if (o.created_at < clientSales[client].firstSeen) clientSales[client].firstSeen = o.created_at;
         });
 
@@ -1176,7 +1179,8 @@ export default function CEODashboard() {
         const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
 
         const allClientSales = Object.values(clientSales).sort((a, b) => b.sales - a.sales);
-        const totalB2bAdvance = currentB2b.reduce((s, o) => s + Number(o.advance_payment || 0), 0);
+        // Money actually collected (drives totalB2bBalance below), so total_paid.
+        const totalB2bAdvance = currentB2b.reduce((s, o) => s + (Number(o.total_paid ?? o.advance_payment) || 0), 0);
 
         // Search filter
         let filteredB2b = allClientSales;

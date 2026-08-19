@@ -11,7 +11,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
-import { getSAStageLabel, getSAStageColor, getOrderStatusLabel } from "../utils/barcodeService";
+import { getSAStageLabel, getSAStageColor, getOrderStatusLabel, markShipmentDelivered } from "../utils/barcodeService";
 import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
@@ -438,7 +438,10 @@ export default function Dashboard() {
         const ORDER_LIST_COLUMNS = [
           "id", "order_no", "created_at", "delivery_date", "delivered_at", "status",
           "salesperson", "salesperson_email",
-          "net_total", "grand_total_after_discount", "grand_total", "advance_payment",
+          "net_total", "grand_total_after_discount", "grand_total",
+          // advance_payment = order-time advance (what the invoice prints).
+          // total_paid = everything received; use it for any balance figure.
+          "advance_payment", "total_paid", "remaining_payment",
           "total_quantity", "is_stock_order", "is_alteration", "alteration_location",
           "is_rework", "warehouse_stage", "user_id",
           "delivery_name", "delivery_email", "delivery_phone",
@@ -647,49 +650,143 @@ export default function Dashboard() {
     setDeliveryModalOrder(order);
   };
 
-  const handleDeliveryPaymentConfirm = async ({ paidAt, rows, deliveredAddress, finalMethod, deliveryCharge, codWaived }) => {
+  // Re-read one order after a payment write and merge it into local state.
+  //
+  // total_paid and remaining_payment are computed by a Postgres trigger, so the
+  // values we'd guess at client-side are not authoritative — read them back.
+  // `fallback` is the fields we know we wrote, applied if the re-read fails so
+  // the card still reflects the action rather than silently looking untouched.
+  const refreshOrderRow = async (orderId, fallback = {}) => {
+    const { data: fresh } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .single();
+    setOrders(prev => prev.map(o =>
+      o.id === orderId ? { ...o, ...fallback, ...(fresh || {}) } : o
+    ));
+    return fresh;
+  };
+
+  const handleDeliveryPaymentConfirm = async ({ paidAt, rows, deliveredAddress, finalMethod, deliveryCharge, codWaived, shipmentAllocations, isLastShipment }) => {
     const order = deliveryModalOrder;
     if (!order) return;
     setDeliveryModalSaving(true);
     try {
-      // Record each balance payment (if any money was collected at delivery).
+      const allocations = Array.isArray(shipmentAllocations) ? shipmentAllocations : [];
+
+      // Record each balance payment, tagged with the box it was collected against.
+      //
+      // One handover can cover several boxes, so each payment mode is split across
+      // them in proportion to what each box owed — the customer hands over one
+      // amount, but the ledger keeps it attributable per shipment, which is the
+      // entire reason shipment_id exists.
+      //
+      // No allocations = an order with no shipments (legacy). shipment_id stays
+      // null, which is meaningful: an order-level payment, not a guess at which
+      // product it was for.
       if (Array.isArray(rows) && rows.length > 0) {
-        const paymentRows = rows.map((r) => ({
-          order_id: order.id,
-          kind: "balance",
-          payment_mode: r.mode,
-          amount: r.amount,
-          paid_at: paidAt,
-          recorded_by: salesperson?.email || null,
-        }));
+        const paymentRows = [];
+        const weights = allocations.map((a) => Number(a.balance) || 0);
+        const weightSum = weights.reduce((s, w) => s + w, 0);
+
+        rows.forEach((r) => {
+          const amount = Number(r.amount) || 0;
+          const base = {
+            order_id: order.id,
+            kind: "balance",
+            payment_mode: r.mode,
+            paid_at: paidAt,
+            recorded_by: salesperson?.email || null,
+          };
+
+          if (allocations.length === 0 || weightSum <= 0) {
+            // Nothing to split against — an order with no shipments (including
+            // every order while the shipments migration has not yet run), or every
+            // selected box already fully paid. Record it whole.
+            //
+            // shipment_id is OMITTED rather than set to null when there is nothing
+            // to attribute it to: the column does not exist until migration 78 runs,
+            // and Supabase rejects an insert naming an unknown column. Omitting it
+            // lets this deploy safely ahead of that migration, and the column's
+            // default is null anyway.
+            paymentRows.push(
+              allocations.length === 1
+                ? { ...base, shipment_id: allocations[0].id, amount }
+                : { ...base, amount }
+            );
+            return;
+          }
+
+          // Split with a running remainder so the parts sum to the amount EXACTLY.
+          // Per-row rounding would leak paise and leave a box a rupee short.
+          let used = 0;
+          allocations.forEach((a, i) => {
+            const share = i === allocations.length - 1
+              ? Math.round((amount - used) * 100) / 100
+              : Math.round((amount * weights[i] / weightSum) * 100) / 100;
+            used = Math.round((used + share) * 100) / 100;
+            if (share > 0) {
+              paymentRows.push({ ...base, shipment_id: a.id, amount: share });
+            }
+          });
+        });
+
         const { error: payErr } = await supabase
           .from("order_payments")
           .insert(paymentRows);
         if (payErr) throw payErr;
       }
 
-      // Recompute the order's financial fields to include the COD charge that
-      // was decided at delivery, so net_total / remaining reflect what was
-      // actually charged. The goods total never carried the charge (it was
-      // removed from order placement), so we add it here exactly once.
-      const goodsTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
+      // Recompute net_total to include the COD charge decided at delivery.
+      //
+      // The goods total is read from grand_total_after_discount (never from
+      // net_total): net_total is what we WRITE below, so reading it back would
+      // add the charge on top of a total that already carries one — a second
+      // delivery, or a retry after a partial failure, would compound ₹250 each
+      // time. deliveryCharge.js is explicit that the charge is never baked in
+      // at placement, so the pre-COD goods total is the correct base and this
+      // stays idempotent however often it runs.
+      // Deliberately NOT falling back to 0: on a legacy row with neither total
+      // set, a 0 here would silently overwrite a real net_total with the bare
+      // COD charge. Refuse instead — a blocked delivery is recoverable, a
+      // zeroed order total is not.
+      const goodsBase = order?.grand_total_after_discount ?? order?.grand_total;
+      if (goodsBase == null || Number.isNaN(Number(goodsBase))) {
+        throw new Error(
+          "This order has no goods total (grand_total_after_discount / grand_total are both empty), " +
+          "so the delivery total can't be computed. Fix the order's pricing before marking it delivered."
+        );
+      }
+      const goodsTotal = Number(goodsBase);
       const charge = Number(deliveryCharge) || 0;
       const newNetTotal = goodsTotal + charge;
-      const collected = (rows || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      const advancePaid = Number(order?.advance_payment) || 0;
-      const newRemaining = Math.max(0, newNetTotal - advancePaid - collected);
 
       const deliveredAt = new Date().toISOString();
+      // No money fields here. total_paid / remaining_payment are owned by
+      // trg_order_payments_sync_total (77_orders_total_paid.sql), which already
+      // fired on the insert above; advance_payment is frozen to the order-time
+      // advance the invoice prints. Writing either from here would re-introduce
+      // the two-writers drift this replaced.
       const orderUpdate = {
-        status: "delivered",
-        delivered_at: deliveredAt,
         delivered_mode_of_delivery: finalMethod,
         cod_charge: charge,
         net_total: newNetTotal,
-        remaining_payment: newRemaining,
       };
       // Only set delivered_address when the SA flagged an address change.
       if (deliveredAddress) orderUpdate.delivered_address = deliveredAddress;
+
+      // Who decides the ORDER is delivered:
+      //   • With a shipment — nobody here. mark_shipment_delivered() flips the box,
+      //     and recalc_order_delivery() (78) promotes the order only once EVERY
+      //     outstanding box has landed. Writing status here would claim the whole
+      //     order arrived when one garment did.
+      //   • Without one (legacy order, no shipments) — this handler still does it,
+      //     exactly as before.
+      if (allocations.length === 0) {
+        orderUpdate.status = "delivered";
+        orderUpdate.delivered_at = deliveredAt;
+      }
 
       const { error: ordErr } = await supabase
         .from("orders")
@@ -697,17 +794,35 @@ export default function Dashboard() {
         .eq("id", order.id);
       if (ordErr) throw ordErr;
 
-      setOrders(prev => prev.map(o =>
-        o.id === order.id ? { ...o, ...orderUpdate } : o
-      ));
+      // Every selected box was physically handed over, so every one is delivered.
+      // The trigger promotes the ORDER once none are left outstanding.
+      for (const a of allocations) {
+        const res = await markShipmentDelivered(a.id, deliveredAt);
+        if (!res?.success) {
+          throw new Error(res?.message || "Could not mark the shipment delivered.");
+        }
+      }
+
+      // net_total just changed, so remaining_payment (derived from it) is now
+      // stale — re-run the recompute, then read the authoritative row back. The
+      // re-read also picks up any status the trigger just set.
+      await supabase.rpc("recalc_order_total_paid", { p_order_id: order.id });
+      await refreshOrderRow(order.id, orderUpdate);
       setDeliveryModalOrder(null);
+
+      const codNote = charge > 0
+        ? `₹${formatIndianNumber(charge)} COD charge applied. `
+        : (codWaived ? "COD charge waived. " : "");
+
+      const boxes = allocations.length;
+      const partial = boxes > 0 && !isLastShipment;
 
       showPopup({
         type: "success",
-        title: "Order Delivered",
-        message: charge > 0
-          ? `₹${formatIndianNumber(charge)} COD charge applied. Order marked as delivered.`
-          : (codWaived ? "COD charge waived. Order marked as delivered." : "Order marked as delivered."),
+        title: partial ? "Shipment Delivered" : "Order Delivered",
+        message: partial
+          ? `${codNote}${boxes > 1 ? `${boxes} shipments` : "Shipment"} delivered. The order stays open until its remaining shipments are delivered.`
+          : `${codNote}Order marked as delivered.`,
         confirmText: "OK",
       });
     } catch (err) {
@@ -750,21 +865,18 @@ export default function Dashboard() {
         .insert(paymentRows);
       if (payErr) throw payErr;
 
-      // Roll the collected amount into advance_payment and recompute the
-      // outstanding balance. Status is NOT changed — this is payment only.
-      const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
-      const newAdvance = (Number(order?.advance_payment) || 0) + collected;
-      const newRemaining = Math.max(0, orderTotal - newAdvance);
-
-      const orderUpdate = { advance_payment: newAdvance, remaining_payment: newRemaining };
-      const { error: ordErr } = await supabase
-        .from("orders")
-        .update(orderUpdate)
-        .eq("id", order.id);
-      if (ordErr) throw ordErr;
-
-      setOrders(prev => prev.map(o => (o.id === order.id ? { ...o, ...orderUpdate } : o)));
+      // No orders.update at all. This used to add `collected` into
+      // advance_payment, which made the customer invoice print an advance
+      // larger than the customer ever advanced. total_paid and
+      // remaining_payment are now maintained by trg_order_payments_sync_total
+      // (77_orders_total_paid.sql) off the insert above; advance_payment stays
+      // frozen at the order-time figure. Status is NOT changed — payment only.
+      const fresh = await refreshOrderRow(order.id);
       setPaymentModalOrder(null);
+
+      // Quote the balance the DB computed, not one guessed here — that guess is
+      // exactly what used to drift from the ledger.
+      const newRemaining = Number(fresh?.remaining_payment) || 0;
 
       showPopup({
         type: "success",
@@ -1184,8 +1296,11 @@ export default function Dashboard() {
     const status = order.status?.toLowerCase();
     if (status === "delivered" || status === "cancelled" || status === "exchange_return" || status === "revoked") return false;
     const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
-    const advancePaid = Number(order?.advance_payment) || 0;
-    return orderTotal - advancePaid > 0;
+    // total_paid, not advance_payment: the latter is frozen at the order-time
+    // advance, so it would never shrink the balance and this button would never
+    // go away on a fully-paid order. Falls back for rows predating the backfill.
+    const paidSoFar = Number(order?.total_paid ?? order?.advance_payment) || 0;
+    return orderTotal - paidSoFar > 0;
   };
 
   // Get status badge style

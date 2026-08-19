@@ -569,7 +569,8 @@ export default function COODashboard() {
         const period = nonLxrtsOrders.filter(o => inPeriod(o.created_at));
 
         const totalGrand = period.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
-        const totalAdvance = period.reduce((s, o) => s + Number(o.advance_payment || 0), 0);
+        // Money actually collected (drives totalPending), so total_paid.
+        const totalAdvance = period.reduce((s, o) => s + (Number(o.total_paid ?? o.advance_payment) || 0), 0);
         const totalPending = totalGrand - totalAdvance;
 
         // By channel
@@ -578,8 +579,8 @@ export default function COODashboard() {
             const ch = getOrderChannel(o);
             if (!channelPayments[ch]) channelPayments[ch] = { name: ch, total: 0, advance: 0, pending: 0 };
             channelPayments[ch].total += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            channelPayments[ch].advance += Number(o.advance_payment || 0);
-            channelPayments[ch].pending += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));
+            channelPayments[ch].advance += Number(o.total_paid ?? o.advance_payment) || 0;
+            channelPayments[ch].pending += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - (Number(o.total_paid ?? o.advance_payment) || 0));
         });
         const byChannel = Object.values(channelPayments).sort((a, b) => b.total - a.total);
 
@@ -604,11 +605,13 @@ export default function COODashboard() {
         const byPaymentMode = Object.values(modeMap).sort((a, b) => b.value - a.value);
 
         // Unpaid orders (COD / no advance)
+        // Outstanding = total - everything received. Reading advance_payment
+        // here would keep fully-collected orders in the unpaid list forever.
+        const paidOn = (o) => Number(o.total_paid ?? o.advance_payment) || 0;
+        const totalOn = (o) => Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         const unpaidOrders = period.filter(o => {
-            const total = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0;
-            const advance = o.advance_payment || 0;
-            return advance < total && o.status !== "cancelled";
-        }).sort((a, b) => (Number(b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - Number(b.advance_payment || 0)) - (Number(a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - Number(a.advance_payment || 0)));
+            return paidOn(o) < totalOn(o) && o.status !== "cancelled";
+        }).sort((a, b) => (totalOn(b) - paidOn(b)) - (totalOn(a) - paidOn(a)));
 
         return { totalGrand, totalAdvance, totalPending, byChannel, byPaymentMode, unpaidCount: unpaidOrders.length };
     }, [nonLxrtsOrders, inPeriod]);

@@ -918,6 +918,55 @@ export async function verifyPackagingComponents(orderId, scannedBarcodes, itemIn
 }
 
 // ============================================================
+// 5b. SHIPMENTS — the box that leaves the building
+// ============================================================
+// Mirrors db/barcode_system/v2/78_shipments.sql.
+//
+// A shipment is one box: the unit that is dispatched, delivered and paid for. It is
+// created at the packaging station from exactly the components that went in, keyed on
+// order_components.id — NEVER item_index, which is a position in a mutable JSONB array
+// (see 78's header for why that is unsafe for money).
+//
+// The RPC is atomic and refuses to put a component in two live shipments, so a
+// double-click cannot ship the same garment twice.
+export async function createShipment(orderId, componentIds, by = null) {
+  const { data, error } = await supabase.rpc("create_shipment", {
+    p_order_id: orderId,
+    p_component_ids: componentIds,
+    p_by: by,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+// The single seam for "this box reached the customer". Called by the SA today; the
+// Blitz webhook will call the same RPC later, firing the same trigger that promotes
+// the ORDER to delivered once its last outstanding box lands.
+export async function markShipmentDelivered(shipmentId, at = null) {
+  const { data, error } = await supabase.rpc("mark_shipment_delivered", {
+    p_shipment_id: shipmentId,
+    p_at: at,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+// Shipments for an order, with their contents. Returns [] when the order predates
+// shipments — every caller must treat "no shipments" as the normal legacy case.
+export async function fetchOrderShipments(orderId) {
+  const { data, error } = await supabase
+    .from("shipments")
+    .select("*, shipment_components(component_id)")
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// ============================================================
 // 6. FETCH COMPONENTS — Get all components for an order
 // ============================================================
 export async function fetchOrderComponents(orderId) {

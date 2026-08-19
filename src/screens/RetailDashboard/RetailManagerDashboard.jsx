@@ -242,9 +242,11 @@ export default function RetailManagerDashboard() {
 
     const getPaymentStatus = (order) => {
         const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-        const advance = order.advance_payment || 0;
-        if (advance >= total) return "paid";
-        if (advance > 0) return "partial";
+        // total_paid = everything received. advance_payment is the order-time
+        // advance only and would under-report any balance collected later.
+        const paid = Number(order.total_paid ?? order.advance_payment) || 0;
+        if (paid >= total) return "paid";
+        if (paid > 0) return "partial";
         return "unpaid";
     };
 

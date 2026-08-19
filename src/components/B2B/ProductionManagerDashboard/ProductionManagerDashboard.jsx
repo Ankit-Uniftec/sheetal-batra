@@ -587,8 +587,12 @@ export default function ProductionManagerDashboard() {
 
     // ==================== HELPER FUNCTIONS ====================
     const getPaymentStatus = (order) => {
-        const paid = Number(order.amount_paid || 0);
-        const total = Number(order.grand_total || order.net_total || 0);
+        // Was reading `amount_paid` — a column that exists nowhere in the schema,
+        // so this returned "unpaid" for every B2B order. total_paid is the real
+        // one; the total uses the same COALESCE precedence as every other
+        // dashboard (net_total first), not grand_total first.
+        const paid = Number(order.total_paid ?? order.advance_payment) || 0;
+        const total = Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
         if (paid <= 0) return "unpaid";
         if (paid >= total) return "paid";
         return "partial";

@@ -312,9 +312,11 @@ export default function GMDashboard() {
     // ═══════════════════════════════════════════════════════════
     const getPaymentStatus = (order) => {
         const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-        const advance = order.advance_payment || 0;
-        if (advance >= total) return "paid";
-        if (advance > 0) return "partial";
+        // total_paid = everything received. advance_payment is the order-time
+        // advance only and would under-report any balance collected later.
+        const paid = Number(order.total_paid ?? order.advance_payment) || 0;
+        if (paid >= total) return "paid";
+        if (paid > 0) return "partial";
         return "unpaid";
     };
 
@@ -513,8 +515,9 @@ export default function GMDashboard() {
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
             if (isRevenueOrder(o)) clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             clientSales[client].orders += 1;
-            clientSales[client].advance += Number(o.advance_payment || 0);
-            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - Number(o.advance_payment || 0));
+            // Collections, not the order-time advance — read total_paid.
+            clientSales[client].advance += Number(o.total_paid ?? o.advance_payment) || 0;
+            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - (Number(o.total_paid ?? o.advance_payment) || 0));
         });
         const allClientSales = Object.values(clientSales).sort((a, b) => b.sales - a.sales);
 

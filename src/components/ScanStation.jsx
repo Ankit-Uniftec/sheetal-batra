@@ -9,6 +9,7 @@ import {
     recordQcResult,
     securityGuardScan,
     verifyPackagingComponents,
+    createShipment,
     fetchOrderComponents,
     fetchComponentByBarcode,
     resolveFullBarcode,
@@ -1164,14 +1165,47 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     );
                 }
 
+                // Record the BOX. What was just scanned into it is what the customer
+                // will receive and be charged for, so the shipment is created from
+                // exactly this set — keyed on component id, not item_index (78).
+                //
+                // Deliberately after the stage advances and deliberately non-fatal:
+                // the garments have physically left, and refusing to admit that
+                // because a bookkeeping insert failed would be worse than a missing
+                // shipment row, which create_shipment can mint later. Surfaced, not
+                // swallowed — the packer is told, so it can be fixed while the box
+                // is still identifiable.
+                let shipmentWarning = "";
+                try {
+                    const ids = (packagingPopup.allComponents || [])
+                        .filter((c) => packagingPopup.scannedBarcodes.includes(c.barcode))
+                        .map((c) => c.id);
+
+                    if (ids.length !== packagingPopup.scannedBarcodes.length) {
+                        shipmentWarning = " (shipment not recorded: component ids missing)";
+                    } else {
+                        const ship = await createShipment(
+                            packagingPopup.orderId,
+                            ids,
+                            currentUserEmail
+                        );
+                        if (!ship?.success) {
+                            shipmentWarning = ` (shipment not recorded: ${ship?.message || ship?.error || "unknown"})`;
+                        }
+                    }
+                } catch (e) {
+                    console.error("createShipment failed:", e);
+                    shipmentWarning = ` (shipment not recorded: ${e.message})`;
+                }
+
                 // Only claim the ORDER is complete when the whole order went out —
                 // a per-product dispatch leaves the other products in production.
                 const partial = packagingPopup.itemIndex !== null && packagingPopup.itemIndex !== undefined;
                 setScanResult({
                     success: true,
-                    message: partial
+                    message: (partial
                         ? `Product ${packagingPopup.itemIndex + 1} dispatched (${result.verified_count} pieces) — other products still in production.`
-                        : `All ${result.verified_count} components dispatched — order complete!`,
+                        : `All ${result.verified_count} components dispatched — order complete!`) + shipmentWarning,
                     data: result,
                 });
             } else {

@@ -227,6 +227,9 @@ export default function CommsReviewOrder() {
         discount_percent: isPersonalOrder ? Number(discountPercent || 0) : 0,
         discount_amount: discountAmount,
         advance_payment: isPersonalOrder ? Number(advancePayment || 0) : 0,
+        // Seed total_paid at placement — the trigger only fires on
+        // order_payments rows, and placement writes none.
+        total_paid: isPersonalOrder ? Number(advancePayment || 0) : 0,
         remaining_payment: isPersonalOrder ? remainingPayment : 0,
         payment_mode: isPersonalOrder ? paymentMode : null,
 

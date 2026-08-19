@@ -762,6 +762,14 @@ export default function OrderDetailPage() {
                 <label>Advance Paid:</label>
                 <span>₹{formatIndianNumber(order.advance_payment)}</span>
               </div>
+              {/* Shown only once a balance has been collected, so the three
+                  rows always add up: advance + later collections = received. */}
+              {Number(order.total_paid ?? 0) > Number(order.advance_payment ?? 0) && (
+                <div className="odp-info-row">
+                  <label>Total Received:</label>
+                  <span>₹{formatIndianNumber(order.total_paid)}</span>
+                </div>
+              )}
               <div className="odp-info-row">
                 <label>Balance:</label>
                 <span className={order.remaining_payment > 0 ? "odp-balance" : ""}>
