@@ -273,6 +273,78 @@
   color: #fff;
 }
 
+/* ── Shipment picker ──────────────────────────────────────────────
+   Full-width rows rather than the inline pill pair used for the
+   two-way toggles: a shipment carries a name AND an amount, and the
+   list grows with the number of boxes. */
+.dpm-ship-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.dpm-ship-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  color: #555;
+  cursor: pointer;
+}
+
+.dpm-ship-btn.on {
+  background: #d5b85a;
+  border-color: #d5b85a;
+  color: #fff;
+}
+
+.dpm-ship-sub {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+/* Tick box. Several shipments are often handed over together, so these are
+   multi-select — the box makes that obvious at a glance, where a highlighted
+   row alone would read as "pick one". */
+.dpm-ship-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 9px;
+  border: 1px solid #b9b9b9;
+  border-radius: 3px;
+  background: #fff;
+  color: #d5b85a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dpm-ship-btn.on .dpm-ship-check {
+  background: #fff;
+  border-color: #fff;
+}
+
+.dpm-ship-name {
+  flex: 1 1 auto;
+}
+
+.dpm-ship-amt {
+  white-space: nowrap;
+}
+
 .dpm-addr-input {
   width: 100%;
   margin-top: 10px;

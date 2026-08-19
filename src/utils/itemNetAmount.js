@@ -8,6 +8,22 @@
 // GST-stripped `subtotal` column — otherwise the ratio comes out > 1 and the
 // discount gets inflated by the GST rate.
 //
+// ── EXTRAS AND ADDITIONALS COUNT TOWARD THE ITEM ──────────────────────────────
+// `item.price` is deliberately the BASE price with extras excluded
+// (ProductForm.js:2077 "Use base price without extras"); each extra/additional
+// carries its own `price`. But `orders.grand_total` INCLUDES them — OrderDetails.js
+// subtracts `extrasTotal` only to derive the discount base, because discount does
+// not apply to extras.
+//
+// So an item's worth is (price × qty) + its extras + its additionals. Counting only
+// price × qty silently drops real money: a ₹20,000 dupatta booked as an additional
+// was invisible, and per-item finals did not sum to the order total. Anything that
+// COLLECTS money per product (per-shipment balances) must not under-count, so the
+// gross includes them.
+//
+// The DISCOUNT RATIO still uses the extras-free product subtotal, matching how the
+// discount was actually calculated at order time.
+//
 // Example: a ₹10,000 kurta and a ₹5,000 saree on one order with ₹3,000 off.
 //   - basis    = 15,000  (sum of item.price * quantity)
 //   - kurta:    gross 10000, ratio 0.667, discount 2000, final 8000
@@ -17,20 +33,42 @@
 // Use itemAmounts() for tables/CSVs that want all three numbers per item.
 // Use itemFinalAmount() for charts that only need the one net number.
 
-const grossOf = (item) =>
+const sumPrices = (list) =>
+    (list || []).reduce((s, x) => s + (Number(x?.price) || 0), 0);
+
+// Extras/additionals are priced per line, not per unit — ProductForm adds each one's
+// price once (:2144), so they are NOT multiplied by quantity.
+export const itemExtrasTotal = (item) =>
+    sumPrices(item?.extras) + sumPrices(item?.additionals);
+
+// The bare garment: what the order-level discount was calculated against.
+const productOnlyOf = (item) =>
     Number(item?.price || 0) * Number(item?.quantity || 1);
+
+const grossOf = (item) => productOnlyOf(item) + itemExtrasTotal(item);
 
 export const orderItemsGross = (order) =>
     (order?.items || []).reduce((s, it) => s + grossOf(it), 0);
 
+// Discount-allocation basis: extras-free, because discount never applied to extras.
+const orderProductOnlyGross = (order) =>
+    (order?.items || []).reduce((s, it) => s + productOnlyOf(it), 0);
+
 export const itemAmounts = (order, item) => {
     const gross = grossOf(item);
-    const basis = orderItemsGross(order);
+    const basis = orderProductOnlyGross(order);
     const orderDiscount = Number(order?.discount_amount || 0);
-    const ratio = basis > 0 ? gross / basis : 0;
-    const discount = Math.min(gross, orderDiscount * ratio);
+    const ratio = basis > 0 ? productOnlyOf(item) / basis : 0;
+    // Cap at the garment's own price: a discount can wipe out the outfit but never
+    // eats into the extras, which were never discounted in the first place.
+    const discount = Math.min(productOnlyOf(item), orderDiscount * ratio);
     const final = Math.max(0, gross - discount);
     return { gross, discount, final };
 };
 
 export const itemFinalAmount = (order, item) => itemAmounts(order, item).final;
+
+// Sum of every item's final — what the per-item numbers claim the order is worth.
+// Compare against net_total before trusting a per-item split of money.
+export const orderItemsFinal = (order) =>
+    (order?.items || []).reduce((s, it) => s + itemAmounts(order, it).final, 0);

@@ -21,7 +21,13 @@ export default function UpdatePaymentModal({ order, onCancel, onConfirm, saving 
   const mrp = Number(order?.grand_total) || 0;
   const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
   const advancePaid = Number(order?.advance_payment) || 0;
-  const balanceDue = Math.max(0, orderTotal - advancePaid);
+  // Everything received so far, NOT the order-time advance. advance_payment is
+  // frozen at placement, so using it here would leave balanceDue permanently at
+  // its original value and let the same money be collected again — the
+  // over-collection guard below reads this same figure and would not catch it.
+  // Falls back to advance_payment for rows predating the total_paid backfill.
+  const paidSoFar = Number(order?.total_paid ?? order?.advance_payment) || 0;
+  const balanceDue = Math.max(0, orderTotal - paidSoFar);
 
   const [paidAt, setPaidAt] = useState(todayISO());
   const [rows, setRows] = useState([{ id: 1, mode: "Cash", amount: "" }]);
@@ -79,9 +85,11 @@ export default function UpdatePaymentModal({ order, onCancel, onConfirm, saving 
             <span>Order Total</span>
             <span>₹{formatIndianNumber(orderTotal)}</span>
           </div>
+          {/* Label follows the figure: once anything beyond the original
+              advance has come in, "Advance Paid" would be a lie. */}
           <div className="dpm-summary-row">
-            <span>Advance Paid</span>
-            <span>₹{formatIndianNumber(advancePaid)}</span>
+            <span>{paidSoFar > advancePaid ? "Paid So Far" : "Advance Paid"}</span>
+            <span>₹{formatIndianNumber(paidSoFar)}</span>
           </div>
           <div className="dpm-summary-row dpm-balance">
             <span>Balance Due</span>

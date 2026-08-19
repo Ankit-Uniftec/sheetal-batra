@@ -238,9 +238,11 @@ export default function StoreManagerDashboard() {
 
     const getPaymentStatus = (order) => {
         const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-        const advance = order.advance_payment || 0;
-        if (advance >= total) return "paid";
-        if (advance > 0) return "partial";
+        // total_paid = everything received. advance_payment is the order-time
+        // advance only and would under-report any balance collected later.
+        const paid = Number(order.total_paid ?? order.advance_payment) || 0;
+        if (paid >= total) return "paid";
+        if (paid > 0) return "partial";
         return "unpaid";
     };
 
@@ -467,7 +469,7 @@ export default function StoreManagerDashboard() {
             "Order No", "Order Date", "Delivery Date", "Customer", "Phone",
             "Salesperson", "Status", "Payment Status", "Mode of Payment",
             "Order Value (₹)", "Discount (₹)", "Store Credit Used (₹)",
-            "Advance Paid (₹)", "Net Sale (₹)", "QTY",
+            "Advance Paid (₹)", "Total Received (₹)", "Net Sale (₹)", "QTY",
         ];
         const rows = filteredOrders.map(o => {
             const qty = o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0;
@@ -475,6 +477,10 @@ export default function StoreManagerDashboard() {
             const discount = Number(o.discount_amount || 0);
             const credit = Number(o.store_credit_used || 0);
             const advance = Number(o.advance_payment || 0);
+            // Kept as two columns on purpose: "Advance Paid" is the order-time
+            // advance (matches the customer invoice), "Total Received" is
+            // everything collected since. They differ once a balance comes in.
+            const totalReceived = Number(o.total_paid ?? o.advance_payment) || 0;
             // Order Value column is the MRP (grand_total); Net Sale is what was
             // actually realised after discount and store credit.
             const netSale = grand - discount - credit;
@@ -492,6 +498,7 @@ export default function StoreManagerDashboard() {
                 discount,
                 credit,
                 advance,
+                totalReceived,
                 netSale,
                 qty,
             ].map(escape).join(",");

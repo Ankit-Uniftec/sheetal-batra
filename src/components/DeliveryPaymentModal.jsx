@@ -1,9 +1,15 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import { computeDeliveryCharge, COD_CHARGE, isHomeDelivery, DELIVERY_METHODS } from "../utils/deliveryCharge";
+import { supabase } from "../lib/supabaseClient";
+import { shipmentBalances } from "../utils/shipmentBalance";
 import "./DeliveryPaymentModal.css";
 
 const PAYMENT_MODES = ["Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"];
+
+// Money is summed across shipments here, so trim float noise before it reaches a
+// rupee figure the SA has to match exactly.
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 const todayISO = () => {
   const d = new Date();
@@ -23,8 +29,112 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
   const mrp = Number(order?.grand_total) || 0;
   const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
   const advancePaid = Number(order?.advance_payment) || 0;
-  // Goods balance (before any delivery charge).
-  const goodsBalance = Math.max(0, orderTotal - advancePaid);
+  // Everything received so far, NOT the order-time advance. advance_payment is
+  // frozen at placement; using it here would show a balance that never shrinks
+  // after an interim "Update Payment" — collecting the same money twice AND
+  // applying the ₹250 COD charge on a balance that is really zero (goodsBalance
+  // feeds computeDeliveryCharge below). Falls back for pre-backfill rows.
+  const paidSoFar = Number(order?.total_paid ?? order?.advance_payment) || 0;
+
+  // ── Shipments (78_shipments.sql) ──────────────────────────────────────────
+  // An order whose products finished at different times has several boxes, each
+  // dispatched, delivered and paid for separately. Orders placed before shipments
+  // existed have none — `shipments` stays empty and everything below falls back to
+  // the whole-order behaviour, so nothing about the single-box case changes.
+  const [shipments, setShipments] = useState([]);
+  // Multi-select: several boxes are often handed over together, and forcing the SA
+  // through the modal once per box would record one physical handover as two
+  // separate collections.
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [shipmentsLoading, setShipmentsLoading] = useState(true);
+  const [balances, setBalances] = useState(null);
+  const [balanceError, setBalanceError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!order?.id) return;
+      setShipmentsLoading(true);
+      try {
+        const [shipRes, compRes, payRes] = await Promise.all([
+          supabase.from("shipments").select("*, shipment_components(component_id)")
+            .eq("order_id", order.id).order("created_at", { ascending: true }),
+          supabase.from("order_components").select("id, item_index, barcode, component_label, current_stage, is_active")
+            .eq("order_id", order.id),
+          supabase.from("order_payments").select("amount, shipment_id").eq("order_id", order.id),
+        ]);
+        if (cancelled) return;
+
+        // Shipments may not exist yet: the migration that creates them (78) can
+        // legitimately trail this code, and an order-level deployment must keep
+        // working without it. Supabase RETURNS errors rather than throwing, so
+        // check explicitly — otherwise a missing table looks like "no shipments"
+        // by accident rather than by design.
+        if (shipRes.error || payRes.error) {
+          setShipments([]);
+          setShipmentsLoading(false);
+          return;   // silent: this is the expected pre-migration state, not a fault
+        }
+
+        const ships = shipRes.data;
+        const comps = compRes.data;
+        const pays  = payRes.data;
+
+        const undelivered = (ships || []).filter(
+          (s) => !["delivered", "cancelled", "returned"].includes(s.status)
+        );
+        setShipments(undelivered);
+
+        if (undelivered.length > 0) {
+          const links = (ships || []).flatMap((s) =>
+            (s.shipment_components || []).map((sc) => ({
+              shipment_id: s.id, component_id: sc.component_id,
+            }))
+          );
+          // Balances are computed over ALL shipments so the pro-rata shares of the
+          // advance divide against each other and sum exactly; only undelivered
+          // ones are offered for collection.
+          setBalances(shipmentBalances(order, ships || [], comps || [], links, pays || []));
+          // Default to the first box only. Pre-ticking everything would invite an SA
+          // to collect for garments still sitting in the warehouse.
+          setSelectedIds([undelivered[0].id]);
+        }
+      } catch (e) {
+        // A broken split must not block a handover — fall back to the order-level
+        // balance and say why, rather than showing a figure we cannot stand behind.
+        if (!cancelled) { setShipments([]); setBalanceError(e.message || String(e)); }
+      } finally {
+        if (!cancelled) setShipmentsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [order]);
+
+  const perShipment = shipments.length > 0 && balances;
+
+  // Totals across every selected box — one handover, one amount to collect.
+  const selected = useMemo(
+    () => (perShipment ? selectedIds.map((id) => balances.get(id)).filter(Boolean) : []),
+    [perShipment, selectedIds, balances]
+  );
+  const sumOf = (key) => selected.reduce((s, b) => s + (Number(b?.[key]) || 0), 0);
+  const selectedTotal = sumOf("total");
+  const selectedPaidShare = sumOf("advanceShare") + sumOf("unattributedShare") + sumOf("paidDirect");
+
+  // Goods balance (before any delivery charge): the selected boxes', or the whole
+  // order's when the order has no shipments (legacy, or single-box).
+  const goodsBalance = perShipment
+    ? Math.max(0, round2(sumOf("balance")))
+    : Math.max(0, orderTotal - paidSoFar);
+
+  const remainingAfterSelection = perShipment ? shipments.length - selected.length : 0;
+
+  const toggleShipment = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+    setError("");
+  };
 
   const [paidAt, setPaidAt] = useState(todayISO());
   const [rows, setRows] = useState([{ id: 1, mode: "Cash", amount: "" }]);
@@ -83,6 +193,10 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
   };
 
   const handleConfirm = () => {
+    if (perShipment && selected.length === 0) {
+      setError("Select at least one shipment being handed over.");
+      return;
+    }
     if (addressChanged && !deliveredAddress.trim()) {
       setError("Please enter the changed delivery address.");
       return;
@@ -106,6 +220,16 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
       finalMethod,
       deliveryCharge,
       codWaived: waiveCod,
+      // The boxes being handed over, each with the share of the collection that
+      // belongs to it, so the money stays attributable per shipment. Empty = the
+      // whole order (legacy orders with no shipments) — today's behaviour exactly.
+      shipmentAllocations: perShipment
+        ? selectedIds.map((id) => ({ id, balance: Number(balances.get(id)?.balance) || 0 }))
+        : [],
+      // True when nothing is left outstanding, so the caller knows the ORDER is
+      // finished. The DB decides this too (recalc_order_delivery); the UI only needs
+      // it for the confirmation wording.
+      isLastShipment: perShipment ? remainingAfterSelection === 0 : true,
     });
   };
 
@@ -137,6 +261,65 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
           )}
         </div>
 
+        {/* Which box is being handed over. Only shown when the order actually has
+            more than one outstanding shipment — a single-box order must not gain a
+            step it never had. */}
+        {shipments.length > 1 && balances && (
+          <div className="dpm-field">
+            <div className="dpm-rows-header">
+              <label>Which shipment(s) are being handed over?</label>
+              <button
+                type="button"
+                className="dpm-add-btn"
+                onClick={() => {
+                  setSelectedIds(
+                    selectedIds.length === shipments.length ? [] : shipments.map((s) => s.id)
+                  );
+                  setError("");
+                }}
+              >{selectedIds.length === shipments.length ? "Clear all" : "Select all"}</button>
+            </div>
+            <div className="dpm-ship-list">
+              {shipments.map((s, i) => {
+                const b = balances.get(s.id);
+                const on = selectedIds.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`dpm-ship-btn ${on ? "on" : ""}`}
+                    onClick={() => toggleShipment(s.id)}
+                    aria-pressed={on}
+                  >
+                    <span className="dpm-ship-check" aria-hidden="true">{on ? "✓" : ""}</span>
+                    <span className="dpm-ship-name">
+                      {s.blitz_order_code || `Shipment ${i + 1}`}
+                      {b?.itemIndexes?.length > 0 && (
+                        <span className="dpm-ship-sub">
+                          {" "}· {b.itemIndexes.map((n) => `Product ${n + 1}`).join(", ")}
+                        </span>
+                      )}
+                    </span>
+                    <span className="dpm-ship-amt">₹{formatIndianNumber(b?.balance ?? 0)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <span className="dpm-method-changed">
+              {remainingAfterSelection === 0
+                ? "All shipments selected — the order will be marked delivered."
+                : `${remainingAfterSelection} shipment${remainingAfterSelection === 1 ? "" : "s"} will stay outstanding — the order stays open until all are delivered.`}
+            </span>
+          </div>
+        )}
+
+        {balanceError && (
+          <p className="dpm-error">
+            Could not split this order per shipment ({balanceError}). Showing the whole
+            order's balance instead.
+          </p>
+        )}
+
         <div className="dpm-summary">
           {mrp !== orderTotal && mrp > 0 && (
             <div className="dpm-summary-row">
@@ -148,10 +331,26 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
             <span>Order Total</span>
             <span>₹{formatIndianNumber(orderTotal)}</span>
           </div>
+          {/* Label follows the figure: once anything beyond the original
+              advance has come in, "Advance Paid" would be a lie. */}
           <div className="dpm-summary-row">
-            <span>Advance Paid</span>
-            <span>₹{formatIndianNumber(advancePaid)}</span>
+            <span>{paidSoFar > advancePaid ? "Paid So Far" : "Advance Paid"}</span>
+            <span>₹{formatIndianNumber(paidSoFar)}</span>
           </div>
+          {/* When collecting for one box, show how its balance was arrived at —
+              an SA asked for ₹19,600 on a ₹33,000 order needs to see why. */}
+          {perShipment && selected.length > 0 && (
+            <>
+              <div className="dpm-summary-row">
+                <span>{selected.length > 1 ? `Selected Shipments (${selected.length})` : "This Shipment"}</span>
+                <span>₹{formatIndianNumber(round2(selectedTotal))}</span>
+              </div>
+              <div className="dpm-summary-row">
+                <span>Less {selected.length > 1 ? "their" : "its"} share of payments</span>
+                <span>−₹{formatIndianNumber(round2(selectedPaidShare))}</span>
+              </div>
+            </>
+          )}
           {deliveryCharge > 0 && (
             <div className="dpm-summary-row">
               <span>Delivery Charge (COD)</span>
@@ -159,7 +358,11 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
             </div>
           )}
           <div className="dpm-summary-row dpm-balance">
-            <span>{nothingToCollect ? "Balance" : "Balance Due"}</span>
+            <span>
+              {perShipment
+                ? (nothingToCollect ? "Shipment Balance" : "Collect for This Shipment")
+                : (nothingToCollect ? "Balance" : "Balance Due")}
+            </span>
             <span>₹{formatIndianNumber(balanceDue)}</span>
           </div>
         </div>
@@ -279,8 +482,12 @@ export default function DeliveryPaymentModal({ order, onCancel, onConfirm, savin
             type="button"
             className="dpm-btn dpm-btn-primary"
             onClick={handleConfirm}
-            disabled={saving || !exactlyMatches}
-          >{saving ? "Saving…" : (nothingToCollect ? "Mark Delivered" : "Confirm & Mark Delivered")}</button>
+            disabled={saving || shipmentsLoading || !exactlyMatches || (perShipment && selected.length === 0)}
+          >{saving ? "Saving…" : (
+            perShipment && shipments.length > 1
+              ? `${nothingToCollect ? "Mark" : "Confirm &"} Deliver ${selected.length > 1 ? `${selected.length} Shipments` : "Shipment"}`
+              : (nothingToCollect ? "Mark Delivered" : "Confirm & Mark Delivered")
+          )}</button>
         </div>
       </div>
     </div>

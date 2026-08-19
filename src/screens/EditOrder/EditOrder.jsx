@@ -615,6 +615,13 @@ export default function EditOrder() {
               <label>Advance Payment:</label>
               <span>₹{formatIndianNumber(order.advance_payment || 0)}</span>
             </div>
+            {/* Only differs from the advance once a balance has been collected. */}
+            {Number(order.total_paid ?? 0) > Number(order.advance_payment ?? 0) && (
+              <div className="eo-field">
+                <label>Total Received:</label>
+                <span>₹{formatIndianNumber(order.total_paid)}</span>
+              </div>
+            )}
             <div className="eo-field">
               <label>Balance:</label>
               <span>₹{formatIndianNumber(order.remaining_payment || 0)}</span>

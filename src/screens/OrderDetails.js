@@ -651,6 +651,10 @@ export default function OrderDetails() {
       ...order,
       user_id: user.id,
       advance_payment: sanitizedAdvance,
+      // Seed total_paid at placement. The trigger that maintains it fires on
+      // order_payments rows, and placement writes none — without this the order
+      // would read as ₹0 received until its first collection.
+      total_paid: sanitizedAdvance,
       remaining_payment: pricing.remaining,
       discount_percent: pricing.discountPercent,
       discount_amount: pricing.discountAmount,
