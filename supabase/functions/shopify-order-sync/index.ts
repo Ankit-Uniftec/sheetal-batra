@@ -1009,10 +1009,25 @@ serve(async (req) => {
           })
           .eq("id", o.id);
 
+        // Mint the pieces for an order that is now READY. Ingestion skips
+        // component minting for a needs_review order (the breakdown isn't
+        // trustworthy yet) and mints on the way in otherwise — but nothing
+        // minted for the order that ARRIVES flagged and is cleared later,
+        // which is exactly what a human setting the breakdown does. Those
+        // orders sat ready, with a full top/bottom breakdown, and no barcodes
+        // and no View Journey. ensureComponents is idempotent and mints only
+        // missing barcodes, so re-mapping an already-minted order writes
+        // nothing; a still-flagged order is left alone as before.
+        let componentCount;
+        if (!upErr && orderRow.web_order_status !== "needs_review") {
+          componentCount = await ensureComponents({ ...o, items });
+        }
+
         out.push({
           order_no: o.order_no,
           items: items.length,
           status: orderRow.web_order_status,
+          ...(componentCount === undefined ? {} : { components: componentCount }),
           ...(upErr ? { error: upErr.message } : {}),
         });
       }
