@@ -958,17 +958,31 @@ serve(async (req) => {
     }
 
     if (mode === "remap-items") {
-      const { data: rows, error } = await supabase
+      // Optional single-order scope. The dashboard re-maps ONE order after a
+      // human sets its breakdown; replaying all ~125 for that would be a lot of
+      // writes to apply one decision. Absent, it still sweeps everything.
+      const onlyOrderNo = String(body?.orderNo ?? "").trim();
+
+      let q = supabase
         .from("orders")
-        .select("id, order_no, shopify_raw")
-        .or(ORDER_NO_PREFIX_FILTER)
-        .not("shopify_raw", "is", null)
-        .order("created_at", { ascending: true });
+        .select("id, order_no, shopify_raw, manual_line_breakdown")
+        .not("shopify_raw", "is", null);
+      q = onlyOrderNo
+        ? q.eq("order_no", onlyOrderNo)
+        : q.or(ORDER_NO_PREFIX_FILTER);
+      const { data: rows, error } = await q.order("created_at", { ascending: true });
       if (error) throw error;
 
       const out = [];
       for (const o of rows || []) {
-        const { orderRow, items } = mapShopifyOrder(o.shopify_raw, colorMap);
+        // The stored override is re-applied on every replay. Without it this
+        // mode would re-derive "no product, nothing to read" and silently
+        // revert a human's breakdown decision. See 83_manual_line_breakdown.sql.
+        const { orderRow, items } = mapShopifyOrder(
+          o.shopify_raw,
+          colorMap,
+          (o as any).manual_line_breakdown,
+        );
 
         // Re-derive the REVIEW STATE too, not just items[]. A mapper fix can
         // newly discover that something is unknown (e.g. DUPATTA_UNKNOWN), and
@@ -1025,7 +1039,7 @@ serve(async (req) => {
     if (mode === "redate") {
       const { data: rows, error } = await supabase
         .from("orders")
-        .select("id, order_no, created_at, delivery_date, shopify_raw, status")
+        .select("id, order_no, created_at, delivery_date, shopify_raw, status, web_order_status, web_order_issues, manual_line_breakdown")
         .or(ORDER_NO_PREFIX_FILTER)
         .not("shopify_raw", "is", null)
         .order("created_at", { ascending: true });
@@ -1042,7 +1056,11 @@ serve(async (req) => {
       const unresolved = [];
 
       for (const o of rows || []) {
-        const { orderRow } = mapShopifyOrder(o.shopify_raw, colorMap);
+        const { orderRow } = mapShopifyOrder(
+          o.shopify_raw,
+          colorMap,
+          (o as any).manual_line_breakdown,
+        );
         const next = orderRow.delivery_date as string | null;
         const prev = o.delivery_date as string | null;
 
@@ -1053,7 +1071,39 @@ serve(async (req) => {
           if (prev) unresolved.push({ order_no: o.order_no, kept: prev });
           continue;
         }
-        if (next === prev) continue;
+        // A row flagged under the OLD category rule carries a stale
+        // DELIVERY_DATE_UNRESOLVED blocker that pins it in Needs Review even
+        // though it HAS a date. The blocker is now unreachable (the amount-only
+        // rule always resolves a date), so it is obsolete, not merely
+        // satisfied — drop it, and clear needs_review when nothing else
+        // remains. Other blockers stay: they are still real.
+        //
+        // Computed BEFORE the `next === prev` gate on purpose. The common case
+        // is an order whose date is already correct under the current rule and
+        // whose ONLY remaining problem is the dead flag — gating this on "the
+        // date moved" would skip exactly those rows and leave them stuck.
+        const priorIssues = ((o as any).web_order_issues || []);
+        const issues = priorIssues
+          .filter((i: any) => i.code !== "DELIVERY_DATE_UNRESOLVED");
+        const unblocked = priorIssues.length !== issues.length;
+
+        // Date already correct. Still write if a dead flag needs clearing —
+        // that is a status correction, not a deadline change, so it is safe
+        // regardless of production status.
+        if (next === prev) {
+          if (unblocked) {
+            changes.push({
+              order_no: o.order_no,
+              from: prev,
+              to: next,
+              days: 0,
+              issues,
+              unblocked,
+              flagOnly: true,
+            });
+          }
+          continue;
+        }
 
         if (o.status !== "order_received" && !includeInProduction) {
           skipped.push({
@@ -1070,7 +1120,14 @@ serve(async (req) => {
             (new Date(next).getTime() - new Date(prev).getTime()) / 86400000,
           )
           : null;
-        changes.push({ order_no: o.order_no, from: prev, to: next, days });
+        changes.push({
+          order_no: o.order_no,
+          from: prev,
+          to: next,
+          days,
+          issues,
+          unblocked,
+        });
       }
 
       if (body?.dryRun) {
@@ -1082,6 +1139,7 @@ serve(async (req) => {
           would_change: changes.length,
           earlier: changes.filter((c) => (c.days ?? 0) < 0).length,
           later: changes.filter((c) => (c.days ?? 0) > 0).length,
+          would_unblock: changes.filter((c) => c.unblocked).length,
           skipped_in_production: skipped.length,
           unresolved_kept_existing: unresolved.length,
           changes,
@@ -1096,7 +1154,19 @@ serve(async (req) => {
         const row = (rows || []).find((r: any) => r.order_no === c.order_no);
         const { error: upErr } = await supabase
           .from("orders")
-          .update({ delivery_date: c.to })
+          .update({
+            // A flag-only correction leaves the date alone — rewriting an
+            // identical value would fire the orders audit trigger for nothing.
+            ...(c.flagOnly ? {} : { delivery_date: c.to }),
+            ...(c.unblocked
+              ? {
+                // Mirror mapper.ts exactly: "ready"/"needs_review", and an
+                // empty issue list is stored as null, not [].
+                web_order_issues: c.issues.length ? c.issues : null,
+                web_order_status: c.issues.length ? "needs_review" : "ready",
+              }
+              : {}),
+          })
           .eq("id", row.id);
         if (upErr) failures.push({ order_no: c.order_no, error: upErr.message });
         else updated++;
@@ -1107,6 +1177,7 @@ serve(async (req) => {
         mode,
         scanned: (rows || []).length,
         updated,
+        unblocked: changes.filter((c) => c.unblocked).length,
         skipped_in_production: skipped.length,
         unresolved_kept_existing: unresolved.length,
         ...(failures.length ? { failures } : {}),

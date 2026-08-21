@@ -685,7 +685,97 @@ export function toColorObject(
   return { hex, name: clean_ };
 }
 
-export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>) {
+/**
+ * A human-set garment breakdown for a line item that has no Shopify product.
+ *
+ * Shape (one entry per line, by index):
+ *   { item_index: 0, top: "", bottom: "", includes_dupatta: true }
+ *
+ * See 83_manual_line_breakdown.sql for why this exists and why it lives in its
+ * own column rather than in items[].
+ */
+export type LineBreakdown = {
+  item_index: number;
+  top?: string;
+  bottom?: string;
+  includes_dupatta?: boolean;
+};
+
+/** An override only counts if it actually names a piece to make. */
+const breakdownNamesAPiece = (b: LineBreakdown): boolean =>
+  isPresent(clean(b?.top)) || isPresent(clean(b?.bottom)) || b?.includes_dupatta === true;
+
+/**
+ * Apply human-set breakdowns over mapped items, and drop the blockers those
+ * answers resolve.
+ *
+ * Runs AFTER the mapper so it is re-applied on every `remap-items` replay: the
+ * mapper always re-derives the same "nothing to read" result from shopify_raw,
+ * and this puts the human's answer back on top. That ordering is the whole
+ * reason the override survives a remap.
+ *
+ * Only PRODUCT_STYLE_MISSING and DUPATTA_UNKNOWN are cleared, and only for the
+ * lines actually covered. Both are questions about what pieces exist, which is
+ * exactly what the override answers. Every other blocker is a different
+ * question and is left alone.
+ */
+export function applyBreakdownOverride(
+  mapped: { items: any[]; blockers: Blocker[] },
+  overrides: LineBreakdown[] | null | undefined,
+): { items: any[]; blockers: Blocker[] } {
+  if (!Array.isArray(overrides) || overrides.length === 0) return mapped;
+
+  const byIndex = new Map<number, LineBreakdown>();
+  for (const b of overrides) {
+    // Ignore a malformed or empty entry rather than letting it mint nothing:
+    // a covered line whose answer names no piece would clear the blocker and
+    // then produce zero barcodes, which is worse than staying flagged.
+    if (!b || !Number.isInteger(b.item_index) || !breakdownNamesAPiece(b)) continue;
+    byIndex.set(b.item_index, b);
+  }
+  if (byIndex.size === 0) return mapped;
+
+  const items = mapped.items.map((item, i) => {
+    const b = byIndex.get(i);
+    if (!b) return item;
+    return {
+      ...item,
+      top: isPresent(clean(b.top)) ? clean(b.top) : "",
+      bottom: isPresent(clean(b.bottom)) ? clean(b.bottom) : "",
+      includes_dupatta: b.includes_dupatta === true,
+      // Marks the line as human-resolved so surfaces can say so rather than
+      // presenting a typed-in breakdown as if Shopify supplied it.
+      breakdown_source: "manual",
+    };
+  });
+
+  // A blocker names the offending line by TITLE, not index, so match on the
+  // title of the covered items. Titles come from the same mapped items the
+  // blockers were raised against, so this cannot drift.
+  const covered = new Set(
+    [...byIndex.keys()]
+      .map((i) => clean(mapped.items[i]?.product_name))
+      .filter(Boolean),
+  );
+  const RESOLVED_BY_OVERRIDE = ["PRODUCT_STYLE_MISSING", "DUPATTA_UNKNOWN"];
+  const blockers = mapped.blockers.filter((bl) => {
+    if (!RESOLVED_BY_OVERRIDE.includes(bl.code)) return true;
+    // Keep a blocker whose line was NOT covered — a multi-line draft order can
+    // have one line answered and another still open.
+    return ![...covered].some((title) => bl.detail?.includes(`"${title}"`));
+  });
+
+  return { items, blockers };
+}
+
+export function mapShopifyOrder(
+  node: any,
+  hexByColorName?: Map<string, string>,
+  // Human-set breakdowns for lines with no Shopify product. Passed in by the
+  // caller from orders.manual_line_breakdown, and applied AFTER mapping so it
+  // is restored on every remap-items replay rather than being overwritten.
+  lineBreakdown?: LineBreakdown[] | null,
+) {
   const blockers: Blocker[] = [];
 
   const lineNodes = (node?.lineItems?.edges || []).map((e: any) => e.node);
@@ -734,7 +824,16 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
     });
   }
 
-  const issues: Blocker[] = [...blockers];
+  // Human answers go on LAST, over everything the mapper derived, and clear the
+  // "what pieces exist" blockers for the lines they cover. See
+  // applyBreakdownOverride and 83_manual_line_breakdown.sql.
+  const resolved = applyBreakdownOverride(
+    { items, blockers },
+    lineBreakdown,
+  );
+  const finalItems = resolved.items;
+
+  const issues: Blocker[] = [...resolved.blockers];
   if (basis) issues.push({ code: "DELIVERY_DATE_DERIVED", detail: basis });
 
   const orderRow: Record<string, unknown> = {
@@ -747,8 +846,8 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
     created_at: createdAt,
     status: "order_received",
 
-    items,
-    total_quantity: items.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
+    items: finalItems,
+    total_quantity: finalItems.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
     delivery_date: deliveryDate,
 
     // Customer / delivery
@@ -818,7 +917,7 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
     is_gifting: false,
     is_alteration: false,
 
-    web_order_status: blockers.length > 0 ? "needs_review" : "ready",
+    web_order_status: resolved.blockers.length > 0 ? "needs_review" : "ready",
     web_order_issues: issues.length > 0 ? issues : null,
 
     // ── Shopify's own payment state, stored VERBATIM for the warehouse to see.
@@ -838,5 +937,13 @@ export function mapShopifyOrder(node: any, hexByColorName?: Map<string, string>)
       : [],
   };
 
-  return { orderRow, items, blockers, deliveryDate, isCod };
+  // `blockers` here is the RESOLVED set: callers decide needs_review from it,
+  // so returning the pre-override list would re-flag a line a human answered.
+  return {
+    orderRow,
+    items: finalItems,
+    blockers: resolved.blockers,
+    deliveryDate,
+    isCod,
+  };
 }
