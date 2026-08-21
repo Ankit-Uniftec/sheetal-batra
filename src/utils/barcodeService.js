@@ -1190,7 +1190,16 @@ export async function generateOrderComponents(order) {
         order_no: orderNo,
         barcode: `${storeCode}-${seqPart}-DUP${itemIndex > 0 ? itemIndex + 1 : ""}`,
         component_type: "dupatta",
-        component_label: "Dupatta",
+        // A dupatta sold ALONE is the whole order, and for a typed draft-order
+        // line the product name is the only description of it that exists
+        // ("LIghter Dupatta"). Label it with that, the same way the TOP branch
+        // above falls back to product_name — otherwise the work order and the
+        // scan station both just say "Dupatta". When the dupatta accompanies a
+        // top/bottom the bare label is right: it distinguishes the piece.
+        component_label:
+          !hasGarmentOption(item?.top) && !hasGarmentOption(item?.bottom)
+            ? (item?.product_name || "Dupatta")
+            : "Dupatta",
         item_index: itemIndex,
         extra_index: null,
       });
