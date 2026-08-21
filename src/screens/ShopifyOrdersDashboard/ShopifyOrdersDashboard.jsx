@@ -7,7 +7,7 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 // deadline, not the customer promise — same rule and same helper as the
 // Warehouse and Production Manager dashboards. See utils/warehouseDate.js.
 import { getWarehouseDate } from "../../utils/warehouseDate";
-import { usePopup } from "../../components/Popup";
+import Popup, { usePopup } from "../../components/Popup";
 import Paginator from "../../components/Paginator";
 import Badge from "../../components/Badge";
 import NotificationBell from "../../components/NotificationBell";
@@ -153,6 +153,10 @@ const ORDER_LIST_COLUMNS = [
   "shopify_order_id", "shopify_order_name", "shopify_synced_at",
   "shopify_financial_status", "shopify_tags",
   "web_order_status", "web_order_issues",
+  // Human-set garment breakdown for draft-order custom line items, and who set
+  // it. Needed on this screen because this is where it is both shown and set.
+  // See db/barcode_system/v2/83_manual_line_breakdown.sql.
+  "manual_line_breakdown", "manual_line_breakdown_by",
 ].join(", ");
 
 // ─── Orders tab sorting ────────────────────────────────────────────────────
@@ -233,18 +237,6 @@ const statusVariant = (status) => {
 };
 
 // ─── Shopify payment state ─────────────────────────────────────────────────
-// Shown VERBATIM, never inferred. Whatever word Shopify used is the word on the
-// badge, so this screen can't disagree with Shopify admin. (The mapper's older
-// isCod derivation treats every PENDING order as COD, which over-matches —
-// nothing here depends on it.) Colour-only mapping; unknown states fall through
-// to neutral rather than being guessed at.
-const paymentVariant = (financialStatus) => {
-  const s = String(financialStatus || "").toUpperCase();
-  if (s === "PAID") return "success";
-  if (s === "PENDING" || s === "PARTIALLY_PAID" || s === "AUTHORIZED") return "warning";
-  if (s === "REFUNDED" || s === "VOIDED" || s === "PARTIALLY_REFUNDED") return "danger";
-  return "neutral";
-};
 
 // The COD-related tags on an order, from the stored array.
 //
@@ -274,6 +266,54 @@ const isCodTagged = (order) => codTags(order).length > 0;
 // Matched on the whole tag so a bare "COD" can never satisfy it.
 const isCodConfirmed = (order) =>
   codTags(order).some((t) => /^cod\s+confirmed\b/i.test(String(t).trim()));
+
+// ─── Payment badge: one word for where the money got to ───────────────────
+//
+// The card used to print Shopify's raw `displayFinancialStatus` ("PENDING",
+// "PARTIALLY_PAID") plus one chip per COD tag, so an order could read
+// "PENDING · COD · COD Confirmed" — three chips saying one thing, in Shopify's
+// vocabulary rather than the floor's.
+//
+// Now it says ONE thing:
+//   COD + confirmed              → COD Confirmed
+//   any other COD tag            → COD          (collects on delivery)
+//   PAID                         → Fully Paid
+//   PARTIALLY_PAID / AUTHORIZED  → Partial Paid
+//   REFUNDED / VOIDED / …        → the end state, said plainly
+//   anything else                → Not Paid
+//
+// COD wins over the status because it describes how the order settles at all —
+// a COD order sitting at PENDING is not "not paid", it is waiting for the
+// courier.
+//
+// Confirmed and unconfirmed COD are told apart, because they land on DIFFERENT
+// TABS: a confirmed COD is in the work queue and cleared to cut, an unconfirmed
+// one is held in Needs Review until the customer verifies by call or WhatsApp.
+// Showing both as a bare "COD" would make two operationally different states
+// look identical on the badge row.
+const PAYMENT_STATUS_LABELS = {
+  PAID: "Fully Paid",
+  PARTIALLY_PAID: "Partial Paid",
+  AUTHORIZED: "Partial Paid",
+  REFUNDED: "Refunded",
+  PARTIALLY_REFUNDED: "Partially Refunded",
+  VOIDED: "Voided",
+  CANCELLED: "Cancelled",
+};
+
+const paymentLabel = (order) => {
+  if (isCodTagged(order)) return isCodConfirmed(order) ? "COD Confirmed" : "COD";
+  const s = String(order?.shopify_financial_status || "").toUpperCase();
+  return PAYMENT_STATUS_LABELS[s] || "Not Paid";
+};
+
+const paymentLabelVariant = (label) => {
+  // Confirmed COD is cleared to work on, so it reads like a settled state.
+  if (label === "Fully Paid" || label === "COD Confirmed") return "success";
+  if (label === "COD") return "info";
+  if (label === "Partial Paid" || label === "Not Paid") return "warning";
+  return "danger";
+};
 
 // ─── Payment hold: is this order cleared to be worked on? ──────────────────
 //
@@ -338,8 +378,12 @@ const DERIVED_CODE = "DELIVERY_DATE_DERIVED";
 
 const ISSUE_LABELS = {
   DUPATTA_UNKNOWN: "Dupatta unknown — needs custom.has_dupatta in Shopify",
-  PRODUCT_STYLE_MISSING: "Garment breakdown missing — needs custom.top_style / bottom_style",
-  DELIVERY_DATE_UNRESOLVED: "No delivery date — needs custom.shipping_timeline",
+  PRODUCT_STYLE_MISSING: "Garment breakdown missing",
+  // Rule-neutral on purpose. Rows flagged under the retired category rule
+  // still carry its "set the product category" detail, while the live
+  // amount-only rule fails only on an unusable total. The stored `detail`
+  // says which; the label must not contradict either.
+  DELIVERY_DATE_UNRESOLVED: "No delivery date derived",
   NO_LINE_ITEMS: "No products on the order",
   CUSTOMER_UNRESOLVED: "No contact details on the order",
   PAYMENT_NOT_CONFIRMED: "Payment not confirmed — do not start production",
@@ -367,6 +411,115 @@ const reviewIssues = (order) => {
   return [{ code: PAYMENT_CODE, detail }, ...stored];
 };
 
+// ─── Manual garment breakdown (draft orders) ───────────────────────────────
+// A Shopify DRAFT order can carry a custom line item: a name and a price typed
+// by hand, with no product behind it. The mapper reads the garment breakdown
+// from PRODUCT metafields, so for these lines there is nothing to read and the
+// order flags PRODUCT_STYLE_MISSING forever — no re-sync can fix it, because
+// the information does not exist upstream. Only a human knows whether
+// "LIghter Dupatta" is one piece or two.
+//
+// So this offers the answer here, where the person is already looking at the
+// product name, the notes and the customer. See 83_manual_line_breakdown.sql.
+
+// Deliberately narrow: only offered when the line has NO Shopify product at
+// all. A line that HAS a product but is missing its metafields is a fixable
+// catalogue problem, and must be fixed in Shopify so every future order of the
+// same product is right — overriding it here would paper over that, one order
+// at a time.
+const isManualLine = (item) => !item?.shopify_product_id;
+
+// What a person can choose. These map onto the three fields
+// generateOrderComponents already consumes (top / bottom / includes_dupatta),
+// so nothing new has to learn how to mint a barcode.
+const BREAKDOWN_CHOICES = [
+  {
+    key: "dupatta_only",
+    label: "Dupatta only",
+    hint: "1 barcode",
+    value: { top: "", bottom: "", includes_dupatta: true },
+  },
+  {
+    key: "top_bottom",
+    label: "Top + Bottom",
+    hint: "2 barcodes",
+    value: { top: "Top", bottom: "Bottom", includes_dupatta: false },
+  },
+  {
+    key: "top_bottom_dupatta",
+    label: "Top + Bottom + Dupatta",
+    hint: "3 barcodes",
+    value: { top: "Top", bottom: "Bottom", includes_dupatta: true },
+  },
+  {
+    key: "top_only",
+    label: "Top only",
+    hint: "1 barcode",
+    value: { top: "Top", bottom: "", includes_dupatta: false },
+  },
+];
+
+// ─── Suggesting a breakdown from the typed name ────────────────────────────
+// A typed line has no product, so the NAME is the only signal there is. Reading
+// it to pre-select an answer is fair; reading it to DECIDE silently is not —
+// these names are free text with no vocabulary ("LIghter Dupatta", "mohsina
+// orange - only dupatta"), and a wrong guess mints barcodes that get printed
+// and stuck on fabric before anyone notices. ensureComponents never deletes a
+// barcode for that reason.
+//
+// So this suggests, and a person confirms with one click. The suggestion does
+// the thinking; the click keeps a human's eyes on an irreversible decision.
+
+// Order matters: the first match wins, so the most specific patterns come
+// first. A name mentioning a dupatta ALONGSIDE a garment is a set, not an
+// accessory — that is the case a naive "contains dupatta" test gets wrong.
+const BREAKDOWN_SUGGESTIONS = [
+  // Explicitly NOT a dupatta, whatever else the name says. First, because it
+  // overrides the set-detection below: "...Choga With Salwar - without dupatta"
+  // contains both a garment and the word dupatta.
+  { key: "top_bottom", re: /\b(with\s*out|no)\s+dupatta\b/i },
+
+  // A garment word AND a dupatta word → a SET, not an accessory. This is the
+  // case a naive "contains dupatta" test gets wrong, in either word order.
+  { key: "top_bottom_dupatta", re: /\b(kurta|choga|kalidaar|anarkali|suit|set|sharara|gharara|garara|lehenga|salwar|palazzo|pant|churidar|blouse|jacket|skirt)\b[\s\S]*\b(dupatta|odhni|odhani|chunni|scarf|stole)\b/i },
+  { key: "top_bottom_dupatta", re: /\b(dupatta|odhni|odhani|chunni|scarf|stole)\b[\s\S]*\b(kurta|choga|kalidaar|anarkali|suit|set|sharara|gharara|garara|lehenga|salwar|palazzo|pant|churidar|blouse|jacket|skirt)\b/i },
+
+  // An accessory sold alone: a dupatta word and NO garment word anywhere.
+  { key: "dupatta_only", re: /^(?!.*\b(kurta|choga|kalidaar|anarkali|suit|set|sharara|gharara|garara|lehenga|salwar|palazzo|pant|churidar|blouse|jacket|skirt)\b)[\s\S]*\b(dupatta|odhni|odhani|chunni|scarf|stole)\b/i },
+
+  // Names both a top and a bottom.
+  {
+    key: "top_bottom",
+    re: /\b(kurta|choga|kalidaar|anarkali|blouse|top)\b[\s\S]*\b(salwar|palazzo|pant|churidar|sharara|gharara|garara|skirt|bottom)\b/i,
+  },
+];
+
+/**
+ * The likely breakdown for a typed line, or null when the name says nothing
+ * useful. Null is a normal answer, not a failure — it just means no choice is
+ * pre-selected and the person picks unaided.
+ */
+const suggestBreakdown = (productName) => {
+  const name = String(productName || "");
+  if (!name.trim()) return null;
+  return BREAKDOWN_SUGGESTIONS.find((s) => s.re.test(name))?.key || null;
+};
+
+const breakdownForItem = (order, index) =>
+  (order?.manual_line_breakdown || []).find((b) => b?.item_index === index) || null;
+
+// Which choice an existing override corresponds to, so a set breakdown shows as
+// selected rather than blank on reload.
+const matchChoice = (b) =>
+  b
+    ? BREAKDOWN_CHOICES.find(
+      (c) =>
+        !!c.value.top === !!b.top &&
+        !!c.value.bottom === !!b.bottom &&
+        c.value.includes_dupatta === (b.includes_dupatta === true),
+    )?.key || null
+    : null;
+
 export default function ShopifyOrdersDashboard() {
   const navigate = useNavigate();
   const { showPopup, PopupComponent } = usePopup();
@@ -377,6 +530,10 @@ export default function ShopifyOrdersDashboard() {
   const [orders, setOrders] = useState([]);
   const [componentsByOrder, setComponentsByOrder] = useState({});
   const [journeyOrder, setJourneyOrder] = useState(null);
+  // "<orderId>:<itemIndex>" while a manual breakdown is being applied.
+  const [savingBreakdown, setSavingBreakdown] = useState(null);
+  // The line whose breakdown is being chosen: { order, idx, item } or null.
+  const [breakdownFor, setBreakdownFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -1014,6 +1171,89 @@ export default function ShopifyOrdersDashboard() {
   // clickable and jumps to the Needs Review tab; on that tab itself it is not
   // (it would link to where you already are) and instead lists its issues
   // inline underneath.
+  // Save a human's breakdown for one line, then re-map so the blocker clears
+  // and components mint from the answer.
+  //
+  // The WRITE is the decision only. Re-deriving items[] and the review state is
+  // left to the edge function's remap-items, which is the single place that
+  // turns a mapper result into a row — duplicating that derivation here would
+  // be a second source of truth for what a line contains.
+  const saveBreakdown = async (order, itemIndex, choiceKey) => {
+    const choice = BREAKDOWN_CHOICES.find((c) => c.key === choiceKey);
+    if (!choice) return;
+
+    setSavingBreakdown(`${order.id}:${itemIndex}`);
+    try {
+      // Replace this line's entry, keep any other line's. A multi-line draft
+      // order is answered one line at a time.
+      const next = [
+        ...(order.manual_line_breakdown || []).filter((b) => b?.item_index !== itemIndex),
+        { item_index: itemIndex, ...choice.value },
+      ].sort((a, b) => a.item_index - b.item_index);
+      // The typed name is the ONLY description of this piece that exists — the
+      // line has no product behind it. Carrying it through means the work order
+      // and the scan station show "LIghter Dupatta", not a bare "Dupatta".
+
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          manual_line_breakdown: next,
+          // The email, not the display name: this login's `saleperson` is the
+          // role word ("shopify"), which reads as "Set by shopify" — useless as
+          // provenance for a decision the floor cuts from. The email identifies
+          // an actual person.
+          manual_line_breakdown_by: user?.email || profile?.saleperson || null,
+          manual_line_breakdown_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+      if (error) throw error;
+
+      // Re-map from the stored snapshot so items[], the blocker list and the
+      // review status all come from the one mapper, with the override applied.
+      const res = await fetch(
+        `${config.SUPABASE_URL}/functions/v1/shopify-order-sync`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ mode: "remap-items", orderNo: order.order_no }),
+        },
+      );
+      if (!res.ok) throw new Error(`Re-map failed (${res.status})`);
+
+      // Verify the re-map actually TOUCHED this order. An edge function
+      // deployed without the orderNo filter, or without the override wiring,
+      // still answers 200 — and the order silently stays flagged, which looks
+      // like the choice never saved. Fail loudly instead of leaving that
+      // ambiguous.
+      const out = await res.json().catch(() => null);
+      const touched = (out?.results || []).some((r) => r.order_no === order.order_no);
+      if (!touched) {
+        throw new Error(
+          "the sync function did not update this order — it may be running an older deployed version",
+        );
+      }
+
+      // Close the modal only once the re-map is confirmed. Closing earlier
+      // would reveal a card that has not reloaded yet, which reads as "nothing
+      // happened".
+      setBreakdownFor(null);
+      await loadOrders();
+    } catch (e) {
+      // The decision may have saved while the re-map failed. Say so plainly —
+      // a silent failure here looks like the choice did not register, and the
+      // person would set it again.
+      showPopup({
+        type: "error",
+        message: `Could not apply the breakdown: ${e.message}. The choice may be saved — re-run sync if the order stays flagged.`,
+      });
+    } finally {
+      setSavingBreakdown(null);
+    }
+  };
+
   const renderCard = (order, context = "orders") => {
     const item = order.items?.[0] || {};
     const extra = (order.items?.length || 0) - 1;
@@ -1092,17 +1332,14 @@ export default function ShopifyOrdersDashboard() {
             <Badge variant={statusVariant(order.status)}>
               {getOrderStatusLabel(order.status)}
             </Badge>
-            {/* Shopify's displayFinancialStatus, verbatim and un-inferred. */}
-            {order.shopify_financial_status && (
-              <Badge variant={paymentVariant(order.shopify_financial_status)}>
-                {order.shopify_financial_status}
-              </Badge>
-            )}
-            {/* COD tags, one chip each. Driven off the stored array so a new
-                tag the business starts using shows up with no code change. */}
-            {codTags(order).map((tag) => (
-              <Badge key={tag} variant="info">{tag}</Badge>
-            ))}
+            {/* HOW it pays, then WHERE the payment got to — at most two
+                badges, in the floor's vocabulary rather than Shopify's. The raw
+                status is still on the order and drives the review hold; it is
+                just not what a warehouse card should be reading out. */}
+            {(() => {
+              const label = paymentLabel(order);
+              return <Badge variant={paymentLabelVariant(label)}>{label}</Badge>;
+            })()}
             {paymentFlagged && (
               <Badge variant="warning">Awaiting Payment</Badge>
             )}
@@ -1147,28 +1384,39 @@ export default function ShopifyOrdersDashboard() {
                 <span className="sho-order-label">Qty:</span>
                 <span className="sho-value">{order.total_quantity || 1}</span>
               </div>
-              <div className="sho-detail-item">
-                {/* Label follows the option the size came from: a kids line
-                    carries an Age value ("5-6 YEARS"), which must not read
-                    "Size:". Falls back for orders ingested before the mapper
-                    started sending size_label. */}
-                <span className="sho-order-label">
-                  {item.size_label || (item.isKids ? "Age" : "Size")}:
-                </span>
-                <span className="sho-value">{item.size || "—"}</span>
-              </div>
-              <div className="sho-detail-item">
-                <span className="sho-order-label">Top:</span>
-                <span className="sho-value">
-                  {item.top || "—"}<ColorDot color={item.top_color} />
-                </span>
-              </div>
-              <div className="sho-detail-item">
-                <span className="sho-order-label">Bottom:</span>
-                <span className="sho-value">
-                  {item.bottom || "—"}<ColorDot color={item.bottom_color} />
-                </span>
-              </div>
+              {/* Size / Top / Bottom are omitted entirely when empty rather
+                  than printed as a dash. A website order legitimately has no
+                  measurements, and an accessory has no top or bottom — a row of
+                  dashes reads as missing data when nothing is actually missing.
+                  Dupatta below is NOT in this group: "No" is an answer. */}
+              {item.size ? (
+                <div className="sho-detail-item">
+                  {/* Label follows the option the size came from: a kids line
+                      carries an Age value ("5-6 YEARS"), which must not read
+                      "Size:". Falls back for orders ingested before the mapper
+                      started sending size_label. */}
+                  <span className="sho-order-label">
+                    {item.size_label || (item.isKids ? "Age" : "Size")}:
+                  </span>
+                  <span className="sho-value">{item.size}</span>
+                </div>
+              ) : null}
+              {item.top ? (
+                <div className="sho-detail-item">
+                  <span className="sho-order-label">Top:</span>
+                  <span className="sho-value">
+                    {item.top}<ColorDot color={item.top_color} />
+                  </span>
+                </div>
+              ) : null}
+              {item.bottom ? (
+                <div className="sho-detail-item">
+                  <span className="sho-order-label">Bottom:</span>
+                  <span className="sho-value">
+                    {item.bottom}<ColorDot color={item.bottom_color} />
+                  </span>
+                </div>
+              ) : null}
               <div className="sho-detail-item">
                 <span className="sho-order-label">Dupatta:</span>
                 <span className="sho-value">
@@ -1278,6 +1526,32 @@ export default function ShopifyOrdersDashboard() {
             ))}
           </ul>
         )}
+
+        {/* Draft-order lines with no product behind them: nothing upstream can
+            answer what pieces to make. The card only OFFERS the decision — the
+            choices live in a modal, so a review card stays scannable. */}
+        {onReviewTab && (order.items || []).some(isManualLine) && (
+          <div className="sho-breakdown-bar">
+            {(order.items || []).map((item, idx) => {
+              if (!isManualLine(item)) return null;
+              const done = !!matchChoice(breakdownForItem(order, idx));
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  className="sho-breakdown-open"
+                  onClick={() => setBreakdownFor({ order, idx, item })}
+                >
+                  {done ? "Change garment breakdown" : "Set garment breakdown"}
+                  {(order.items || []).filter(isManualLine).length > 1
+                    ? ` — ${item.product_name}`
+                    : ""}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
       </div>
     );
   };
@@ -1285,6 +1559,56 @@ export default function ShopifyOrdersDashboard() {
   return (
     <div className="sho-page">
       {PopupComponent}
+
+      {/* Garment breakdown for a typed draft-order line. In a modal rather than
+          on the card: a review card should stay scannable, and this is a
+          deliberate decision that deserves its own focus. */}
+      {breakdownFor && (() => {
+        const { order, idx, item } = breakdownFor;
+        const confirmed = matchChoice(breakdownForItem(order, idx));
+        const suggested = confirmed ? null : suggestBreakdown(item.product_name);
+        const selected = confirmed || suggested;
+        const busy = savingBreakdown === `${order.id}:${idx}`;
+        return (
+          <Popup
+            isOpen
+            onClose={() => (busy ? null : setBreakdownFor(null))}
+            title="What should production make?"
+            type="confirm"
+          >
+            <div className="sho-bd-modal">
+              <p className="sho-bd-name">“{item.product_name}”</p>
+              <p className="sho-bd-why">
+                Typed into a Shopify draft order, so there is no product to read
+                the pieces from. Your choice decides the barcodes.
+                {suggested ? " The likely answer is highlighted." : ""}
+              </p>
+              <div className="sho-bd-choices">
+                {BREAKDOWN_CHOICES.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    disabled={busy}
+                    className={
+                      "sho-bd-choice" +
+                      (selected === c.key
+                        ? confirmed ? " is-selected" : " is-suggested"
+                        : "")
+                    }
+                    onClick={() => saveBreakdown(order, idx, c.key)}
+                  >
+                    <span className="sho-bd-choice-label">{c.label}</span>
+                    <span className="sho-bd-choice-hint">
+                      {suggested === c.key ? `${c.hint} · suggested` : c.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {busy ? <p className="sho-bd-busy">Applying…</p> : null}
+            </div>
+          </Popup>
+        );
+      })()}
 
       {journeyOrder && (
         <ComponentJourneyModal

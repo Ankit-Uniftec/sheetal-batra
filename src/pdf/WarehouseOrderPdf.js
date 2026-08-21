@@ -535,6 +535,39 @@ const SectionBar = ({ title, isAlteration = false }) => (
  * caller split it down the middle, so the two columns stay even whatever
  * combination of optional rows this particular order has.
  */
+/**
+ * The full delivery address, as one wrapped block.
+ *
+ * The header used to print `delivery_city` alone ("Radstock"), which is not an
+ * address anyone can hand a parcel to — and for a COD order the person at the
+ * door is also collecting money against it. Every part below is already stored
+ * on the order by the Shopify mapper (shippingAddress) and by the store order
+ * forms; only the printing was missing.
+ *
+ * Assembled from the parts that EXIST, joined so a missing line2 or state never
+ * leaves a stray comma. Falls back to the old city/mode value when an order
+ * genuinely carries no address — walk-ins and store pickups have none, and a
+ * blank "DELIVERY TO:" would read as lost data rather than "not applicable".
+ */
+const buildDeliveryAddress = (order) => {
+  const line = (v) => String(v ?? "").trim();
+  // `delivery_address` already holds address1 + address2 joined — the Shopify
+  // mapper combines them at capture (mapper.ts), so there is no second column.
+  const street = line(order.delivery_address);
+  const cityState = [line(order.delivery_city), line(order.delivery_state)]
+    .filter(Boolean)
+    .join(", ");
+  const tail = [cityState, line(order.delivery_pincode)].filter(Boolean).join(" ");
+  const parts = [street, tail].filter(Boolean);
+  if (parts.length === 0) {
+    return line(order.delivery_location) || line(order.delivery_city) || line(order.mode_of_delivery);
+  }
+  // Phone last: dispatch calls it on a failed delivery, and for COD it is the
+  // number the collection is chased on.
+  const phone = line(order.delivery_phone);
+  return parts.join(", ") + (phone ? `  ·  ${phone}` : "");
+};
+
 const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration }) => {
   const rows = [
     { label: "Order ID:", value: order.order_no || order.order_id },
@@ -548,7 +581,7 @@ const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isU
   }
 
   rows.push(
-    { label: "DELIVERY TO:", value: order.delivery_location || order.delivery_city || order.mode_of_delivery },
+    { label: "DELIVERY TO:", value: buildDeliveryAddress(order) },
     { label: "CLIENT NAME:", value: clientNameForHeader },
     // "DISPATCH DATE", not "delivery": this field is getWarehouseDate() — the
     // T-2 production deadline (customer delivery_date minus 2 days), which is
