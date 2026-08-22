@@ -26,6 +26,28 @@ import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 
+// Garment piece + its colour — "Short Kurta ● Mint Green" — matching how the
+// PM / Merchandiser order cards render top and bottom.
+// Colours come in TWO shapes: top/bottom are { name, hex } objects, but
+// dupatta_color is a bare name string (the dupatta_colors table stores no hex).
+// Guarding on hex alone would drop the dupatta colour entirely, so the swatch
+// is optional and the NAME is what always renders.
+function GarmentValue({ name, color }) {
+    const colorName = typeof color === "object" ? color?.name : color;
+    const colorHex = typeof color === "object" ? color?.hex : "";
+    return (
+        <>
+            {name || "—"}
+            {colorName && (
+                <>
+                    {colorHex && <span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: colorHex, borderRadius: "50%", marginLeft: 6, border: "1px solid #ccc", verticalAlign: "middle" }} />}
+                    <span style={{ marginLeft: 4 }}>{colorName}</span>
+                </>
+            )}
+        </>
+    );
+}
+
 export default function B2bProductionDashboard() {
     const navigate = useNavigate();
 
@@ -984,8 +1006,14 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                     {!isStock && (<div className="prod-ocard-row"><span className="prod-ocard-dlabel">Vendor:</span><span className="prod-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>)}
                     <div className="prod-ocard-grid">
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Qty:</span><span className="prod-ocard-dval">{order.total_quantity || 1}</span></div>
+                        <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Top:</span><span className="prod-ocard-dval"><GarmentValue name={item.top} color={item.top_color} /></span></div>
+                        <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Bottom:</span><span className="prod-ocard-dval"><GarmentValue name={item.bottom} color={item.bottom_color} /></span></div>
+                        {item.dupatta_color && (<div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Dupatta:</span><span className="prod-ocard-dval"><GarmentValue name={item.dupatta || "Dupatta"} color={item.dupatta_color} /></span></div>)}
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Delivery:</span><span className="prod-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                     </div>
+                    {item.extras?.length > 0 && (
+                        <div className="prod-ocard-row"><span className="prod-ocard-dlabel">Extras:</span><span className="prod-ocard-dval">{item.extras.map((ex, i) => (<span key={i}><GarmentValue name={ex.name} color={ex.color} />{i < item.extras.length - 1 && <span style={{ margin: "0 8px" }}>|</span>}</span>))}</span></div>
+                    )}
                 </div>
             </div>
             {components.length > 0 && (
