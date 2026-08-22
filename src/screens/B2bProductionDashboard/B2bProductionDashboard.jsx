@@ -1009,7 +1009,6 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Top:</span><span className="prod-ocard-dval"><GarmentValue name={item.top} color={item.top_color} /></span></div>
                         <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Bottom:</span><span className="prod-ocard-dval"><GarmentValue name={item.bottom} color={item.bottom_color} /></span></div>
                         {item.dupatta_color && (<div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Dupatta:</span><span className="prod-ocard-dval"><GarmentValue name={item.dupatta || "Dupatta"} color={item.dupatta_color} /></span></div>)}
-                        <div className="prod-ocard-gitem"><span className="prod-ocard-dlabel">Delivery:</span><span className="prod-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                     </div>
                     {item.extras?.length > 0 && (
                         <div className="prod-ocard-row"><span className="prod-ocard-dlabel">Extras:</span><span className="prod-ocard-dval">{item.extras.map((ex, i) => (<span key={i}><GarmentValue name={ex.name} color={ex.color} />{i < item.extras.length - 1 && <span style={{ margin: "0 8px" }}>|</span>}</span>))}</span></div>
