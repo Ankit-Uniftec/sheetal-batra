@@ -159,8 +159,19 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
   // edit must NOT (a live product isn't a draft, so that filter would match
   // zero rows and every edit would look like a lost race).
   const [formMode, setFormMode] = useState("create");
+  // Set when a save succeeded but its variants failed: the row is parked back to
+  // is_draft and the next attempt updates it instead of minting a new SKU.
+  const [parkedId, setParkedId] = useState(null);
+
   // The `products` row being updated — set for both 'fillTag' and 'edit'.
   const [editTarget, setEditTarget] = useState(null);
+  // Mirrors of the two values that decide whether the form is a blank create.
+  // Async work started at mount captured the initial state, so it must read
+  // these rather than the stale closure variables.
+  const formModeRef = useRef(formMode);
+  const editTargetRef = useRef(editTarget);
+  useEffect(() => { formModeRef.current = formMode; }, [formMode]);
+  useEffect(() => { editTargetRef.current = editTarget; }, [editTarget]);
   // Variant ids present when an LXRTS product was loaded, so save can tell an
   // edited row from a new one and spot the ones that were removed.
   const [loadedVariantIds, setLoadedVariantIds] = useState([]);
@@ -233,7 +244,21 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
       setSkuLoading(true);
       try {
         const next = await fetchNextSku();
-        if (alive) setSku(next);
+        // Only claim this number if the form is still a blank create.
+        //
+        // Clicking Edit in the catalogue MOUNTS this component and prefills it
+        // at the same time, so this fetch and loadProductIntoForm race. This one
+        // pages the whole products table, so it usually finishes LAST and
+        // overwrote the SKU the load had just set: the form then showed the next
+        // free number while editTarget still pointed at the product you opened.
+        // Saving renamed that row to the new number — SKU-1073 became SKU-1074,
+        // looking exactly like the old row was deleted and a new one created.
+        //
+        // formModeRef, not formMode: this closure captured the mount-time value
+        // and would always read "create".
+        if (alive && formModeRef.current === "create" && !editTargetRef.current) {
+          setSku(next);
+        }
       } catch (e) {
         console.error("SKU fetch error:", e);
       } finally {
@@ -302,6 +327,7 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
     // its SKU locked would make the very next save collide on the unique key.
     setEditTarget(null);
     setFormMode("create");
+    setParkedId(null);
     refreshSku();
   };
 
@@ -358,11 +384,25 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
         .eq("product_id", product.id);
 
       if (varErr) {
+        // BAILING OUT HERE MUST RESET THE FORM, NOT JUST RETURN.
+        //
+        // Every setter above has already run, so the fields are full of this
+        // product's data. Returning early skips setFormMode("edit") at the
+        // bottom, leaving formMode at its "create" default while the form LOOKS
+        // like a normal edit — SKU box included. Saving from that state takes
+        // the INSERT branch, collides on sku_id, bumps to the next free number
+        // and re-inserts the product under a NEW SKU. That is how editing
+        // SKU-1070 silently became SKU-1071, and how consecutive runs of SKUs
+        // got burned one per retry.
+        //
+        // resetForm() puts the form back to a clean create with a fresh SKU, so
+        // the worst case is an empty form rather than a mislabelled garment.
         console.error("Variant load failed:", varErr);
+        resetForm();
         showPopup({
           type: "error",
           title: "Could Not Load Sizes",
-          message: `${product.sku_id}'s size variants couldn't be loaded, so saving now would wipe them. Close this and try again. (${varErr.message})`,
+          message: `${product.sku_id}'s size variants couldn't be loaded, so it wasn't opened for editing — the form has been cleared to avoid saving it under a different SKU. Try again. (${varErr.message})`,
           confirmText: "OK",
         });
         return;
@@ -405,6 +445,7 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
     } else {
       setEditTarget(null);
       setFormMode("create");
+      setParkedId(null);
       refreshSku();   // a copy is a new garment and needs its own number
     }
   };
@@ -573,7 +614,20 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
     let inserted = null;
     let lastError = null;
 
+
     if (formMode === "fillTag" || formMode === "edit") {
+      // The SKU is a physical fact: printed on a tag, or already catalogued.
+      // An edit may NEVER move a product to a different number, so take it from
+      // the row we loaded, never from the sku field — that field is shared with
+      // the create flow and can be overwritten by an async next-SKU fetch (see
+      // the mount effect). Without this, losing that race silently RENAMES the
+      // row on save, which reads as the old SKU vanishing and a new one
+      // appearing with its data.
+      if (editTarget.sku_id && productRow.sku_id !== editTarget.sku_id) {
+        console.warn("SKU drift blocked:", productRow.sku_id, "->", editTarget.sku_id);
+        productRow.sku_id = editTarget.sku_id;
+      }
+
       // The row already exists, so this is an UPDATE. Inserting would create a
       // second row for one physical barcode.
       //
@@ -605,7 +659,43 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
       } else {
         inserted = data;
       }
+    } else if (parkedId) {
+      // A previous attempt on this form saved the row, failed on variants, and
+      // parked it back to is_draft (see the varErr rollback). Retry must claim
+      // THAT row, not insert a new one: inserting collides on sku_id, bumps to a
+      // fresh number, and leaves the parked row stranded as a permanent hole —
+      // the very thing the rollback fix exists to prevent.
+      const { data, error } = await supabase
+        .from("products")
+        .update(productRow)
+        .eq("id", parkedId)
+        .select()
+        .maybeSingle();
+      if (error) lastError = error;
+      else if (!data) lastError = new Error(`${sku} could not be found — it may have been removed while this form was open.`);
+      else inserted = data;
     } else {
+      // A create must never carry a SKU that belongs to an existing product.
+      // formMode is the only thing separating "new product" from "editing
+      // SKU-1070", and it is plain component state — any early return in
+      // loadProductIntoForm leaves it at "create" with the form still full of
+      // another product's data. The dupe-retry below then quietly relabels that
+      // data onto the next free number instead of failing.
+      //
+      // editTarget is set by every load path, so its presence here means we are
+      // about to insert something that was opened from the catalogue. Refuse.
+      if (editTarget) {
+        console.error("Create blocked: form still holds", editTarget.sku_id);
+        showPopup({
+          type: "error",
+          title: "Nothing Was Saved",
+          message: `This form still has ${editTarget.sku_id} loaded, so saving would copy it onto a new SKU. Press Reset and open the product again.`,
+          confirmText: "OK",
+        });
+        setSubmitting(false);
+        return;
+      }
+
       // Insert with one retry if SKU race-collides.
       let attempt = 0;
       while (attempt < 2 && !inserted) {
@@ -794,28 +884,39 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
       }
 
       if (varErr) {
-        // Roll back so the form can be retried cleanly.
-        if (formMode === "fillTag") {
-          // A pre-printed tag: put the row back to reserved rather than
-          // deleting it. Deleting would destroy a reservation whose barcode is
-          // already stuck on a garment — the SKU would then read as unknown on
-          // the next scan and, worse, be re-mintable to a different product.
-          // Restoring is_draft is enough: that is what marks a row reserved,
-          // and the stale field values are overwritten on the next attempt.
+        // Roll back so the form can be retried cleanly. NEVER delete the row.
+        //
+        // fetchNextSku is MAX(sku_id)+1, so a number is held by nothing but its
+        // own row. Deleting it lets the next save reuse it — meanwhile the user
+        // retries, lands on a NEW number, and the one they were shown becomes a
+        // permanent hole. That is what burned SKU-1074/1075/1076: one number per
+        // retry.
+        //
+        // Park as reserved ONLY on manual create, where the row is brand new and
+        // holds nothing but the claimed number. On fillTag the row carries
+        // details a human just typed against a physical tag — re-drafting it
+        // hides that work behind products_live (gone from Inventory and every
+        // dashboard, data still in the table). A product with unsaved sizes is
+        // recoverable by re-opening it; an invisible one is not.
+        //
+        // The edit path above deliberately does neither: it reports and leaves
+        // the live catalogue row alone.
+        if (formMode !== "fillTag") {
           await supabase
             .from("products")
             .update({ is_draft: true })
             .eq("id", inserted.id);
-        } else {
-          await supabase.from("products").delete().eq("id", inserted.id);
+          setParkedId(inserted.id);
         }
         console.error("Variants insert failed:", varErr);
         showPopup({
-          type: "error",
-          title: "Variants Failed",
+          type: formMode === "fillTag" ? "warning" : "error",
+          title: formMode === "fillTag" ? "Sizes Not Saved" : "Variants Failed",
           message: formMode === "fillTag"
-            ? `Nothing was saved — ${sku} is still reserved and can be scanned again. Variant error: ${varErr.message}`
-            : `Product was rolled back. Variant error: ${varErr.message}`,
+            ? `${inserted.name} is saved against ${sku} and will show in Inventory, but its size variants were not saved: ${varErr.message}
+
+Re-open the product and add the sizes.`
+            : `Nothing was saved — ${sku} is still reserved and will be reused when you try again, so don't change it. Variant error: ${varErr.message}`,
           confirmText: "OK",
         });
         setSubmitting(false);
