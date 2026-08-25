@@ -145,6 +145,21 @@ const ORDER_FIELDS = `
         originalUnitPriceSet   { shopMoney { amount } }
         discountedUnitPriceSet { shopMoney { amount } }
         customAttributes { key value }
+        # Does this line represent something PHYSICALLY SHIPPED?
+        #
+        # THE signal that separates a garment from a service charge. The store
+        # sells customisations ("Neck and size customisation", "Sleeves
+        # customisation") as their own lines priced in tens of thousands; those
+        # carry requiresShipping:false and Shopify groups them under "Shipping
+        # not required" in the admin. Verified on #27567 — garment true, both
+        # customisations false — and true on 14 garment lines across other orders.
+        #
+        # Read on the LINE ITEM, not the variant: these lines have variant:null
+        # (no product behind them), so a variant-level read finds nothing on
+        # exactly the lines that need it. It is also the value captured AT
+        # CHECKOUT, so editing the product later cannot retroactively change what
+        # the customer ordered.
+        requiresShipping
         variant {
           id
           sku
@@ -399,9 +414,23 @@ function rawIsStale(storedRaw: any): boolean {
   const edges = storedRaw?.lineItems?.edges;
   if (!Array.isArray(edges) || edges.length === 0) return false;
   return edges.some((e: any) => {
+    // LINE-ITEM level first, and before the product bail-out below.
+    //
+    // requiresShipping is what separates a garment from a customisation charge,
+    // and it lives on the line item — the charge lines have variant:null, so
+    // every product-level test below returns early on exactly the lines this
+    // needs to catch. Checking it here is what lets a pre-existing order like
+    // #27567 be re-fetched at all; without it `refresh` reports "not stale",
+    // skips the order, and the charge fix can never reach stored data.
+    //
+    // Absent KEY, same discipline as the product checks: `false` is Shopify
+    // answering "not shipped", absent is us never having asked.
+    if (!("requiresShipping" in (e?.node || {}))) return true;
+
     const product = e?.node?.variant?.product;
-    // No product node at all (deleted product) tells us nothing about the
-    // snapshot's age — don't call that stale or it never stops refreshing.
+    // No product node at all (deleted product, or a non-shipped charge line)
+    // tells us nothing more about the snapshot's age — don't call that stale or
+    // it never stops refreshing.
     if (!product) return false;
     // Absent KEY, not an empty value: a product with no tags still has the
     // "tags" key once the query asked for it. Both keys are checked because
@@ -813,7 +842,7 @@ serve(async (req) => {
     // experimenting with an unknown mode does not expect.
     const KNOWN_MODES = [
       "sync-now", "order", "reconcile", "refresh", "refresh-raw", "remap-items",
-      "backfill-components", "redate",
+      "backfill-components", "redate", "restate-money", "restate-totals",
     ];
     if (!KNOWN_MODES.includes(mode)) {
       return json({
@@ -997,6 +1026,12 @@ serve(async (req) => {
           .from("orders")
           .update({
             items,
+            // Derived FROM items, so it has to move with them or the two
+            // disagree. It counts garments only (a customisation charge is not
+            // a piece), and leaving it behind is what left #27567 reading
+            // "3 pieces" for one kurta set even after items[] was corrected.
+            // Not money — a count.
+            total_quantity: orderRow.total_quantity,
             shopify_order_name: orderRow.shopify_order_name,
             // Payment state Shopify already told us, backfilled from the same
             // stored raw node. Still no Shopify call, and still no money —
@@ -1195,6 +1230,324 @@ serve(async (req) => {
         unblocked: changes.filter((c) => c.unblocked).length,
         skipped_in_production: skipped.length,
         unresolved_kept_existing: unresolved.length,
+        ...(failures.length ? { failures } : {}),
+      });
+    }
+
+    // ── restate-money: rewrite the discount split from the STORED shopify_raw.
+    // No Shopify call, and no other column touched.
+    //
+    // WHY THIS IS ITS OWN MODE, AND NOT PART OF remap-items
+    // remap-items deliberately never writes money — re-deriving items[] must
+    // not silently move an amount somebody has reconciled against a bank
+    // statement. That guard is right, and it stays. But the mapper used to put
+    // Shopify's ALREADY-NET total into grand_total, while the rest of the app
+    // means "before discount" by that column (CustomerOrderPdf.js:450 computes
+    // netTotal = grand_total - discount_amount). So a discounted web order's
+    // invoice subtracted the discount a SECOND time: #27567 was paid ₹2,40,500
+    // and printed ₹2,28,500. Existing rows keep that split until restated.
+    //
+    // Only orders that CARRY a discount can be affected — with discount 0 the
+    // old and new arithmetic agree exactly, so undiscounted orders are
+    // untouched by construction, not by a filter.
+    //
+    // The total the customer PAID never changes here. This only moves which
+    // column holds the pre- and post-discount figures.
+    //
+    // ALWAYS DRY-RUN FIRST.
+    if (mode === "restate-money") {
+      const onlyOrderNo = String(body?.orderNo ?? "").trim();
+      let q = supabase
+        .from("orders")
+        .select("id, order_no, grand_total, grand_total_after_discount, net_total, discount_amount, advance_payment, remaining_payment, total_paid, status, shopify_raw")
+        .not("shopify_raw", "is", null);
+      q = onlyOrderNo ? q.eq("order_no", onlyOrderNo) : q.or(ORDER_NO_PREFIX_FILTER);
+      const { data: rows, error } = await q.order("created_at", { ascending: true });
+      if (error) throw error;
+
+      const changes = [];
+      const mismatched = [];
+
+      for (const o of rows || []) {
+        let orderRow: any;
+        try {
+          ({ orderRow } = mapShopifyOrder(o.shopify_raw, colorMap, (o as any).manual_line_breakdown));
+        } catch {
+          continue;
+        }
+
+        const nextGrand = Number(orderRow.grand_total) || 0;
+        const nextNet = Number(orderRow.net_total) || 0;
+        const nextDisc = Number(orderRow.discount_amount) || 0;
+        const prevGrand = Number(o.grand_total) || 0;
+        const prevNet = Number(o.net_total) || 0;
+
+        if (nextGrand === prevGrand && nextNet === prevNet) continue;
+
+        // ── Only restate a row whose ONLY problem is the discount split.
+        //
+        // This mode's whole contract is "move which column holds the pre- vs
+        // post-discount figure, never change what the customer paid". The
+        // signature of that bug is exact: the stored grand_total equals the
+        // PAID total, because the old mapper wrote Shopify's already-net figure
+        // into a pre-discount column. net_total therefore must not move.
+        //
+        // Prod turned up 11 orders that fail this test — two line items, but a
+        // grand_total holding only one of them, and total_quantity stuck at 1
+        // (found by this mode's own dry run, e.g. #004591: stored ₹29,150 vs
+        // Shopify ₹58,050). That is a DIFFERENT and older defect: a dropped or
+        // uncounted line item, ~₹1.9L under-recorded in total.
+        //
+        // Restating those here would raise grand_total to the true amount while
+        // leaving total_quantity and items[] wrong — a half-correction that
+        // reads as fixed and is not. Worse, it would silently move net_total,
+        // which this mode promises never to do. So they are reported and left
+        // for the deliberate items-level fix (refresh-raw + remap-items), which
+        // is the only path that can repair the count and the lines together.
+        if (nextNet !== prevNet) {
+          mismatched.push({
+            order_no: o.order_no,
+            stored_grand_total: prevGrand,
+            shopify_paid: nextNet,
+            difference: nextNet - prevNet,
+            reason:
+              "net_total would move — the stored total does not match Shopify's, so this is a missing/uncounted line item, not the discount split. Fix with refresh-raw + remap-items.",
+          });
+          continue;
+        }
+
+        // The paid figure must not move. If what the customer actually paid
+        // (total_paid) disagrees with the net we are about to write, something
+        // other than this bug is going on — a manual correction, a partial
+        // refund — and restating it would paper over that. Report, never write.
+        const paid = o.total_paid == null ? null : Number(o.total_paid);
+        if (paid != null && paid > 0 && paid !== nextNet) {
+          mismatched.push({
+            order_no: o.order_no,
+            total_paid: paid,
+            would_set_net: nextNet,
+            reason: "total_paid disagrees with the restated net — left untouched for a human",
+          });
+          continue;
+        }
+
+        changes.push({
+          order_no: o.order_no,
+          id: o.id,
+          status: o.status,
+          discount: nextDisc,
+          grand_total: { from: prevGrand, to: nextGrand },
+          net_total: { from: prevNet, to: nextNet },
+          // What the customer's invoice prints, before and after. This is the
+          // number the whole mode exists to correct.
+          invoice_prints: { from: prevGrand - Number(o.discount_amount || 0), to: nextGrand - nextDisc },
+        });
+      }
+
+      if (body?.dryRun) {
+        return json({
+          success: true,
+          mode,
+          dryRun: true,
+          scanned: (rows || []).length,
+          would_change: changes.length,
+          mismatched_left_alone: mismatched.length,
+          changes,
+          mismatched,
+        });
+      }
+
+      let updated = 0;
+      const failures = [];
+      for (const c of changes) {
+        const { error: upErr } = await supabase
+          .from("orders")
+          .update({
+            grand_total: c.grand_total.to,
+            grand_total_after_discount: c.net_total.to,
+            net_total: c.net_total.to,
+            discount_amount: c.discount,
+          })
+          .eq("id", c.id);
+        if (upErr) failures.push({ order_no: c.order_no, error: upErr.message });
+        else updated++;
+      }
+
+      return json({
+        success: true,
+        mode,
+        scanned: (rows || []).length,
+        updated,
+        mismatched_left_alone: mismatched.length,
+        ...(mismatched.length ? { mismatched } : {}),
+        ...(failures.length ? { failures } : {}),
+      });
+    }
+
+    // ── restate-totals: rewrite the FULL money set for NAMED orders, from the
+    // stored shopify_raw. No Shopify call.
+    //
+    // WHY THIS EXISTS SEPARATELY FROM restate-money
+    // restate-money only ever moves the discount split and refuses any row
+    // where net_total would change — because a moving net means the stored
+    // total disagrees with Shopify's, which is a missing/uncounted line item,
+    // not a column mix-up. That guard is right and stays.
+    //
+    // But those rows still need fixing. After refresh-raw + remap-items
+    // restored their items[] and total_quantity, only the AMOUNTS remain stale
+    // (remap-items deliberately never writes money). This is the deliberate,
+    // explicitly-scoped way to finish them.
+    //
+    // ── THE TWO SAFETY RULES, both non-negotiable
+    //
+    // 1. NAMED ORDERS ONLY. `orderNos` is required — there is no sweep-
+    //    everything form. Each of these rows needs a human to have looked at
+    //    it, so the caller states exactly which.
+    //
+    // 2. NOTHING COLLECTED. A row is refused unless total_paid, advance_payment
+    //    and every order_payments row are zero/absent. Raising the total on an
+    //    order where money HAS changed hands would silently make a settled
+    //    order look underpaid and could trigger a wrongful collection call to a
+    //    customer who already paid. For a COD order awaiting delivery there is
+    //    nothing to reconcile — the amount simply has not been collected yet,
+    //    and the corrected figure is what the driver must collect.
+    //
+    // Prepaid orders in this state (Shopify says PAID but our total_paid holds
+    // the old wrong figure) are deliberately NOT covered: they need the
+    // gateway/bank record checked first. Rule 2 refuses them by design.
+    //
+    // ALWAYS DRY-RUN FIRST.
+    if (mode === "restate-totals") {
+      const orderNos: string[] = Array.isArray(body?.orderNos)
+        ? body.orderNos.map((s: unknown) => String(s).trim()).filter(Boolean)
+        : [];
+      if (orderNos.length === 0) {
+        throw new Error(
+          "mode 'restate-totals' requires { orderNos: [...] } — it never sweeps the whole table",
+        );
+      }
+
+      const { data: rows, error } = await supabase
+        .from("orders")
+        .select("id, order_no, status, grand_total, grand_total_after_discount, net_total, discount_amount, advance_payment, remaining_payment, total_paid, total_quantity, shopify_raw, manual_line_breakdown")
+        .in("order_no", orderNos);
+      if (error) throw error;
+
+      // Any recorded payment disqualifies a row, whatever the columns say.
+      const ids = (rows || []).map((r: any) => r.id);
+      const { data: payRows } = ids.length
+        ? await supabase.from("order_payments").select("order_id, amount").in("order_id", ids)
+        : { data: [] as any[] };
+      const paidByOrder = new Map<string, number>();
+      for (const p of payRows || []) {
+        paidByOrder.set(p.order_id, (paidByOrder.get(p.order_id) || 0) + (Number(p.amount) || 0));
+      }
+
+      const changes = [];
+      const refused = [];
+      const notFound = orderNos.filter(
+        (no) => !(rows || []).some((r: any) => r.order_no === no),
+      );
+
+      for (const o of rows || []) {
+        const collected =
+          (Number(o.total_paid) || 0) +
+          (Number(o.advance_payment) || 0) +
+          (paidByOrder.get(o.id) || 0);
+        if (collected > 0) {
+          refused.push({
+            order_no: o.order_no,
+            collected,
+            reason:
+              "money has already been collected on this order — reconcile against the gateway/bank before restating, this mode only touches orders with nothing paid",
+          });
+          continue;
+        }
+
+        let orderRow: any;
+        try {
+          ({ orderRow } = mapShopifyOrder(o.shopify_raw, colorMap, (o as any).manual_line_breakdown));
+        } catch (e) {
+          refused.push({ order_no: o.order_no, reason: `mapper failed: ${(e as Error).message}` });
+          continue;
+        }
+
+        const next = {
+          grand_total: Number(orderRow.grand_total) || 0,
+          net_total: Number(orderRow.net_total) || 0,
+          discount_amount: Number(orderRow.discount_amount) || 0,
+          advance_payment: Number(orderRow.advance_payment) || 0,
+          remaining_payment: Number(orderRow.remaining_payment) || 0,
+        };
+
+        // The mapper must agree with itself, or we are writing nonsense.
+        if (Math.abs(next.grand_total - next.discount_amount - next.net_total) > 0.01) {
+          refused.push({
+            order_no: o.order_no,
+            reason: `mapper produced an inconsistent total (${next.grand_total} - ${next.discount_amount} != ${next.net_total})`,
+          });
+          continue;
+        }
+
+        if (
+          next.grand_total === Number(o.grand_total) &&
+          next.net_total === Number(o.net_total)
+        ) continue;
+
+        changes.push({
+          order_no: o.order_no,
+          id: o.id,
+          status: o.status,
+          total_quantity: o.total_quantity,
+          grand_total: { from: Number(o.grand_total), to: next.grand_total },
+          net_total: { from: Number(o.net_total), to: next.net_total },
+          discount_amount: { from: Number(o.discount_amount), to: next.discount_amount },
+          // What a COD driver must collect — the number this mode exists to fix.
+          to_collect: { from: Number(o.remaining_payment), to: next.remaining_payment },
+          next,
+        });
+      }
+
+      if (body?.dryRun) {
+        return json({
+          success: true,
+          mode,
+          dryRun: true,
+          requested: orderNos.length,
+          would_change: changes.length,
+          refused: refused.length,
+          not_found: notFound,
+          changes,
+          refused_detail: refused,
+        });
+      }
+
+      let updated = 0;
+      const failures = [];
+      for (const c of changes) {
+        const { error: upErr } = await supabase
+          .from("orders")
+          .update({
+            grand_total: c.next.grand_total,
+            grand_total_after_discount: c.next.net_total,
+            net_total: c.next.net_total,
+            discount_amount: c.next.discount_amount,
+            advance_payment: c.next.advance_payment,
+            remaining_payment: c.next.remaining_payment,
+          })
+          .eq("id", c.id);
+        if (upErr) failures.push({ order_no: c.order_no, error: upErr.message });
+        else updated++;
+      }
+
+      return json({
+        success: true,
+        mode,
+        requested: orderNos.length,
+        updated,
+        refused: refused.length,
+        ...(refused.length ? { refused_detail: refused } : {}),
+        ...(notFound.length ? { not_found: notFound } : {}),
         ...(failures.length ? { failures } : {}),
       });
     }

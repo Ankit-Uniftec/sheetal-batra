@@ -235,6 +235,32 @@ export function isDupattaUnknown(variant: any, product: any): boolean {
 }
 
 /**
+ * Is this line a NON-SHIPPED CHARGE rather than a garment?
+ *
+ * The store sells customisations as their own order lines — "Neck and size
+ * customisation" (₹17,500), "Sleeves customisation" (₹10,000) — which arrive
+ * looking exactly like products. They are not: nothing is cut, nothing is
+ * scanned, nothing is packed. They are instructions attached to money.
+ *
+ * `requiresShipping` is Shopify's OWN answer to "is this physically shipped",
+ * shown in the admin as the "Shipping not required" fulfilment group. Verified
+ * on order #27567: the garment line is true, both customisation lines false;
+ * and true across 14 garment lines on other orders.
+ *
+ * Read from the LINE ITEM, never the variant. These lines have `variant: null`
+ * — there is no product behind them — so a variant-level read returns nothing
+ * on precisely the lines this needs to catch.
+ *
+ * STRICTLY `=== false`. Absent must NOT mean "charge": every order synced
+ * before this field was added to the query has it undefined, and treating those
+ * as charges would silently drop real garments out of production. A missing
+ * answer is not a no.
+ */
+export function isNonShippedCharge(node: any): boolean {
+  return node?.requiresShipping === false;
+}
+
+/**
  * Is this product an ACCESSORY sold on its own — a dupatta, odhni, scarf —
  * rather than an outfit?
  *
@@ -325,6 +351,10 @@ function mapLineItem(
   // from the metafields being empty.
   const isAccessory = isAccessoryProduct(product);
 
+  // A customisation charge, not a garment. Nothing is cut for it, so every
+  // "which pieces does this make?" question below is the wrong question to ask.
+  const isCharge = isNonShippedCharge(node);
+
   // Both missing → we cannot derive the pieces. The fallback in
   // generateOrderComponents would mint ONE "top" component named after the
   // product, which for a two-piece garment puts it into production with one
@@ -333,7 +363,13 @@ function mapLineItem(
   //
   // Accessories are exempt: for them "no styles" is the correct shape, and they
   // mint a single dupatta component below instead.
-  if (!isAccessory && !isPresent(top) && !isPresent(bottom)) {
+  //
+  // Charges are exempt too, and for a stronger reason: having no garment styles
+  // is not a GAP on a charge, it is the correct and complete shape. Flagging it
+  // sent the order to review, where a human cleared the block by typing
+  // placeholder styles — which is what put "Top"/"Bottom" breakdowns on #27567
+  // and queued six phantom barcodes.
+  if (!isCharge && !isAccessory && !isPresent(top) && !isPresent(bottom)) {
     blockers.push({
       code: "PRODUCT_STYLE_MISSING",
       detail: `No top_style/bottom_style on "${clean(node?.title)}" (${clean(product?.id)})`,
@@ -343,7 +379,11 @@ function mapLineItem(
   // Neither a Style option nor the name tells us about a dupatta. Guessing
   // either way is wrong: assume none and a real piece never gets a barcode;
   // assume one and a phantom component blocks packaging. Flag it instead.
-  if (isDupattaUnknown(variant, product)) {
+  //
+  // A charge is exempt: it has no product to read a tag from BY DESIGN, which
+  // is the same condition isDupattaUnknown tests for. Asking a human whether a
+  // ₹17,500 sleeves alteration includes a dupatta has no meaningful answer.
+  if (!isCharge && isDupattaUnknown(variant, product)) {
     blockers.push({
       code: "DUPATTA_UNKNOWN",
       detail: `Line item "${clean(node?.title)}" has no Shopify product (manual/custom line) — no Style option or tag to read a dupatta from; confirm before production`,
@@ -387,6 +427,12 @@ function mapLineItem(
 
     product_name: clean(node?.title),
     color: colorObj,
+
+    // TRUE = a service charge (a customisation), not a garment. Set from
+    // Shopify's requiresShipping. Consumers must skip it as a PIECE — no
+    // barcode, not counted in total_quantity — while keeping its PRICE, which
+    // is real revenue on the order.
+    is_charge: isCharge,
 
     // Production-critical four.
     top: isPresent(top) ? top : "",
@@ -583,6 +629,17 @@ export function buildOrderComponents(order: any) {
   const items = Array.isArray(order?.items) ? order.items : [order?.items];
 
   items.forEach((item: any, itemIndex: number) => {
+    // A service charge makes nothing physical, so it gets no barcode. Without
+    // this the namesNoPiece fallback below mints a TOP labelled "Sleeves
+    // customisation" — a tag on a garment that does not exist, which then has
+    // to clear Final QC before the order can be packed.
+    //
+    // NB the barcode suffix stays keyed on itemIndex, NOT on a re-numbered
+    // garment position. The suffix must match item_index or a scan cannot be
+    // traced back to its line, and renumbering would also change the barcode of
+    // an already-printed tag on any order that gains a charge later.
+    if (item?.is_charge) return;
+
     const suffix = itemIndex > 0 ? String(itemIndex + 1) : "";
 
     // No top and no bottom. Two shapes land here:
@@ -738,6 +795,12 @@ export function applyBreakdownOverride(
   const items = mapped.items.map((item, i) => {
     const b = byIndex.get(i);
     if (!b) return item;
+    // Never let a breakdown turn a CHARGE into a garment. #27567 carries a
+    // stored override typing "Top"/"Bottom" onto both customisation lines,
+    // written when they still quarantined; that override is replayed on every
+    // remap, so without this guard the fix above would be undone on the next
+    // sync and the phantom barcodes would come back.
+    if (item?.is_charge) return item;
     return {
       ...item,
       top: isPresent(clean(b.top)) ? clean(b.top) : "",
@@ -793,6 +856,30 @@ export function mapShopifyOrder(
   const items = lineNodes.map((n: any) =>
     mapLineItem(n, deliveryDate, blockers, hexByColorName));
 
+  // ── Carry the customisation onto the garment the tailor actually makes.
+  //
+  // A charge mints no barcode, so on its own it reaches no work order — the
+  // customer would pay ₹27,500 for neck, size and sleeve work that the floor is
+  // never told to do. The charge TITLE is the instruction, so append it to the
+  // notes of the garment lines, which already print on the warehouse PDF and
+  // the order card through mergeOrderNotes().
+  //
+  // Applied to EVERY garment line, not just the first: Shopify gives no link
+  // between a charge and a specific line, so on a two-garment order there is no
+  // honest way to say which one the customisation is for. Showing it on both
+  // asks a human to read one extra line; guessing wrong alters the wrong dress.
+  const chargeTitles = items
+    .filter((i: any) => i.is_charge)
+    .map((i: any) => clean(i.product_name))
+    .filter(Boolean);
+  if (chargeTitles.length > 0) {
+    const label = `Customisation ordered: ${chargeTitles.join(", ")}`;
+    for (const item of items) {
+      if (item.is_charge) continue;
+      item.notes = [item.notes, label].filter(Boolean).join(" | ");
+    }
+  }
+
   // ── Payment. Half of real orders are COD, so this is not an edge case.
   // COD lands as PENDING with gateway "cash_on_delivery". Existing COD orders
   // in this business run through production with a balance outstanding and are
@@ -802,8 +889,23 @@ export function mapShopifyOrder(
   const isCod =
     gateways.some((g) => /cash_on_delivery|cod/i.test(g)) || financial === "PENDING";
 
-  const grandTotal = money(node?.totalPriceSet);
-  const advance = isCod ? 0 : grandTotal;
+  // ── The two totals, and why they are not the same field.
+  //
+  // Shopify's totalPriceSet is what the customer PAID — already net of every
+  // discount. The rest of the app means something different by `grand_total`:
+  // the sum BEFORE discount, which is why CustomerOrderPdf.js:450 computes
+  // `netTotal = grand_total - discount_amount`.
+  //
+  // Writing the paid amount into grand_total makes that subtraction run twice.
+  // On #27567 (paid ₹2,40,500, discount ₹12,000) the invoice printed ₹2,28,500
+  // — ₹12,000 short, with a discount line the customer had already been given.
+  //
+  // So reconstruct the PRE-discount total, which is what the column means.
+  // Shopify hands us both halves, so this is arithmetic, not a guess.
+  const paidTotal = money(node?.totalPriceSet);
+  const discountAmount = money(node?.totalDiscountsSet);
+  const grandTotal = paidTotal + discountAmount;
+  const advance = isCod ? 0 : paidTotal;
 
   // ── Addresses. shippingAddress is the delivery truth; the customer record
   // and billing name can be a DIFFERENT PERSON (seen in real data), and names
@@ -847,7 +949,13 @@ export function mapShopifyOrder(
     status: "order_received",
 
     items: finalItems,
-    total_quantity: finalItems.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
+    // GARMENTS only. This counts physical pieces — it drives the order card,
+    // reports and anything asking "how many things are we making" — so a
+    // customisation charge must not inflate it. #27567 read 3 for one kurta set.
+    total_quantity: finalItems.reduce(
+      (s: number, i: any) => s + (i.is_charge ? 0 : i.quantity || 0),
+      0,
+    ),
     delivery_date: deliveryDate,
 
     // Customer / delivery
@@ -886,16 +994,24 @@ export function mapShopifyOrder(
     // customer PDF reverse-calculates, so never add tax on top here.
     subtotal: money(node?.subtotalPriceSet),
     taxes: money(node?.totalTaxSet),
-    discount_amount: money(node?.totalDiscountsSet),
+    discount_amount: discountAmount,
     // On COD orders this ₹250 is a COD HANDLING FEE, not postage — the
     // shippingLine reads "Free Shipping and COD Charges". Shipping is free
     // either way.
     shipping_charge: money(node?.totalShippingPriceSet),
+
+    // BEFORE discount — the column's meaning app-wide, and what the invoice
+    // subtracts discount_amount from.
     grand_total: grandTotal,
-    grand_total_after_discount: grandTotal,
-    net_total: grandTotal,
+    // AFTER discount — what the customer actually paid. These two used to hold
+    // the same number, which hid the discount from every surface that reads
+    // them and made the invoice subtract it a second time. Revenue reporting
+    // reads net_total first (AdminDashboard and ~20 other call sites), so this
+    // is the figure that must equal the money received.
+    grand_total_after_discount: paidTotal,
+    net_total: paidTotal,
     advance_payment: advance,
-    remaining_payment: grandTotal - advance,
+    remaining_payment: paidTotal - advance,
     payment_mode: isCod ? "COD" : gateways[0] || "Online",
     is_split_payment: false,
 
