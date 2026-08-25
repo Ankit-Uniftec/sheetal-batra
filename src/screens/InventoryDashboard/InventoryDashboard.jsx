@@ -15,8 +15,32 @@ import StockExchangeTab from "../../components/stock/StockExchangeTab";
 import AddProduct from "../../components/AddProduct/AddProduct";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
+import { poolsForUser } from "../../utils/stockVisibility";
 
 const ITEMS_PER_PAGE = 15;
+
+// Who may open this screen. It is the full-visibility group from
+// utils/stockVisibility — the same people who see every stock pool — plus
+// nobody else, because this screen can also WRITE inventory.
+const INVENTORY_DASHBOARD_ROLES = [
+  "inventory",
+  "admin",
+  "assistant_cmo",
+  "gm",
+  "coo",
+  "ceo",
+];
+
+// Short header labels for the channel columns — the full CHANNEL_KEY_LABELS
+// ("Retail Stock") are too wide for a table already carrying 14 columns.
+const CHANNEL_COLUMN_LABELS = {
+  retail_stock: "Retail",
+  b2b_stock: "B2B",
+  shopify_stock: "Shopify",
+};
+
+// Columns before + after the variable channel block, for colSpan on empty rows.
+const FIXED_INVENTORY_COLUMNS = 11;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
 
 // Shopify CDN supports per-request resizing by injecting `_WxH` before the
@@ -109,6 +133,19 @@ export default function InventoryDashboard() {
   // which stays the single global number every other dashboard reads.
   const [channelStock, setChannelStock] = useState({});
 
+  // The salesperson row of whoever is logged in, set by the guard above. Drives
+  // which stock pools this screen shows, so a role added to
+  // INVENTORY_DASHBOARD_ROLES automatically gets the right columns.
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // The CHANNEL pools this user may see, in display order. The channel columns
+  // in the table below used to be a hardcoded triple; reading them from the
+  // shared map keeps this screen honest with every other dashboard.
+  const visibleChannelPools = useMemo(
+    () => poolsForUser(currentUser).filter((k) => k.endsWith("_stock")),
+    [currentUser]
+  );
+
   // ==================== NEW LXRTS STATES ====================
   const [variantInventory, setVariantInventory] = useState({}); // { productId: { S: 4, M: 2, ... } }
   const [expandedProducts, setExpandedProducts] = useState({}); // { productId: true/false }
@@ -118,6 +155,12 @@ export default function InventoryDashboard() {
   const [savingVariant, setSavingVariant] = useState(false);
 
   // ==================== FETCH PRODUCTS ====================
+  // Role guard, matching every other dashboard (pattern: GMDashboard.jsx:187).
+  // This screen used to check the SESSION ONLY, which meant any authenticated
+  // user of any role who typed /inventoryDashboard got in — and this screen
+  // EDITS products.inventory and pushes to Shopify, so that was a write hole,
+  // not just an information one. The allowed set is the stock-visibility map's
+  // full-access group; anyone else is bounced the way they are everywhere else.
   useEffect(() => {
     const checkAuthAndFetch = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -127,6 +170,19 @@ export default function InventoryDashboard() {
         return;
       }
 
+      const { data: userRecord } = await supabase
+        .from("salesperson")
+        .select("role, saleperson, store_name")
+        .eq("email", session.user.email?.toLowerCase())
+        .single();
+
+      if (!userRecord || !INVENTORY_DASHBOARD_ROLES.includes(userRecord.role)) {
+        await supabase.auth.signOut();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      setCurrentUser(userRecord);
       fetchProducts();
     };
 
@@ -668,7 +724,11 @@ export default function InventoryDashboard() {
             `channelStock` this screen already loads, so opening the tab costs
             no extra fetch. */}
         {activeTab === "overview" && (
-          <InventoryOverviewTab products={products} channelStock={channelStock} />
+          <InventoryOverviewTab
+            products={products}
+            channelStock={channelStock}
+            poolKeys={visibleChannelPools}
+          />
         )}
 
         {/* ==================== INVENTORY TAB ==================== */}
@@ -852,10 +912,13 @@ export default function InventoryDashboard() {
                 <th>Base Price</th>
                 {/* Channel-wise stock (db/…/v2/72). A negative is shown in red
                     rather than hidden — it means stock left without a matching
-                    stock order, or a sale was booked to the wrong channel. */}
-                <th className="inv-th-channel">Retail</th>
-                <th className="inv-th-channel">B2B</th>
-                <th className="inv-th-channel">Shopify</th>
+                    stock order, or a sale was booked to the wrong channel.
+                    Scoped to the pools this role may see. */}
+                {visibleChannelPools.map((key) => (
+                  <th key={key} className="inv-th-channel">
+                    {CHANNEL_COLUMN_LABELS[key]}
+                  </th>
+                ))}
                 <th>Inventory</th>
                 <th className="inv-th-actions">Actions</th>
                 {/* <th>Sync</th> */}
@@ -864,7 +927,7 @@ export default function InventoryDashboard() {
             <tbody>
               {currentProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="14" className="inv-no-data">
+                  <td colSpan={FIXED_INVENTORY_COLUMNS + visibleChannelPools.length} className="inv-no-data">
                     {searchTerm || stockFilters.length > 0 || syncFilter !== "all"
                       ? "No products match your filters"
                       : "No products found"}
@@ -955,7 +1018,7 @@ export default function InventoryDashboard() {
                         </td>
 
                         {/* Channel-wise stock — retail / B2B / Shopify */}
-                        {["retail_stock", "b2b_stock", "shopify_stock"].map((key) => {
+                        {visibleChannelPools.map((key) => {
                           const qty = channelStock[product.id]?.[key] || 0;
                           return (
                             <td key={key} className="inv-channel-cell">
@@ -1077,7 +1140,7 @@ export default function InventoryDashboard() {
                       {/* ==================== EXPANDED VARIANT ROW (LXRTS ONLY) ==================== */}
                       {isSyncEnabled && isExpanded && (
                         <tr className="inv-variant-row">
-                          <td colSpan="14">
+                          <td colSpan={FIXED_INVENTORY_COLUMNS + visibleChannelPools.length}>
                             <div className="inv-variant-container">
                               <div className="inv-variant-header">
                                 <span className="inv-variant-title">Size Variants — {product.name}</span>

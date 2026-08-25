@@ -27,6 +27,8 @@ import { fetchScanReport, scanReportCsv } from "../../../utils/scanReport";
 import useTabParam from "../../../hooks/useTabParam";
 import useFilterParam from "../../../hooks/useFilterParam";
 import Paginator from "../../../components/Paginator";
+import StockPanel from "../../../components/stock/StockPanel";
+import { poolsForUser } from "../../../utils/stockVisibility";
 import ComponentStageBadge from "../../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../../components/ComponentJourneyModal";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../../../components/PeriodFilter";
@@ -2283,6 +2285,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
                             <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setSubTab("directory"); setShowSidebar(false); }}>Vendors</a>
                             <a className={`pm-menu-item ${activeTab === "replacements" ? "active" : ""}`} onClick={() => { setActiveTab("replacements"); setShowSidebar(false); }}>Replacement Approvals</a>
+                            <a className={`pm-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                             <a className={`pm-menu-item ${activeTab === "staff" ? "active" : ""}`} onClick={() => { setActiveTab("staff"); setShowSidebar(false); }}>Staff</a>
                             <a className={`pm-menu-item ${activeTab === "profile" ? "active" : ""}`} onClick={() => { setActiveTab("profile"); setShowSidebar(false); }}>Profile</a>
@@ -4032,6 +4035,17 @@ export default function ProductionManagerDashboard() {
                                 </div>
                             );
                         })()}
+
+                        {/* ===== STOCK TAB ===== */}
+                        {/* The PM produces for every channel, so all three
+                            channel pools plus the factory — but not the shop
+                            floors' own counts, which are the stores' business. */}
+                        {activeTab === "stock" && (
+                            <div className="pm-orders-tab">
+                                <h2 className="pm-tab-title">Stock</h2>
+                                <StockPanel pools={poolsForUser({ role: "production_manager" })} />
+                            </div>
+                        )}
 
                         {/* ===== CALENDAR TAB ===== */}
                         {activeTab === "calendar" && (() => {

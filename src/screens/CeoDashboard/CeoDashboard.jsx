@@ -12,6 +12,8 @@ import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import NotificationBell from "../../components/NotificationBell";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 import ExhibitionApprovals from "../../components/ExhibitionApprovals";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
@@ -2275,6 +2277,13 @@ export default function CEODashboard() {
                     {/* ═══════════════════════════════════════════════════════════ */}
                     {activeTab === "inventory" && (
                         <div className="admin-inventory-tab">
+                            {/* Where stock actually sits — per location and per
+                                channel, from the shared panel every dashboard
+                                uses. Above the catalogue-health figures below,
+                                which count products rather than placement. */}
+                            <h2 className="admin-section-title">Stock by Location &amp; Channel</h2>
+                            <StockPanel pools={poolsForUser({ role: "ceo" })} />
+
                             <h2 className="admin-section-title">Inventory Overview</h2>
                             <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                                 <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Delayed Deliveries</span><span className="stat-value">{enhancedInventoryStats.delayedCount}</span></div></div>

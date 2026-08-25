@@ -1,0 +1,403 @@
+/* ============================================================
+   StockPanel — the shared per-role stock view.
+
+   Visual language follows InventoryOverviewTab (dot + count + proportional
+   bar + %), which follows the Production Manager dashboard, so "stock, broken
+   down" reads the same on every dashboard that mounts this. Gold (#d5b85a) is
+   the brand accent.
+
+   Every rule is namespaced under .stkp-panel: this component is mounted inside
+   a dozen lazy-loaded screens, and React.lazy breaks the shared-base-then-
+   override cascade, so nothing here may rely on load order or inherit a host
+   dashboard's table styling.
+   ============================================================ */
+
+.stkp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Loading ── */
+.stkp-panel .stkp-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.stkp-panel .stkp-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #eee;
+  border-top-color: #d5b85a;
+  border-radius: 50%;
+  animation: stkp-spin 0.8s linear infinite;
+}
+
+@keyframes stkp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Per-pool totals ── */
+.stkp-panel .stkp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.stkp-panel .stkp-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #fff;
+  padding: 18px 20px;
+  border: 1px solid #e6e6e6;
+  /* The pool's own colour, set inline per card. */
+  border-top: 3px solid #ccc;
+  border-radius: 10px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stkp-panel .stkp-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.stkp-panel .stkp-stat-total {
+  border-top-color: #d5b85a;
+  background: #fffdf6;
+}
+
+.stkp-panel .stkp-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+}
+
+.stkp-panel .stkp-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #333;
+}
+
+.stkp-panel .stkp-stat-value.negative {
+  color: #c62828;
+}
+
+/* An unconfigured location shows a dash, not a zero — greyed so it never reads
+   as a real count of nothing. */
+.stkp-panel .stkp-stat-value.stkp-stat-na {
+  color: #ccc;
+}
+
+.stkp-panel .stkp-stat-sub {
+  font-size: 12px;
+  color: #999;
+}
+
+/* ── Notices ── */
+/* Neutral/informational: a location that has no warehouse row yet. */
+.stkp-panel .stkp-notice {
+  padding: 12px 16px;
+  background: #fbf7ea;
+  border: 1px solid #e6d9a8;
+  border-left: 4px solid #d5b85a;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #6b5a20;
+  line-height: 1.5;
+}
+
+/* Alarming: negative balances. */
+.stkp-panel .stkp-warning {
+  padding: 12px 16px;
+  background: #fff4f4;
+  border: 1px solid #ef9a9a;
+  border-left: 4px solid #c62828;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #8e2020;
+  line-height: 1.5;
+}
+
+/* ── Cards ── */
+.stkp-panel .stkp-card {
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.stkp-panel .stkp-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.stkp-panel .stkp-card-title {
+  font-family: "Athleas", serif;
+  font-size: 16px;
+  color: #d5b85a;
+  margin: 0 0 16px 0;
+}
+
+.stkp-panel .stkp-card-header .stkp-card-title {
+  margin: 0;
+}
+
+.stkp-panel .stkp-empty-inline {
+  color: #999;
+  font-style: italic;
+  font-size: 14px;
+  margin: 0;
+  padding: 12px 0;
+}
+
+/* ── Consignment summary ── */
+.stkp-panel .stkp-consign-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+.stkp-panel .stkp-consign-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: #faf8f3;
+  border-radius: 8px;
+}
+
+.stkp-panel .stkp-consign-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #333;
+}
+
+.stkp-panel .stkp-consign-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+}
+
+/* ── Proportional split rows ── */
+.stkp-panel .stkp-channel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stkp-panel .stkp-channel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stkp-panel .stkp-channel-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.stkp-panel .stkp-channel-note {
+  font-size: 11px;
+  font-style: italic;
+  color: #aaa;
+}
+
+.stkp-panel .stkp-channel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.stkp-panel .stkp-channel-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.stkp-panel .stkp-channel-count {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 48px;
+  text-align: right;
+}
+
+.stkp-panel .stkp-channel-count.negative {
+  color: #c62828;
+}
+
+.stkp-panel .stkp-channel-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.stkp-panel .stkp-channel-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.stkp-panel .stkp-channel-pct {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: right;
+  color: #555;
+}
+
+/* ── Toolbar ── */
+.stkp-panel .stkp-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stkp-panel .stkp-search,
+.stkp-panel .stkp-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  outline: none;
+}
+
+.stkp-panel .stkp-search {
+  min-width: 220px;
+}
+
+.stkp-panel .stkp-search:focus,
+.stkp-panel .stkp-select:focus {
+  border-color: #d5b85a;
+}
+
+.stkp-panel .stkp-select {
+  cursor: pointer;
+}
+
+/* ── Table ── */
+.stkp-panel .stkp-table-wrap {
+  /* Wide content scrolls inside its own container so the page body never
+     scrolls sideways on a phone. */
+  overflow-x: auto;
+}
+
+.stkp-panel .stkp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.stkp-panel .stkp-table th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid #eee;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #777;
+  white-space: nowrap;
+}
+
+.stkp-panel .stkp-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f2f2f2;
+}
+
+.stkp-panel .stkp-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.stkp-panel .stkp-th-num,
+.stkp-panel .stkp-td-num {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.stkp-panel .stkp-sku {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 12px;
+  color: #555;
+}
+
+.stkp-panel .stkp-name {
+  min-width: 200px;
+}
+
+.stkp-panel .stkp-qty {
+  display: inline-block;
+  min-width: 30px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.stkp-panel .stkp-qty.zero {
+  background: #f5f5f5;
+  color: #9e9e9e;
+}
+
+/* A negative is a discrepancy worth chasing, so it is loud on purpose. */
+.stkp-panel .stkp-qty.negative {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+
+.stkp-panel .stkp-total-negative {
+  color: #c62828;
+}
+
+@media (max-width: 768px) {
+  .stkp-panel .stkp-channel-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .stkp-panel .stkp-channel-label {
+    min-width: unset;
+  }
+
+  .stkp-panel .stkp-channel-right {
+    flex-wrap: wrap;
+  }
+
+  .stkp-panel .stkp-search {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .stkp-panel .stkp-stat-value {
+    font-size: 24px;
+  }
+}

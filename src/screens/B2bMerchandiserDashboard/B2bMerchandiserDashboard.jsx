@@ -25,6 +25,8 @@ import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange }
 import { startB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
 import WarehouseTab from "../../components/stock/WarehouseTab";
 import StockExchangeTab from "../../components/stock/StockExchangeTab";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -878,6 +880,7 @@ export default function B2bMerchandiserDashboard() {
                         <a className={`merch-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`merch-menu-item ${activeTab === "consignment" ? "active" : ""}`} onClick={() => { setActiveTab("consignment"); setShowSidebar(false); }}>Consignment</a>
                         <a className={`merch-menu-item ${activeTab === "analytics" ? "active" : ""}`} onClick={() => { setActiveTab("analytics"); setShowSidebar(false); }}>Analytics</a>
+                        <a className={`merch-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
                         <a className={`merch-menu-item ${activeTab === "warehouses" ? "active" : ""}`} onClick={() => { setActiveTab("warehouses"); setShowSidebar(false); }}>Warehouses</a>
                         <a className={`merch-menu-item ${activeTab === "exchanges" ? "active" : ""}`} onClick={() => { setActiveTab("exchanges"); setShowSidebar(false); }}>Stock Exchange</a>
                         {profile?.can_place_b2b_stock_orders && (
@@ -1566,6 +1569,15 @@ export default function B2bMerchandiserDashboard() {
                             <div className="merch-profile-row"><span className="merch-plabel">Role</span><span className="merch-pvalue">B2B Merchandiser</span></div>
                             <div className="merch-profile-row"><span className="merch-plabel">Store</span><span className="merch-pvalue">{profile?.store_name || "N/A"}</span></div>
                         </div>
+                    </div>
+                )}
+
+                {/* ===== STOCK TAB ===== */}
+                {/* B2B only — the B2B stock pool and consignment. Retail,
+                    Shopify and the shop floors are not this desk's business. */}
+                {activeTab === "stock" && (
+                    <div className="merch-tab-wrapper">
+                        <StockPanel pools={poolsForUser({ role: "merchandiser" })} />
                     </div>
                 )}
 

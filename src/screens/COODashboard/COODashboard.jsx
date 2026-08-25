@@ -12,6 +12,8 @@ import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import NotificationBell from "../../components/NotificationBell";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 import VendorApprovals from "../../components/VendorApprovals";
 import FactoryPause from "../../components/FactoryPause";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
@@ -942,6 +944,12 @@ export default function COODashboard() {
                     {/* ═══════════ INVENTORY ═══════════ */}
                     {activeTab === "inventory" && (
                         <div>
+                            {/* Where stock sits — per location and per channel.
+                                The catalogue-health figures below count products;
+                                this counts placement. */}
+                            <h2 className="admin-section-title">Stock by Location &amp; Channel</h2>
+                            <StockPanel pools={poolsForUser({ role: "coo" })} />
+
                             <h2 className="admin-section-title">Inventory Overview</h2>
                             <div className="admin-stats-grid">
                                 <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Products</span><span className="stat-value">{inventoryStats.total}</span></div></div>
