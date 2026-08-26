@@ -15,6 +15,8 @@ import { usePeriodFilter } from "../../components/PeriodFilter";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import { getOrderStatusLabel } from "../../utils/barcodeService";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
@@ -1635,10 +1637,11 @@ export default function AssistantCmoDashboard() {
                 <StatCard title="Consignment Inventory" value={formatIndianNumber(inventoryMetrics.consignmentQty)} subtitle="Units out on consignment" />
               </div>
 
-              <div className="acmo-card">
-                <p className="acmo-card-title">Inventory Quantity by Store</p>
-                <PlaceholderCard title="Store-wise live inventory" note="Needs store-warehouse mapping — warehouse system is live but not yet tied to each store" />
-              </div>
+              {/* Was a "needs store-warehouse mapping" placeholder. StockPanel
+                  is that mapping: per-location stock from warehouse_stock,
+                  per-channel from product_channel_stock, scoped by role. */}
+              <h2 className="acmo-section-title">Stock by Location &amp; Channel</h2>
+              <StockPanel pools={poolsForUser(currentUserProfile)} />
             </>
           )}
 

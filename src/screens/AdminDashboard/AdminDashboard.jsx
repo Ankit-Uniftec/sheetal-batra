@@ -14,6 +14,8 @@ import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLa
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
@@ -2563,6 +2565,13 @@ export default function AdminDashboard() {
                     {/* ═══════════════════════════════════════════════════════════ */}
                     {activeTab === "inventory" && (
                         <div className="admin-inventory-tab">
+                            {/* Where stock sits — per location and per channel.
+                                The figures below count products; this counts
+                                placement. Also supplies the real consignment
+                                number the placeholder badge below stands in for. */}
+                            <h2 className="admin-section-title">Stock by Location &amp; Channel</h2>
+                            <StockPanel pools={poolsForUser({ role: "admin" })} />
+
                             <h2 className="admin-section-title">Inventory Overview</h2>
                             <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                                 <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Delayed Deliveries</span><span className="stat-value">{enhancedInventoryStats.delayedCount}</span></div></div>

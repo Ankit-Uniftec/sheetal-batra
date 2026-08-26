@@ -22,6 +22,8 @@ import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
 import useTabParam from "../hooks/useTabParam";
 import Paginator from "../components/Paginator";
+import StockPanel from "../components/stock/StockPanel";
+import { poolsForUser } from "../utils/stockVisibility";
 import { usePeriodFilter } from "../components/PeriodFilter";
 
 // Time calculation helpers
@@ -1536,6 +1538,7 @@ export default function Dashboard() {
               <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
               <a className={`ad-menu-item ${activeTab === "walkin" ? "active" : ""}`} onClick={() => { setActiveTab("walkin"); setShowSidebar(false); }}>Walk-In</a>
+              <a className={`ad-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
               {isExhibition && (
                 <a className={`ad-menu-item ${activeTab === "exhibitions" ? "active" : ""}`} onClick={() => { setActiveTab("exhibitions"); setShowSidebar(false); }}>Exhibitions</a>
               )}
@@ -2203,6 +2206,15 @@ export default function Dashboard() {
 
           {activeTab === "walkin" && (
             <WalkInTab saEmail={salesperson?.email} showPopup={showPopup} />
+          )}
+
+          {/* Stock for THIS SA's own store, plus the retail pool they sell
+              from — never the other store's shelf. poolsForUser derives that
+              from their salesperson row, so nothing here hardcodes a store. */}
+          {activeTab === "stock" && (
+            <div style={{ gridColumn: "2 / -1" }}>
+              <StockPanel pools={poolsForUser(salesperson)} />
+            </div>
           )}
 
           {activeTab === "exhibitions" && isExhibition && (

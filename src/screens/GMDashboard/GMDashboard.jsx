@@ -12,6 +12,8 @@ import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import NotificationBell from "../../components/NotificationBell";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 import ExhibitionApprovals from "../../components/ExhibitionApprovals";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
@@ -906,6 +908,7 @@ export default function GMDashboard() {
                         <button className={`admin-nav-item ${activeTab === "day_sales" ? "active" : ""}`} onClick={() => { setActiveTab("day_sales"); setShowSidebar(false); }}>Day-wise Sales</button>
                         <button className={`admin-nav-item ${activeTab === "b2b_overview" ? "active" : ""}`} onClick={() => { setActiveTab("b2b_overview"); setShowSidebar(false); }}>B2B Overview</button>
                         <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory Health</button>
+                        <button className={`admin-nav-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</button>
                         <button className={`admin-nav-item ${activeTab === "returns" ? "active" : ""}`} onClick={() => { setActiveTab("returns"); setShowSidebar(false); }}>Returns & Analytics</button>
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
@@ -1175,6 +1178,16 @@ export default function GMDashboard() {
                     )}
 
                     {/* ═══════════ TAB 4: INVENTORY HEALTH ═══════════ */}
+                    {/* Where stock physically sits, per pool. Distinct from
+                        Inventory Health above, which asks how much and how old.
+                        Mounted only when open so it costs nothing until used. */}
+                    {activeTab === "stock" && (
+                        <div>
+                            <h2 className="admin-section-title">Stock</h2>
+                            <StockPanel pools={poolsForUser(currentUserProfile)} />
+                        </div>
+                    )}
+
                     {activeTab === "inventory" && (
                         <div>
                             <h2 className="admin-section-title">Inventory Health</h2>

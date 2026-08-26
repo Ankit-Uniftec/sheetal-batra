@@ -11,6 +11,8 @@ import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
 import { getOrderStatusLabel, getStageLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../utils/barcodeService";
@@ -1436,6 +1438,14 @@ export default function StoreManagerDashboard() {
                     {/* ═══════════ TAB 5: INVENTORY ═══════════ */}
                     {activeTab === "inventory" && (
                         <div>
+                            {/* Where stock sits. Store managers see BOTH stores
+                                plus the factory and the retail pool they sell
+                                from — per the visibility map, not scoped to
+                                their own store. The catalogue table below is
+                                the global products.inventory number, unchanged. */}
+                            <h2 className="sm-section-title">Stock by Location</h2>
+                            <StockPanel pools={poolsForUser({ role: "store_manager" })} />
+
                             <h2 className="sm-section-title">Store Inventory</h2>
                             <div className="sm-stats-grid">
                                 <div className="sm-stat-card"><span className="sm-stat-label">Total Products</span><span className="sm-stat-value">{inventoryStats.total}</span></div>

@@ -14,6 +14,8 @@ import {
 import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
+import StockPanel from "../../components/stock/StockPanel";
+import { poolsForUser } from "../../utils/stockVisibility";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 import { getOrderChannelLabel } from "../../utils/barcodeService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
@@ -672,12 +674,26 @@ export default function RetailManagerDashboard() {
                         <button className={`rm-nav-item ${activeTab === "daywise_sales" ? "active" : ""}`} onClick={() => { setActiveTab("daywise_sales"); setShowSidebar(false); }}>Day-wise Sales</button>
                         <button className={`rm-nav-item ${activeTab === "product_analytics" ? "active" : ""}`} onClick={() => { setActiveTab("product_analytics"); setShowSidebar(false); }}>Product Analytics</button>
                         <button className={`rm-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
+                        <button className={`rm-nav-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</button>
                         <button className="rm-nav-item logout" onClick={handleLogout}>Logout</button>
                     </nav>
                 </aside>
 
                 {/* CONTENT */}
                 <main className="rm-content">
+
+                    {/* ═══════════ TAB: STOCK ═══════════ */}
+                    {/* Both stores + factory + the retail and B2B pools, plus
+                        consignment — the retail manager runs the retail side of
+                        the B2B relationship too. Mounted only when open. */}
+                    {activeTab === "stock" && (
+                        <div className="rm-analytics-tab">
+                            <div className="rm-tab-header">
+                                <h2 className="rm-section-title">Stock</h2>
+                            </div>
+                            <StockPanel pools={poolsForUser({ role: "retail_manager" })} />
+                        </div>
+                    )}
 
                     {/* ═══════════ TAB 1: STORE ANALYTICS ═══════════ */}
                     {activeTab === "store_analytics" && (

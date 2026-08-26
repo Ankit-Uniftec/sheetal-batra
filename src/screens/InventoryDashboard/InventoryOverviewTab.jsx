@@ -19,13 +19,19 @@ import "./InventoryOverviewTab.css";
 // this change.
 // ============================================================
 
-// The three stock pools, in the fixed app-wide display order. Labels and colors
-// come from barcodeService so they can never drift from the rest of the app.
-const POOLS = ["retail_stock", "b2b_stock", "shopify_stock"].map((key) => ({
+// The stock pools, in the fixed app-wide display order. Labels and colors come
+// from barcodeService so they can never drift from the rest of the app.
+//
+// WHICH pools appear is the caller's decision (see utils/stockVisibility) —
+// this tab used to hardcode the triple, which meant every role that could reach
+// this screen saw all three regardless of what they were entitled to.
+const ALL_POOL_KEYS = ["retail_stock", "b2b_stock", "shopify_stock"];
+
+const poolDef = (key) => ({
   key,
   label: CHANNEL_KEY_LABELS[key],
   color: CHANNEL_SEGMENTS.find((s) => s.label === CHANNEL_KEY_LABELS[key])?.color || "#888",
-}));
+});
 
 const ITEMS_PER_PAGE = 15;
 
@@ -53,10 +59,17 @@ function ChannelRow({ label, count, percentage, color }) {
   );
 }
 
-export default function InventoryOverviewTab({ products, channelStock }) {
+export default function InventoryOverviewTab({ products, channelStock, poolKeys }) {
   const [search, setSearch] = useState("");
   const [poolFilter, setPoolFilter] = useState("all");
   const [page, setPage] = useState(1);
+
+  // Defaults to all three so an existing caller that passes no poolKeys keeps
+  // its current behaviour rather than silently rendering an empty tab.
+  const POOLS = useMemo(
+    () => (poolKeys?.length ? poolKeys : ALL_POOL_KEYS).map(poolDef),
+    [poolKeys]
+  );
 
   // Totals per pool, plus the counts that make the numbers interpretable:
   // how many distinct products carry stock, and how many are negative.
@@ -77,14 +90,14 @@ export default function InventoryOverviewTab({ products, channelStock }) {
 
     const grand = POOLS.reduce((s, p) => s + byPool[p.key], 0);
     return { byPool, productsWithStock, negatives, grand };
-  }, [channelStock]);
+  }, [channelStock, POOLS]);
 
   // Percentages are of the POSITIVE total only. A negative balance is a
   // discrepancy, not a share of stock — letting it shrink the denominator would
   // make every other channel's bar overstate itself.
   const positiveTotal = useMemo(
     () => POOLS.reduce((s, p) => s + Math.max(0, totals.byPool[p.key]), 0),
-    [totals]
+    [totals, POOLS]
   );
 
   const pct = (n) =>
@@ -120,7 +133,7 @@ export default function InventoryOverviewTab({ products, channelStock }) {
         if (aNeg !== bNeg) return aNeg ? -1 : 1;
         return b.total - a.total;
       });
-  }, [products, channelStock, search, poolFilter]);
+  }, [products, channelStock, search, poolFilter, POOLS]);
 
   const totalPages = Math.ceil(rows.length / ITEMS_PER_PAGE);
   const paged = useMemo(
