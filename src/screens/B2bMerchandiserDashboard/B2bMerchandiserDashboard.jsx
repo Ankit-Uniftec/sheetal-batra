@@ -123,6 +123,7 @@ export default function B2bMerchandiserDashboard() {
     const [cancelSearch, setCancelSearch] = useState("");
     const [cancelLoading, setCancelLoading] = useState(false);
     const [cancelError, setCancelError] = useState("");
+    const [cancelResults, setCancelResults] = useState(null); // matches from the last search, or null before searching
     const [cancelOrder, setCancelOrder] = useState(null);   // the looked-up order (with vendors join)
     const [cancelReason, setCancelReason] = useState("");
     const [cancelProcessing, setCancelProcessing] = useState(false);
@@ -691,16 +692,39 @@ export default function B2bMerchandiserDashboard() {
         setCancelLoading(true);
         setCancelError("");
         setCancelOrder(null);
+        setCancelResults(null);
         setCancelReason("");
         try {
+            // Partial match, not .eq: nobody types the whole SB-B2B-0826-000246.
+            // Sequence-only terms ("246") have to hit the tail of order_no, so
+            // every column is searched with a contains pattern.
+            const like = `%${term.replace(/[%_,]/g, "")}%`;
             const { data, error } = await supabase
                 .from("orders")
                 .select("*, vendors:vendor_id ( store_brand_name, vendor_code )")
-                .eq("order_no", term)
-                .maybeSingle();
+                .or([
+                    `order_no.ilike.${like}`,
+                    `po_number.ilike.${like}`,
+                    `delivery_name.ilike.${like}`,
+                    `merchandiser_name.ilike.${like}`,
+                ].join(","))
+                .order("created_at", { ascending: false })
+                .limit(25);
             if (error) throw error;
-            if (!data) { setCancelError(`No order found with number "${term}".`); return; }
-            setCancelOrder(data);
+
+            // Product name lives inside the items jsonb array, which PostgREST
+            // cannot partial-match. The B2B orders are already in memory, so
+            // match those locally and merge rather than pay for a second query.
+            const q = term.toLowerCase();
+            const seen = new Set((data || []).map(o => o.id));
+            const byProduct = orders.filter(o =>
+                !seen.has(o.id) && (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
+            );
+            const matches = [...(data || []), ...byProduct];
+
+            if (!matches.length) { setCancelError(`No order found matching "${term}".`); return; }
+            if (matches.length === 1) { setCancelOrder(matches[0]); return; }
+            setCancelResults(matches);
         } catch (err) {
             console.error("Cancel lookup error:", err);
             setCancelError("Lookup failed: " + (err.message || "Unknown error"));
@@ -1287,13 +1311,13 @@ export default function B2bMerchandiserDashboard() {
                     <div className="merch-tab-wrapper">
                         <h2 className="merch-tab-title">Cancel Order</h2>
                         <p className="merch-muted" style={{ marginTop: -4, marginBottom: 16 }}>
-                            Any order can be cancelled within 24 hours of being placed — no approval needed. Enter the order number to look it up.
+                            Any order can be cancelled within 24 hours of being placed — no approval needed. Search by order number, PO, client, product or merchandiser.
                         </p>
 
                         <div style={{ display: "flex", gap: 8, maxWidth: 460, marginBottom: 20 }}>
                             <input
                                 type="text"
-                                placeholder="Enter order number (e.g. SB-DLC-0626-000100)"
+                                placeholder="Order #, PO, client, product, merchandiser..."
                                 value={cancelSearch}
                                 onChange={(e) => setCancelSearch(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleFindCancelOrder(); }}
@@ -1305,6 +1329,19 @@ export default function B2bMerchandiserDashboard() {
                         </div>
 
                         {cancelError && <p className="merch-muted" style={{ color: "#c62828" }}>{cancelError}</p>}
+
+                        {cancelResults && !cancelOrder && (
+                            <div className="merch-order-list-scroll" style={{ maxWidth: 720, marginBottom: 20 }}>
+                                <p className="merch-muted" style={{ marginBottom: 8 }}>{cancelResults.length} orders match — pick one.</p>
+                                {cancelResults.map(order => (
+                                    <div key={order.id} className="merch-order-item" style={{ cursor: "pointer" }} onClick={() => { setCancelResults(null); setCancelOrder(order); }}>
+                                        <p><b>Order No:</b> {order.order_no} &nbsp;|&nbsp; <b>PO:</b> {order.po_number || "—"}</p>
+                                        <p><b>Client:</b> {order.delivery_name || "—"} &nbsp;|&nbsp; <b>Merchandiser:</b> {order.merchandiser_name || "—"}</p>
+                                        <p><b>Product:</b> {order.items?.[0]?.product_name || "—"} &nbsp;|&nbsp; <b>Qty:</b> {order.total_quantity || 0} &nbsp;|&nbsp; <b>Date:</b> {formatDate(order.created_at)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {cancelOrder && (() => {
                             const o = cancelOrder;
@@ -1345,9 +1382,12 @@ export default function B2bMerchandiserDashboard() {
                                             <div><span className="merch-ocard-dlabel">Salesperson:</span> <span className="merch-ocard-dval">{o.salesperson || "—"}</span></div>
                                             <div><span className="merch-ocard-dlabel">Delivery Date:</span> <span className="merch-ocard-dval">{o.delivery_date ? formatDate(o.delivery_date) : "—"}</span></div>
                                             <div><span className="merch-ocard-dlabel">Product:</span> <span className="merch-ocard-dval">{o.items?.[0]?.product_name || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">PO Number:</span> <span className="merch-ocard-dval">{o.po_number || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Merchandiser:</span> <span className="merch-ocard-dval">{o.merchandiser_name || "—"}</span></div>
+                                            <div><span className="merch-ocard-dlabel">Quantity:</span> <span className="merch-ocard-dval">{o.total_quantity || 0}</span></div>
                                             {o.is_b2b && (
                                                 <>
-                                                    <div><span className="merch-ocard-dlabel">Vendor:</span> <span className="merch-ocard-dval">{o.vendors?.store_brand_name || "—"}</span></div>
+                                                    <div><span className="merch-ocard-dlabel">Vendor:</span> <span className="merch-ocard-dval">{o.vendors?.store_brand_name || vendorMap[o.vendor_id]?.store_brand_name || "—"}</span></div>
                                                     <div><span className="merch-ocard-dlabel">B2B Type:</span> <span className="merch-ocard-dval">{o.b2b_order_type || "—"}</span></div>
                                                 </>
                                             )}
