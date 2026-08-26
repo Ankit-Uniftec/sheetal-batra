@@ -1930,6 +1930,20 @@ export default function ProductForm() {
       return;
     }
 
+    // A product whose `available_size` is empty used to add silently with
+    // size:"" — the warehouse PDF then hid the Size field entirely and the
+    // tailor got nothing (SAs were typing "XL size" into Notes instead).
+    // Refuse the add rather than write a sizeless line item; the Custom
+    // button below is always offered, so there is always a valid choice.
+    if (!selectedSize) {
+      showPopup({
+        title: "Size Required",
+        message: "Please select a size before adding this product.",
+        type: "warning",
+      });
+      return;
+    }
+
     // Comms inventory block check — refuse to add a product that's currently
     // reserved by Nazreen for a shoot/event. Comms-placed orders and stock
     // orders are exempt: Nazreen shouldn't be blocked by her own reservations,
@@ -2575,6 +2589,17 @@ export default function ProductForm() {
         });
         return;
       }
+      // Same size guard as the manual "Add Product" path — this submit-time
+      // auto-add is the other way a sizeless line item reached the warehouse.
+      if (!selectedSize) {
+        showPopup({
+          title: "Size Required",
+          message: "Please select a size for this product before continuing.",
+          type: "warning",
+        });
+        return;
+      }
+
       // Capture pending extra if selected but not added
       let finalExtras = [...selectedExtrasWithColors];
       if (selectedExtra) {
@@ -3210,8 +3235,17 @@ export default function ProductForm() {
                                     </button>
                                   )}
                                 </>
-                              ) : (
+                              ) : item.sync_enabled ? (
                                 <span style={{ opacity: 0.6 }}>No sizes available</span>
+                              ) : (
+                                /* No configured sizes — Custom is the only way
+                                   to give the warehouse a size. See handleAddProduct. */
+                                <button
+                                  className={item.size === CUSTOM_SIZE ? "size-btn active" : "size-btn"}
+                                  onClick={() => selectCustomSizeForItem(item)}
+                                >
+                                  {CUSTOM_SIZE}
+                                </button>
                               )}
                             </div>
                           </div>
@@ -3631,10 +3665,18 @@ export default function ProductForm() {
                       </button>
                     )}
                   </>
+                ) : isSyncProduct ? (
+                  <span style={{ opacity: 0.6 }}>No sizes in stock</span>
                 ) : (
-                  <span style={{ opacity: 0.6 }}>
-                    {isSyncProduct ? "No sizes in stock" : "No sizes available"}
-                  </span>
+                  /* Product has no `available_size` configured. Still offer
+                     Custom — otherwise there is no way to set a size at all
+                     and the line item would go to the warehouse sizeless. */
+                  <button
+                    className={selectedSize === CUSTOM_SIZE ? "size-btn active" : "size-btn"}
+                    onClick={() => selectCustomSize()}
+                  >
+                    {CUSTOM_SIZE}
+                  </button>
                 )}
               </div>
             </div>
