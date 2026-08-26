@@ -361,6 +361,22 @@ const isPaymentHeld = (order) => {
 const needsReviewOrder = (order) =>
   order?.web_order_status === "needs_review" || isPaymentHeld(order);
 
+// Cancelled on Shopify (or by hand). Read off orders.status, which the sync now
+// writes from Shopify's cancelledAt — NOT inferred from the money columns.
+//
+// This is why it must be its own predicate rather than a payment hold: a
+// cancellation usually arrives as a REFUND, and REFUNDED is in
+// PAYMENT_END_STATES above, so isPaymentHeld correctly says "not awaiting
+// money" and the order fell straight through into the work queue. "Not a
+// payment problem" is not the same as "cleared to cut".
+//
+// A cancelled order belongs on NEITHER tab's queue: there is nothing to review
+// (no human decision unblocks it) and nothing to make. It stays visible on the
+// Orders tab with a Cancelled badge and no actions — see the card. Hiding it
+// outright is what let a cancelled order go unnoticed in the cut list.
+const isCancelledOrder = (order) =>
+  normalizeOrderStatus(order?.status) === "cancelled";
+
 const COD_FILTER_OPTIONS = [
   { value: "all", label: "All orders" },
   { value: "cod", label: "COD only" },
@@ -896,8 +912,12 @@ export default function ShopifyOrdersDashboard() {
     () => orders.filter((o) => !needsReviewOrder(o)),
     [orders]
   );
+  // Cancelled orders are excluded EXPLICITLY rather than by relying on
+  // needsReviewOrder: a cancelled order's payment state is usually REFUNDED,
+  // which is not a hold, so without this it counts as ready and joins the
+  // review queue's complement — the work queue.
   const needsReview = useMemo(
-    () => orders.filter((o) => needsReviewOrder(o)),
+    () => orders.filter((o) => needsReviewOrder(o) && !isCancelledOrder(o)),
     [orders]
   );
 
@@ -1261,8 +1281,11 @@ export default function ShopifyOrdersDashboard() {
     // mapper could not map it, or its payment is not settled. Same tab, but a
     // warehouse manager needs to know which — one is a data fix, the other is
     // a wait.
-    const mappingFlagged = order.web_order_status === "needs_review";
-    const paymentFlagged = isPaymentHeld(order);
+    // A cancelled order is settled, not flagged: it has no blocker a human can
+    // clear, so it must not read as pending work or link into Needs Review.
+    const cancelled = isCancelledOrder(order);
+    const mappingFlagged = !cancelled && order.web_order_status === "needs_review";
+    const paymentFlagged = !cancelled && isPaymentHeld(order);
     const flagged = mappingFlagged || paymentFlagged;
     const components = componentsByOrder[order.id] || [];
     const imgSrc = item.image_url || "";
@@ -1274,7 +1297,7 @@ export default function ShopifyOrdersDashboard() {
     return (
       <div
         key={order.id}
-        className={`sho-order-card ${flagged ? "flagged" : ""} ${linkToReview ? "sho-clickable" : ""}`}
+        className={`sho-order-card ${flagged ? "flagged" : ""} ${cancelled ? "cancelled" : ""} ${linkToReview ? "sho-clickable" : ""}`}
         onClick={linkToReview ? () => goToReview(order) : undefined}
         title={linkToReview ? "Open in Needs Review" : undefined}
       >
@@ -1344,13 +1367,18 @@ export default function ShopifyOrdersDashboard() {
               <Badge variant="warning">Awaiting Payment</Badge>
             )}
             {mappingFlagged && <Badge variant="warning">Needs Review</Badge>}
-            <button
-              className="sho-ghost-btn"
-              onClick={(e) => handleWarehousePdf(e, order)}
-              disabled={warehousePdfLoading === order.id}
-            >
-              {warehousePdfLoading === order.id ? "…" : "Warehouse PDF"}
-            </button>
+            {/* No work order for a cancelled garment — printing one is the
+                exact mistake this whole change exists to stop. The status badge
+                above already reads "Cancelled" in red. */}
+            {!cancelled && (
+              <button
+                className="sho-ghost-btn"
+                onClick={(e) => handleWarehousePdf(e, order)}
+                disabled={warehousePdfLoading === order.id}
+              >
+                {warehousePdfLoading === order.id ? "…" : "Warehouse PDF"}
+              </button>
+            )}
           </div>
         </div>
 

@@ -665,6 +665,22 @@
     border-left: 4px solid #ef6c00;
 }
 
+/* Cancelled on Shopify. Deliberately still LISTED rather than hidden — an
+   invisible cancellation is how one ended up sitting in the cut queue — but
+   visibly dead, so nobody works it by mistake. Red rail to separate it from the
+   orange "needs a human" rail above, and a muted card so it recedes.
+
+   The header keeps full contrast: the order number and the red Cancelled badge
+   are what someone searching for this order needs to read. */
+.sho-order-card.cancelled {
+    border-left: 4px solid #c62828;
+    background: #fafafa;
+}
+
+.sho-order-card.cancelled .sho-order-content {
+    opacity: 0.62;
+}
+
 .sho-order-header {
     display: flex;
     justify-content: space-between;
