@@ -258,14 +258,24 @@ const COD_TAG_RE = /^cod\b/i;
 const codTags = (order) =>
   (order?.shopify_tags || []).filter((t) => COD_TAG_RE.test(String(t).trim()));
 
-// Does this order carry any COD tag at all? Used by the filter.
-const isCodTagged = (order) => codTags(order).length > 0;
-
 // Has a COD order been CONFIRMED? GoKwik adds "COD Confirmed" alongside the
 // plain "COD" tag once the customer verifies the order by call or WhatsApp.
 // Matched on the whole tag so a bare "COD" can never satisfy it.
+//
+// "Labels Confirmed" (in any wording containing those words, e.g. "Only
+// Labels Confirmed") counts the same as "COD Confirmed" (asked for
+// 2026-09-02): the labels workflow is an alternative confirmation path, so an
+// order carrying it is cleared for production even without a COD tag.
 const isCodConfirmed = (order) =>
-  codTags(order).some((t) => /^cod\s+confirmed\b/i.test(String(t).trim()));
+  (order?.shopify_tags || []).some((t) => {
+    const tag = String(t).trim();
+    return /^cod\s+confirmed\b/i.test(tag) || /\blabels?\s+confirmed\b/i.test(tag);
+  });
+
+// Does this order settle as COD? Any COD tag, or a confirmation tag — a
+// labels-confirmed order is COD by definition even when the bare "COD" tag
+// never got written. Used by the filter and the issue detail.
+const isCodTagged = (order) => codTags(order).length > 0 || isCodConfirmed(order);
 
 // ─── Payment badge: one word for where the money got to ───────────────────
 //
@@ -302,7 +312,9 @@ const PAYMENT_STATUS_LABELS = {
 };
 
 const paymentLabel = (order) => {
-  if (isCodTagged(order)) return isCodConfirmed(order) ? "COD Confirmed" : "COD";
+  // Confirmation first: it also covers labels-confirmed orders with no COD tag.
+  if (isCodConfirmed(order)) return "COD Confirmed";
+  if (isCodTagged(order)) return "COD";
   const s = String(order?.shopify_financial_status || "").toUpperCase();
   return PAYMENT_STATUS_LABELS[s] || "Not Paid";
 };
@@ -354,12 +366,14 @@ const isPaymentHeld = (order) => {
 };
 
 // The single routing rule for the two order tabs. An order is held back from
-// the work queue either because it could not be MAPPED (mapper blockers) or
-// because its PAYMENT is unsettled. Both land in Needs Review; the card says
-// which applies. Every count, filter and tab split reads this one predicate, so
-// they can never disagree.
+// the work queue because it could not be MAPPED (mapper blockers), because its
+// PAYMENT is unsettled, or because it was CANCELLED. All land in Needs Review;
+// the card says which applies. Every count, filter and tab split reads this one
+// predicate, so they can never disagree.
 const needsReviewOrder = (order) =>
-  order?.web_order_status === "needs_review" || isPaymentHeld(order);
+  order?.web_order_status === "needs_review" ||
+  isPaymentHeld(order) ||
+  isCancelledOrder(order);
 
 // Cancelled on Shopify (or by hand). Read off orders.status, which the sync now
 // writes from Shopify's cancelledAt — NOT inferred from the money columns.
@@ -370,10 +384,10 @@ const needsReviewOrder = (order) =>
 // money" and the order fell straight through into the work queue. "Not a
 // payment problem" is not the same as "cleared to cut".
 //
-// A cancelled order belongs on NEITHER tab's queue: there is nothing to review
-// (no human decision unblocks it) and nothing to make. It stays visible on the
-// Orders tab with a Cancelled badge and no actions — see the card. Hiding it
-// outright is what let a cancelled order go unnoticed in the cut list.
+// A cancelled order routes to Needs Review (asked for 2026-09-02): a
+// cancellation mid-flow must be eyeballed — confirm nothing was cut and pull
+// it off the floor — so it must not sit quietly in the work queue, which is
+// where one landed once its refund cleared the payment hold.
 const isCancelledOrder = (order) =>
   normalizeOrderStatus(order?.status) === "cancelled";
 
@@ -403,6 +417,7 @@ const ISSUE_LABELS = {
   NO_LINE_ITEMS: "No products on the order",
   CUSTOMER_UNRESOLVED: "No contact details on the order",
   PAYMENT_NOT_CONFIRMED: "Payment not confirmed — do not start production",
+  ORDER_CANCELLED: "Cancelled",
 };
 
 // A SYNTHETIC issue code. Every other code above is a mapper blocker stored on
@@ -412,10 +427,18 @@ const ISSUE_LABELS = {
 // filter dropdown and export instead of needing a parallel path of its own.
 const PAYMENT_CODE = "PAYMENT_NOT_CONFIRMED";
 
+// Synthetic like PAYMENT_CODE: derived live from orders.status, never stored.
+const CANCELLED_CODE = "ORDER_CANCELLED";
+
 // The full issue list for an order: the stored mapper blockers PLUS the live
 // payment hold. One function so the inline list, the filter dropdown and the
 // CSV export all show the same reasons.
 const reviewIssues = (order) => {
+  // A cancelled order's only actionable fact IS the cancellation — its stored
+  // blockers and payment state are moot, and listing them would drag dead
+  // orders into every other issue filter.
+  if (isCancelledOrder(order))
+    return [{ code: CANCELLED_CODE, detail: "Order cancelled — confirm nothing is in production" }];
   const stored = (order?.web_order_issues || []).filter((i) => i.code !== DERIVED_CODE);
   if (!isPaymentHeld(order)) return stored;
   const state = String(order?.shopify_financial_status || "").toUpperCase();
@@ -928,12 +951,8 @@ export default function ShopifyOrdersDashboard() {
     () => orders.filter((o) => !needsReviewOrder(o)),
     [orders]
   );
-  // Cancelled orders are excluded EXPLICITLY rather than by relying on
-  // needsReviewOrder: a cancelled order's payment state is usually REFUNDED,
-  // which is not a hold, so without this it counts as ready and joins the
-  // review queue's complement — the work queue.
   const needsReview = useMemo(
-    () => orders.filter((o) => needsReviewOrder(o) && !isCancelledOrder(o)),
+    () => orders.filter(needsReviewOrder),
     [orders]
   );
 
@@ -1297,8 +1316,9 @@ export default function ShopifyOrdersDashboard() {
     // mapper could not map it, or its payment is not settled. Same tab, but a
     // warehouse manager needs to know which — one is a data fix, the other is
     // a wait.
-    // A cancelled order is settled, not flagged: it has no blocker a human can
-    // clear, so it must not read as pending work or link into Needs Review.
+    // A cancelled order routes to Needs Review via needsReviewOrder, but its
+    // card carries no warning badges: the red Cancelled status badge is the
+    // message, and Awaiting Payment / Needs Review would read as work to do.
     const cancelled = isCancelledOrder(order);
     const mappingFlagged = !cancelled && order.web_order_status === "needs_review";
     const paymentFlagged = !cancelled && isPaymentHeld(order);
@@ -1980,14 +2000,14 @@ export default function ShopifyOrdersDashboard() {
                   <h2 className="sho-section-title">Needs Review</h2>
                   {needsReview.length === 0 ? (
                     <div className="sho-empty">
-                      Nothing needs review — every order mapped cleanly and its payment is confirmed.
+                      Nothing needs review — every order mapped cleanly, its payment is confirmed, and none are cancelled.
                     </div>
                   ) : (
                     <>
                       <p className="sho-hint">
-                        These orders are missing something production needs, so
-                        nothing was guessed and no barcodes were minted. What's
-                        missing is listed under each order.
+                        These orders are missing something production needs —
+                        or were cancelled — so they are held out of the work
+                        queue. The reason is listed under each order.
                       </p>
                       <div className="sho-toolbar">
                         <SearchByDropdown
