@@ -473,6 +473,21 @@ const BREAKDOWN_CHOICES = [
     hint: "1 barcode",
     value: { top: "Top", bottom: "", includes_dupatta: false },
   },
+  {
+    key: "bottom_only",
+    label: "Bottom only",
+    hint: "1 barcode",
+    value: { top: "", bottom: "Bottom", includes_dupatta: false },
+  },
+  // A line that is no garment at all — a belt, a potli, a brooch. Minting it
+  // as a TOP would put a garment barcode on a non-garment; the EX piece is the
+  // honest unit, and it carries the typed name (the only description there is).
+  {
+    key: "extras_only",
+    label: "Extras only",
+    hint: "1 barcode",
+    value: { top: "", bottom: "", includes_dupatta: false, includes_extra: true },
+  },
 ];
 
 // ─── Suggesting a breakdown from the typed name ────────────────────────────
@@ -532,7 +547,8 @@ const matchChoice = (b) =>
       (c) =>
         !!c.value.top === !!b.top &&
         !!c.value.bottom === !!b.bottom &&
-        c.value.includes_dupatta === (b.includes_dupatta === true),
+        c.value.includes_dupatta === (b.includes_dupatta === true) &&
+        (c.value.includes_extra === true) === (b.includes_extra === true),
     )?.key || null
     : null;
 

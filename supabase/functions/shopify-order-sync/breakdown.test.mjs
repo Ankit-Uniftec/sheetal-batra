@@ -166,4 +166,39 @@ assert.equal(new Set(codes).size, codes.length, "no duplicate barcodes across li
 
 }
 
+// 9. Bottom-only override → one BTM piece, no phantom TOP, blocker cleared.
+{
+  const r = applyBreakdownOverride(
+    { items: [item("Ivory Sharara")], blockers: [styleBlocker("Ivory Sharara")] },
+    [{ item_index: 0, top: "", bottom: "Bottom", includes_dupatta: false }],
+  );
+  assert.equal(r.items[0].top, "");
+  assert.equal(r.items[0].bottom, "Bottom");
+  assert.equal(r.blockers.length, 0);
+}
+
+// 10. Extras-only override → ONE EX piece carrying the typed name, no phantom
+//     TOP (the case the namesNoPiece extras guard exists for), blocker cleared.
+{
+  const r = applyBreakdownOverride(
+    { items: [item("Gold Potli Bag", { extras: [] })], blockers: [styleBlocker("Gold Potli Bag")] },
+    [{ item_index: 0, top: "", bottom: "", includes_dupatta: false, includes_extra: true }],
+  );
+  assert.deepEqual(r.items[0].extras, [{ name: "Gold Potli Bag" }]);
+  assert.equal(r.blockers.length, 0, "extras-only answer must clear the blocker");
+
+  // Minting contract, mirroring buildOrderComponents' branch conditions.
+  const it = r.items[0];
+  const has = (v) => !!v && !["na", "n/a", ""].includes(String(v).toLowerCase());
+  const namesNoPiece =
+    !has(it.top) && !has(it.bottom) && !it.includes_dupatta &&
+    !(Array.isArray(it.extras) && it.extras.length > 0);
+  const out = [];
+  if (has(it.top) || (namesNoPiece && it.product_name)) out.push("TOP");
+  if (has(it.bottom)) out.push("BTM");
+  if (it.includes_dupatta) out.push("DUP");
+  (it.extras || []).forEach((_, i) => out.push(`EX${i + 1}`));
+  assert.deepEqual(out, ["EX1"], "extras-only = 1 EX barcode, no phantom TOP");
+}
+
 console.log("all breakdown checks passed");

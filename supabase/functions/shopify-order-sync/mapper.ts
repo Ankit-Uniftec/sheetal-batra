@@ -652,7 +652,11 @@ export function buildOrderComponents(order: any) {
     const noTopOrBottom =
       !isPresent(clean(item?.top)) && !isPresent(clean(item?.bottom));
     const dupattaOnly = noTopOrBottom && !!item?.includes_dupatta;
-    const namesNoPiece = noTopOrBottom && !item?.includes_dupatta;
+    // Extras count as "names a piece": an extras-only line is tracked by its
+    // EX barcode, and the product_name TOP fallback would mint a phantom.
+    const namesNoPiece =
+      noTopOrBottom && !item?.includes_dupatta &&
+      !(Array.isArray(item?.extras) && item.extras.length > 0);
 
     if (isPresent(clean(item?.top)) || (namesNoPiece && item?.product_name)) {
       components.push({
@@ -756,11 +760,15 @@ export type LineBreakdown = {
   top?: string;
   bottom?: string;
   includes_dupatta?: boolean;
+  // The line is no garment at all (a belt, a potli): mint ONE EX piece
+  // carrying the typed name, instead of dressing it up as a TOP.
+  includes_extra?: boolean;
 };
 
 /** An override only counts if it actually names a piece to make. */
 const breakdownNamesAPiece = (b: LineBreakdown): boolean =>
-  isPresent(clean(b?.top)) || isPresent(clean(b?.bottom)) || b?.includes_dupatta === true;
+  isPresent(clean(b?.top)) || isPresent(clean(b?.bottom)) ||
+  b?.includes_dupatta === true || b?.includes_extra === true;
 
 /**
  * Apply human-set breakdowns over mapped items, and drop the blockers those
@@ -806,6 +814,11 @@ export function applyBreakdownOverride(
       top: isPresent(clean(b.top)) ? clean(b.top) : "",
       bottom: isPresent(clean(b.bottom)) ? clean(b.bottom) : "",
       includes_dupatta: b.includes_dupatta === true,
+      // The EX piece IS the whole line for this answer, so it carries the
+      // typed name — same reasoning as buildOrderComponents' dupatta-only label.
+      extras: b.includes_extra === true
+        ? [{ name: clean(item?.product_name) || "Extra" }]
+        : (item?.extras ?? []),
       // Marks the line as human-resolved so surfaces can say so rather than
       // presenting a typed-in breakdown as if Shopify supplied it.
       breakdown_source: "manual",
