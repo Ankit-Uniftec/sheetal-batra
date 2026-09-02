@@ -1152,7 +1152,10 @@ export async function generateOrderComponents(order) {
     const namesNoPiece =
       !hasGarmentOption(item?.top) &&
       !hasGarmentOption(item?.bottom) &&
-      !item?.includes_dupatta;
+      !item?.includes_dupatta &&
+      // Extras count too: an extras-only line is tracked by its EX barcode,
+      // so the product_name TOP fallback would mint a phantom garment.
+      !(Array.isArray(item?.extras) && item.extras.length > 0);
 
     // TOP component — if item has a top option selected
     if (hasGarmentOption(item?.top) || (namesNoPiece && item?.product_name)) {

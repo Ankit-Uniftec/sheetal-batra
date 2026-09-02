@@ -523,11 +523,10 @@ function mapLineItem(
  * AMOUNT ONLY. Category is no longer read, so the Shopify taxonomy no longer
  * affects any delivery date.
  *
- * The days below are the row every clothing category already carried
- * (10/14/18/22), so garment orders are unaffected. Accessories, which used to
- * carry their own faster/slower rows (clutch & belt 5/10/18/18, scarves
- * 10/12/15/19), now follow the same schedule as everything else — that is the
- * intended consequence of dropping category, not an oversight.
+ * REVISED (client instruction, Sep 2026): the original four bands carried
+ * 10/14/18/22 days. The client added one day-plus to each and split "above
+ * 75k" into three tiers, giving the six bands below (see
+ * db/barcode_system/v2/84_shopify_delivery_bands_revised.sql).
  *
  * This also removes the single largest source of blocked orders: an untagged
  * or wrongly-tagged product used to yield DELIVERY_DATE_UNRESOLVED and hold
@@ -539,10 +538,12 @@ function mapLineItem(
  * cheaper column.
  */
 const DELIVERY_BANDS = [
-  { key: "10-25k", max: 25_000, days: 10 },
-  { key: "25-40k", max: 40_000, days: 14 },
-  { key: "40-75k", max: 75_000, days: 18 },
-  { key: "75k+",   max: Infinity, days: 22 },
+  { key: "10-25k",    max: 25_000,   days: 11 },
+  { key: "25-40k",    max: 40_000,   days: 15 },
+  { key: "40-75k",    max: 75_000,   days: 20 },
+  { key: "75k-1.5L",  max: 150_000,  days: 24 },
+  { key: "1.5L-2L",   max: 200_000,  days: 28 },
+  { key: "2L+",       max: Infinity, days: 30 },
 ] as const;
 
 /** Runtime copy, so the DB table can revise the numbers without a redeploy. */
@@ -582,7 +583,7 @@ function resolveDeliveryDate(
   // delivery calendar and delay escalations, so a wrong date is worse than a
   // flagged order.
   //
-  // A total of exactly 0 is ALLOWED and takes the first band (10 days). Zero is
+  // A total of exactly 0 is ALLOWED and takes the first band. Zero is
   // a real, correct amount here — gifted, fully-discounted and replacement
   // orders come through at 0 — and the cheapest band is the right floor for
   // them. One such order exists in UAT today (SB-SHOPIFY-0826-000175), blocked
@@ -652,7 +653,11 @@ export function buildOrderComponents(order: any) {
     const noTopOrBottom =
       !isPresent(clean(item?.top)) && !isPresent(clean(item?.bottom));
     const dupattaOnly = noTopOrBottom && !!item?.includes_dupatta;
-    const namesNoPiece = noTopOrBottom && !item?.includes_dupatta;
+    // Extras count as "names a piece": an extras-only line is tracked by its
+    // EX barcode, and the product_name TOP fallback would mint a phantom.
+    const namesNoPiece =
+      noTopOrBottom && !item?.includes_dupatta &&
+      !(Array.isArray(item?.extras) && item.extras.length > 0);
 
     if (isPresent(clean(item?.top)) || (namesNoPiece && item?.product_name)) {
       components.push({
@@ -756,11 +761,15 @@ export type LineBreakdown = {
   top?: string;
   bottom?: string;
   includes_dupatta?: boolean;
+  // The line is no garment at all (a belt, a potli): mint ONE EX piece
+  // carrying the typed name, instead of dressing it up as a TOP.
+  includes_extra?: boolean;
 };
 
 /** An override only counts if it actually names a piece to make. */
 const breakdownNamesAPiece = (b: LineBreakdown): boolean =>
-  isPresent(clean(b?.top)) || isPresent(clean(b?.bottom)) || b?.includes_dupatta === true;
+  isPresent(clean(b?.top)) || isPresent(clean(b?.bottom)) ||
+  b?.includes_dupatta === true || b?.includes_extra === true;
 
 /**
  * Apply human-set breakdowns over mapped items, and drop the blockers those
@@ -806,6 +815,11 @@ export function applyBreakdownOverride(
       top: isPresent(clean(b.top)) ? clean(b.top) : "",
       bottom: isPresent(clean(b.bottom)) ? clean(b.bottom) : "",
       includes_dupatta: b.includes_dupatta === true,
+      // The EX piece IS the whole line for this answer, so it carries the
+      // typed name — same reasoning as buildOrderComponents' dupatta-only label.
+      extras: b.includes_extra === true
+        ? [{ name: clean(item?.product_name) || "Extra" }]
+        : (item?.extras ?? []),
       // Marks the line as human-resolved so surfaces can say so rather than
       // presenting a typed-in breakdown as if Shopify supplied it.
       breakdown_source: "manual",

@@ -240,7 +240,7 @@ async function loadColorHexMap(): Promise<Map<string, string>> {
  * revising them is an UPDATE rather than a redeploy.
  *
  * Category is NOT read: per the client, the delivery date depends on the order
- * AMOUNT only. The table keeps one row (category = '*') holding the four band
+ * AMOUNT only. The table keeps one row (category = '*') holding the six band
  * values.
  *
  * On ANY failure — table missing, RLS, empty — the mapper keeps its identical
@@ -250,7 +250,7 @@ async function loadColorHexMap(): Promise<Map<string, string>> {
 async function loadDeliveryMatrix(): Promise<void> {
   const { data, error } = await supabase
     .from("shopify_delivery_matrix")
-    .select("category, d10_25k, d25_40k, d40_75k, d75k_up")
+    .select("category, d10_25k, d25_40k, d40_75k, d75k_150k, d150k_200k, d200k_up")
     .eq("category", "*")
     .maybeSingle();
   if (error) {
@@ -261,7 +261,14 @@ async function loadDeliveryMatrix(): Promise<void> {
     return;
   }
   if (!data) return; // no '*' row yet — keep the built-in days
-  setDeliveryDays([data.d10_25k, data.d25_40k, data.d40_75k, data.d75k_up]);
+  setDeliveryDays([
+    data.d10_25k,
+    data.d25_40k,
+    data.d40_75k,
+    data.d75k_150k,
+    data.d150k_200k,
+    data.d200k_up,
+  ]);
 }
 
 async function shopifyGraphql(query: string) {

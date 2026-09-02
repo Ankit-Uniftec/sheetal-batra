@@ -29,6 +29,16 @@ const resolveClientNameForPdf = async (order) => {
   }
 };
 
+// Shopify customisation charges ("Neck and sleeve customisation") are order
+// lines kept in items[] for revenue, flagged is_charge by the sync mapper.
+// Nothing is cut for them, so they get NO warehouse work order. `index` stays
+// the ORIGINAL items[] position — component item_index and barcode suffixes
+// are keyed on it (renumbering would orphan printed tags).
+const garmentItems = (items) =>
+  (items || [])
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !item?.is_charge);
+
 // Dashboards now fetch a TRIMMED set of order columns for speed, so the order
 // object handed to a PDF function may be missing the billing / signature /
 // gift / measurement columns the PDFs need. Re-fetch the full row by id before
@@ -184,16 +194,18 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
       console.warn("Barcode generation skipped:", err.message);
     }
 
-    for (let i = 0; i < totalItems; i++) {
-      const item = items[i];
-      const filename = `orders/${order.order_no}_warehouse_${i + 1}.pdf`;
+    const garments = garmentItems(order.items || items);
+
+    for (let gi = 0; gi < garments.length; gi++) {
+      const { item, index } = garments[gi];
+      const filename = `orders/${order.order_no}_warehouse_${gi + 1}.pdf`;
 
       // Filter component barcodes for this specific item
       const itemBarcodes = barcodeData.componentBarcodes.filter(
         (cb) => {
-          // Match components that belong to this item index
+          // Match components that belong to this item's ORIGINAL index
           const comp = (components || []).find(c => c.barcode === cb.barcode);
-          return comp ? comp.item_index === i : false;
+          return comp ? comp.item_index === index : false;
         }
       );
 
@@ -202,8 +214,8 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
         <WarehouseOrderPdf
           order={order}
           item={item}
-          itemIndex={i}
-          totalItems={totalItems}
+          itemIndex={gi}
+          totalItems={garments.length}
           logoUrl={logoUrl}
           masterBarcodeImage={barcodeData.masterBarcode}
           componentBarcodes={itemBarcodes}
@@ -220,7 +232,7 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
         });
 
       if (uploadError && !uploadError.message?.includes("already exists")) {
-        console.error(`Upload error for PDF ${i + 1}:`, uploadError);
+        console.error(`Upload error for PDF ${gi + 1}:`, uploadError);
       }
 
       // Get public URL with cache buster
@@ -270,6 +282,11 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
 
     if (productIndex < 0 || productIndex >= totalItems) {
       alert("Invalid product index");
+      return null;
+    }
+
+    if (items[productIndex]?.is_charge) {
+      alert("This line is a customisation charge — no warehouse work order exists for it.");
       return null;
     }
 
@@ -374,7 +391,6 @@ export const generateAllPdfs = async (order, setLoading = null) => {
   const logoUrl = new URL(Logo, window.location.origin).href;
   const orderData = { ...order, items: order.items || [] };
   const items = orderData.items;
-  const totalItems = items.length;
   const resolvedClientName = await resolveClientNameForPdf(orderData);
 
   let customerUrl = null;
@@ -419,23 +435,24 @@ export const generateAllPdfs = async (order, setLoading = null) => {
   }
 
   // ========== WAREHOUSE PDFs ==========
-  for (let i = 0; i < totalItems; i++) {
+  const garments = garmentItems(items);
+  for (let gi = 0; gi < garments.length; gi++) {
     try {
-      const item = items[i];
-      console.log(`📄 Generating Warehouse PDF ${i + 1} for:`, item.product_name);
+      const { item, index } = garments[gi];
+      console.log(`📄 Generating Warehouse PDF ${gi + 1} for:`, item.product_name);
 
-      // Filter barcodes for this item
+      // Filter barcodes for this item's ORIGINAL index
       const itemBarcodes = barcodeData.componentBarcodes.filter((cb) => {
         const comp = components.find(c => c.barcode === cb.barcode);
-        return comp ? comp.item_index === i : false;
+        return comp ? comp.item_index === index : false;
       });
 
       const pdfBlob = await pdf(
         <WarehouseOrderPdf
           order={orderData}
           item={item}
-          itemIndex={i}
-          totalItems={totalItems}
+          itemIndex={gi}
+          totalItems={garments.length}
           logoUrl={logoUrl}
           masterBarcodeImage={barcodeData.masterBarcode}
           componentBarcodes={itemBarcodes}
@@ -443,7 +460,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
         />
       ).toBlob();
 
-      const filename = `orders/${order.order_no}_warehouse_${i + 1}.pdf`;
+      const filename = `orders/${order.order_no}_warehouse_${gi + 1}.pdf`;
 
       const { error: uploadError } = await supabase.storage
         .from("invoices")
@@ -453,7 +470,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
         });
 
       if (uploadError) {
-        console.error(`Warehouse PDF ${i + 1} upload error:`, uploadError);
+        console.error(`Warehouse PDF ${gi + 1} upload error:`, uploadError);
         warehouseUrls.push(null);
       } else {
         const { data: urlData } = supabase.storage
@@ -463,7 +480,7 @@ export const generateAllPdfs = async (order, setLoading = null) => {
         warehouseUrls.push(urlData?.publicUrl);
       }
     } catch (warehouseError) {
-      console.error(`❌ Warehouse PDF ${i + 1} generation failed:`, warehouseError);
+      console.error(`❌ Warehouse PDF ${gi + 1} generation failed:`, warehouseError);
       warehouseUrls.push(null);
     }
   }
