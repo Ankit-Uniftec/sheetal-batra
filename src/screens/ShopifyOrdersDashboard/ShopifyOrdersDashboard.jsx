@@ -1210,7 +1210,7 @@ export default function ShopifyOrdersDashboard() {
   if (!authChecked) return null;
 
   const tabLabel = (tab) => {
-    if (tab.key === "orders") return `${tab.label} (${orders.length})`;
+    if (tab.key === "orders") return `${tab.label} (${readyOrders.length})`;
     if (tab.key === "needs-review") return `${tab.label} (${needsReview.length})`;
     return tab.label;
   };
