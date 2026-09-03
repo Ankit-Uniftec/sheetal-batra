@@ -1,0 +1,194 @@
+/* ===================================
+   ORDER FORM LAYOUT — shared by the retail order form (ProductForm.js)
+   and the B2B order form (B2bproductform.jsx).
+   Base styles come from Screen4.css; these are the layout overrides.
+
+   Every rule is scoped under .pf-page (added to the page's .screen4-bg
+   root) so it wins over Screen4.css by specificity, independent of
+   lazy-chunk CSS load order.
+   =================================== */
+
+/* Pin the shared card/form layout to these pages so it survives even when a
+   lazy-loaded chunk redefines the generic Screen4.css classes or arrives
+   late. Keeps the form on the wide, centred card. */
+.pf-page .screen4-card {
+  width: 95%;
+  max-width: 1300px;
+  margin: 20px auto;
+}
+
+.pf-page .screen4-form {
+  flex: 1;
+  width: 100%;
+}
+
+/* Pin the intended field look for this form. The generic .row/.field/.input-line
+   classes are redefined differently in Screen4.css, Screen3.css and Screen6.css;
+   with lazy-loaded chunks whichever loads last wins globally, so this form's
+   appearance was flipping between a boxed style and an underline style depending
+   on which dashboard the user visited first. These scoped rules make the
+   design (label above a borderless input, gold underline under the field) win
+   deterministically by specificity, regardless of chunk order. */
+/* Top-level form rows only (direct children of .screen4-form) — NOT the
+   boxed inputs inside the edit panels (.expand-panel.full-edit), which keep
+   Screen4's boxed .input-line look. */
+.pf-page .screen4-form > .row {
+  display: flex;
+  gap: 25px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.pf-page .screen4-form > .row > .field {
+  flex: 1;
+  min-width: 150px;
+  min-height: 0;
+  display: block;
+  padding: 8px 0 0;
+  margin: 0;
+  border-bottom: 2px solid #d5b85a;
+}
+
+.pf-page .screen4-form > .row > .field > label {
+  display: block;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+  margin-bottom: 6px;
+  white-space: normal;
+}
+
+/* Borderless, transparent inputs — the gold line comes from the .field */
+.pf-page .screen4-form > .row > .field > .input-line,
+.pf-page .screen4-form > .row > .field input.input-line {
+  width: 100%;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 0;
+  font-size: 15px;
+  outline: none;
+}
+
+/* ===== ALIGNED FORM ROWS (Delivery Date / Mode / Flag, Notes / Attachments) =====
+   These rows use a fixed 3-column grid instead of flex so the columns line up
+   vertically ACROSS rows — with `flex: 1` a 2-field row splits 50/50 while a
+   3-field row splits 33/33/33, and nothing lined up. A field can span two
+   columns with .field-span-2. */
+.pf-page .screen4-form > .row.form-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+  align-items: start;
+}
+
+.pf-page .screen4-form > .row.form-row-3 > .field {
+  /* Label on top, control pinned to the bottom of the field, so the gold
+     underline sits at the same height in every column even when labels wrap. */
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-bottom: none;
+}
+
+.pf-page .screen4-form > .row.form-row-3 > .field.field-span-2 {
+  grid-column: span 2;
+}
+
+.pf-page .screen4-form > .row.form-row-3 > .field > label {
+  margin-bottom: 4px;
+}
+
+/* The underline belongs to the control wrapper, not the whole field, so a
+   field with extra content below (attachment chips) keeps its line at the
+   same height as its neighbours. */
+.pf-page .screen4-form > .row.form-row-3 .field-control {
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  min-height: 38px;
+  border-bottom: 2px solid #d5b85a;
+}
+
+.pf-page .screen4-form > .row.form-row-3 .field-control > * {
+  width: 100%;
+}
+
+/* Normalise all three control types (date input, SearchableSelect, upload
+   button) onto the same box so their text shares one baseline. */
+.pf-page .screen4-form > .row.form-row-3 .field-control .input-line {
+  width: 100%;
+  height: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 15px;
+  line-height: 24px;
+  outline: none;
+}
+
+/* Screen4.css nudges .ss-root down with `top: 10px`, which pushed the two
+   selects below the date input's baseline. Neutralise it here. */
+.pf-page .screen4-form > .row.form-row-3 .field-control .ss-root {
+  top: 0;
+}
+
+.pf-page .screen4-form > .row.form-row-3 .field-control .ss-control {
+  align-items: center;
+  padding: 0;
+  min-height: 0;
+}
+
+.pf-page .screen4-form > .row.form-row-3 .field-control .ss-input {
+  font-size: 15px;
+  line-height: 24px;
+  padding: 0;
+}
+
+.pf-page .screen4-form > .row.form-row-3 .field-control .custom-file-upload {
+  width: 100%;
+}
+
+.pf-page .screen4-form > .row.form-row-3 .field-control .upload-btn {
+  display: block;
+  padding: 0;
+  font-size: 15px !important;
+  line-height: 24px;
+}
+
+.pf-page .screen4-form > .row.form-row-3 .attachment-preview {
+  margin-top: 8px;
+}
+
+@media (max-width: 1100px) {
+  .pf-page .screen4-form > .row {
+    gap: 15px;
+  }
+
+  .pf-page .screen4-form > .row.form-row-3 {
+    gap: 15px 20px;
+  }
+}
+
+@media (max-width: 600px) {
+  .pf-page .screen4-form > .row {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .pf-page .screen4-form > .row > .field {
+    min-width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .pf-page .screen4-form > .row.form-row-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-page .screen4-form > .row.form-row-3 > .field.field-span-2 {
+    grid-column: span 1;
+  }
+}
