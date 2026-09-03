@@ -737,7 +737,8 @@ export default function B2bMerchandiserDashboard() {
         const order = cancelOrder;
         if (!order) return;
         if (!cancelReason.trim()) { alert("Please enter a reason for cancellation."); return; }
-        if (hoursSince(order.created_at) >= 24) { alert("The 24-hour cancellation window has expired."); return; }
+        // The designated B2B merchandiser can cancel past the 24h window.
+        if (hoursSince(order.created_at) >= 24 && !isB2bMerchandiserEmail(user?.email)) { alert("The 24-hour cancellation window has expired."); return; }
         const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
         setCancelProcessing(true);
         try {
@@ -1311,7 +1312,9 @@ export default function B2bMerchandiserDashboard() {
                     <div className="merch-tab-wrapper">
                         <h2 className="merch-tab-title">Cancel Order</h2>
                         <p className="merch-muted" style={{ marginTop: -4, marginBottom: 16 }}>
-                            Any order can be cancelled within 24 hours of being placed — no approval needed. Search by order number, PO, client, product or merchandiser.
+                            {isB2bMerchandiserEmail(user?.email)
+                                ? "As B2B merchandiser you can cancel any order at any time — no approval needed. Search by order number, PO, client, product or merchandiser."
+                                : "Any order can be cancelled within 24 hours of being placed — no approval needed. Search by order number, PO, client, product or merchandiser."}
                         </p>
 
                         <div style={{ display: "flex", gap: 8, maxWidth: 460, marginBottom: 20 }}>
@@ -1350,6 +1353,9 @@ export default function B2bMerchandiserDashboard() {
                             const isCancelled = (o.status || "").toLowerCase() === "cancelled";
                             const withinWindow = hrs < 24;
                             const hoursLeft = Math.max(0, Math.floor(24 - hrs));
+                            // Designated B2B merchandiser can cancel regardless of the window.
+                            const overrideWindow = !withinWindow && isB2bMerchandiserEmail(user?.email);
+                            const canCancel = !isCancelled && (withinWindow || overrideWindow);
                             return (
                                 <div className="merch-modal" style={{ maxWidth: 560, margin: 0, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" }}>
                                     <div className="merch-modal-top">
@@ -1365,6 +1371,10 @@ export default function B2bMerchandiserDashboard() {
                                         ) : withinWindow ? (
                                             <div style={{ padding: "10px 14px", borderRadius: 8, background: "#e8f5e9", color: "#2e7d32", fontWeight: 600, marginBottom: 14 }}>
                                                 ✓ Eligible for cancellation — about {hoursLeft} hour{hoursLeft === 1 ? "" : "s"} left in the 24-hour window.
+                                            </div>
+                                        ) : overrideWindow ? (
+                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fff8e1", color: "#b26a00", fontWeight: 600, marginBottom: 14 }}>
+                                                24-hour window expired (placed {Math.floor(hrs)} hours ago) — as B2B merchandiser you can still cancel this order.
                                             </div>
                                         ) : (
                                             <div style={{ padding: "10px 14px", borderRadius: 8, background: "#ffebee", color: "#c62828", fontWeight: 600, marginBottom: 14 }}>
@@ -1394,7 +1404,7 @@ export default function B2bMerchandiserDashboard() {
                                         </div>
 
                                         {/* Cancel action — only when eligible */}
-                                        {!isCancelled && withinWindow && (
+                                        {canCancel && (
                                             <div style={{ marginTop: 18 }}>
                                                 <label className="merch-ocard-dlabel" style={{ display: "block", marginBottom: 6 }}>Reason for cancellation *</label>
                                                 <textarea
@@ -1407,7 +1417,7 @@ export default function B2bMerchandiserDashboard() {
                                             </div>
                                         )}
                                     </div>
-                                    {!isCancelled && withinWindow && (
+                                    {canCancel && (
                                         <div className="merch-modal-footer">
                                             <button className="merch-modal-confirm reject" onClick={handleConfirmCancel} disabled={cancelProcessing || !cancelReason.trim()}>
                                                 {cancelProcessing ? "Cancelling..." : "Cancel This Order"}
