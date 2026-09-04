@@ -906,6 +906,9 @@ export async function securityGuardScan({
 // ============================================================
 // itemIndex scopes verification to ONE product of a multi-product order, so a
 // finished product can ship without waiting for the rest. null = whole order.
+// Since 85: scannedBarcodes may be a SUBSET of the scope (component-wise
+// checkbox dispatch) — unsubmitted pieces are held back, not "missing". Every
+// submitted piece must be marked Completed; wrong/terminal pieces still fail.
 export async function verifyPackagingComponents(orderId, scannedBarcodes, itemIndex = null) {
   const { data, error } = await supabase.rpc("verify_packaging_components", {
     p_order_id: orderId,

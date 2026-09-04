@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import "./Screen4.css";
+import "./productFormLayout.css";
 import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatDate from "../utils/formatDate";
@@ -2901,7 +2902,7 @@ export default function ProductForm() {
   };
 
   return (
-    <div className="screen4-bg">
+    <div className="screen4-bg pf-page">
       {/* Popup Component */}
       {PopupComponent}
 
@@ -3905,79 +3906,94 @@ export default function ProductForm() {
             </>
 
             {/* ORDER DETAILS */}
-            <div className="row">
+            {/* Every field carries a label and a .field-control wrapper so the
+                labels, the controls and the gold underlines all line up across
+                both rows, regardless of whether the control is an input, a
+                SearchableSelect or the file-upload button. */}
+            <div className="row form-row-3">
               {/* Delivery Date — hidden for comms orders, which capture a single
                   delivery date on the Comms order form (it's the one stored on
                   the order and is auto-applied to each item). Avoids asking the
                   SA for the same date twice. */}
               {!isCommsOrder && (
-              <div className="field" style={{ display: "flex", flexDirection: 'row', alignItems: 'center', }}>
+              <div className="field">
                 <label>Delivery Date*</label>
-                <input
-                  type="date"
-                  className={`input-line ${deliveryDate ? "date-filled" : "date-empty"}`}
-                  value={deliveryDate}
-                  min={new Date().toISOString().split("T")[0]}
-                  onChange={(e) => setDeliveryDate(e.target.value)}
-                />
+                <div className="field-control">
+                  <input
+                    type="date"
+                    className={`input-line ${deliveryDate ? "date-filled" : "date-empty"}`}
+                    value={deliveryDate}
+                    min={new Date().toISOString().split("T")[0]}
+                    onChange={(e) => setDeliveryDate(e.target.value)}
+                  />
+                </div>
               </div>
               )}
 
               <div className="field">
-                <SearchableSelect
-                  options={DELIVERY_OPTIONS}
-                  value={modeOfDelivery}
-                  onChange={setModeOfDelivery}
-                  placeholder="Mode of Delivery"
-                />
+                <label>Mode of Delivery</label>
+                <div className="field-control">
+                  <SearchableSelect
+                    options={DELIVERY_OPTIONS}
+                    value={modeOfDelivery}
+                    onChange={setModeOfDelivery}
+                    placeholder="Mode of Delivery"
+                  />
+                </div>
               </div>
 
               <div className="field">
-                <SearchableSelect
-                  options={[
-                    { label: "Urgent", value: "Urgent" },
-                    { label: "Normal", value: "Normal" },
-                  ]}
-                  value={orderFlag}
-                  onChange={(val) => {
-                    if (val === "Urgent") {
-                      setShowUrgentModal(true);
-                    } else {
-                      setOrderFlag(val);
-                      setUrgentReason("");
-                    }
-                  }}
-                  placeholder="Order Flag"
-                />
+                <label>Order Flag</label>
+                <div className="field-control">
+                  <SearchableSelect
+                    options={[
+                      { label: "Urgent", value: "Urgent" },
+                      { label: "Normal", value: "Normal" },
+                    ]}
+                    value={orderFlag}
+                    onChange={(val) => {
+                      if (val === "Urgent") {
+                        setShowUrgentModal(true);
+                      } else {
+                        setOrderFlag(val);
+                        setUrgentReason("");
+                      }
+                    }}
+                    placeholder="Order Flag"
+                  />
+                </div>
               </div>
             </div>
 
             {/* GENERAL ORDER COMMENTS */}
-            <div className="row">
-              <div className="field">
-                <label>Notes:</label>
-                <input
-                  style={{ border: "none", background: "transparent" }}
-                  className="input-line"
-                  placeholder=""
-                  value={comments}
-                  onChange={(e) => setComments(e.target.value)}
-                />
+            <div className="row form-row-3">
+              <div className="field field-span-2">
+                <label>Notes</label>
+                <div className="field-control">
+                  <input
+                    className="input-line"
+                    placeholder=""
+                    value={comments}
+                    onChange={(e) => setComments(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="field">
-                {/* <label>Attachments</label> */}
+                <label>Attachments</label>
 
-                <div className="custom-file-upload">
-                  <label className="upload-btn">
-                    Upload Attachments
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx"
-                      multiple
-                      onChange={handleFileUpload}
-                    />
-                  </label>
+                <div className="field-control">
+                  <div className="custom-file-upload">
+                    <label className="upload-btn">
+                      Upload Files
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx"
+                        multiple
+                        onChange={handleFileUpload}
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 {attachments && attachments.length > 0 && (

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "../Screen4.css";
+import "../productFormLayout.css";
 import "./B2bProductForm.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -648,7 +649,7 @@ export default function B2bProductForm() {
     };
 
     return (
-        <div className="screen4-bg b2b-pf-page">
+        <div className="screen4-bg pf-page b2b-pf-page">
             {PopupComponent}
 
             <header className="pf-header">

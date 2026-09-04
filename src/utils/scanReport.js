@@ -14,6 +14,8 @@ import { getStageLabel } from "./barcodeService";
 // Human labels for transition_type, so the CSV's Type column reads plainly.
 const TYPE_LABEL = {
     scan: "Scan",
+    master_scan: "Master Barcode",
+    manual_tick: "Checkbox Confirm",
     manual_override: "Manual Override",
     security_exit: "Sent to Vendor",
     security_entry: "Back from Vendor",

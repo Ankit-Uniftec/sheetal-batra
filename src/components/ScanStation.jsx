@@ -72,6 +72,13 @@ const findOrderByMasterBarcode = async (barcode) => {
 // agree on what "expected" means — they used to spell this out separately.
 const isPackableComponent = (c) => c.is_active && !TERMINAL_STAGES.includes(c.current_stage);
 
+// A piece that can go in the box RIGHT NOW: packable and marked Completed
+// (packaging requires production_complete; packaging_dispatch = a piece whose
+// earlier dispatch attempt half-advanced, still re-submittable). Anything
+// earlier renders in the packaging checklist greyed-out with its stage.
+const isDispatchableComponent = (c) =>
+    isPackableComponent(c) && ["production_complete", "packaging_dispatch"].includes(c.current_stage);
+
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
 // labels (e.g. "Embroidery In-Progress") so RPC error messages read
 // naturally. Sort longest-first so a shorter value (e.g. "embroidery")
@@ -260,7 +267,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
         orderId: null,
         orderNo: "",
         expectedCount: 0,
+        // The TICKED set — what the Dispatch button will submit. Scanning a
+        // piece ticks it; the packer can also tick/untick by hand (checkbox).
         scannedBarcodes: [],
+        // Subset of scannedBarcodes that was PHYSICALLY scanned, so the ledger
+        // can record scan-proof vs packer's-word per piece (see verify).
+        physicallyScanned: [],
         // Per-product dispatch: itemIndex null = whole order (single-product
         // orders always stay null, so their flow is unchanged).
         itemIndex: null,
@@ -489,15 +501,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 // pieces at once instead of demanding one scan per piece, for when
                 // the per-piece paper is lost/never issued or to save time.
                 // The packer confirms the listed pieces are in the box; verification
-                // itself is unchanged — verify_packaging_components still runs and
-                // still gates on every in-scope piece being marked Completed. This
+                // still runs server-side (verify_packaging_components, 85) and
+                // gates on every SUBMITTED piece being marked Completed. This
                 // shortens the SCANNING, never the checks.
                 //
-                // It is all-or-nothing per scope by design: the RPC requires the
-                // submitted set to exactly equal the in-scope expected set, so a
-                // piece cannot be held back here. If one is genuinely missing, the
-                // packer scopes to the other product or falls back to per-piece
-                // scanning of the box that is actually complete.
+                // Since 85 the submitted set may be a SUBSET of the scope: an
+                // unticked piece is simply held back and ships in a later box.
                 if (isMasterBarcode(barcode)) {
                     const order = await findOrderByMasterBarcode(barcode);
                     if (!order) {
@@ -533,8 +542,11 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         orderId: order.id,
                         orderNo: order.order_no,
                         expectedCount: packable.length,
-                        // The whole scope is submitted together (see above).
-                        scannedBarcodes: packable.map(c => c.barcode),
+                        // Pre-tick every piece that is READY (Completed) — the
+                        // packer unticks anything not physically in the box.
+                        // Not-ready pieces list greyed-out and stay unticked.
+                        scannedBarcodes: packable.filter(isDispatchableComponent).map(c => c.barcode),
+                        physicallyScanned: [],
                         itemIndex: null,
                         isMultiProduct: productCount > 1,
                         productCount,
@@ -571,6 +583,19 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     return;
                 }
 
+                // Only a Completed piece can go in the box (packaging requires
+                // production_complete). Catch it on the scan so the packer hears
+                // it immediately instead of at Verify — the RPC enforces it too.
+                if (!isDispatchableComponent(component)) {
+                    setScanResult({
+                        success: false,
+                        error: "NOT_COMPLETED",
+                        message: `${barcode} (${component.component_label || component.component_type}) is at ${getStageLabel(component.current_stage)} — mark it Completed before packaging.`,
+                    });
+                    setIsProcessing(false);
+                    return;
+                }
+
                 if (!packagingPopup.isOpen) {
                     // First scan — open packaging popup
                     const allComponents = await fetchOrderComponents(component.order_id);
@@ -597,6 +622,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         orderNo: component.order_no,
                         expectedCount: isMultiProduct ? itemCount : activeCount,
                         scannedBarcodes: [barcode],
+                        physicallyScanned: [barcode],
                         // null = whole order; a number scopes to that product
                         itemIndex: isMultiProduct ? scannedItem : null,
                         isMultiProduct,
@@ -620,12 +646,17 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         return;
                     }
 
-                    if (!packagingPopup.scannedBarcodes.includes(barcode)) {
-                        setPackagingPopup(prev => ({
-                            ...prev,
-                            scannedBarcodes: [...prev.scannedBarcodes, barcode],
-                        }));
-                    }
+                    // A scan both ticks the piece and records the scan-proof —
+                    // a hand-tick that gets scanned afterwards upgrades to proof.
+                    setPackagingPopup(prev => ({
+                        ...prev,
+                        scannedBarcodes: prev.scannedBarcodes.includes(barcode)
+                            ? prev.scannedBarcodes
+                            : [...prev.scannedBarcodes, barcode],
+                        physicallyScanned: prev.physicallyScanned.includes(barcode)
+                            ? prev.physicallyScanned
+                            : [...prev.physicallyScanned, barcode],
+                    }));
                 }
 
                 setScanResult({
@@ -1101,17 +1132,28 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 ...prev,
                 itemIndex,
                 expectedCount: scoped.length,
-                // Master mode confirms the WHOLE scope at once, so switching
-                // scope re-selects every piece in the new scope. (The RPC demands
-                // an exact match against the in-scope set, so a partial selection
-                // is not a thing it can accept.) In scan mode we only DROP
-                // now-out-of-scope barcodes — we must never select a piece the
-                // packer hasn't physically scanned.
+                // Master mode starts from "everything ready in scope ticked",
+                // so switching scope re-ticks the new scope's ready pieces. In
+                // scan mode we only DROP now-out-of-scope ticks — never tick a
+                // piece the packer hasn't scanned or ticked themselves.
                 scannedBarcodes: prev.masterMode
-                    ? scoped.map(c => c.barcode)
+                    ? scoped.filter(isDispatchableComponent).map(c => c.barcode)
                     : prev.scannedBarcodes.filter(bc => allowed.has(bc)),
+                physicallyScanned: prev.physicallyScanned.filter(bc => allowed.has(bc)),
             };
         });
+    };
+
+    // Checkbox tick/untick — component-wise dispatch. A hand-tick carries the
+    // packer's word (recorded as 'manual_tick'), a scan carries proof; both
+    // land in scannedBarcodes, only scans in physicallyScanned.
+    const togglePackagingBarcode = (barcode) => {
+        setPackagingPopup(prev => ({
+            ...prev,
+            scannedBarcodes: prev.scannedBarcodes.includes(barcode)
+                ? prev.scannedBarcodes.filter(bc => bc !== barcode)
+                : [...prev.scannedBarcodes, barcode],
+        }));
     };
 
 
@@ -1121,17 +1163,22 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     const handlePackagingVerify = async () => {
         setIsProcessing(true);
         try {
-            // Master mode records HOW the dispatch was confirmed. Per-piece
-            // scanning is proof each garment was physically in the box; a master
-            // confirmation is the packer's word. The ledger must not claim proof
-            // it doesn't have, so the transition type and note differ — a report
-            // can always tell the two apart. It changes no guard: only
+            // The ledger records HOW each piece's dispatch was confirmed. A
+            // physical scan is proof the garment was in the box; a master-barcode
+            // or checkbox confirmation is the packer's word. The ledger must not
+            // claim proof it doesn't have, so type and note differ PER PIECE — a
+            // report can always tell them apart. It changes no guard: only
             // 'manual_override' and 'security_entry' alter advance_component_stage's
-            // behaviour, and this is neither.
+            // behaviour, and none of these are either.
             const master = packagingPopup.masterMode;
-            const transitionType = master ? "master_scan" : "scan";
-            const verifyNote = master ? "Packaging verified via master barcode" : "Packaging verified";
-            const dispatchNote = master ? "Dispatched (master barcode)" : "Dispatched";
+            const scannedProof = new Set(packagingPopup.physicallyScanned);
+            const confirmKind = (barcode) =>
+                scannedProof.has(barcode) ? "scan" : master ? "master_scan" : "manual_tick";
+            const NOTES = {
+                scan: ["Packaging verified", "Dispatched"],
+                master_scan: ["Packaging verified via master barcode", "Dispatched (master barcode)"],
+                manual_tick: ["Packaging verified via checkbox", "Dispatched (checkbox)"],
+            };
 
             const result = await verifyPackagingComponents(
                 packagingPopup.orderId,
@@ -1145,6 +1192,8 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 // the sync_order_warehouse_stage trigger auto-completes the order
                 // (SA sees "Order Ready & Dispatched"). V2 Stage 10.
                 for (const barcode of packagingPopup.scannedBarcodes) {
+                    const kind = confirmKind(barcode);
+                    const [verifyNote, dispatchNote] = NOTES[kind];
                     // Step into Packaging & Dispatch (records the packaging step)
                     await advanceComponentStage(
                         barcode,
@@ -1152,7 +1201,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         currentUserEmail,
                         "Packaging Station",
                         verifyNote,
-                        transitionType
+                        kind
                     );
                     // Then dispatch it (completes the journey)
                     await advanceComponentStage(
@@ -1161,7 +1210,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                         currentUserEmail,
                         "Packaging Station",
                         dispatchNote,
-                        transitionType
+                        kind
                     );
                 }
 
@@ -1199,13 +1248,19 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                 }
 
                 // Only claim the ORDER is complete when the whole order went out —
-                // a per-product dispatch leaves the other products in production.
-                const partial = packagingPopup.itemIndex !== null && packagingPopup.itemIndex !== undefined;
+                // a per-product or component-wise (held-back) dispatch leaves the
+                // rest in production.
+                const scoped = packagingPopup.itemIndex !== null && packagingPopup.itemIndex !== undefined;
+                const heldBack = result.held_back ?? 0;
+                const wholeOrderGone = !scoped && heldBack === 0;
                 setScanResult({
                     success: true,
-                    message: (partial
-                        ? `Product ${packagingPopup.itemIndex + 1} dispatched (${result.verified_count} pieces) — other products still in production.`
-                        : `All ${result.verified_count} components dispatched — order complete!`) + shipmentWarning,
+                    message: (wholeOrderGone
+                        ? `All ${result.verified_count} components dispatched — order complete!`
+                        : `${scoped ? `Product ${packagingPopup.itemIndex + 1}: ` : ""}${result.verified_count} piece(s) dispatched` +
+                          (heldBack > 0
+                              ? ` — ${heldBack} piece(s) held back, still in production.`
+                              : " — other products still in production.")) + shipmentWarning,
                     data: result,
                 });
             } else {
@@ -1227,7 +1282,11 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     });
                 }
                 if (missing.length > 0) {
-                    detailMsg += "\n\nNot yet scanned (expected for this order):";
+                    // Since 85 missing_details = ticked pieces not yet marked
+                    // Completed (NOT_ALL_QC_PASSED); held-back pieces are fine.
+                    detailMsg += result.error === "NOT_ALL_QC_PASSED"
+                        ? "\n\nNot ready (Mark as Completed first):"
+                        : "\n\nNot yet scanned (expected for this order):";
                     missing.forEach((m) => {
                         detailMsg += `\n• ${m.barcode}` + (m.component_label ? ` (${m.component_label})` : "") +
                             (m.last_stage ? ` — last at ${getStageLabel(m.last_stage)}` : "") +
@@ -1246,7 +1305,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             setScanResult({ success: false, error: "PACKAGING_ERROR", message: buildFriendlyScanError(err.message) || err.message });
         }
 
-        setPackagingPopup(prev => ({ ...prev, isOpen: false, scannedBarcodes: [], masterMode: false }));
+        setPackagingPopup(prev => ({ ...prev, isOpen: false, scannedBarcodes: [], physicallyScanned: [], masterMode: false }));
         setIsProcessing(false);
     };
 
@@ -1851,7 +1910,7 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
             {packagingPopup.isOpen && (
                 <div className="wd-modal-overlay">
                     <div className="wd-modal" onClick={e => e.stopPropagation()}>
-                        <button className="wd-modal-close" onClick={() => setPackagingPopup(prev => ({ ...prev, isOpen: false, scannedBarcodes: [], masterMode: false }))}>{'\u2715'}</button>
+                        <button className="wd-modal-close" onClick={() => setPackagingPopup(prev => ({ ...prev, isOpen: false, scannedBarcodes: [], physicallyScanned: [], masterMode: false }))}>{'\u2715'}</button>
                         <h3 className="wd-modal-title">Packaging Verification</h3>
                         <p style={{ textAlign: "center", color: "#666", marginBottom: 20 }}>
                             Order: <strong>{packagingPopup.orderNo}</strong>
@@ -1899,80 +1958,67 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                             </div>
                         )}
 
-                        {packagingPopup.masterMode ? (
-                            /* MASTER BARCODE MODE — the order barcode was scanned, so
-                               every expected piece is listed pre-ticked. The packer
-                               confirms what is physically in the box and unticks
-                               anything missing. Verification is unchanged: the RPC
-                               still enforces the Final QC gate server-side. */
-                            <>
-                                <p className="wd-pack-master-note">
-                                    Confirmed by <strong>master barcode</strong> — all {packagingPopup.expectedCount} piece(s)
-                                    below will be dispatched together. Check they are physically in the box first.
-                                    {packagingPopup.isMultiProduct && " To send only one product, pick it above."}
-                                </p>
+                        {/* COMPONENT-WISE CHECKLIST — every in-scope piece with a
+                            checkbox. Scanning a piece ticks it; the packer can also
+                            tick/untick by hand. Only TICKED pieces dispatch; the
+                            rest are held back and ship in a later box. A piece not
+                            yet marked Completed is greyed-out with its stage. */}
+                        {packagingPopup.masterMode && (
+                            <p className="wd-pack-master-note">
+                                Confirmed by <strong>master barcode</strong> — the ready pieces below are
+                                pre-ticked. Untick anything not physically in the box.
+                                {packagingPopup.isMultiProduct && " To send only one product, pick it above."}
+                            </p>
+                        )}
 
-                                <div className="wd-packaging-list">
-                                    {(packagingPopup.allComponents || [])
-                                        .filter(c => isPackableComponent(c) &&
-                                            (packagingPopup.itemIndex === null || (c.item_index ?? 0) === packagingPopup.itemIndex))
-                                        .map(comp => (
-                                            <div key={comp.id} className="wd-packaging-item">
-                                                <span className="wd-mono">{comp.barcode}</span>
-                                                <span className="wd-activation-label">
-                                                    {comp.component_label || comp.component_type}
-                                                </span>
-                                            </div>
-                                        ))}
-                                </div>
+                        <div className="wd-packaging-list">
+                            {(packagingPopup.allComponents || [])
+                                .filter(c => isPackableComponent(c) &&
+                                    (packagingPopup.itemIndex === null || (c.item_index ?? 0) === packagingPopup.itemIndex))
+                                .map(comp => {
+                                    const ready = isDispatchableComponent(comp);
+                                    return (
+                                        <label
+                                            key={comp.id}
+                                            className={`wd-packaging-item wd-pack-tick${ready ? "" : " not-ready"}`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={packagingPopup.scannedBarcodes.includes(comp.barcode)}
+                                                disabled={!ready || isProcessing}
+                                                onChange={() => togglePackagingBarcode(comp.barcode)}
+                                            />
+                                            <span className="wd-mono">{comp.barcode}</span>
+                                            <span className="wd-activation-label">
+                                                {comp.component_label || comp.component_type}
+                                            </span>
+                                            {!ready && (
+                                                <span className="wd-pack-stage">{getStageLabel(comp.current_stage)}</span>
+                                            )}
+                                        </label>
+                                    );
+                                })}
+                        </div>
 
-                                <p className="wd-packaging-count">
-                                    {packagingPopup.expectedCount} piece(s) to dispatch
-                                </p>
+                        <p className="wd-packaging-count">
+                            {packagingPopup.scannedBarcodes.length} / {packagingPopup.expectedCount} piece(s) selected
+                        </p>
 
-                                <button
-                                    className="wd-qc-submit-btn"
-                                    onClick={handlePackagingVerify}
-                                    disabled={isProcessing || packagingPopup.scannedBarcodes.length === 0}
-                                >
-                                    {isProcessing
-                                        ? "Verifying..."
-                                        : `Confirm & Dispatch ${packagingPopup.expectedCount} piece(s)`}
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <div className="wd-packaging-progress">
-                                <div className="wd-packaging-bar">
-                                    <div
-                                        className="wd-packaging-fill"
-                                        style={{ width: `${(packagingPopup.scannedBarcodes.length / packagingPopup.expectedCount) * 100}%` }}
-                                    />
-                                </div>
-                                <p className="wd-packaging-count">
-                                    {packagingPopup.scannedBarcodes.length} / {packagingPopup.expectedCount} scanned
-                                </p>
-                            </div>
-    
-                            <div className="wd-packaging-list">
-                                {packagingPopup.scannedBarcodes.map((bc, idx) => (
-                                    <div key={idx} className="wd-packaging-item">
-                                        <span>{'\u2713'}</span>
-                                        <span className="wd-mono">{bc}</span>
-                                    </div>
-                                ))}
-                            </div>
-    
-                            <button
-                                className="wd-qc-submit-btn"
-                                onClick={handlePackagingVerify}
-                                disabled={isProcessing || packagingPopup.scannedBarcodes.length < packagingPopup.expectedCount}
-                            >
-                                {packagingPopup.scannedBarcodes.length < packagingPopup.expectedCount
-                                    ? `Scan ${packagingPopup.expectedCount - packagingPopup.scannedBarcodes.length} more...`
-                                    : isProcessing ? "Verifying..." : "Verify & Dispatch"}
-                            </button>
-                            </>
+                        <button
+                            className="wd-qc-submit-btn"
+                            onClick={handlePackagingVerify}
+                            disabled={isProcessing || packagingPopup.scannedBarcodes.length === 0}
+                        >
+                            {isProcessing
+                                ? "Verifying..."
+                                : `Dispatch ${packagingPopup.scannedBarcodes.length} of ${packagingPopup.expectedCount} piece(s)`}
+                        </button>
+
+                        {packagingPopup.scannedBarcodes.length > 0 &&
+                            packagingPopup.scannedBarcodes.length < packagingPopup.expectedCount && (
+                            <p className="wd-pack-partial-note">
+                                Unticked pieces stay in production and can be dispatched later.
+                            </p>
                         )}
                     </div>
                 </div>
