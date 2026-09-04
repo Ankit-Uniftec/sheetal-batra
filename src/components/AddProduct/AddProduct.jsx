@@ -4,6 +4,7 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../Popup";
 import {
   CSV_COLUMNS,
+  SIZE_OPTIONS,
   TEMPLATE_DEMO_ROWS,
   buildCsv,
   downloadCsv,
@@ -17,12 +18,6 @@ import BarcodeExportPanel from "./BarcodeExportPanel";
 import SkuTypeChooser from "./SkuTypeChooser";
 import ScannedProductCard from "./ScannedProductCard";
 import "./AddProduct.css";
-
-// Standard size order for sorting variant rows + the size multi-select.
-const SIZE_OPTIONS = [
-  "XXS", "XS", "S", "M", "L", "XL", "XXL",
-  "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL",
-];
 
 /**
  * Generate the next SKU based on the current max in the database.
