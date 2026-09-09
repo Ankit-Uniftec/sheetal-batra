@@ -102,6 +102,9 @@ export default function SALogin() {
       } else if (userRecord.role === "shopify_orders") {
         // Website (Shopify) orders login: lands on the Shopify orders dashboard.
         navigate("/shopify-orders-dashboard");
+      } else if (userRecord.role === "packaging") {
+        // Packaging & dispatch desk: the queue of orders ready to box and ship.
+        navigate("/packaging-dashboard");
       } else if (userRecord.role === "executive") {
         const { data: prof } = await supabase.from("profiles").select("full_name, store, store_name").eq("id", authData.user.id).single();
         sessionStorage.setItem("currentSalesperson", JSON.stringify({

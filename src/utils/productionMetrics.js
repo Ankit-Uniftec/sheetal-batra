@@ -349,3 +349,106 @@ export function computeProductionMetrics(orders, statusStats, opts = {}) {
     exceedingDelivery: orders.filter(o => isOrderStillRunning(o) && o.delivery_date && new Date(o.delivery_date) < now).sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date)),
   };
 }
+
+// ============================================================
+// Dispatch & delivery performance — the four figures the packaging/dispatch
+// desk is measured on. Pure over an orders array (plus optional shipments), so
+// any dashboard can compute them on whatever slice it already holds.
+//
+//   (A) T-2 adherence          — production finished on/before the WAREHOUSE
+//                                deadline (getWarehouseDateObj), not the
+//                                customer's date. Same rule as every other
+//                                production figure here.
+//   (B) On-time delivery       — delivered_at on/before the customer's
+//                                delivery_date. This is the promise to the
+//                                client, so it deliberately uses the RAW date.
+//   (C) On-time production     — alias of (A) kept separate in the return so
+//                                the two cards can diverge later without a
+//                                caller change.
+//   (D) Delivery fails         — shipments that ended badly ('failed' /
+//                                'returned'). Order-level `refund_status` is
+//                                NOT a delivery failure and is not counted.
+//
+// Each rate is null (not 0) when nothing qualifies, so the UI renders "—"
+// rather than a fabricated 0% that reads as total failure. `orders` carries the
+// offending rows so a card can drill in without re-deriving the set.
+// ============================================================
+
+// Day-precision comparison. delivery_date is a DATE (no time) while
+// delivered_at is a TIMESTAMPTZ — comparing them raw makes a delivery at 6pm on
+// the promised day look late against that day's 00:00. Both sides collapse to
+// local midnight so "delivered on the promised day" counts as on time.
+const atMidnight = (d) => {
+  const x = new Date(d);
+  if (isNaN(x.getTime())) return null;
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+// When production actually finished, per order. Derived from the COMPONENTS —
+// the last piece to leave the floor is when the order was production-complete.
+//
+// Deliberately NOT orders.dispatched_at / ready_for_dispatch_at: those are dead
+// columns no RPC ever writes (see the Dispatch tab note in
+// ProductionManagerDashboard.jsx:1240 — every KPI built on them read 0).
+// order_components.stage_updated_at is stamped by advance_component_stage, so
+// it is a real signal.
+const FINISHED_STAGES = new Set([
+  "final_qc_passed", "production_complete", "packaging_dispatch", "dispatched",
+]);
+export function productionFinishedAtByOrder(components = []) {
+  const byOrder = {};
+  components.forEach((c) => {
+    if (!c.order_id || !FINISHED_STAGES.has(c.current_stage)) return;
+    const t = new Date(c.stage_updated_at || c.updated_at).getTime();
+    if (!Number.isFinite(t)) return;
+    // Latest finishing piece — the order is only done when its last piece is.
+    if (byOrder[c.order_id] == null || t > byOrder[c.order_id]) byOrder[c.order_id] = t;
+  });
+  return byOrder;
+}
+
+export function computeDeliveryPerformance(orders = [], shipments = [], finishedAtByOrder = {}) {
+  // (A)/(C) Production vs the T-2 deadline. Only orders that actually FINISHED
+  // production can be scored — one still on the floor has no completion date,
+  // and counting it as "late" would punish work that isn't due yet.
+  let prodOnTime = 0;
+  const prodLate = [];
+  orders.forEach((o) => {
+    const finishedAt = finishedAtByOrder[o.id];
+    const due = productionDueAt(o);
+    if (!finishedAt || !due) return;
+    const done = atMidnight(finishedAt);
+    const deadline = atMidnight(due);
+    if (!done || !deadline) return;
+    if (done <= deadline) prodOnTime++;
+    else prodLate.push(o);
+  });
+  const prodScored = prodOnTime + prodLate.length;
+
+  // (B) Delivery vs the customer's promised date.
+  let delivOnTime = 0;
+  const delivLate = [];
+  orders.forEach((o) => {
+    if (!o.delivered_at || !o.delivery_date) return;
+    const got = atMidnight(o.delivered_at);
+    const promised = atMidnight(o.delivery_date);
+    if (!got || !promised) return;
+    if (got <= promised) delivOnTime++;
+    else delivLate.push(o);
+  });
+  const delivScored = delivOnTime + delivLate.length;
+
+  // (D) Delivery failures — a shipment that came back or never landed.
+  const failedShipments = (shipments || []).filter((s) =>
+    ["failed", "returned"].includes((s.status || "").toLowerCase())
+  );
+
+  const rate = (hit, total) => (total > 0 ? Math.round((hit / total) * 1000) / 10 : null);
+
+  return {
+    production: { onTime: prodOnTime, late: prodLate.length, scored: prodScored, rate: rate(prodOnTime, prodScored), orders: prodLate },
+    delivery: { onTime: delivOnTime, late: delivLate.length, scored: delivScored, rate: rate(delivOnTime, delivScored), orders: delivLate },
+    fails: { count: failedShipments.length, shipments: failedShipments },
+  };
+}

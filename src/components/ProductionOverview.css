@@ -36,7 +36,13 @@
   margin-bottom: 8px;
 }
 
-.po-stat-icon { font-size: 15px; line-height: 1; }
+/* Icons carry their own `stroke` attribute (see StatIcons.jsx), so nothing is
+   set here — a `color` rule could not win against index.css's global
+   `body, * { color: #000 !important }` anyway. */
+.po-stat-icon {
+  display: inline-flex;
+  align-items: center;
+}
 
 .po-stat-title {
   margin: 0;
