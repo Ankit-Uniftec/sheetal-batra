@@ -10,6 +10,7 @@ import {
   downloadCsv,
   parseCsv,
   validateRow,
+  checkDuplicateName,
 } from "./csvHelpers";
 import { STORE_CATEGORIES, DEFAULT_STORE_CATEGORY } from "../../utils/storeCategory";
 import { fetchShopifyInventory, adjustShopifyInventory } from "../../utils/shopifyInventory";
@@ -561,6 +562,28 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
       showPopup({ type: "warning", title: "Missing Information", message: err, confirmText: "OK" });
       return;
     }
+
+    let effectiveName = name;
+
+    // Duplicate-name guard — same rule as the CSV import, one shared function.
+    // Editing an existing product must not flag ITSELF, so the row being saved
+    // is excluded by id.
+    {
+      const { data: liveProducts } = await fetchAllRows("products_live", (q) =>
+        q.select("id, name, store_category")
+      );
+      const others = (liveProducts || []).filter((p) => p.id !== editTarget?.id);
+      const dup = checkDuplicateName(name, storeCategory, others);
+      if (!dup.ok) {
+        showPopup({ type: "warning", title: "Duplicate Product", message: dup.error, confirmText: "OK" });
+        return;
+      }
+      // setName alone would NOT do: state updates are async, so the insert
+      // below would still carry the old name. Set both — state for the field,
+      // effectiveName for this save.
+      if (dup.renameTo) { setName(dup.renameTo); effectiveName = dup.renameTo; }
+    }
+
     setSubmitting(true);
 
     // Common product row.
@@ -569,7 +592,7 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
     // uniformly to every product.
     const productRow = {
       sku_id: sku,
-      name: name.trim(),
+      name: effectiveName.trim(),
       image_url: imageUrl.trim() || null,
       base_price: Number(basePrice),
       top_options: topOptions.length > 0 ? topOptions : null,
@@ -1040,6 +1063,36 @@ Re-open the product and add the sizes.`
 
       // Validate each row
       const results = parsed.data.map((row, i) => validateRow(row, i + 2, dupattaColorList)); // +2 = 1-based + header offset
+
+      // Duplicate-name guard. Checked HERE, at validation, not at insert time:
+      // a row rejected here never reaches the loop, so the import cannot half-
+      // create a catalogue the order form can't disambiguate. Live products are
+      // fetched fresh rather than reused from state — this screen stays open
+      // across imports.
+      const { data: liveProducts } = await fetchAllRows("products_live", (q) =>
+        q.select("name, store_category")
+      );
+      const seenInSheet = [];
+      results.forEach((r, i) => {
+        if (!r.ok) return;
+        // Compare against the catalogue AND the rows above this one, so a sheet
+        // that repeats a name inside itself is caught too.
+        const dup = checkDuplicateName(
+          r.normalized.name,
+          r.normalized.store_category,
+          [...(liveProducts || []), ...seenInSheet]
+        );
+        if (!dup.ok) {
+          results[i] = { ok: false, errors: [`Row ${i + 2}: ${dup.error}`] };
+          return;
+        }
+        if (dup.renameTo) r.normalized.name = dup.renameTo;
+        seenInSheet.push({
+          name: r.normalized.name,
+          store_category: r.normalized.store_category,
+        });
+      });
+
       const errorCount = results.filter((r) => !r.ok).length;
       setCsvParsed(parsed);
       setCsvValidation({ results, errorCount });

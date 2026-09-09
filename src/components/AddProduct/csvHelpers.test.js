@@ -1,4 +1,4 @@
-import { parseCsv, validateRow, SIZE_OPTIONS } from "./csvHelpers";
+import { parseCsv, validateRow, SIZE_OPTIONS, checkDuplicateName } from "./csvHelpers";
 
 // Minimal valid row; each test overrides only what it's about.
 const base = {
@@ -36,4 +36,58 @@ test("a quoted, space-padded cell imports clean", () => {
 test("a doubled quote inside a cell unescapes to one quote", () => {
   const csv = ["name", '"He said ""hi"""', ""].join("\n");
   expect(parseCsv(csv).data[0].name).toBe('He said "hi"');
+});
+
+// ─── checkDuplicateName ───────────────────────────────────────────────
+// The rule that stops the order dropdown filling with indistinguishable
+// entries. Same name + same store is the case that produced two orderable
+// prices for one style.
+describe("checkDuplicateName", () => {
+  const existing = [
+    { name: "Zimal chauga", store_category: "All Stores" },
+    { name: "Riva chauga", store_category: "Delhi" },
+  ];
+
+  it("allows a name nothing else uses", () => {
+    expect(checkDuplicateName("Brand New", "Delhi", existing).ok).toBe(true);
+  });
+
+  it("rejects same name in the same store", () => {
+    const r = checkDuplicateName("Riva chauga", "Delhi", existing);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/already exists for Delhi/);
+  });
+
+  it("labels the Delhi piece when an All Stores row exists — both stay sellable", () => {
+    const r = checkDuplicateName("Zimal chauga", "Delhi", existing);
+    expect(r.ok).toBe(true);
+    expect(r.renameTo).toBe("Zimal chauga (Delhi)");
+  });
+
+  it("labels a new All Stores row when a store row exists", () => {
+    const r = checkDuplicateName("Riva chauga", "All Stores", existing);
+    expect(r.ok).toBe(true);
+    expect(r.renameTo).toBe("Riva chauga (All Stores)");
+  });
+
+  it("allows Delhi vs Ludhiana, appending the store to the name", () => {
+    const r = checkDuplicateName("Riva chauga", "Ludhiana", existing);
+    expect(r.ok).toBe(true);
+    expect(r.renameTo).toBe("Riva chauga (Ludhiana)");
+  });
+
+  it("matches case-insensitively and ignores surrounding space", () => {
+    expect(checkDuplicateName("  riva CHAUGA ", "Delhi", existing).ok).toBe(false);
+  });
+
+  it("treats a blank store_category as All Stores", () => {
+    const r = checkDuplicateName("Riva chauga", "", existing);
+    expect(r.ok).toBe(true);
+    expect(r.renameTo).toBe("Riva chauga (All Stores)");
+  });
+
+  it("still rejects an exact same-store repeat after one was labelled", () => {
+    const withLabelled = [...existing, { name: "Zimal chauga (Delhi)", store_category: "Delhi" }];
+    expect(checkDuplicateName("Zimal chauga (Delhi)", "Delhi", withLabelled).ok).toBe(false);
+  });
 });
