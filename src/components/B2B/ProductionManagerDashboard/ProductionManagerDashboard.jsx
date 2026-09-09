@@ -14,7 +14,7 @@ import VendorRequest from "../../../components/VendorRequest";
 import ReplacementApprovals from "../../../components/ReplacementApprovals";
 import StageCountCards from "../../../components/StageCountCards";
 import QcHistoryPanel from "../../../components/QcHistoryPanel";
-import { fetchQcRecords } from "../../../utils/qcHistory";
+import { fetchQcRecords, whichQcLabel } from "../../../utils/qcHistory";
 import { runManualCompleteWithOverride, describeBlocking } from "../../../utils/manualComplete";
 import ReJourneyPanel from "../../../components/ReJourneyPanel";
 import { fetchReJourneys } from "../../../utils/reJourneys";
@@ -257,6 +257,9 @@ export default function ProductionManagerDashboard() {
     // each other when a sidebar click sets both tab and subtab at once.
     const [subTab, setSubTab] = useState("dispatch");
     const [highlightOrderId, setHighlightOrderId] = useState(location.state?.highlightOrderId || null);
+    // Every disposal ever recorded (qc_records, outcome='dispose'), not just the
+    // pieces sitting disposed right now — see the loader below.
+    const [disposals, setDisposals] = useState([]);
     const [qcHistory, setQcHistory] = useState([]);
     const [qcHistoryLoading, setQcHistoryLoading] = useState(false);
     // Fetched-once guard: QC History and Production both read qcHistory, so the
@@ -514,6 +517,21 @@ export default function ProductionManagerDashboard() {
     }, [navigate]);
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
+
+    // Load the disposal ledger once, with the dashboard — NOT per tab. A disposed
+    // piece restarts at Cloth Issue (db/…/v2/52), and that restart wipes
+    // current_stage / disposition / disposition_reason on the component row. So
+    // order_components can only ever answer "disposed right now"; qc_records is
+    // the only place a disposal that was later re-journeyed still exists. Narrow
+    // (outcome='dispose') so this is a small query, unlike the full QC history.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const recs = await fetchQcRecords({ paged: true, outcome: "dispose" });
+            if (!cancelled) setDisposals(recs);
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     // Load QC records (all channels) when a tab that needs them opens.
     // The Production tab needs them too: qc_records is the ONLY real signal for
@@ -1116,20 +1134,26 @@ export default function ProductionManagerDashboard() {
         return components.reduce((n, c) => n + (ids.has(c.order_id) ? 1 : 0), 0);
     }, [components, overviewOrders]);
 
-    // Disposed components in the selected Overview period (disposal sets
-    // stage_updated_at = NOW(), so overviewComponents already scopes by when it
-    // was disposed). Powers the clickable "Disposed" Business Performance card.
+    // Disposals in the selected Overview period, counted off the qc_records
+    // ledger (created_at = when the piece was disposed), so a piece that was
+    // disposed and later restarted at Cloth Issue still counts. Powers the
+    // clickable "Disposed" Business Performance card.
     const disposedCount = useMemo(
-        () => overviewComponents.filter((c) => c.current_stage === "disposed").length,
-        [overviewComponents]
+        () => disposals.filter((r) => inOverviewPeriod(r.created_at)).length,
+        [disposals, inOverviewPeriod]
     );
-    // Orders (all-time, not period-scoped) that contain a disposed component —
+    // Orders (all-time, not period-scoped) that have ever had a piece disposed —
     // the set the "Disposed" card drills the order list into.
-    const disposedOrderIds = useMemo(() => {
-        const s = new Set();
-        components.forEach((c) => { if (c.current_stage === "disposed") s.add(c.order_id); });
-        return s;
-    }, [components]);
+    const disposedOrderIds = useMemo(
+        () => new Set(disposals.map((r) => r.order_id)),
+        [disposals]
+    );
+    // Disposals grouped for the per-order "why disposed" strip.
+    const disposalsByOrder = useMemo(() => {
+        const m = {};
+        disposals.forEach((r) => { (m[r.order_id] = m[r.order_id] || []).push(r); });
+        return m;
+    }, [disposals]);
     // Orders with ≥1 component sitting at packaging_dispatch (ready, not yet
     // dispatch-scanned) — the set the "Dispatch Backlog" card drills into.
     const dispatchReadyOrderIds = useMemo(() => {
@@ -2784,18 +2808,29 @@ export default function ProductionManagerDashboard() {
                                                     </div>
                                                 )}
 
-                                                {/* Why-disposed strip — one line per disposed piece with
-                                                    the stage it died at and the QC reason. */}
-                                                {(componentsByOrder[order.id] || []).some((c) => c.current_stage === "disposed") && (
+                                                {/* Why-disposed strip — one line per disposal, read from the
+                                                    qc_records ledger so a piece that was disposed and then
+                                                    restarted at Cloth Issue still shows (the restart clears
+                                                    disposition_reason on the component). Where the piece is
+                                                    back in the flow, say where it got to. */}
+                                                {(disposalsByOrder[order.id] || []).length > 0 && (
                                                     <div className="pm-disposed-note">
-                                                        {componentsByOrder[order.id].filter((c) => c.current_stage === "disposed").map((c) => (
-                                                            <div key={c.id} className="pm-disposed-line">
-                                                                <b>{c.component_label || c.component_type || c.barcode}</b>
-                                                                {" disposed"}
-                                                                {c.previous_stage ? ` at ${getStageLabel(c.previous_stage) || c.previous_stage}` : ""}
-                                                                {c.disposition_reason ? <> — <span className="pm-disposed-reason">{c.disposition_reason}</span></> : ""}
-                                                            </div>
-                                                        ))}
+                                                        {disposalsByOrder[order.id].map((r) => {
+                                                            const comp = (componentsByOrder[order.id] || []).find((c) => c.id === r.component_id);
+                                                            const restarted = comp && comp.current_stage !== "disposed";
+                                                            return (
+                                                                <div key={r.id} className="pm-disposed-line">
+                                                                    <b>{comp?.component_label || comp?.component_type || r.barcode}</b>
+                                                                    {` disposed at ${whichQcLabel(r.which_qc)}`}
+                                                                    {r.fail_reason ? <> — <span className="pm-disposed-reason">{r.fail_reason}</span></> : ""}
+                                                                    {restarted && (
+                                                                        <span className="pm-disposed-restart">
+                                                                            {" · restarted, now "}{getStageLabel(comp.current_stage) || comp.current_stage}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
 

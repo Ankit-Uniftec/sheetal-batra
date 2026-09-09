@@ -141,6 +141,14 @@ const splitPipes = (s) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
+// Canonical size list: the order size buttons render in, and the only values
+// `available_size` is allowed to hold. Shared with the manual form's size
+// multi-select so hand-entry and CSV import can't drift apart.
+export const SIZE_OPTIONS = [
+  "XXS", "XS", "S", "M", "L", "XL", "XXL",
+  "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL",
+];
+
 // ─── Per-row validation (Normal products only) ────────────────────
 // Returns { ok: true, normalized } or { ok: false, errors: [string, ...] }.
 // `normalized` is a clean object ready to insert.
@@ -182,7 +190,17 @@ export const validateRow = (row, rowIndex, dupattaColorNames = []) => {
     }
   }
 
-  const availableSizes = splitPipes(row.available_size);
+  // Sizes are upper-cased, de-duped and put in canonical order. Imported
+  // verbatim they used to reach the order form as-typed: "XXS|XXS" rendered
+  // the same size button twice, and a name the app doesn't know ("Small")
+  // became a size no dashboard could match. Reject the row rather than drop
+  // the value — a mistyped size is a size someone meant to sell.
+  const rawSizes = splitPipes(row.available_size).map((x) => x.toUpperCase());
+  const unknownSizes = [...new Set(rawSizes.filter((x) => !SIZE_OPTIONS.includes(x)))];
+  if (unknownSizes.length > 0) {
+    errors.push(`Row ${rowIndex}: unknown size(s) ${unknownSizes.join(", ")}. Use one or more of ${SIZE_OPTIONS.join("|")}.`);
+  }
+  const availableSizes = SIZE_OPTIONS.filter((x) => rawSizes.includes(x));
   const invStr = (row.inventory || "").trim();
   let inventory = 0;
   if (invStr.toUpperCase() === "MTO") inventory = 9999;
@@ -244,4 +262,46 @@ export const validateRow = (row, rowIndex, dupattaColorNames = []) => {
       inventory,
     },
   };
+};
+
+// ─── Duplicate-name guard ─────────────────────────────────────────────
+// Two product rows with the same NAME are indistinguishable in the order
+// form's dropdown, which sorts by name only (ProductForm.js:1387). That is how
+// ~40 styles ended up doubled and, on a dozen of them, orderable at two
+// different prices — whichever entry the SA happened to click decided what the
+// customer was charged.
+//
+// Store category is what makes a same-name pair legitimate or not:
+//   * SAME name + SAME store  -> reject. Nothing could tell them apart.
+//   * SAME name + DIFFERENT store -> allow, appending " (Store)" to the new
+//     row. Both entries stay orderable — an "All Stores" made-to-order row and
+//     the single physical piece sitting in one shop are different things to
+//     sell, and the shop needs to sell either. The suffix is what makes them
+//     tellable apart in the dropdown, which sorts by name only
+//     (ProductForm.js:1387) and otherwise shows two identical lines.
+//
+// Returns { ok } | { ok:false, error } | { ok:true, renameTo }.
+// `existing` is [{ name, store_category }] — every live product.
+export const checkDuplicateName = (name, storeCategory, existing = []) => {
+  const key = String(name || "").trim().toLowerCase();
+  if (!key) return { ok: true };
+
+  const store = (storeCategory || DEFAULT_STORE_CATEGORY).trim();
+  const clashes = existing.filter(
+    (p) => String(p.name || "").trim().toLowerCase() === key
+  );
+  if (clashes.length === 0) return { ok: true };
+
+  const sameStore = clashes.find(
+    (p) => (p.store_category || DEFAULT_STORE_CATEGORY).trim() === store
+  );
+  if (sameStore) {
+    return {
+      ok: false,
+      error: `"${name.trim()}" already exists for ${store}. Rename it, or edit the existing product instead of adding a second one.`,
+    };
+  }
+
+  // Different store: allowed, labelled so the two read differently.
+  return { ok: true, renameTo: `${name.trim()} (${store})` };
 };

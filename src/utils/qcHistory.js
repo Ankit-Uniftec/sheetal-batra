@@ -28,8 +28,14 @@ export function whichQcLabel(whichQc) {
 //   { orderIds: [...] }     -> records for a set of orders (channel-scoped PH);
 //                             chunked in 200s so a big list can't blow the .in() limit
 //   { paged: true }         -> ALL records, paged past the 1000-row cap (Production Manager)
+//   { paged: true, outcome } -> only that fail outcome ('dispose' | 'rework').
+//                             qc_records is the ONLY durable record of a disposal:
+//                             restarting a disposed piece at Cloth Issue (db/…/v2/52)
+//                             clears current_stage and disposition_reason on the
+//                             component, so order_components can only ever show the
+//                             pieces sitting disposed RIGHT NOW.
 // Always newest-first.
-export async function fetchQcRecords({ inspectedBy, orderIds, paged } = {}) {
+export async function fetchQcRecords({ inspectedBy, orderIds, paged, outcome } = {}) {
   try {
     if (inspectedBy) {
       const { data, error } = await supabase
@@ -64,9 +70,9 @@ export async function fetchQcRecords({ inspectedBy, orderIds, paged } = {}) {
       let from = 0;
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const { data, error } = await supabase
-          .from("qc_records")
-          .select(QC_RECORD_COLUMNS)
+        let q = supabase.from("qc_records").select(QC_RECORD_COLUMNS);
+        if (outcome) q = q.eq("outcome", outcome);
+        const { data, error } = await q
           .order("created_at", { ascending: false })
           .range(from, from + PAGE - 1);
         if (error) throw error;
