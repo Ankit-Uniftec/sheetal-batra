@@ -27,6 +27,7 @@ import WarehouseTab from "../../components/stock/WarehouseTab";
 import StockExchangeTab from "../../components/stock/StockExchangeTab";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
+import downloadCsv from "../../utils/downloadCsv";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -861,6 +862,46 @@ export default function B2bMerchandiserDashboard() {
     const orderBadgeLabel = (order) => (order.status || "").toLowerCase() === "cancelled" ? "Cancelled" : (order.approval_status || "Pending");
     const orderBadgeClass = (order) => (order.status || "").toLowerCase() === "cancelled" ? "merch-status-cancelled" : getStatusBadgeClass(order.approval_status);
 
+    // Export what the All Orders tab is currently showing — the filtered set,
+    // not the page, so the search/status/vendor/period filters above the list
+    // are the export's scope.
+    const handleExportOrders = () => {
+        if (filteredOrders.length === 0) {
+            showPopup({ type: "info", title: "Nothing to export", message: "No orders match the current filters." });
+            return;
+        }
+        downloadCsv({
+            filename: "b2b_orders_export",
+            headers: [
+                "Order No", "PO Number", "Order Date", "Delivery Date", "Type",
+                "Vendor", "Merchandiser", "Client", "Product", "Size", "Top", "Bottom",
+                "Qty", "Amount", "Markdown %", "Approval", "Status",
+            ],
+            rows: filteredOrders.map((o) => {
+                const it = o.items?.[0] || {};
+                return [
+                    o.order_no || "",
+                    o.po_number || "",
+                    formatDate(o.created_at) || "",
+                    formatDate(o.delivery_date) || "",
+                    o.is_stock_order ? "Stock" : (o.b2b_order_type || ""),
+                    vendorMap[o.vendor_id]?.store_brand_name || "",
+                    o.merchandiser_name || "",
+                    o.delivery_name || "",
+                    it.product_name || "",
+                    it.size || "",
+                    it.top || "",
+                    it.bottom || "",
+                    o.total_quantity || 1,
+                    o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0,
+                    o.markdown_percent || 0,
+                    orderBadgeLabel(o),
+                    getOrderStatusLabel(o.status) || "",
+                ];
+            }),
+        });
+    };
+
     if (loading) return <p className="loading-text">Loading Dashboard...</p>;
 
     return (
@@ -1119,6 +1160,9 @@ export default function B2bMerchandiserDashboard() {
                                 {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || vendorFilter !== "all" || ordersTimeline !== "all") && (
                                     <button className="merch-clear-filters-btn" onClick={() => { clearOrderFilters(); setCurrentPage(1); }}>Clear</button>
                                 )}
+                                <button className="merch-export-btn" onClick={handleExportOrders} title="Export the filtered orders to CSV">
+                                    {"⬇"} Order Export
+                                </button>
                             </div>
                         </div>
                         <div className="merch-order-list-scroll">

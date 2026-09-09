@@ -512,3 +512,7 @@
   .merch-ios-date-num { font-size: 13px; }
   .merch-ios-order-count { font-size: 9px; min-width: 16px; height: 16px; }
 }
+/* Order Export — sits in the All Orders filter row, matching the Clear button's
+   height so the row keeps one baseline. Brand gold, not the destructive red. */
+.merch-export-btn { height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5b85a; background: #fff; color: #8b7240; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.merch-export-btn:hover { background: #d5b85a; color: #fff; }
