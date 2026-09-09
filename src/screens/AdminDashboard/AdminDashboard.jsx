@@ -27,6 +27,7 @@ import {
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
+import { startOrderMode } from "../../utils/orderMode";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -350,9 +351,8 @@ export default function AdminDashboard() {
             store: currentUserProfile.store_name,
             designation: currentUserProfile.designation,
         }));
-        sessionStorage.setItem("isStockOrder", "true");
-        sessionStorage.removeItem("screen4FormData");
-        sessionStorage.removeItem("screen6FormData");
+        // Exclusive: clears comms/exhibition flags and stale drafts too.
+        startOrderMode("stock");
         navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
     };
 

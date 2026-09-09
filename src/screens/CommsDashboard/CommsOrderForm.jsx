@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import "./CommsOrderForm.css";
 import Logo from "../../images/logo.png";
 import { usePopup } from "../../components/Popup";
+import { startOrderMode, clearOrderMode } from "../../utils/orderMode";
 
 /**
  * CommsOrderForm — first screen of the comms order flow.
@@ -272,9 +273,9 @@ export default function CommsOrderForm() {
         designation: profile.designation,
       }));
       sessionStorage.setItem("returnDashboard", "/comms-dashboard");
-      sessionStorage.setItem("isCommsOrder", "true");
-      // Make sure no leftover stock-order flag misroutes ProductForm.
-      sessionStorage.removeItem("isStockOrder");
+      // Exclusive: also clears any leftover stock/exhibition flag that would
+      // otherwise misroute ProductForm.
+      startOrderMode("comms");
 
       navigate("/product", { state: { fromAssociate: true, isCommsOrder: true } });
     })();
@@ -283,7 +284,7 @@ export default function CommsOrderForm() {
   const handleCancel = () => {
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem("commsOrderPayload");
-    sessionStorage.removeItem("isCommsOrder");
+    clearOrderMode();
     navigate("/comms-dashboard", { replace: true });
   };
 

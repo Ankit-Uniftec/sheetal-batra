@@ -10,6 +10,7 @@ import formatPhoneNumber from "../utils/formatPhoneNumber";
 import config from "../config/config";
 import { generateAllPdfs } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
+import { isOrderMode, clearOrderMode } from "../utils/orderMode";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 
@@ -150,8 +151,7 @@ export default function ReviewDetail() {
   // carried through ProductForm. Stock orders skip the OTP/customer flow,
   // skip Private-SA verification, force the order_no to the STOCK prefix
   // (via p_store: 'Internal' in the RPC), and skip WhatsApp.
-  const isStockOrder = order?.is_stock_order === true ||
-    sessionStorage.getItem("isStockOrder") === "true";
+  const isStockOrder = order?.is_stock_order === true || isOrderMode("stock");
 
   const totalAmount = Number(order?.grand_total) || 0;
   const advancePayment = Number(order?.advance_payment) || 0;
@@ -472,7 +472,33 @@ export default function ReviewDetail() {
     } catch { /* ignore malformed session */ }
 
     // STOCK ORDER FLAG — propagate to the row so dashboards can filter on it.
+    // Re-verify the permission HERE, at the write boundary, not just where the
+    // button is drawn. Hiding the sidebar item is cosmetic: the mode lives in
+    // sessionStorage, so a flag set before the permission was revoked (or an
+    // abandoned flow resumed via Back) would otherwise still raise a stock
+    // order. Fail loudly rather than silently downgrading to a client order —
+    // a stock order written as a priced customer order corrupts revenue.
     if (isStockOrder) {
+      // The Private-SA block above carries its own email guard, but it is
+      // skipped for stock orders — so check here before querying.
+      const spEmail = (normalizedOrder.salesperson_email || "").toLowerCase();
+      if (!spEmail) {
+        throw Object.assign(new Error(
+          "Salesperson email is missing — cannot verify stock-order permission. Please log in again from the dashboard."
+        ), { userFacing: true });
+      }
+      const { data: spPerm, error: spPermError } = await supabase
+        .from("salesperson")
+        .select("can_place_stock_orders")
+        .eq("email", spEmail)
+        .maybeSingle();
+      if (spPermError) throw spPermError;
+      if (!spPerm?.can_place_stock_orders) {
+        clearOrderMode();
+        throw Object.assign(new Error(
+          "You no longer have permission to place stock orders. This order was not saved. Please start a new order."
+        ), { userFacing: true });
+      }
       orderDataToInsert.is_stock_order = true;
     }
 
@@ -870,11 +896,9 @@ export default function ReviewDetail() {
     }
 
     // 7️⃣ CLEAR SESSION & NAVIGATE
-    sessionStorage.removeItem("screen4FormData");
-    sessionStorage.removeItem("screen6FormData");
-    // Clear the stock-order flag so the next time the SA places a normal
-    // order it doesn't accidentally inherit stock behaviour.
-    sessionStorage.removeItem("isStockOrder");
+    // Clear every order-mode flag and draft, not just the stock one, so the
+    // next order raised in this tab starts from a clean slate.
+    clearOrderMode();
 
     navigate("/order-placed", {
       state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
@@ -931,8 +955,10 @@ export default function ReviewDetail() {
       console.error("❌ Error stack:", e.stack);
       console.error("❌ Full error:", e);
       showPopup({
-        title: "Failed",
-        message: "Failed to place order.",
+        // Deliberate, user-actionable errors (e.g. stock-order permission
+        // revoked) carry their own message; everything else stays generic.
+        title: e?.userFacing ? "Order Not Placed" : "Failed",
+        message: e?.userFacing ? e.message : "Failed to place order.",
         type: "error",
         confirmText: "Ok",
       })
@@ -956,8 +982,10 @@ export default function ReviewDetail() {
     } catch (e) {
       console.error("❌ Auto signature error:", e.message);
       showPopup({
-        title: "Failed",
-        message: "Failed to place order.",
+        // Deliberate, user-actionable errors (e.g. stock-order permission
+        // revoked) carry their own message; everything else stays generic.
+        title: e?.userFacing ? "Order Not Placed" : "Failed",
+        message: e?.userFacing ? e.message : "Failed to place order.",
         type: "error",
         confirmText: "Ok",
       })

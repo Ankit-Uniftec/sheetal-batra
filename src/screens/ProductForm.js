@@ -13,6 +13,7 @@ import { restoreAssociateSession } from "../utils/restoreAssociateSession";
 import { usePopup } from "../components/Popup"; // Import Popup component
 import ExtrasPopup from "../components/ExtrasPopup";
 import config from "../config/config";
+import { isOrderMode } from "../utils/orderMode";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -549,18 +550,14 @@ export default function ProductForm() {
   // Stock-order flag: when true, this order is for internal inventory
   // (skips OTP/customer flow, forces WH Delhi delivery, zeroes all prices,
   // and routes through a different ReviewDetail/Inventory Dashboard path).
-  const isStockOrder =
-    location.state?.isStockOrder === true ||
-    sessionStorage.getItem("isStockOrder") === "true";
+  const isStockOrder = isOrderMode("stock", location.state);
 
   // Comms-order flag: when true, this is a Comms (PR/celebrity/agency) order
   // placed by Nazreen. Skips OTP/customer flow, routes through CommsReviewOrder
   // instead of OrderDetails. Pricing depends on engagement type: Personal order
   // keeps real prices; Barter/Gifting/Sourcing have grand_total=0 but item
   // prices stay (for PR Performance reporting).
-  const isCommsOrder =
-    location.state?.isCommsOrder === true ||
-    sessionStorage.getItem("isCommsOrder") === "true";
+  const isCommsOrder = isOrderMode("comms", location.state);
 
   // Read comms engagement type from sessionStorage (set by CommsOrderForm).
   // Determines whether grand_total should be zeroed.

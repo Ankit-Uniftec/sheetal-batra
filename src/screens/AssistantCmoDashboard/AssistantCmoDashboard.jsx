@@ -21,6 +21,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
 } from "recharts";
+import { startOrderMode } from "../../utils/orderMode";
 
 const COLOR_NAME_MAP = {
   black: "#1a1a1a", white: "#f5f5f5", red: "#c62828", blue: "#1565c0",
@@ -161,9 +162,8 @@ export default function AssistantCmoDashboard() {
       store: currentUserProfile.store_name,
       designation: currentUserProfile.designation,
     }));
-    sessionStorage.setItem("isStockOrder", "true");
-    sessionStorage.removeItem("screen4FormData");
-    sessionStorage.removeItem("screen6FormData");
+    // Exclusive: clears comms/exhibition flags and stale drafts too.
+    startOrderMode("stock");
     navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
   };
 

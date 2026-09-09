@@ -24,6 +24,7 @@ import useTabParam from "../hooks/useTabParam";
 import Paginator from "../components/Paginator";
 import StockPanel from "../components/stock/StockPanel";
 import { poolsForUser } from "../utils/stockVisibility";
+import { startOrderMode, clearOrderMode } from "../utils/orderMode";
 import { usePeriodFilter } from "../components/PeriodFilter";
 
 // Time calculation helpers
@@ -523,8 +524,7 @@ export default function Dashboard() {
     // so an abandoned exhibition order would otherwise persist and make the
     // next (regular) login wrongly behave as an exhibition order — e.g. email
     // /DOB shown as optional in the customer form.
-    sessionStorage.removeItem("isStockOrder");
-    sessionStorage.removeItem("exhibitionOrder");
+    clearOrderMode();
     navigate("/login");
   };
 
@@ -536,6 +536,23 @@ export default function Dashboard() {
       showPopup({
         title: "Access Denied",
         message: "Salesperson data not found. Please login again.",
+        type: "error",
+        confirmText: "Ok",
+      });
+      return;
+    }
+    // Re-read the permission live. `salesperson` was loaded on mount, so a
+    // permission revoked since then would still render the button.
+    const { data: perm } = await supabase
+      .from("salesperson")
+      .select("can_place_stock_orders")
+      .eq("email", (salesperson.email || "").toLowerCase())
+      .single();
+    if (!perm?.can_place_stock_orders) {
+      clearOrderMode();
+      showPopup({
+        title: "Not Allowed",
+        message: "You do not have permission to place stock orders.",
         type: "error",
         confirmText: "Ok",
       });
@@ -557,10 +574,8 @@ export default function Dashboard() {
       designation: salesperson.designation,
       role: salesperson.role,
     }));
-    sessionStorage.setItem("isStockOrder", "true");
-    sessionStorage.removeItem("exhibitionOrder"); // a stock order is not an exhibition order
-    sessionStorage.removeItem("screen4FormData");
-    sessionStorage.removeItem("screen6FormData");
+    // Exclusive: clears exhibition/comms flags and any half-finished drafts.
+    startOrderMode("stock");
     navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
   };
 
@@ -2267,12 +2282,10 @@ export default function Dashboard() {
               role: salesperson.role,
             }));
 
-            // Clear any leftover stock-order / exhibition-order flags — this is
-            // the regular customer flow, not a stock or exhibition order.
-            // Prevents leakage if the SA previously started one and backed out
-            // (exhibitionOrder is otherwise only cleared on a successful insert).
-            sessionStorage.removeItem("isStockOrder");
-            sessionStorage.removeItem("exhibitionOrder");
+            // Regular customer flow — clear every order-mode flag and draft.
+            // Prevents leakage if the SA previously started a stock/exhibition
+            // order and backed out without completing it.
+            startOrderMode("client");
 
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}

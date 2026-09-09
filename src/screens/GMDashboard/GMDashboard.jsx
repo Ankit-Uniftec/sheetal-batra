@@ -25,6 +25,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
+import { startOrderMode } from "../../utils/orderMode";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -245,9 +246,8 @@ export default function GMDashboard() {
             store: currentUserProfile.store_name,
             designation: currentUserProfile.designation,
         }));
-        sessionStorage.setItem("isStockOrder", "true");
-        sessionStorage.removeItem("screen4FormData");
-        sessionStorage.removeItem("screen6FormData");
+        // Exclusive: clears comms/exhibition flags and stale drafts too.
+        startOrderMode("stock");
         navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
     };
 
@@ -1394,6 +1394,10 @@ export default function GMDashboard() {
                                         email: currentUserEmail,
                                     }));
                                     sessionStorage.setItem("returnDashboard", "/gm-dashboard");
+                                    // Regular client order — drop any stale stock/comms/exhibition
+                                    // flag from an abandoned flow, which would otherwise misroute
+                                    // ProductForm and zero this order's pricing.
+                                    startOrderMode("client");
                                     navigate("/buyerVerification");
                                 }} style={{ background: '#d5b85a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>
                                     + Place Order

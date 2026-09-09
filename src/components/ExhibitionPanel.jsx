@@ -13,6 +13,7 @@ import {
   fetchExhibitionsByCreator,
 } from "../utils/exhibitionService";
 import "./ExhibitionPanel.css";
+import { startOrderMode } from "../utils/orderMode";
 
 const EMPTY_FORM = {
   name: "", country: "", location: "", companyName: "",
@@ -160,13 +161,13 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
       console.error("Exhibition order session setup failed:", e);
     }
 
-    sessionStorage.setItem("exhibitionOrder", JSON.stringify({
+    // Exclusive: also clears any stale stock/comms flag and half-finished drafts.
+    startOrderMode("exhibition", JSON.stringify({
       exhibition_id: exb.id,
       exhibition_name: exb.name,
       commission_split: exb.commission_split,
       sb_representative: exb.sb_representative,
     }));
-    sessionStorage.removeItem("isStockOrder");
     navigate("/buyerVerification", { state: { fromAssociate: true, exhibition: true } });
   };
 
