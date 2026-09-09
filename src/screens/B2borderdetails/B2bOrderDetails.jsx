@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
+import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { isB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
@@ -30,17 +31,15 @@ export default function B2bOrderDetails() {
     // Load data from session
     useEffect(() => {
         const checkAuthAndLoad = async () => {
-            // ✅ Auth check - only B2B users allowed
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                navigate("/login", { replace: true });
-                return;
-            }
-
-            const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
-            const allowedRoles = ["executive", "merchandiser", "production"];
-            if (!sp?.role || !allowedRoles.includes(sp.role)) {
-                await supabase.auth.signOut();
+            // ✅ Auth check - only B2B users allowed. A failed role read is
+            // "couldn't check", not "denied" — see utils/b2bRoleGuard.js.
+            const gate = await checkB2bRole();
+            if (!gate.ok) {
+                if (gate.reason === "denied") await supabase.auth.signOut();
+                if (gate.reason === "unavailable") {
+                    showPopup({ title: "Connection Problem", message: "Could not verify your access. Check your connection and try again.", type: "error" });
+                    return;
+                }
                 navigate("/login", { replace: true });
                 return;
             }
@@ -128,8 +127,17 @@ export default function B2bOrderDetails() {
 
     // A stock order has no vendorData at all, so gating the render on it would
     // hang on "Loading..." forever — only the product data is required.
+    // PopupComponent renders even while gated — the "Missing Data" warning
+    // raised by the mount effect above fires exactly when this gate is active,
+    // so leaving it out made that warning invisible and the redirect look like
+    // an unexplained jump. Same reason as B2bReviewOrder's gate.
     if (!productData || (!isStockOrder && !vendorData)) {
-        return <div className="b2b-od-loading">Loading...</div>;
+        return (
+            <>
+                {PopupComponent}
+                <div className="b2b-od-loading">Loading...</div>
+            </>
+        );
     }
 
     return (

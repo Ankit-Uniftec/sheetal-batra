@@ -9,6 +9,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
+import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import ExtrasPopup from "../../components/ExtrasPopup";
 import { B2B_SIZE_OPTIONS, SIZE_CHART_US, resolveSizeChart, chartValueSet } from "../../utils/b2bSizeChart";
 import { isB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
@@ -247,17 +248,15 @@ export default function B2bProductForm() {
     // ==================== LOAD VENDOR DATA FROM SESSION ====================
     useEffect(() => {
         const checkAuthAndLoad = async () => {
-            // ✅ Auth check - only B2B users allowed
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                navigate("/login", { replace: true });
-                return;
-            }
-
-            const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
-            const allowedRoles = ["executive", "merchandiser", "production"];
-            if (!sp?.role || !allowedRoles.includes(sp.role)) {
-                await supabase.auth.signOut();
+            // ✅ Auth check - only B2B users allowed. A failed role read is
+            // "couldn't check", not "denied" — see utils/b2bRoleGuard.js.
+            const gate = await checkB2bRole();
+            if (!gate.ok) {
+                if (gate.reason === "denied") await supabase.auth.signOut();
+                if (gate.reason === "unavailable") {
+                    showPopup({ title: "Connection Problem", message: "Could not verify your access. Check your connection and try again.", type: "error" });
+                    return;
+                }
                 navigate("/login", { replace: true });
                 return;
             }

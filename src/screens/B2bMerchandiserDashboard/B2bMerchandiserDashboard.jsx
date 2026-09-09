@@ -8,6 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { usePopup } from "../../components/Popup";
+import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
@@ -148,24 +149,21 @@ export default function B2bMerchandiserDashboard() {
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
+            // ✅ Role check - only merchandiser users allowed. A failed role
+            // read is "couldn't check", not "denied" — the old .single() here
+            // raised on zero rows and signed the user out on any transient
+            // failure. See utils/b2bRoleGuard.js.
+            const gate = await checkB2bRole(["merchandiser"]);
+            if (!gate.ok) {
+                if (gate.reason === "denied") await supabase.auth.signOut();
+                if (gate.reason === "unavailable") {
+                    showPopup({ title: "Connection Problem", message: "Could not load the dashboard. Check your connection and try again.", type: "error" });
+                    return;
+                }
                 navigate("/login", { replace: true });
                 return;
             }
-
-            // ✅ Role check - only merchandiser users allowed
-            const { data: roleCheck } = await supabase
-                .from("salesperson")
-                .select("role")
-                .eq("email", user.email?.toLowerCase())
-                .single();
-
-            if (!roleCheck || roleCheck.role !== "merchandiser") {
-                await supabase.auth.signOut();
-                navigate("/login", { replace: true });
-                return;
-            }
+            const user = gate.user;
 
             setUser(user);
 
@@ -221,9 +219,12 @@ export default function B2bMerchandiserDashboard() {
                 }
             }
             if (vendorsResult.data) setVendors(vendorsResult.data);
-            setLoading(false);
         } catch (err) {
             console.error("Load error:", err);
+        } finally {
+            // finally, not per-branch: every early return above (auth, denied,
+            // unavailable) used to skip setLoading(false) and leave the
+            // dashboard spinning forever.
             setLoading(false);
         }
     }, []);
