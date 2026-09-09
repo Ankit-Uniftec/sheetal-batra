@@ -668,6 +668,14 @@ export function getStageMaxDays(stageValue) {
   return typeof d === "number" ? d : null;
 }
 
+// Logical steps a component can be sent OUT to an external vendor for (Rule 7:
+// stages 2..8). Single source for the Production Head's movement picker and the
+// Production Manager's vendor-request form, so a vendor is always requested for a
+// stage the picker can actually offer.
+export const EXTERNAL_ELIGIBLE_STEPS = SCAN_STATIONS
+  .filter((s) => s.step >= 2 && s.step <= 8)
+  .map((s) => ({ step: s.step, label: s.label }));
+
 // Label for a logical STEP number (1..10) — e.g. 2 -> "Dyeing". Used to name
 // the stage a component went out to a vendor for (external_movements.stages_outside).
 export function getStepLabel(step) {
