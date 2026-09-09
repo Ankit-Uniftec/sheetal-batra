@@ -1,11 +1,10 @@
 // Guards the fix for vendors saved with no stage (rendered as "Stage not set"
 // and invisible in the Production Head's movement picker).
-import { SCAN_STATIONS } from "./barcodeService";
+import { SCAN_STATIONS, EXTERNAL_ELIGIBLE_STEPS } from "./barcodeService";
 
-// Mirrors the picker in VendorRequest.jsx / ProductionHeadVendors.jsx.
-const eligible = SCAN_STATIONS
-  .filter((s) => s.step >= 2 && s.step <= 8 && ![3, 6].includes(s.step))
-  .map((s) => s.step);
+// The real picker list, imported (not re-implemented) so this test can't drift
+// from what VendorRequest.jsx / ProductionHeadVendors.jsx actually offer.
+const eligible = EXTERNAL_ELIGIBLE_STEPS.map((s) => s.step);
 
 // The exact resolution requestVendor() does before inserting.
 const resolveStage = (stageStep) => {
@@ -17,7 +16,9 @@ const resolveStage = (stageStep) => {
 };
 
 test("every stage the form offers resolves to a label", () => {
-  expect(eligible).toEqual([2, 4, 5, 7, 8]);
+  // Steps 2..9: Dyeing through Final QC. 1 (cloth issue) and 10 (packaging)
+  // are in-house only and must never be offered.
+  expect(eligible).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
   eligible.forEach((step) => expect(resolveStage(step)).toBeTruthy());
   expect(resolveStage(4)).toBe("Embroidery");
 });

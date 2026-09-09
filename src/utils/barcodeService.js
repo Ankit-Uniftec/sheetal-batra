@@ -107,9 +107,10 @@ export const SCAN_STATIONS = [
 // `key` is the group id used by filters; `members` are the raw
 // production_stage enum values that map into this group.
 // ============================================================
-// `external` = pieces can be sent OUT to a vendor for this stage. On the
-// always-internal stages (order received, cloth issue, QC, packaging) the
-// stage cards hide the in-house/vendor split (there's never a "vendor" count).
+// `external` = pieces can be sent OUT to a vendor for this stage (steps 2..9,
+// mirroring EXTERNAL_ELIGIBLE_STEPS). On the always-internal stages (order
+// received, cloth issue, production complete, packaging) the stage cards hide
+// the in-house/vendor split (there's never a "vendor" count).
 export const STAGE_GROUPS = [
   { key: "order_received", label: "Order Received", step: 0, color: "#9e9e9e", external: false, members: ["order_received"] },
   { key: "cloth_issue", label: "Cloth Issue", step: 1, color: "#795548", external: false, members: ["cloth_issued"] },
@@ -117,10 +118,10 @@ export const STAGE_GROUPS = [
   { key: "pattern_cutting", label: "Pattern Cutting", step: 3, color: "#9c27b0", external: true, members: ["pattern_cutting_in_progress", "pattern_cutting_completed"] },
   { key: "embroidery", label: "Embroidery", step: 4, color: "#3f51b5", external: true, members: ["embroidery_in_progress", "embroidery_completed"] },
   { key: "dry_cleaning", label: "Dry Cleaning", step: 5, color: "#00bcd4", external: true, members: ["dry_cleaning_in_progress", "dry_cleaning_completed"] },
-  { key: "qc1", label: "QC 1", step: 6, color: "#f44336", external: false, members: ["qc_in_progress", "qc_passed", "qc_failed"] },
+  { key: "qc1", label: "QC 1", step: 6, color: "#f44336", external: true, members: ["qc_in_progress", "qc_passed", "qc_failed"] },
   { key: "stitching", label: "Stitching", step: 7, color: "#ef6c00", external: true, members: ["stitching_in_progress", "stitching_completed"] },
   { key: "hemming", label: "Hemming", step: 8, color: "#ff5722", external: true, members: ["hemming_in_progress", "hemming_completed"] },
-  { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", external: false, members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
+  { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", external: true, members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
   { key: "production_complete", label: "Production Completed", step: 10, color: "#388e3c", external: false, members: ["production_complete"] },
   { key: "packaging", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", external: false, members: ["packaging_dispatch", "dispatched"] },
 ];
@@ -668,12 +669,15 @@ export function getStageMaxDays(stageValue) {
   return typeof d === "number" ? d : null;
 }
 
-// Logical steps a component can be sent OUT to an external vendor for (Rule 7:
-// stages 2..8). Single source for the Production Head's movement picker and the
-// Production Manager's vendor-request form, so a vendor is always requested for a
-// stage the picker can actually offer.
+// Logical steps a component can be sent OUT to an external vendor for: stages
+// 2..9 (Dyeing through Final QC). Single source for the Production Head's
+// movement picker and the Production Manager's vendor-request form, so a vendor
+// is always requested for a stage the picker can actually offer.
+// Cloth Issue (1) and Packaging & Dispatch (10) are in-house only — a piece
+// never leaves the warehouse for them, and step_completed_stage() has no
+// completed enum to record against them on return (25_external_stage_completion).
 export const EXTERNAL_ELIGIBLE_STEPS = SCAN_STATIONS
-  .filter((s) => s.step >= 2 && s.step <= 8)
+  .filter((s) => s.step >= 2 && s.step <= 9)
   .map((s) => ({ step: s.step, label: s.label }));
 
 // Label for a logical STEP number (1..10) — e.g. 2 -> "Dyeing". Used to name
