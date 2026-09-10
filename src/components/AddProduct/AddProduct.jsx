@@ -13,7 +13,7 @@ import {
   checkDuplicateName,
 } from "./csvHelpers";
 import { STORE_CATEGORIES, DEFAULT_STORE_CATEGORY } from "../../utils/storeCategory";
-import { fetchShopifyInventory, adjustShopifyInventory } from "../../utils/shopifyInventory";
+import { fetchShopifyInventory, adjustShopifyInventory, normalizeShopifyId } from "../../utils/shopifyInventory";
 import useSkuScan from "../../hooks/useSkuScan";
 import BarcodeExportPanel from "./BarcodeExportPanel";
 import SkuTypeChooser from "./SkuTypeChooser";
@@ -624,7 +624,10 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
     } else {
       // LXRTS: per-size info lives in product_variants. Set inventory=0 on
       // the row (the dashboard sums variant inventory for the display).
-      productRow.shopify_product_id = shopifyProductId.trim();
+      //
+      // Normalised so a pasted GID and a pasted bare number land as the same
+      // value — the GID form every existing row in the catalogue uses.
+      productRow.shopify_product_id = normalizeShopifyId(shopifyProductId, "Product");
       productRow.inventory = 0;
       productRow.available_size = null;
     }
@@ -761,7 +764,8 @@ export default function AddProduct({ onProductAdded, prefill, onPrefillConsumed 
         size: v.size.trim().toUpperCase(),
         price: v.price ? Number(v.price) : Number(basePrice),
         inventory: Number(v.inventory) || 0,
-        shopify_variant_id: v.shopify_variant_id?.trim() || null,
+        shopify_variant_id:
+          normalizeShopifyId(v.shopify_variant_id, "ProductVariant") || null,
       });
 
       let varErr = null;
@@ -1621,8 +1625,12 @@ Re-open the product and add the sizes.`
                   className="ap-input"
                   value={shopifyProductId}
                   onChange={(e) => setShopifyProductId(e.target.value)}
-                  placeholder="gid://shopify/Product/1234567890"
+                  placeholder="gid://shopify/Product/1234567890  or  1234567890"
                 />
+                <span className="ap-help">
+                  Paste either the full <code>gid://shopify/Product/…</code> or just
+                  the number — a bare number is saved as the full GID either way.
+                </span>
               </div>
 
               <h3 className="ap-section-title">Size Variants</h3>
@@ -1677,7 +1685,7 @@ Re-open the product and add the sizes.`
                             className="ap-input"
                             value={v.shopify_variant_id}
                             onChange={(e) => updateVariant(i, "shopify_variant_id", e.target.value)}
-                            placeholder="gid://shopify/ProductVariant/..."
+                            placeholder="gid://shopify/ProductVariant/… or number"
                           />
                         </td>
                         <td>
