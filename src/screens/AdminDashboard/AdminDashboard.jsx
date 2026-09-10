@@ -3400,15 +3400,24 @@ export default function AdminDashboard() {
                     {activeTab === "sales_team" && (() => {
                         // Roles eligible for stock-order permission. Matches the
                         // dashboards that have a "Stock Order" sidebar item wired
-                        // up — SA (salesperson + sa_services), Admin, GM, and
-                        // Assistant CMO. Other roles don't have the button yet,
-                        // so listing them here would be misleading.
+                        // up — SA (salesperson + sa_services), Admin, GM,
+                        // Assistant CMO and Store Manager. Other roles don't have
+                        // the button yet, so listing them here would be
+                        // misleading: the toggle would save but do nothing.
+                        //
+                        // KEEP IN SYNC with the dashboards themselves. A role
+                        // added here without the matching sidebar item grants a
+                        // permission its owner can never use; a dashboard that
+                        // gains the item but isn't added here has no way to be
+                        // granted the permission at all (which is exactly how
+                        // store_manager was stuck).
                         const STOCK_ELIGIBLE_ROLES = new Set([
                             "salesperson",
                             "sa_services",
                             "admin",
                             "gm",
                             "assistant_cmo",
+                            "store_manager",
                         ]);
                         // Roles eligible for B2B stock-order permission — only the
                         // merchandiser dashboard has the "B2B Stock Order" item

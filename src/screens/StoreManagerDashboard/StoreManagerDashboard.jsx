@@ -11,6 +11,8 @@ import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
+import { usePopup } from "../../components/Popup";
+import { startOrderMode } from "../../utils/orderMode";
 import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
 import { getOrderStatusLabel, getStageLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../utils/barcodeService";
@@ -60,6 +62,7 @@ const storeMatches = (orderStore, userStore) => {
 export default function StoreManagerDashboard() {
     const navigate = useNavigate();
     const dropdownRef = useRef(null);
+    const { showPopup, PopupComponent } = usePopup();
 
     // Core state
     const [loading, setLoading] = useState(true);
@@ -68,6 +71,9 @@ export default function StoreManagerDashboard() {
     const [salespersonTable, setSalespersonTable] = useState([]);
     const [currentUserEmail, setCurrentUserEmail] = useState("");
     const [currentUserName, setCurrentUserName] = useState("");
+    // The logged-in manager's salesperson row. Drives the Stock Order entry
+    // below, which is gated on can_place_stock_orders.
+    const [currentUserProfile, setCurrentUserProfile] = useState(null);
     const [userStore, setUserStore] = useState("");
 
     // UI
@@ -124,9 +130,12 @@ export default function StoreManagerDashboard() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) { navigate("/login", { replace: true }); return; }
 
+            // phone/designation/can_place_stock_orders are for the stock-order
+            // flow below — it writes the whole profile into sessionStorage the
+            // way the SA and GM dashboards do.
             const { data: userRecord } = await supabase
                 .from("salesperson")
-                .select("role, saleperson, store_name")
+                .select("role, saleperson, email, phone, store_name, designation, can_place_stock_orders")
                 .eq("email", session.user.email?.toLowerCase())
                 .single();
 
@@ -139,10 +148,52 @@ export default function StoreManagerDashboard() {
             setCurrentUserEmail(session.user.email?.toLowerCase() || "");
             setCurrentUserName(userRecord.saleperson || "");
             setUserStore(userRecord.store_name || "");
+            setCurrentUserProfile(userRecord);
             fetchAllData();
         };
         checkAuthAndFetch();
     }, [navigate]);
+
+    // ═══════════════════════════════════════════════════════════
+    // STOCK ORDER ENTRY
+    // ═══════════════════════════════════════════════════════════
+    // Same flow as the SA and GM dashboards, gated on
+    // salesperson.can_place_stock_orders. A store manager raises stock for
+    // their own store, so the order carries their profile exactly as an SA's
+    // would; the channel is resolved downstream from store_name.
+    const handleStartStockOrder = async () => {
+        if (!currentUserProfile) {
+            showPopup({
+                title: "Access Denied",
+                message: "User profile not loaded. Please refresh and try again.",
+                type: "error",
+                confirmText: "Ok",
+            });
+            return;
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) sessionStorage.setItem("associateSession", JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            user: { email: session.user?.email },
+        }));
+        sessionStorage.setItem("returnToAssociate", "true");
+        // Route back HERE after the order is placed. Without this,
+        // OrderPlaced.handleBackToDashboard defaults to /AssociateDashboard,
+        // whose role check fails and logs a non-SA user straight out.
+        sessionStorage.setItem("returnDashboard", "/store-manager-dashboard");
+        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+        sessionStorage.setItem("currentSalesperson", JSON.stringify({
+            name: currentUserProfile.saleperson,
+            email: currentUserProfile.email,
+            phone: currentUserProfile.phone,
+            store: currentUserProfile.store_name,
+            designation: currentUserProfile.designation,
+        }));
+        // Exclusive: clears comms/exhibition flags and stale drafts too.
+        startOrderMode("stock");
+        navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
+    };
 
     const fetchAllData = async () => {
         setLoading(true);
@@ -821,6 +872,7 @@ export default function StoreManagerDashboard() {
 
     return (
         <div className="sm-page">
+            {PopupComponent}
             {/* HEADER */}
             <DashboardHeader
                 title={`${storeLabel} Store Manager`}
@@ -849,6 +901,17 @@ export default function StoreManagerDashboard() {
                             <button key={tab.key} className={`sm-nav-item ${activeTab === tab.key ? "active" : ""}`}
                                 onClick={() => { setActiveTab(tab.key); setShowSidebar(false); }}>{tab.label}</button>
                         ))}
+                        {/* Not a tab — it leaves this dashboard for the order
+                            form. Gated on the permission, like SA and GM. */}
+                        {currentUserProfile?.can_place_stock_orders && (
+                            <>
+                                <span className="sm-nav-section" style={{ marginTop: 12 }}>Operations</span>
+                                <button
+                                    className="sm-nav-item"
+                                    onClick={() => { setShowSidebar(false); handleStartStockOrder(); }}
+                                >Stock Order</button>
+                            </>
+                        )}
                     </nav>
                 </aside>
 
