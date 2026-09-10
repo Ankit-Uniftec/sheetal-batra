@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { usePopup } from "./Popup";
-import { fetchAllVendors, requestVendor, SCAN_STATIONS, getStepLabel } from "../utils/barcodeService";
+import { fetchAllVendors, requestVendor, EXTERNAL_ELIGIBLE_STEPS, getStepLabel } from "../utils/barcodeService";
 import "./VendorRequest.css";
 
 /**
@@ -14,14 +14,6 @@ import "./VendorRequest.css";
  * outside (ProductionHeadVendors) — a stage-less vendor is invisible there and
  * renders as "Stage not set".
  */
-// Stages a vendor can be engaged for — mirrors EXTERNAL_ELIGIBLE_STEPS in
-// ProductionHeadVendors.jsx (logical steps 2..8, minus Pattern Cutting/QC 1
-// which are not offered externally).
-const VENDOR_HIDDEN_STEPS = new Set([3, 6]);
-const VENDOR_STAGE_OPTIONS = SCAN_STATIONS
-  .filter((s) => s.step >= 2 && s.step <= 8 && !VENDOR_HIDDEN_STEPS.has(s.step))
-  .map((s) => ({ step: s.step, label: s.label }));
-
 const VendorRequest = ({ currentUserEmail }) => {
   const { showPopup, PopupComponent } = usePopup();
   const [name, setName] = useState("");
@@ -72,7 +64,7 @@ const VendorRequest = ({ currentUserEmail }) => {
         <label className="vr-label">Stage</label>
         <select className="vr-input" value={stageStep} onChange={(e) => setStageStep(e.target.value)}>
           <option value="">Select the stage this vendor does…</option>
-          {VENDOR_STAGE_OPTIONS.map((s) => <option key={s.step} value={String(s.step)}>{s.label}</option>)}
+          {EXTERNAL_ELIGIBLE_STEPS.map((s) => <option key={s.step} value={String(s.step)}>{s.label}</option>)}
         </select>
         <button className="vr-submit" onClick={handleRequest} disabled={submitting}>
           {submitting ? "Requesting…" : "Request Vendor"}

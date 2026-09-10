@@ -5,14 +5,12 @@ import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "../utils/fetchAllRows";
 import { isRevenueOrder } from "../utils/revenue";
 import { restoreOrderInventory } from "../utils/restoreOrderInventory";
-import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
 import { getSAStageLabel, getSAStageColor, getOrderStatusLabel, markShipmentDelivered } from "../utils/barcodeService";
-import NotificationBell from "../components/NotificationBell";
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 import UpdatePaymentModal from "../components/UpdatePaymentModal";
@@ -24,7 +22,9 @@ import useTabParam from "../hooks/useTabParam";
 import Paginator from "../components/Paginator";
 import StockPanel from "../components/stock/StockPanel";
 import { poolsForUser } from "../utils/stockVisibility";
+import { startOrderMode, clearOrderMode } from "../utils/orderMode";
 import { usePeriodFilter } from "../components/PeriodFilter";
+import DashboardHeader from "../components/DashboardHeader";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -515,6 +515,22 @@ export default function Dashboard() {
   }, []);
 
 
+  // Clicking an order notification jumps to that order: switch to the Orders
+  // tab, search it, then scroll it into view and flash its outline. Lifted out
+  // of the header JSX verbatim when the header moved to <DashboardHeader/>.
+  const handleNotificationOrderClick = (orderId, orderNo) => {
+    setActiveTab("orders");
+    setOrderSearch(orderNo || "");
+    setTimeout(() => {
+      const el = document.querySelector(`[data-order-id="${orderId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.outline = "2px solid #d5b85a";
+        setTimeout(() => { el.style.outline = ""; }, 3000);
+      }
+    }, 300);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     sessionStorage.setItem("requirePasswordVerificationOnDashboard", "true");
@@ -523,8 +539,7 @@ export default function Dashboard() {
     // so an abandoned exhibition order would otherwise persist and make the
     // next (regular) login wrongly behave as an exhibition order — e.g. email
     // /DOB shown as optional in the customer form.
-    sessionStorage.removeItem("isStockOrder");
-    sessionStorage.removeItem("exhibitionOrder");
+    clearOrderMode();
     navigate("/login");
   };
 
@@ -536,6 +551,23 @@ export default function Dashboard() {
       showPopup({
         title: "Access Denied",
         message: "Salesperson data not found. Please login again.",
+        type: "error",
+        confirmText: "Ok",
+      });
+      return;
+    }
+    // Re-read the permission live. `salesperson` was loaded on mount, so a
+    // permission revoked since then would still render the button.
+    const { data: perm } = await supabase
+      .from("salesperson")
+      .select("can_place_stock_orders")
+      .eq("email", (salesperson.email || "").toLowerCase())
+      .single();
+    if (!perm?.can_place_stock_orders) {
+      clearOrderMode();
+      showPopup({
+        title: "Not Allowed",
+        message: "You do not have permission to place stock orders.",
         type: "error",
         confirmText: "Ok",
       });
@@ -557,10 +589,8 @@ export default function Dashboard() {
       designation: salesperson.designation,
       role: salesperson.role,
     }));
-    sessionStorage.setItem("isStockOrder", "true");
-    sessionStorage.removeItem("exhibitionOrder"); // a stock order is not an exhibition order
-    sessionStorage.removeItem("screen4FormData");
-    sessionStorage.removeItem("screen6FormData");
+    // Exclusive: clears exhibition/comms flags and any half-finished drafts.
+    startOrderMode("stock");
     navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
   };
 
@@ -1478,35 +1508,14 @@ export default function Dashboard() {
       )}
 
       <div className={`ad-dashboard-wrapper ${showPasswordModal || editingOrder ? "ad-blurred" : ""}`}>
-        <header className="ad-header">
-          <img src={Logo} alt="logo" className="ad-header-logo" onClick={handleLogout} />
-          <h1 className="ad-header-title">Associate Dashboard</h1>
-          <div className="ad-header-right">
-            <NotificationBell
-              userEmail={salesperson?.email || ""}
-              onOrderClick={(orderId, orderNo) => {
-                setActiveTab("orders");
-                setOrderSearch(orderNo || "");
-                setTimeout(() => {
-                  const el = document.querySelector(`[data-order-id="${orderId}"]`);
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    el.style.outline = '2px solid #d5b85a';
-                    setTimeout(() => { el.style.outline = ''; }, 3000);
-                  }
-                }, 300);
-              }}
-            />
-            <button className="ad-header-btn" onClick={handleLogout}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-log-out-icon lucide-log-out"><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
-            </button>
-            <div className="ad-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
-              <div className="ad-bar"></div>
-              <div className="ad-bar"></div>
-              <div className="ad-bar"></div>
-            </div>
-          </div>
-        </header>
+        <DashboardHeader
+            title="Associate Dashboard"
+            onHome={() => setActiveTab("dashboard")}
+            onMenuToggle={() => setShowSidebar(!showSidebar)}
+            userEmail={salesperson?.email || ""}
+            onOrderClick={handleNotificationOrderClick}
+            onLogout={handleLogout}
+        />
 
         {/* Period filter — dashboard tab stat cards only (grid cells below are
             explicitly placed, so the control sits above the grid). */}
@@ -2267,12 +2276,10 @@ export default function Dashboard() {
               role: salesperson.role,
             }));
 
-            // Clear any leftover stock-order / exhibition-order flags — this is
-            // the regular customer flow, not a stock or exhibition order.
-            // Prevents leakage if the SA previously started one and backed out
-            // (exhibitionOrder is otherwise only cleared on a successful insert).
-            sessionStorage.removeItem("isStockOrder");
-            sessionStorage.removeItem("exhibitionOrder");
+            // Regular customer flow — clear every order-mode flag and draft.
+            // Prevents leakage if the SA previously started a stock/exhibition
+            // order and backed out without completing it.
+            startOrderMode("client");
 
             navigate("/buyerVerification", { state: { fromAssociate: true } });
           }}

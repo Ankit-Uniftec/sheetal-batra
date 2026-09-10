@@ -4,14 +4,13 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isRevenueOrder } from "../../utils/revenue";
 import "./COODashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
-import NotificationBell from "../../components/NotificationBell";
+import DashboardHeader from "../../components/DashboardHeader";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
 import VendorApprovals from "../../components/VendorApprovals";
@@ -730,11 +729,13 @@ export default function COODashboard() {
     return (
         <div className="admin-page">
             {PopupComponent}
-            <header className="admin-header">
-                <div className="admin-header-left"><button className="admin-hamburger" onClick={() => setShowSidebar(!showSidebar)}><span></span><span></span><span></span></button><img src={Logo} alt="Logo" className="admin-logo" onClick={() => navigate("/login")} /></div>
-                <h1 className="admin-title">COO Dashboard</h1>
-                <div className="admin-header-right"><NotificationBell userEmail={currentUserEmail} onOrderClick={() => { }} /><button className="admin-logout-btn" onClick={handleLogout}>Logout</button></div>
-            </header>
+            <DashboardHeader
+                title="COO Dashboard"
+                onHome={() => setActiveTab("operations")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={currentUserEmail}
+                onLogout={handleLogout}
+            />
 
             <div className="admin-layout">
                 <aside className={`admin-sidebar ${showSidebar ? "open" : ""}`}>

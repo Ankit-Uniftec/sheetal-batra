@@ -10,7 +10,6 @@ import { getWarehouseDate } from "../../utils/warehouseDate";
 import Popup, { usePopup } from "../../components/Popup";
 import Paginator from "../../components/Paginator";
 import Badge from "../../components/Badge";
-import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
@@ -48,8 +47,8 @@ import {
   isPaymentHeld,
 } from "./pay.mjs";
 import formatDate from "../../utils/formatDate";
-import Logo from "../../images/logo.png";
 import "./ShopifyOrdersDashboard.css";
+import DashboardHeader from "../../components/DashboardHeader";
 
 /**
  * ShopifyOrdersDashboard — Shopify orders placed on sheetalbatraindia.com.
@@ -1582,26 +1581,19 @@ export default function ShopifyOrdersDashboard() {
       )}
 
       {/* HEADER */}
-      <header className="sho-header">
-        <div className="sho-header-left">
-          <button
-            className="sho-hamburger"
-            onClick={() => setShowSidebar((s) => !s)}
-            aria-label="Toggle menu"
-          >
-            <span /><span /><span />
-          </button>
-          <img src={Logo} alt="Sheetal Batra" className="sho-logo" />
-        </div>
-        <h1 className="sho-title">Shopify Orders</h1>
-        <div className="sho-header-right">
-          <button className="sho-primary-btn" onClick={handleSyncNow} disabled={syncing}>
-            {syncing ? "Syncing…" : "Sync now"}
-          </button>
-          <NotificationBell userEmail={user?.email} onOrderClick={() => { }} />
-          <span className="sho-user-name">{profile?.saleperson || "—"}</span>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Shopify Orders"
+          onHome={() => setActiveTab("overview")}
+          onMenuToggle={() => setShowSidebar((s) => !s)}
+          userEmail={user?.email}
+          userName={profile?.saleperson}
+          onLogout={handleLogout}
+          actions={(
+                <button className="sho-primary-btn" onClick={handleSyncNow} disabled={syncing}>
+                    {syncing ? "Syncing…" : "Sync now"}
+                </button>
+            )}
+      />
 
       <div className="sho-layout">
         {/* SIDEBAR */}

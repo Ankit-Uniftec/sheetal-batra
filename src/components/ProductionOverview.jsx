@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import { computeStatusStats, computeChannelBreakdown, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady } from "../utils/productionMetrics";
+import StatIcons from "./StatIcons";
 import "./ProductionOverview.css";
 
 // Shared "Production Overview" — the operational metric cards (Total Orders,
@@ -16,9 +17,10 @@ import "./ProductionOverview.css";
 //                meaningful on the multi-channel Production Manager dashboard.
 //   totalLabel   heading for the Total Orders card (default "Total Orders").
 
-const Icon = {
-  package: "📦", gear: "⚙️", warning: "⚠️", clock: "⏱️", refresh: "🔄", truck: "🚚", layers: "🧩",
-};
+// Shared SVG set (StatIcons.jsx) — these cards used emoji, which rendered as
+// OS-specific colour glyphs next to the hand-drawn SVG icons the rest of the
+// app uses. Same keys, so every StatCard call below is unchanged.
+const Icon = StatIcons;
 
 function StatCard({ title, value, subtitle, highlight, icon }) {
   return (

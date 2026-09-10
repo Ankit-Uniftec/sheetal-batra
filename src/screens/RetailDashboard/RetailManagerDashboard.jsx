@@ -4,7 +4,6 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isRevenueOrder, orderRevenueAmount } from "../../utils/revenue";
 import "./RetailManagerDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import {
@@ -19,6 +18,7 @@ import { poolsForUser } from "../../utils/stockVisibility";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
 import { getOrderChannelLabel } from "../../utils/barcodeService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
+import DashboardHeader from "../../components/DashboardHeader";
 
 const COMPARISON_OPTIONS = [
     { value: "none", label: "No comparison" },
@@ -653,18 +653,12 @@ export default function RetailManagerDashboard() {
     return (
         <div className="rm-page">
             {/* HEADER */}
-            <header className="rm-header">
-                <div className="rm-header-left">
-                    <button className="rm-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
-                        <span /><span /><span />
-                    </button>
-                    <img src={Logo} alt="Sheetal Batra" className="rm-logo" />
-                </div>
-                <h1 className="rm-title">Retail Manager</h1>
-                <div className="rm-header-right">
-                    <button className="rm-logout-btn" onClick={handleLogout}>Logout</button>
-                </div>
-            </header>
+            <DashboardHeader
+                title="Retail Manager"
+                onHome={() => setActiveTab("store_analytics")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                onLogout={handleLogout}
+            />
 
             <div className="rm-layout">
                 {/* SIDEBAR */}

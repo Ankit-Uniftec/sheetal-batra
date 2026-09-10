@@ -5,6 +5,16 @@ import { usePopup } from "../Popup";
 import { usePeriodFilter } from "../PeriodFilter";
 import "./StockTabs.css";
 
+// The warehouse names the stock-pool map recognises (utils/stockVisibility's
+// POOL_DEFS matches these words against warehouses.name). Offered as
+// suggestions, not enforced — a warehouse may legitimately be named anything;
+// it simply won't roll up into a location pool.
+const WAREHOUSE_NAME_SUGGESTIONS = [
+  "Delhi Warehouse",
+  "Ludhiana Warehouse",
+  "Factory",
+];
+
 export default function WarehouseTab() {
   const { showPopup, PopupComponent } = usePopup();
   const [warehouses, setWarehouses] = useState([]);
@@ -376,13 +386,29 @@ export default function WarehouseTab() {
 
             <div className="inv-modal-field">
               <label>Warehouse Name *</label>
+              {/* A datalist, not a <select>: the name stays free text, because
+                  existing rows were typed by hand and a fixed list would make
+                  every one of them unselectable on edit. The suggestions are
+                  the names utils/stockVisibility actually matches on
+                  (/delhi/i, /ludhiana/i, /factory/i) — "Factory" was missing
+                  from the stock panel only because no warehouse was ever named
+                  with that word in it. */}
               <input
                 type="text"
-                placeholder="e.g. Delhi Warehouse"
+                list="wh-name-suggestions"
+                placeholder="e.g. Delhi Warehouse, Factory"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 autoFocus
               />
+              <datalist id="wh-name-suggestions">
+                {WAREHOUSE_NAME_SUGGESTIONS.map((n) => <option key={n} value={n} />)}
+              </datalist>
+              <span className="inv-modal-help">
+                Include <strong>Delhi</strong>, <strong>Ludhiana</strong> or{" "}
+                <strong>Factory</strong> in the name for this warehouse to appear
+                under that location in the stock panels.
+              </span>
             </div>
 
             <div className="inv-modal-field">

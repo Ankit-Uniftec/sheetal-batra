@@ -1,0 +1,138 @@
+/* Delivery Performance panel — matches the house dashboard card language
+   (translucent #FFFFFFB0 over the page background, #D4D4D4 border, gold
+   accent), so it sits inside Retail/Warehouse-style shells unchanged. */
+.dpp-wrap { margin: 8px 0 22px; }
+
+.dpp-heading {
+  font-family: "Athleas", serif;
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #d5b85a;
+}
+
+.dpp-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dpp-card {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-left: 4px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 16px 18px;
+  backdrop-filter: blur(10px);
+}
+
+/* Traffic light on the left edge only — keeps the card calm while still
+   scannable at a glance. */
+.dpp-card.dpp-good { border-left-color: #2e7d32; }
+.dpp-card.dpp-warn { border-left-color: #ef6c00; }
+.dpp-card.dpp-bad  { border-left-color: #c62828; }
+
+.dpp-card-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.dpp-card-value {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.1;
+}
+
+.dpp-card-sub {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.dpp-muted { color: #999; }
+
+.dpp-drill {
+  margin-top: 10px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #d5b85a;
+  background: #FFFFFFB0;
+  border: 1px solid #d5b85a;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.dpp-drill:hover { background: #d5b85a; color: #fff; }
+
+.dpp-drill-panel {
+  background: #FFFFFFB0;
+  border: 1px solid #D4D4D4;
+  border-radius: 12px;
+  padding: 12px 14px;
+  backdrop-filter: blur(10px);
+}
+
+.dpp-drill-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.dpp-drill-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: #999;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+/* Wide tables scroll inside their own box — the page body must never scroll
+   sideways. */
+.dpp-table-scroll { overflow-x: auto; }
+
+.dpp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dpp-table th {
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #999;
+  border-bottom: 1px solid #D4D4D4;
+  white-space: nowrap;
+}
+
+.dpp-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #ececec;
+  color: #333;
+  white-space: nowrap;
+}
+
+.dpp-late { color: #c62828; font-weight: 600; }
+
+.dpp-empty {
+  margin: 10px 0;
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+}

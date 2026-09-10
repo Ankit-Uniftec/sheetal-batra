@@ -3,11 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./CommsDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
-import NotificationBell from "../../components/NotificationBell";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
@@ -23,6 +21,7 @@ import CommsOrderCalendar from "./CommsOrderCalendar";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
+import DashboardHeader from "../../components/DashboardHeader";
 
 // Comms order cards are heavy (image, colour swatches, component chips) —
 // rendering the whole filtered list lags once orders grow. Paginate.
@@ -333,23 +332,14 @@ export default function CommsDashboard() {
       )}
 
       {/* HEADER */}
-      <header className="comms-header">
-        <div className="comms-header-left">
-          <button
-            className="comms-hamburger"
-            onClick={() => setShowSidebar((s) => !s)}
-            aria-label="Toggle menu"
-          >
-            <span /><span /><span />
-          </button>
-          <img src={Logo} alt="Sheetal Batra" className="comms-logo" />
-        </div>
-        <h1 className="comms-title">Comms Dashboard</h1>
-        <div className="comms-header-right">
-          <NotificationBell userEmail={user?.email} onOrderClick={() => { }} />
-          <span className="comms-user-name">{profile?.saleperson || "—"}</span>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Comms Dashboard"
+          onHome={() => setActiveTab("overview")}
+          onMenuToggle={() => setShowSidebar((s) => !s)}
+          userEmail={user?.email}
+          userName={profile?.saleperson}
+          onLogout={handleLogout}
+      />
 
       <div className="comms-body">
         {/* SIDEBAR */}

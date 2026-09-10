@@ -4,14 +4,13 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isRevenueOrder } from "../../utils/revenue";
 import "./GMDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
-import NotificationBell from "../../components/NotificationBell";
+import DashboardHeader from "../../components/DashboardHeader";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
 import ExhibitionApprovals from "../../components/ExhibitionApprovals";
@@ -25,6 +24,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
+import { startOrderMode } from "../../utils/orderMode";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -245,9 +245,8 @@ export default function GMDashboard() {
             store: currentUserProfile.store_name,
             designation: currentUserProfile.designation,
         }));
-        sessionStorage.setItem("isStockOrder", "true");
-        sessionStorage.removeItem("screen4FormData");
-        sessionStorage.removeItem("screen6FormData");
+        // Exclusive: clears comms/exhibition flags and stale drafts too.
+        startOrderMode("stock");
         navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
     };
 
@@ -887,17 +886,13 @@ export default function GMDashboard() {
             {PopupComponent}
 
             {/* HEADER */}
-            <header className="admin-header">
-                <div className="admin-header-left">
-                    <button className="admin-hamburger" onClick={() => setShowSidebar(!showSidebar)}><span></span><span></span><span></span></button>
-                    <img src={Logo} alt="Logo" className="admin-logo" onClick={() => navigate("/login")} />
-                </div>
-                <h1 className="admin-title">GM Dashboard</h1>
-                <div className="admin-header-right">
-                    <NotificationBell userEmail={currentUserEmail} onOrderClick={() => { }} />
-                    <button className="admin-logout-btn" onClick={handleLogout}>Logout</button>
-                </div>
-            </header>
+            <DashboardHeader
+                title="GM Dashboard"
+                onHome={() => setActiveTab("store_performance")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={currentUserEmail}
+                onLogout={handleLogout}
+            />
 
             <div className="admin-layout">
                 {/* SIDEBAR */}
@@ -1394,6 +1389,10 @@ export default function GMDashboard() {
                                         email: currentUserEmail,
                                     }));
                                     sessionStorage.setItem("returnDashboard", "/gm-dashboard");
+                                    // Regular client order — drop any stale stock/comms/exhibition
+                                    // flag from an abandoned flow, which would otherwise misroute
+                                    // ProductForm and zero this order's pricing.
+                                    startOrderMode("client");
                                     navigate("/buyerVerification");
                                 }} style={{ background: '#d5b85a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>
                                     + Place Order

@@ -3,16 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bExecutiveDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
-import NotificationBell from "../../components/NotificationBell";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam } from "../../components/PeriodFilter";
 import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
+import DashboardHeader from "../../components/DashboardHeader";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
@@ -268,24 +267,14 @@ export default function B2bExecutiveDashboard() {
     return (
         <div className="b2b-dashboard-wrapper">
             {/* ===== HEADER ===== */}
-            <header className="b2b-header">
-                <img src={Logo} alt="logo" className="b2b-header-logo" onClick={handleLogout} />
-                <h1 className="b2b-header-title">B2B Executive</h1>
-                <div className="b2b-header-right">
-                    <NotificationBell
-                        userEmail={user?.email}
-                        onOrderClick={(orderId) => handleViewOrder(orderId)}
-                    />
-                    <button className="b2b-header-btn" onClick={handleLogout}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
-                    </button>
-                    <div className="b2b-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
-                        <div className="b2b-bar"></div>
-                        <div className="b2b-bar"></div>
-                        <div className="b2b-bar"></div>
-                    </div>
-                </div>
-            </header>
+            <DashboardHeader
+                title="B2B Executive"
+                onHome={() => setActiveTab("dashboard")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={user?.email}
+                onOrderClick={handleViewOrder}
+                onLogout={handleLogout}
+            />
 
             {/* Period filter — dashboard tab stat cards only (grid cells below are
                 explicitly placed, so the control sits above the grid). */}

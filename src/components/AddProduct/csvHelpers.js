@@ -22,7 +22,7 @@ export const CSV_COLUMNS = [
   "default_top",
   "default_bottom",
   "default_color",
-  "store_category",  // "All Stores" (default), "Delhi", or "Ludhiana"
+  "store_category",  // "All Stores" (default), "Delhi", "Ludhiana", or "Factory One"
   "has_dupatta",     // "yes"/"no" (blank = no) — generates a separate dupatta barcode
   "default_dupatta_color", // pre-fills the order form's Dupatta Color; blank falls back to default_color
   "is_custom_piece", // "yes"/"no" (blank = no) — bespoke / non-standard SKU

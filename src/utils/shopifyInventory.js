@@ -29,6 +29,43 @@ import config from "../config/config";
 // order-placement inventory logic carries far more risk than it removes.
 // ============================================================
 
+/**
+ * Put a Shopify id into the GID form this database stores.
+ *
+ * THE STORED SHAPE IS THE FULL GID — verified against the live catalogue, not
+ * assumed: 120 of 121 `products.shopify_product_id` and 1000 of 1000
+ * `product_variants.shopify_variant_id` rows are `gid://shopify/<Type>/<id>`.
+ * (The single exception is the literal string "test" on SKU-1071 — junk, not a
+ * bare id.) The deployed `shopify-inventory` edge function therefore consumes
+ * GIDs today, so anything written here must match or that product stops syncing.
+ *
+ * Shopify's URL bar shows only the number while its API and CSV exports hand out
+ * the GID, so whichever a user copies is a coin flip. Both are accepted; one
+ * shape is stored.
+ *
+ * Idempotent: a value that is already a GID is returned untouched, so re-saving
+ * a product can never produce `gid://shopify/Product/gid://shopify/Product/123`.
+ * Mirrors the defensive pattern in supabase/functions/shopify-order-sync
+ * (index.ts:1000), which likewise accepts either form rather than assuming one.
+ *
+ * @param   {string} value  A GID, a bare numeric id, or anything pasted.
+ * @param   {"Product"|"ProductVariant"} type  Which GID to build from a bare id.
+ * @returns {string} the GID form, or the trimmed input unchanged when it is
+ *          neither a GID nor a bare number — never throws, so a typo reaches the
+ *          DB as typed rather than being silently blanked or mangled into a
+ *          plausible-looking GID that points at nothing.
+ */
+export function normalizeShopifyId(value, type = "Product") {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  // Already a GID of any type — leave it exactly as-is. Rebuilding it from the
+  // trailing digits would silently retype a ProductVariant GID as a Product one.
+  if (/^gid:\/\/shopify\/[A-Za-z]+\/\d+$/.test(raw)) return raw;
+  // A bare numeric id is the only other thing we can safely interpret.
+  if (/^\d+$/.test(raw)) return `gid://shopify/${type}/${raw}`;
+  return raw;
+}
+
 const endpoint = () => `${config.SUPABASE_URL}/functions/v1/shopify-inventory`;
 
 const headers = () => ({

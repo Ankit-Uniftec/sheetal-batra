@@ -5,7 +5,12 @@
 // products are visible to every store; the others are location-specific.
 // ============================================================
 
-export const STORE_CATEGORIES = ["All Stores", "Delhi", "Ludhiana"];
+// "Factory One" is a holding location, not a shop floor: normalizeStore never
+// returns it (no salesperson's store_name resolves there), so by the rule in
+// isProductVisibleForStore a product tagged Factory One is deliberately absent
+// from every SA's order form. That is the point — it is stock at the factory,
+// not stock anyone can sell yet. Move it to a store category to put it on sale.
+export const STORE_CATEGORIES = ["All Stores", "Delhi", "Ludhiana", "Factory One"];
 export const DEFAULT_STORE_CATEGORY = "All Stores";
 
 /**

@@ -2,12 +2,10 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import "./ProductionManagerDashboard.css";
-import Logo from "../../../images/logo.png";
 import formatIndianNumber from "../../../utils/formatIndianNumber";
 import formatDate from "../../../utils/formatDate";
 import { isRevenueOrder } from "../../../utils/revenue";
 import { usePopup } from "../../../components/Popup";
-import NotificationBell from "../../../components/NotificationBell";
 import SearchByDropdown from "../../../components/SearchByDropdown";
 import ProductionOverrides from "../../../components/ProductionOverrides";
 import VendorRequest from "../../../components/VendorRequest";
@@ -39,6 +37,7 @@ import { PRODUCTION_STAGES, getStageLabel, getStageColor, STAGE_GROUPS, enrichCo
 import { computeChannelBreakdown, computeStatusStats, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady, isOrderStillRunning } from "../../../utils/productionMetrics";
 import downloadCsv from "../../../utils/downloadCsv";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import DashboardHeader from "../../../components/DashboardHeader";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
 
@@ -1905,6 +1904,22 @@ export default function ProductionManagerDashboard() {
     // ==================== HELPERS ====================
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
 
+    // Clicking an order notification jumps to that order: switch to All Orders,
+    // search it, highlight it and scroll it into view. Lifted out of the header
+    // JSX verbatim when the header moved to <DashboardHeader/>.
+    const handleNotificationOrderClick = (orderId, orderNo) => {
+        setActiveTab("orders");
+        setOrderSearch(orderNo || "");
+        setCurrentPage(1);
+        setHighlightOrderId(orderId);
+        setTimeout(() => {
+            const card = document.querySelector(`[data-order-id="${orderId}"]`);
+            if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 350);
+        // Auto-clear highlight after a few seconds
+        setTimeout(() => setHighlightOrderId(null), 4000);
+    };
+
     // Channel badge — the full channel model, not the old binary B2B/Store
     // (Comms, Private and Website orders all read as "Store" before).
     // Use the SHARED label helper rather than a local map. The map this replaced
@@ -2267,32 +2282,14 @@ export default function ProductionManagerDashboard() {
 
             <div className={`pm-dashboard-wrapper ${editingOrder || priorityOrder ? "pm-blurred" : ""}`}>
                 {/* ===== HEADER ===== */}
-                <header className="pm-header">
-                    <div className="pm-header-left">
-                        <div className="pm-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}><div className="pm-bar"></div><div className="pm-bar"></div><div className="pm-bar"></div></div>
-                        <img src={Logo} alt="logo" className="pm-header-logo" onClick={() => setActiveTab("overview")} />
-                    </div>
-                    <h1 className="pm-header-title">Production Manager</h1>
-                    <div className="pm-header-right">
-                        <NotificationBell
-                            userEmail={currentUserEmail}
-                            onOrderClick={(orderId, orderNo) => {
-                                // Switch to All Orders tab, highlight + scroll to the order card
-                                setActiveTab("orders");
-                                setOrderSearch(orderNo || "");
-                                setCurrentPage(1);
-                                setHighlightOrderId(orderId);
-                                setTimeout(() => {
-                                    const card = document.querySelector(`[data-order-id="${orderId}"]`);
-                                    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
-                                }, 350);
-                                // Auto-clear highlight after a few seconds
-                                setTimeout(() => setHighlightOrderId(null), 4000);
-                            }}
-                        />
-                        <button className="pm-header-btn" onClick={handleLogout}>Logout</button>
-                    </div>
-                </header>
+                <DashboardHeader
+                    title="Production Manager"
+                    onHome={() => setActiveTab("overview")}
+                    onMenuToggle={() => setShowSidebar(!showSidebar)}
+                    userEmail={currentUserEmail}
+                    onOrderClick={handleNotificationOrderClick}
+                    onLogout={handleLogout}
+                />
 
                 {/* ===== GRID LAYOUT ===== */}
                 <div className={`pm-grid-layout ${showSidebar ? "pm-sidebar-open" : ""}`}>

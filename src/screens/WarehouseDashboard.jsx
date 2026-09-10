@@ -3,17 +3,16 @@ import "./WarehouseDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "../utils/fetchAllRows";
-import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 import { getWarehouseDate as sharedWarehouseDate, getWarehouseDateObj } from "../utils/warehouseDate";
 import { downloadWarehousePdf } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
-import NotificationBell from "../components/NotificationBell";
 import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
 import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
+import { isAssignedToHead } from "../utils/stockProductionHead";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import ComponentStageBadge from "../components/ComponentStageBadge";
 import QcReportModal from "../components/QcReportModal";
@@ -29,6 +28,7 @@ import Paginator from "../components/Paginator";
 import CompletePicker from "../components/CompletePicker";
 import { runManualCompleteWithOverride } from "../utils/manualComplete";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../components/PeriodFilter";
+import DashboardHeader from "../components/DashboardHeader";
 
 // Warehouse production stages (manual dropdown)
 // const WAREHOUSE_STAGES = [
@@ -218,9 +218,17 @@ const WarehouseDashboard = () => {
   // B2B orders carry the store but not the flag, so !is_b2b alone let them slip
   // through (this is why they were still showing).
   const isB2bOrder = (o) => o?.is_b2b === true || (o?.salesperson_store || "").trim().toUpperCase() === "B2B";
+  // EXCEPT a stock order explicitly assigned to this head via the stock-order
+  // head picker. That assignment is the SA saying "this one is yours" and it
+  // must beat the blanket B2B exclusion above — otherwise picking the Offline
+  // head on a B2B stock order writes the designation, passes every other gate,
+  // and the order still never appears here. Additive: the B2B head keeps it too.
+  // See utils/stockProductionHead.js.
   const visibleOrders = useMemo(
-    () => (isOfflineProdHead ? orders.filter(o => !isB2bOrder(o)) : orders),
-    [orders, isOfflineProdHead]
+    () => (isOfflineProdHead
+      ? orders.filter(o => !isB2bOrder(o) || isAssignedToHead(o, userDesignation))
+      : orders),
+    [orders, isOfflineProdHead, userDesignation]
   );
 
   // Get unique salespersons from orders
@@ -1142,23 +1150,14 @@ const WarehouseDashboard = () => {
       )}
 
       {/* HEADER */}
-      <div className="wd-top-header">
-        <div className="wd-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
-          <div className="wd-bar"></div>
-          <div className="wd-bar"></div>
-          <div className="wd-bar"></div>
-        </div>
-        <div className="wd-header-left">
-          <img src={Logo} className="logo" alt="logo" />
-        </div>
-        <h1 className="wd-title">{dashboardTitle}</h1>
-        <div className="wd-header-right">
-          <NotificationBell
-            userEmail={currentUserEmail}
-            onOrderClick={goToOrder}
-          />
-        </div>
-      </div>
+      <DashboardHeader
+        title={dashboardTitle}
+        onHome={() => setActiveTab("orders")}
+        onMenuToggle={() => setShowSidebar(!showSidebar)}
+        userEmail={currentUserEmail}
+        onOrderClick={goToOrder}
+        onLogout={handleLogout}
+      />
 
       {/* MAIN LAYOUT */}
       <div className="wd-main-layout">

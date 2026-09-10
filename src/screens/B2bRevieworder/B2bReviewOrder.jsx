@@ -7,8 +7,10 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
+import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
+import { isValidStockHeadDesignation } from "../../utils/stockProductionHead";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -59,68 +61,40 @@ export default function B2bReviewOrder() {
 
     useEffect(() => {
         const fetchUser = async () => {
-            const { data } = await supabase.auth.getUser();
-            const currentUser = data?.user || null;
-
-            if (!currentUser) {
+            // ✅ Block non-B2B users from B2B review. A failed role read is
+            // "couldn't check", not "denied" — see utils/b2bRoleGuard.js.
+            const gate = await checkB2bRole();
+            if (!gate.ok) {
+                if (gate.reason === "denied") await supabase.auth.signOut();
+                if (gate.reason === "unavailable") {
+                    showPopup({ title: "Connection Problem", message: "Could not verify your access. Check your connection and try again.", type: "error" });
+                    return;
+                }
                 navigate("/login", { replace: true });
                 return;
             }
-            // Fetch user role
+            const currentUser = gate.user;
+
+            // Profile fields (store/name/phone) for the order payload. Read
+            // errors here are non-fatal: handleSubmit refuses to write without
+            // a resolved store rather than guessing one.
             const { data: spData2 } = await supabase
                 .from("salesperson")
                 .select("role, store_name, saleperson, phone")
                 .eq("email", currentUser.email?.toLowerCase())
                 .maybeSingle();
 
-            // ✅ Block non-B2B users from B2B review
-            const allowedRoles = ["executive", "merchandiser", "production"];
-            if (!spData2?.role || !allowedRoles.includes(spData2.role)) {
-                await supabase.auth.signOut();
-                navigate("/login", { replace: true });
-                return;
-            }
-
             setUser(currentUser);
-            setUserRole(spData2.role);
+            setUserRole(gate.role);
             if (spData2?.saleperson) setSalespersonName(spData2.saleperson);
             if (spData2?.phone) setSalespersonPhone(spData2.phone);
 
-            const isB2B = spData2?.role?.includes("executive") || spData2?.role?.includes("merchandiser") || spData2?.role?.includes("production");
-
-            // For B2B users, use profile store directly
-            if (isB2B) {
-                const store = spData2?.store_name || "B2B";
-                setSalespersonStore(store);
-                return;
-            }
-
-            // Try 1: Get store from currentSalesperson session (B2C only)
-            const savedSP = sessionStorage.getItem("currentSalesperson");
-            if (savedSP) {
-                try {
-                    const spData = JSON.parse(savedSP);
-                    if (spData.store) { setSalespersonStore(spData.store); return; }
-                } catch (e) { }
-            }
-
-            // Try 2: Fetch from salesperson table by email
-            if (currentUser.email) {
-                const { data: spData } = await supabase
-                    .from("salesperson")
-                    .select("store_name")
-                    .eq("email", currentUser.email.toLowerCase())
-                    .single();
-                if (spData?.store_name) { setSalespersonStore(spData.store_name); return; }
-            }
-
-            // Try 3: Fetch from profiles table
-            const { data: storeData } = await supabase
-                .from("salesperson")
-                .select("store_name")
-                .eq("email", currentUser.email?.toLowerCase())
-                .maybeSingle();
-            if (storeData?.store_name) setSalespersonStore(storeData.store_name);
+            // gate.role is authoritative — checkB2bRole already proved this
+            // user holds one of the three B2B roles, so everyone reaching here
+            // is B2B and the B2C fallbacks below are dead for them. Deriving
+            // this from spData2 again meant a failed second read silently
+            // dropped the user into the B2C store lookup.
+            setSalespersonStore(spData2?.store_name || "B2B");
         };
         fetchUser();
     }, []);
@@ -342,6 +316,15 @@ export default function B2bReviewOrder() {
                 // warehouse.
                 if (isStockOrder) {
                     orderPayload.is_stock_order = true;
+                    // The head the merchandiser explicitly assigned on the
+                    // details step, or null to derive from channel. Validated
+                    // rather than passed through: the column carries a CHECK
+                    // constraint, so a stale session value naming a designation
+                    // no longer offered would fail the insert outright.
+                    orderPayload.production_head_designation =
+                        isValidStockHeadDesignation(detailsData?.productionHead)
+                            ? detailsData.productionHead
+                            : null;
                     orderPayload.delivery_name = B2B_STOCK_DELIVERY.delivery_name;
                     orderPayload.advance_payment = 0;
                     orderPayload.remaining_payment = 0;
@@ -413,14 +396,6 @@ export default function B2bReviewOrder() {
                 }
             }
 
-            // Clear all session data. The stock flag goes too, so the next order
-            // raised in this session doesn't silently inherit stock behaviour.
-            sessionStorage.removeItem(VENDOR_SESSION_KEY);
-            sessionStorage.removeItem(PRODUCT_SESSION_KEY);
-            sessionStorage.removeItem(DETAILS_SESSION_KEY);
-            sessionStorage.removeItem("b2bEditingOrderId");
-            clearB2bStockOrder();
-
             const isEdit = !!editingOrderId;
             const dashboardPath = isMerchandiser ? "/b2b-merchandiser-dashboard" : userRole?.toLowerCase().includes("production") ? "/b2b-production-dashboard" : "/b2b-executive-dashboard";
 
@@ -434,7 +409,21 @@ export default function B2bReviewOrder() {
                             ? `Order #${resultOrderNo} has been created and auto-approved.`
                             : `Order #${resultOrderNo} has been submitted for approval.`,
                 type: "success",
-                onConfirm: () => navigate(dashboardPath),
+                onConfirm: () => {
+                    // Clear session ONLY on the way out. Clearing it before the
+                    // popup rendered wiped isStockOrder, and the render gate
+                    // below (which needs it, since a stock order has no
+                    // vendorData) then short-circuited to "Loading..." — taking
+                    // PopupComponent down with it. The success dialog could
+                    // never mount, so this navigate never fired and the screen
+                    // hung forever on an order that had actually been created.
+                    sessionStorage.removeItem(VENDOR_SESSION_KEY);
+                    sessionStorage.removeItem(PRODUCT_SESSION_KEY);
+                    sessionStorage.removeItem(DETAILS_SESSION_KEY);
+                    sessionStorage.removeItem("b2bEditingOrderId");
+                    clearB2bStockOrder();
+                    navigate(dashboardPath);
+                },
             });
         } catch (err) {
             console.error("Order submission error:", err);
@@ -448,8 +437,19 @@ export default function B2bReviewOrder() {
 
     // A stock order has no vendorData at all, so gating the render on it would
     // hang on "Loading..." forever.
+    //
+    // PopupComponent renders even while gated: this screen's success and error
+    // dialogs are what tell the user an order was placed and what navigates
+    // away afterwards. Returning without it once meant a submit that had
+    // already written the order could strand the user on "Loading..." with no
+    // dialog and no way forward.
     if (!productData || !detailsData || (!isStockOrder && !vendorData)) {
-        return <div className="b2b-ro-loading">Loading...</div>;
+        return (
+            <>
+                {PopupComponent}
+                <div className="b2b-ro-loading">Loading...</div>
+            </>
+        );
     }
 
     return (

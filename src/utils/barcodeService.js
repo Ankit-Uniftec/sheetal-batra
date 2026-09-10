@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "./fetchAllRows";
+import { isAssignedToHead } from "./stockProductionHead";
 
 /**
  * BarcodeService
@@ -107,9 +108,10 @@ export const SCAN_STATIONS = [
 // `key` is the group id used by filters; `members` are the raw
 // production_stage enum values that map into this group.
 // ============================================================
-// `external` = pieces can be sent OUT to a vendor for this stage. On the
-// always-internal stages (order received, cloth issue, QC, packaging) the
-// stage cards hide the in-house/vendor split (there's never a "vendor" count).
+// `external` = pieces can be sent OUT to a vendor for this stage (steps 2..9,
+// mirroring EXTERNAL_ELIGIBLE_STEPS). On the always-internal stages (order
+// received, cloth issue, production complete, packaging) the stage cards hide
+// the in-house/vendor split (there's never a "vendor" count).
 export const STAGE_GROUPS = [
   { key: "order_received", label: "Order Received", step: 0, color: "#9e9e9e", external: false, members: ["order_received"] },
   { key: "cloth_issue", label: "Cloth Issue", step: 1, color: "#795548", external: false, members: ["cloth_issued"] },
@@ -117,10 +119,10 @@ export const STAGE_GROUPS = [
   { key: "pattern_cutting", label: "Pattern Cutting", step: 3, color: "#9c27b0", external: true, members: ["pattern_cutting_in_progress", "pattern_cutting_completed"] },
   { key: "embroidery", label: "Embroidery", step: 4, color: "#3f51b5", external: true, members: ["embroidery_in_progress", "embroidery_completed"] },
   { key: "dry_cleaning", label: "Dry Cleaning", step: 5, color: "#00bcd4", external: true, members: ["dry_cleaning_in_progress", "dry_cleaning_completed"] },
-  { key: "qc1", label: "QC 1", step: 6, color: "#f44336", external: false, members: ["qc_in_progress", "qc_passed", "qc_failed"] },
+  { key: "qc1", label: "QC 1", step: 6, color: "#f44336", external: true, members: ["qc_in_progress", "qc_passed", "qc_failed"] },
   { key: "stitching", label: "Stitching", step: 7, color: "#ef6c00", external: true, members: ["stitching_in_progress", "stitching_completed"] },
   { key: "hemming", label: "Hemming", step: 8, color: "#ff5722", external: true, members: ["hemming_in_progress", "hemming_completed"] },
-  { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", external: false, members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
+  { key: "final_qc", label: "Final QC", step: 9, color: "#c2185b", external: true, members: ["final_qc_in_progress", "final_qc_passed", "final_qc_failed"] },
   { key: "production_complete", label: "Production Completed", step: 10, color: "#388e3c", external: false, members: ["production_complete"] },
   { key: "packaging", label: "Packaging & Dispatch", step: 10, color: "#2e7d32", external: false, members: ["packaging_dispatch", "dispatched"] },
 ];
@@ -598,7 +600,25 @@ const CHANNELS_OWNED_BY_DESIGNATION = {
 export function scopeOrdersToDesignation(orders, designation) {
   if (!Array.isArray(orders)) return [];
   const d = (designation || "").trim().toLowerCase();
-  if (d === "online production head") return orders.filter(isLxrtsOrder);
+
+  // A stock order EXPLICITLY assigned to this head is always in scope, whatever
+  // channel it was raised in — that is the whole point of the override (see
+  // utils/stockProductionHead.js). Held separately and merged at the end so it
+  // survives every filter below: the offline head's LXRTS exclusion would
+  // otherwise drop an assigned LXRTS-type stock order, and the online head
+  // returns early before the channel map is ever consulted.
+  //
+  // ADDITIVE: this only ever ADDS orders to a head's queue. Nothing here
+  // removes an order from the head who owns it by channel — an assigned order
+  // shows to both, by design.
+  const assigned = orders.filter((o) => isAssignedToHead(o, designation));
+  const withAssigned = (list) => {
+    if (!assigned.length) return list;
+    const have = new Set(list.map((o) => o.id));
+    return list.concat(assigned.filter((o) => !have.has(o.id)));
+  };
+
+  if (d === "online production head") return withAssigned(orders.filter(isLxrtsOrder));
 
   const channel = getChannelKeyForDesignation(designation);
   if (!channel) return orders;
@@ -606,7 +626,7 @@ export function scopeOrdersToDesignation(orders, designation) {
   let scoped = orders.filter((o) => owned.includes(getOrderChannelKey(o)));
   // LXRTS-type pieces are the online head's workload, not the offline head's.
   if (channel === "offline") scoped = scoped.filter((o) => !isLxrtsOrder(o));
-  return scoped;
+  return withAssigned(scoped);
 }
 
 // ============================================================
@@ -667,6 +687,17 @@ export function getStageMaxDays(stageValue) {
   const d = getStageInfo(stageValue)?.maxDays;
   return typeof d === "number" ? d : null;
 }
+
+// Logical steps a component can be sent OUT to an external vendor for: stages
+// 2..9 (Dyeing through Final QC). Single source for the Production Head's
+// movement picker and the Production Manager's vendor-request form, so a vendor
+// is always requested for a stage the picker can actually offer.
+// Cloth Issue (1) and Packaging & Dispatch (10) are in-house only — a piece
+// never leaves the warehouse for them, and step_completed_stage() has no
+// completed enum to record against them on return (25_external_stage_completion).
+export const EXTERNAL_ELIGIBLE_STEPS = SCAN_STATIONS
+  .filter((s) => s.step >= 2 && s.step <= 9)
+  .map((s) => ({ step: s.step, label: s.label }));
 
 // Label for a logical STEP number (1..10) — e.g. 2 -> "Dyeing". Used to name
 // the stage a component went out to a vendor for (external_movements.stages_outside).

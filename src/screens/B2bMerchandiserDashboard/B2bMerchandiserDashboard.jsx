@@ -3,13 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bMerchandiserDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { usePopup } from "../../components/Popup";
+import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
-import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import QcReportModal from "../../components/QcReportModal";
@@ -27,6 +26,8 @@ import WarehouseTab from "../../components/stock/WarehouseTab";
 import StockExchangeTab from "../../components/stock/StockExchangeTab";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
+import downloadCsv from "../../utils/downloadCsv";
+import DashboardHeader from "../../components/DashboardHeader";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -147,24 +148,21 @@ export default function B2bMerchandiserDashboard() {
     // ==================== FETCH DATA ====================
     const loadAllData = useCallback(async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
+            // ✅ Role check - only merchandiser users allowed. A failed role
+            // read is "couldn't check", not "denied" — the old .single() here
+            // raised on zero rows and signed the user out on any transient
+            // failure. See utils/b2bRoleGuard.js.
+            const gate = await checkB2bRole(["merchandiser"]);
+            if (!gate.ok) {
+                if (gate.reason === "denied") await supabase.auth.signOut();
+                if (gate.reason === "unavailable") {
+                    showPopup({ title: "Connection Problem", message: "Could not load the dashboard. Check your connection and try again.", type: "error" });
+                    return;
+                }
                 navigate("/login", { replace: true });
                 return;
             }
-
-            // ✅ Role check - only merchandiser users allowed
-            const { data: roleCheck } = await supabase
-                .from("salesperson")
-                .select("role")
-                .eq("email", user.email?.toLowerCase())
-                .single();
-
-            if (!roleCheck || roleCheck.role !== "merchandiser") {
-                await supabase.auth.signOut();
-                navigate("/login", { replace: true });
-                return;
-            }
+            const user = gate.user;
 
             setUser(user);
 
@@ -220,9 +218,12 @@ export default function B2bMerchandiserDashboard() {
                 }
             }
             if (vendorsResult.data) setVendors(vendorsResult.data);
-            setLoading(false);
         } catch (err) {
             console.error("Load error:", err);
+        } finally {
+            // finally, not per-branch: every early return above (auth, denied,
+            // unavailable) used to skip setLoading(false) and leave the
+            // dashboard spinning forever.
             setLoading(false);
         }
     }, []);
@@ -861,28 +862,60 @@ export default function B2bMerchandiserDashboard() {
     const orderBadgeLabel = (order) => (order.status || "").toLowerCase() === "cancelled" ? "Cancelled" : (order.approval_status || "Pending");
     const orderBadgeClass = (order) => (order.status || "").toLowerCase() === "cancelled" ? "merch-status-cancelled" : getStatusBadgeClass(order.approval_status);
 
+    // Export what the All Orders tab is currently showing — the filtered set,
+    // not the page, so the search/status/vendor/period filters above the list
+    // are the export's scope.
+    const handleExportOrders = () => {
+        if (filteredOrders.length === 0) {
+            showPopup({ type: "info", title: "Nothing to export", message: "No orders match the current filters." });
+            return;
+        }
+        downloadCsv({
+            filename: "b2b_orders_export",
+            headers: [
+                "Order No", "PO Number", "Order Date", "Delivery Date", "Type",
+                "Vendor", "Merchandiser", "Client", "Product", "Size", "Top", "Bottom",
+                "Qty", "Amount", "Markdown %", "Approval", "Status",
+            ],
+            rows: filteredOrders.map((o) => {
+                const it = o.items?.[0] || {};
+                return [
+                    o.order_no || "",
+                    o.po_number || "",
+                    formatDate(o.created_at) || "",
+                    formatDate(o.delivery_date) || "",
+                    o.is_stock_order ? "Stock" : (o.b2b_order_type || ""),
+                    vendorMap[o.vendor_id]?.store_brand_name || "",
+                    o.merchandiser_name || "",
+                    o.delivery_name || "",
+                    it.product_name || "",
+                    it.size || "",
+                    it.top || "",
+                    it.bottom || "",
+                    o.total_quantity || 1,
+                    o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0,
+                    o.markdown_percent || 0,
+                    orderBadgeLabel(o),
+                    getOrderStatusLabel(o.status) || "",
+                ];
+            }),
+        });
+    };
+
     if (loading) return <p className="loading-text">Loading Dashboard...</p>;
 
     return (
         <div className="merch-dashboard-wrapper">
             {PopupComponent}
             {/* ===== HEADER ===== */}
-            <header className="merch-header">
-                <img src={Logo} alt="logo" className="merch-header-logo" onClick={() => setActiveTab("dashboard")} />
-                <h1 className="merch-header-title">B2B Merchandiser</h1>
-                <div className="merch-header-right">
-                    <NotificationBell
-                        userEmail={user?.email}
-                        onOrderClick={(orderId) => handleViewOrder(orderId)}
-                    />
-                    <button className="merch-header-btn" onClick={handleLogout}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
-                    </button>
-                    <div className="merch-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
-                        <div className="merch-bar"></div><div className="merch-bar"></div><div className="merch-bar"></div>
-                    </div>
-                </div>
-            </header>
+            <DashboardHeader
+                title="B2B Merchandiser"
+                onHome={() => setActiveTab("dashboard")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={user?.email}
+                onOrderClick={handleViewOrder}
+                onLogout={handleLogout}
+            />
 
             {/* Period filter — dashboard tab stat cards only (grid cells below are
                 explicitly placed, so the control sits above the grid). */}
@@ -1119,6 +1152,9 @@ export default function B2bMerchandiserDashboard() {
                                 {(statusFilter !== "all" || typeFilter !== "all" || merchandiserFilter !== "all" || vendorFilter !== "all" || ordersTimeline !== "all") && (
                                     <button className="merch-clear-filters-btn" onClick={() => { clearOrderFilters(); setCurrentPage(1); }}>Clear</button>
                                 )}
+                                <button className="merch-export-btn" onClick={handleExportOrders} title="Export the filtered orders to CSV">
+                                    {"⬇"} Order Export
+                                </button>
                             </div>
                         </div>
                         <div className="merch-order-list-scroll">

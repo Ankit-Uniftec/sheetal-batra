@@ -4,7 +4,6 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isRevenueOrder } from "../../utils/revenue";
 import "./AdminDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import formatPhoneNumber from "../../utils/formatPhoneNumber";
@@ -16,7 +15,7 @@ import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
-import NotificationBell from "../../components/NotificationBell";
+import DashboardHeader from "../../components/DashboardHeader";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import WalkInsView from "../../components/WalkInsView/WalkInsView";
@@ -27,6 +26,7 @@ import {
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
+import { startOrderMode } from "../../utils/orderMode";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -350,9 +350,8 @@ export default function AdminDashboard() {
             store: currentUserProfile.store_name,
             designation: currentUserProfile.designation,
         }));
-        sessionStorage.setItem("isStockOrder", "true");
-        sessionStorage.removeItem("screen4FormData");
-        sessionStorage.removeItem("screen6FormData");
+        // Exclusive: clears comms/exhibition flags and stale drafts too.
+        startOrderMode("stock");
         navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
     };
 
@@ -1796,24 +1795,13 @@ export default function AdminDashboard() {
             {PopupComponent}
 
             {/* HEADER */}
-            <header className="admin-header">
-                <div className="admin-header-left">
-                    <button className="admin-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
-                        <span></span><span></span><span></span>
-                    </button>
-                    <img src={Logo} alt="Logo" className="admin-logo" onClick={() => navigate("/login")} />
-                </div>
-                <h1 className="admin-title">Admin Dashboard</h1>
-                <div className="admin-header-right">
-                    <NotificationBell
-                        userEmail={currentUserEmail}
-                        onOrderClick={(orderId) => {
-                            // Could filter or highlight order in future
-                        }}
-                    />
-                    <button className="admin-logout-btn" onClick={handleLogout}>Logout</button>
-                </div>
-            </header>
+            <DashboardHeader
+                title="Admin Dashboard"
+                onHome={() => setActiveTab("brand_performance")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={currentUserEmail}
+                onLogout={handleLogout}
+            />
 
             <div className="admin-layout">
                 {/* SIDEBAR */}

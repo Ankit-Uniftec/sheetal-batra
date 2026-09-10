@@ -6,6 +6,7 @@ import {
   fetchOrderComponents,
   fetchTransitionHistory,
   fetchMovementHistory,
+  securityGuardScan,
   enrichComponentsWithMovements,
   describeTransition,
   buildStagePassMap,
@@ -212,6 +213,32 @@ const ProductionOverrides = ({ currentUserEmail }) => {
           await loadOrderComponents(updated.order_id);
         } else {
           setActionResult({ success: false, message: result.message });
+        }
+
+      } else if (overrideType === "vendor_return") {
+        // The piece is physically back but the Security Gate entry scan never
+        // happened, so is_outside_wh is still TRUE and the DB refuses every
+        // other override (COMPONENT_OUTSIDE_WH). This fires the SAME gate-entry
+        // event the guard would have — same RPC, same vendor-stage completion
+        // and pointer advance — stamped with the PM's email and the reason.
+        // See db/barcode_system/v2/86_pm_force_vendor_return.sql.
+        const result = await securityGuardScan({
+          barcode: component.barcode,
+          scanType: "entry",
+          scannedBy: currentUserEmail,
+          notes: `PM override — no gate entry scan. ${overrideReason.trim()}`,
+        });
+
+        if (result.success) {
+          setActionResult({ success: true, message: result.message || "Returned from vendor." });
+
+          const updated = await fetchComponentByBarcode(component.barcode);
+          const [enriched] = await enrichComponentsWithMovements([updated]);
+          setComponent(enriched || updated);
+          await loadHistoryAndMovements(updated.id);
+          await loadOrderComponents(updated.order_id);
+        } else {
+          setActionResult({ success: false, message: result.message || result.error });
         }
 
       } else if (overrideType === "timeline_extension") {
@@ -425,26 +452,47 @@ const ProductionOverrides = ({ currentUserEmail }) => {
             <div className="pm-override-actions">
               <h4 className="pm-override-actions-title">Override Actions</h4>
 
-              <div className="pm-override-type-btns">
-                <button
-                  className={`pm-override-type-btn ${overrideType === "manual_advance" ? "active" : ""}`}
-                  onClick={() => setOverrideType("manual_advance")}
-                >
-                  Manual Advance
-                </button>
-                <button
-                  className={`pm-override-type-btn ${overrideType === "skip_stage" ? "active" : ""}`}
-                  onClick={() => setOverrideType("skip_stage")}
-                >
-                  Skip Stage
-                </button>
-                <button
-                  className={`pm-override-type-btn ${overrideType === "timeline_extension" ? "active" : ""}`}
-                  onClick={() => setOverrideType("timeline_extension")}
-                >
-                  Extend Timeline
-                </button>
-              </div>
+              {/* A piece at a vendor is frozen: the DB accepts only the gate
+                  return for it, so offer that instead of three buttons that
+                  can only fail. */}
+              {component.is_outside_wh ? (
+                <>
+                  <p className="pm-muted" style={{ fontSize: 13, margin: "0 0 12px" }}>
+                    This piece is out at <b>{component.vendor_name || "a vendor"}</b>. It cannot be
+                    advanced, skipped or rescheduled until it is back in the building. Use this only
+                    when the piece is physically here and the Security Gate entry scan was missed.
+                  </p>
+                  <div className="pm-override-type-btns">
+                    <button
+                      className={`pm-override-type-btn ${overrideType === "vendor_return" ? "active" : ""}`}
+                      onClick={() => setOverrideType("vendor_return")}
+                    >
+                      Force Return from Vendor
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="pm-override-type-btns">
+                  <button
+                    className={`pm-override-type-btn ${overrideType === "manual_advance" ? "active" : ""}`}
+                    onClick={() => setOverrideType("manual_advance")}
+                  >
+                    Manual Advance
+                  </button>
+                  <button
+                    className={`pm-override-type-btn ${overrideType === "skip_stage" ? "active" : ""}`}
+                    onClick={() => setOverrideType("skip_stage")}
+                  >
+                    Skip Stage
+                  </button>
+                  <button
+                    className={`pm-override-type-btn ${overrideType === "timeline_extension" ? "active" : ""}`}
+                    onClick={() => setOverrideType("timeline_extension")}
+                  >
+                    Extend Timeline
+                  </button>
+                </div>
+              )}
 
               {overrideType && (
                 <div className="pm-override-form">

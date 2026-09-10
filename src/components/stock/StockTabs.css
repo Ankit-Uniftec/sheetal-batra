@@ -306,6 +306,14 @@
   border-color: #d5b85a;
 }
 
+.inv-modal-help {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #777;
+}
+
 .inv-modal-actions {
   display: flex;
   justify-content: flex-end;

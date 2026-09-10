@@ -322,6 +322,9 @@ export const toE164 = (raw: unknown): string => {
   return bare ? `+${bare}` : "";
 };
 
+// IST is UTC+5:30 and never observes DST, so a fixed offset is exact.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 const addDays = (iso: string, days: number): string => {
   const d = new Date(iso);
   d.setDate(d.getDate() + days);
@@ -860,7 +863,19 @@ export function mapShopifyOrder(
     blockers.push({ code: "NO_LINE_ITEMS", detail: "Order has no line items" });
   }
 
-  const createdAt: string = clean(node?.createdAt) || new Date().toISOString();
+  // orders.created_at is `timestamp WITHOUT time zone` and every other channel
+  // stores an IST WALL-CLOCK in it (see getISTTimestamp() in ReviewDetail.js,
+  // which adds 5.5h before writing). Shopify's createdAt is UTC with a `Z`,
+  // and the naive column silently DROPS the zone -- so storing it raw parked
+  // every web order 5.5h behind the rest of the business, and flipped the date
+  // backwards by a day for anything placed 00:00-05:30 IST.
+  //
+  // Convert to the IST wall-clock here, before resolveDeliveryDate() runs, so
+  // the derived delivery_date is banded off the same day the customer saw.
+  const createdAtUtc: string = clean(node?.createdAt) || new Date().toISOString();
+  const createdAt: string = new Date(
+    new Date(createdAtUtc).getTime() + IST_OFFSET_MS,
+  ).toISOString().slice(0, 19);
   const { date: deliveryDate, basis } = resolveDeliveryDate(
     createdAt,
     money(node?.totalPriceSet),

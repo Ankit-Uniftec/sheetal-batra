@@ -4,10 +4,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isRevenueOrder } from "../../utils/revenue";
 import "./StoreManagerDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
-import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
@@ -17,6 +15,7 @@ import StoreCalendarTab from "./StoreCalendarTab";
 import config from "../../config/config";
 import { getOrderStatusLabel, getStageLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../utils/barcodeService";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../../components/PeriodFilter";
+import DashboardHeader from "../../components/DashboardHeader";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area, Line
@@ -823,17 +822,13 @@ export default function StoreManagerDashboard() {
     return (
         <div className="sm-page">
             {/* HEADER */}
-            <header className="sm-header">
-                <div className="sm-header-left">
-                    <button className="sm-hamburger" onClick={() => setShowSidebar(!showSidebar)}><span /><span /><span /></button>
-                    <img src={Logo} alt="Logo" className="sm-logo" />
-                </div>
-                <h1 className="sm-title">{storeLabel} Store Manager</h1>
-                <div className="sm-header-right">
-                    <NotificationBell userEmail={currentUserEmail} onOrderClick={() => { }} />
-                    <button className="sm-logout-btn" onClick={handleLogout}>Logout</button>
-                </div>
-            </header>
+            <DashboardHeader
+                title={`${storeLabel} Store Manager`}
+                onHome={() => setActiveTab("sales")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={currentUserEmail}
+                onLogout={handleLogout}
+            />
 
             <div className="sm-layout">
                 {/* SIDEBAR */}

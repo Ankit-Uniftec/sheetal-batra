@@ -6,6 +6,7 @@ import "./B2bVendorSelection.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
+import { checkB2bRole } from "../../utils/b2bRoleGuard";
 
 const SESSION_KEY = "b2bVendorData";
 
@@ -76,23 +77,20 @@ export default function B2bVendorSelection() {
     // Fetch user role
     useEffect(() => {
         const fetchRole = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
+            // ✅ Only allow B2B roles. A failed role read is "couldn't check",
+            // not "denied" — see utils/b2bRoleGuard.js.
+            const gate = await checkB2bRole();
+            if (!gate.ok) {
+                if (gate.reason === "denied") await supabase.auth.signOut();
+                if (gate.reason === "unavailable") {
+                    showPopup({ title: "Connection Problem", message: "Could not verify your access. Check your connection and try again.", type: "error" });
+                    return;
+                }
                 navigate("/login", { replace: true });
                 return;
             }
 
-            const { data: sp } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
-
-            // ✅ Only allow B2B roles (executive, merchandiser, production)
-            const allowedRoles = ["executive", "merchandiser", "production"];
-            if (!sp?.role || !allowedRoles.includes(sp.role)) {
-                await supabase.auth.signOut();
-                navigate("/login", { replace: true });
-                return;
-            }
-
-            setUserRole(sp.role);
+            setUserRole(gate.role);
         };
         fetchRole();
     }, [navigate]);

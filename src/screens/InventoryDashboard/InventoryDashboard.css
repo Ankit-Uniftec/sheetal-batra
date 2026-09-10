@@ -311,6 +311,22 @@
   font-size: 14px;
 }
 
+/* Custom-piece badge — sits beside the LXRTS badge, deliberately quieter:
+   a custom piece is ordinary here, LXRTS is the one that behaves differently. */
+.inv-custom-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border: 1px solid #b39ddb;
+  border-radius: 4px;
+  background: #f3eefc;
+  color: #5e35b1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
 /* Color Tag */
 .inv-color-tag {
   display: inline-block;
@@ -319,6 +335,33 @@
   border-radius: 6px;
   font-size: 12px;
   color: #555;
+}
+
+/* Store category (products.store_category) — same chip shape as the colour tag
+   so the row reads as one family of small labels. */
+.inv-location-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #eef4fb;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #37546f;
+  white-space: nowrap;
+}
+
+/* Flash the row a product was just saved into, so an edit that re-sorts the
+   list still visibly lands somewhere instead of looking like a deletion. */
+.inv-row-saved > td {
+  animation: inv-saved-flash 2.5s ease-out;
+}
+
+@keyframes inv-saved-flash {
+  0%, 40% { background: #fff6d9; }
+  100% { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-row-saved > td { animation: none; background: #fff6d9; }
 }
 
 /* Price */

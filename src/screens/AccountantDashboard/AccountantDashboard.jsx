@@ -4,7 +4,6 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isRevenueOrder } from "../../utils/revenue";
 import "./AccountantDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import {
@@ -17,6 +16,7 @@ import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import { getOrderChannelLabel, getOrderProgressStatusStage } from "../../utils/barcodeService";
 import { usePeriodFilter } from "../../components/PeriodFilter";
+import DashboardHeader from "../../components/DashboardHeader";
 
 // Accountant Dashboard — for the "ACCOUNTANT — DISPATCH & LOGISTICS" role.
 // Sidebar with 4 tabs (Overview + the 3 spec items).
@@ -298,19 +298,13 @@ export default function AccountantDashboard() {
   return (
     <div className="acct-page">
       {/* HEADER */}
-      <header className="acct-header">
-        <div className="acct-header-left">
-          <button className="acct-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
-            <span /><span /><span />
-          </button>
-          <img src={Logo} alt="Logo" className="acct-logo" />
-        </div>
-        <h1 className="acct-title">Accountant — Dispatch & Logistics</h1>
-        <div className="acct-header-right">
-          {currentUserName && <span className="acct-user">{currentUserName}</span>}
-          <button className="acct-logout-btn" onClick={handleLogout}>Logout</button>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Accountant — Dispatch & Logistics"
+          onHome={() => setActiveTab("overview")}
+          onMenuToggle={() => setShowSidebar(!showSidebar)}
+          userName={currentUserName}
+          onLogout={handleLogout}
+      />
 
       <div className="acct-layout">
         {/* SIDEBAR */}

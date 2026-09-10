@@ -1,0 +1,597 @@
+/* ============================================
+   PACKAGING & DISPATCH DASHBOARD - TABLET FIRST
+   Shell mirrors RetailManagerDashboard / WarehouseDashboard: background image,
+   translucent sticky header, hamburger + sidebar nav, Futura/Athleas type,
+   gold #d5b85a accent. Standalone CSS, no cross-dashboard dependency.
+   ============================================ */
+
+/* Font only. `color` is deliberately NOT set here: a blanket `* { color }`
+   beats every shared component's own rule by specificity, which flattened the
+   SVG stat icons (currentColor) to black and would do the same to any coloured
+   element inside ProductionOverview / ScanStation. Colour is set once on the
+   page below and INHERITED, so a child can still override it.
+   Scoped off the embedded ScanStation, which ships its own wd- typography. */
+.pkg-page *:not(.wd-scan-station):not(.wd-scan-station *) {
+    font-family: "Futura", sans-serif !important;
+    box-sizing: border-box;
+}
+
+/* Give the embedded ScanStation the same card surface every other panel on
+   this page sits on — on its own it is transparent and floated over the
+   background image. */
+.pkg-content .wd-scan-station {
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+}
+
+.pkg-page {
+    color: black;
+    min-height: 100vh;
+    width: 100%;
+    background-image: url("../../images/Screen1bg.webp");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+/* Loading */
+.pkg-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 16px;
+}
+
+.pkg-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e0e0e0;
+    border-top-color: #d5b85a;
+    border-radius: 50%;
+    animation: pkgSpin 1s linear infinite;
+}
+
+@keyframes pkgSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+
+.pkg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: #FFFFFFB0;
+    border-bottom: 1px solid #D4D4D4;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+}
+
+.pkg-header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.pkg-hamburger {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    width: 28px;
+    height: 22px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.pkg-hamburger span {
+    width: 100%;
+    height: 3px;
+    background-color: #d5b85a;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+}
+
+.pkg-logo {
+    height: 50px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.pkg-logo:hover { opacity: 0.8; }
+
+.pkg-title {
+    font-family: "Athleas", serif !important;
+    font-size: 22px;
+    color: #d5b85a !important;
+    margin: 0;
+    font-weight: 600;
+}
+
+.pkg-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pkg-logout-btn {
+    background: #d5b85a;
+    color: white !important;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pkg-logout-btn:hover { opacity: 0.9; }
+
+/* ============================================
+   LAYOUT + SIDEBAR
+   ============================================ */
+
+.pkg-layout {
+    display: flex;
+    min-height: calc(100vh - 82px);
+    padding: 20px;
+    gap: 20px;
+}
+
+.pkg-sidebar {
+    width: 200px;
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 16px 0;
+    flex-shrink: 0;
+    height: fit-content;
+    position: sticky;
+    top: 102px;
+    backdrop-filter: blur(10px);
+}
+
+.pkg-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pkg-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
+    background: none;
+    border: none;
+    color: #333;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    width: 100%;
+    position: relative;
+}
+
+.pkg-nav-item:hover {
+    background: rgba(213, 184, 90, 0.1);
+    color: #d5b85a;
+}
+
+.pkg-nav-item.active {
+    background: rgba(213, 184, 90, 0.15);
+    color: #d5b85a !important;
+    font-weight: 600;
+}
+
+.pkg-nav-item.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 60%;
+    background-color: #d5b85a;
+    border-radius: 0 4px 4px 0;
+}
+
+.pkg-nav-item.logout {
+    margin-top: 20px;
+    color: #c62828;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 16px;
+}
+
+.pkg-nav-item.logout:hover {
+    background: rgba(198, 40, 40, 0.1);
+    color: #b71c1c;
+}
+
+/* ============================================
+   MAIN CONTENT
+   ============================================ */
+
+.pkg-content {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.pkg-tab-header { margin-bottom: 24px; }
+
+.pkg-section-title {
+    font-family: "Athleas", serif !important;
+    font-size: 24px;
+    font-weight: 600;
+    color: #d5b85a !important;
+    margin: 0 0 14px;
+}
+
+/* ---- toolbar ----
+   Every control is normalised to ONE height (42px, the height SearchByDropdown
+   hard-codes). Left alone they disagree: .pfx-select is 35px and .sbd-wrapper
+   42px, so the two sat 5px out of line. .pfx also ships its own
+   margin-bottom, which fought this toolbar's gap. */
+.pkg-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+/* The period filter is itself a flex row — strip its trailing margin and let
+   it sit as one toolbar item. */
+.pkg-toolbar .pfx {
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.pkg-toolbar .pfx-select,
+.pkg-toolbar .pfx-date {
+    height: 42px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Search grows to fill the row; the selects stay their natural width. */
+.pkg-toolbar .sbd-wrapper {
+    flex: 1 1 260px;
+    max-width: 420px;
+}
+
+.pkg-filter-select {
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid #e0d5c5;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.pkg-filter-select:focus { border-color: #d5b85a; }
+
+.pkg-filter-clear {
+    height: 42px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #c62828;
+    background: #FFFFFFB0;
+    border: 1px solid #e0d5c5;
+    border-radius: 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.pkg-filter-clear:hover { border-color: #c62828; }
+
+/* ---- status pills ---- */
+.pkg-status-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.pkg-status-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pkg-status-tab:hover { border-color: #d5b85a; }
+
+.pkg-status-tab.active {
+    background: #d5b85a;
+    color: white !important;
+    border-color: #d5b85a;
+}
+
+.pkg-tab-count {
+    background: rgba(0, 0, 0, 0.1);
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+}
+
+.pkg-status-tab.active .pkg-tab-count { background: rgba(255, 255, 255, 0.3); }
+
+.pkg-result-line {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: #666;
+}
+
+.pkg-empty {
+    padding: 40px 0;
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+}
+
+/* ============================================
+   ORDER CARDS
+   ============================================ */
+
+.pkg-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pkg-card {
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 12px;
+    padding: 12px 16px;
+    backdrop-filter: blur(10px);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.pkg-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.pkg-card.open { border-color: #d5b85a; }
+
+/* Head + dates share one row on wide screens: each collapsed card carries
+   little content, so a full-width block per line read as an empty bar. */
+.pkg-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+}
+
+.pkg-card-main { flex-shrink: 0; }
+
+/* Pushes customer + status to the right edge, dates fill the middle. */
+.pkg-card-meta { margin-left: auto; }
+
+.pkg-card-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.pkg-order-no {
+    font-size: 15px;
+    font-weight: 600;
+    color: #d5b85a !important;
+}
+
+.pkg-channel {
+    font-size: 11px;
+    font-weight: 500;
+    color: #666 !important;
+    background: rgba(213, 184, 90, 0.12);
+    border: 1px solid #e4dac6;
+    border-radius: 6px;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
+
+.pkg-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pkg-customer { font-size: 13px; color: #444; }
+
+.pkg-status {
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 4px 10px;
+    white-space: nowrap;
+    background: #f0ece2;
+    color: #666 !important;
+}
+
+.pkg-status-completed { background: #e8f5e9; color: #2e7d32 !important; }
+.pkg-status-dispatched { background: #e3f2fd; color: #1565c0 !important; }
+.pkg-status-delivered { background: #ede7f6; color: #5e35b1 !important; }
+
+.pkg-card-dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 12px;
+    color: #666;
+}
+.pkg-card-dates b { color: #333; font-weight: 600; }
+
+/* ---- expanded detail ---- */
+.pkg-card-body {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed #D4D4D4;
+}
+
+.pkg-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.pkg-detail-label {
+    margin: 0 0 5px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #999 !important;
+}
+
+.pkg-detail-value {
+    margin: 0 0 3px;
+    font-size: 13px;
+    color: #333;
+    word-break: break-word;
+}
+
+.pkg-notes {
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #666;
+    background: rgba(213, 184, 90, 0.08);
+    border-left: 3px solid #d5b85a;
+    border-radius: 4px;
+}
+
+.pkg-pieces {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.pkg-piece {
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    color: #666 !important;
+    background: #FFFFFFB0;
+    border: 1px solid #D4D4D4;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+.pkg-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.pkg-action {
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #d5b85a !important;
+    background: #FFFFFFB0;
+    border: 1px solid #d5b85a;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pkg-action:hover {
+    background: #d5b85a;
+    color: white !important;
+}
+
+/* ============================================
+   RESPONSIVE - DESKTOP (min-width: 1025px)
+   ============================================ */
+
+/* The sidebar is always visible from 1025px up, so the hamburger has nothing
+   to toggle — hide it. Matches RetailManagerDashboard.css. */
+@media (min-width: 1025px) {
+    .pkg-hamburger { display: none; }
+}
+
+/* ============================================
+   RESPONSIVE - TABLET (max-width: 1024px)
+   ============================================ */
+
+@media (max-width: 1024px) {
+    .pkg-layout { padding: 16px; gap: 16px; }
+    .pkg-sidebar { width: 180px; padding: 12px 0; }
+    .pkg-nav-item { padding: 12px 16px; font-size: 13px; }
+    .pkg-card { padding: 14px; }
+}
+
+/* ============================================
+   RESPONSIVE - MOBILE (max-width: 767px)
+   ============================================ */
+
+@media (max-width: 767px) {
+    .pkg-header { padding: 12px 16px; }
+    .pkg-logo { height: 40px; }
+    .pkg-title { font-size: 16px; }
+    .pkg-logout-btn { padding: 8px 16px; font-size: 12px; }
+    .pkg-layout { padding: 12px; flex-direction: column; }
+
+    .pkg-sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        width: 260px;
+        transform: translateX(-100%);
+        z-index: 1000;
+        background: #FFFFFF;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.15);
+        padding-top: 70px;
+        border-radius: 0;
+        transition: transform 0.3s ease;
+    }
+
+    .pkg-sidebar.open { transform: translateX(0); }
+
+    .pkg-content { width: 100%; }
+    .pkg-section-title { font-size: 20px; }
+    .pkg-card-head { align-items: flex-start; gap: 8px; }
+    .pkg-card-meta { width: 100%; margin-left: 0; justify-content: space-between; }
+    .pkg-card-dates { width: 100%; gap: 12px; }
+    .pkg-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+    .pkg-status-tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 8px;
+        -webkit-overflow-scrolling: touch;
+    }
+    .pkg-status-tab { flex-shrink: 0; }
+}

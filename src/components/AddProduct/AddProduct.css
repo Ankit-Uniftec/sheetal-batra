@@ -721,6 +721,50 @@ select.ap-input { cursor: pointer; }
 
 .ap-reserved-chip input { cursor: pointer; }
 
+/* ── Re-print search results (already-filled barcodes) ── */
+.ap-reprint-list {
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.ap-reprint-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fff;
+}
+
+.ap-reprint-row:last-child { border-bottom: none; }
+
+.ap-reprint-sku {
+  flex: 0 0 110px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a6d1f;
+}
+
+/* min-width:0 so a long product name ellipsises instead of pushing the
+   Re-print button off the row. */
+.ap-reprint-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: #444;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .ap-reprint-row { flex-wrap: wrap; }
+  .ap-reprint-sku { flex-basis: auto; }
+}
+
 /* ── Type chooser (scanned an unfilled tag) ── */
 .ap-type-chooser { max-width: 520px; }
 
