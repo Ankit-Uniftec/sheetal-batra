@@ -2,18 +2,79 @@
   margin: 0 0 22px;
 }
 
+/* Title + split toggle share a row; the toggle right-aligns even with no title
+   (most callers render their own heading above and pass none, so the bar sits
+   alone). Tight bottom margin: with no title this row is just the toggle, and a
+   full 12px gap detached it from the cards it belongs to. */
+.scc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+
+/* Nothing to show — don't reserve vertical space for an empty row. */
+.scc-head:empty { display: none; margin: 0; }
+
 .scc-title {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: #6b5842;
 }
 
+/* Segmented control — In-house/Vendor vs Channel-wise. */
+.scc-splitbar {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid #e6ded0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.scc-splitbtn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7a6a55;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.scc-splitbtn + .scc-splitbtn { border-left: 1px solid #e6ded0; }
+.scc-splitbtn:hover:not(.on) { background: #faf6ee; }
+
+.scc-splitbtn.on {
+  background: #d5b85a;
+  color: #3d3218;
+}
+
+.scc-splitbtn:focus-visible {
+  outline: 2px solid #d5b85a;
+  outline-offset: -2px;
+}
+
+/* auto-FIT, not auto-fill: with 13 cards on a wide screen auto-fill kept
+   creating empty phantom tracks, which is what left the Total card marooned on
+   a row of its own with a gap beside it. auto-fit collapses the empties so the
+   cards spread evenly and the last row stays flush with the rest. */
 .scc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
+  /* Every card is the height of the tallest — including across rows, not just
+     within one. The channel split runs 1–8 lines, and cards ending at their own
+     content height made the strip look ragged. `1fr` on auto-rows equalises
+     within a row; the JS sets a --scc-card-min from the busiest stage so row two
+     matches row one as well. */
+  grid-auto-rows: 1fr;
 }
 
 .scc-card {
@@ -22,6 +83,12 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
+  box-sizing: border-box;
+  /* Fill the grid cell (grid-auto-rows: 1fr) so cards in a row match, and take
+     the floor computed from the busiest stage so rows match each other too.
+     Falls back to 96px in order-count mode, where there is no split at all. */
+  height: 100%;
+  min-height: var(--scc-card-min, 96px);
   padding: 16px 16px 14px;
   background: #fff;
   border: 1px solid #eee6d8;
@@ -75,6 +142,10 @@
 }
 
 /* Internal / external split (piece-count mode) */
+/* Sits directly under the label. Cards are all the same height now, so the
+   split starts at a consistent point on every card; pushing it to the bottom
+   with margin-top:auto instead would leave a gap between the label and the
+   split that grows with the card, which reads worse than trailing space. */
 .scc-split {
   display: flex;
   flex-wrap: wrap;
@@ -132,6 +203,25 @@
 .scc-split-ext { color: #d98324; }
 .scc-split-ext .scc-dot { background: #e0913f; }
 
+/* Channel-wise split. A stage can carry many channels, so these stack one per
+   line rather than flowing — a wrapped two-column list of "12 Delhi Store" is
+   much harder to read down a row of cards. */
+.scc-split-channel {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+/* Non-interactive: channel rows are display-only (see StageCountCards.jsx). */
+.scc-split-static {
+  cursor: default;
+  color: #5c5346;
+  padding: 1px 0;
+  margin: 0;
+}
+
+.scc-split-static:hover { background: transparent; }
+
 /* This app is light-only (dashboards use hardcoded light surfaces), so the
    cards must NOT follow the OS dark preference — keep them light everywhere.
    Force the light values even when the OS reports a dark scheme. */
@@ -141,6 +231,10 @@
   .scc-label { color: #7a6f5f; }
   .scc-title { color: #6b5842; }
   .scc-split { border-top-color: #f1ebe0; }
+  .scc-splitbar { background: #fff; border-color: #e6ded0; }
+  .scc-splitbtn { color: #7a6a55; }
+  .scc-splitbtn.on { background: #d5b85a; color: #3d3218; }
+  .scc-split-static { color: #5c5346; }
 }
 
 /* Total card — the reference number the stage counts sum to. */

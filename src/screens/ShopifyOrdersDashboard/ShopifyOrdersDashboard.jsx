@@ -577,7 +577,7 @@ export default function ShopifyOrdersDashboard() {
         for (let i = 0; i < ids.length; i += 100) {
           const { data: chunk, error: compErr } = await supabase
             .from("order_components")
-            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_active, is_rework, is_delayed, qc_status, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts")
+            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_active, is_rework, is_delayed, qc_status, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts, channel_key")
             .in("order_id", ids.slice(i, i + 100));
           if (compErr) { console.error("Shopify component fetch failed:", compErr); break; }
           comps = comps.concat(chunk || []);

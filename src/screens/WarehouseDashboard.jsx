@@ -510,7 +510,7 @@ const WarehouseDashboard = () => {
           const chunk = ids.slice(i, i + 200);
           const { data, error } = await supabase
             .from("order_components")
-            .select("id, order_id, barcode, component_type, current_stage, is_active, is_rework, is_outside_wh, stage_updated_at")
+            .select("id, order_id, barcode, component_type, current_stage, is_active, is_rework, is_outside_wh, stage_updated_at, channel_key")
             .in("order_id", chunk);
           if (error) { console.error("overview components fetch failed:", error); break; }
           all = all.concat(data || []);
@@ -1211,7 +1211,10 @@ const WarehouseDashboard = () => {
         {/* CONTENT AREA */}
         <div className="wd-content-area">
           {activeTab === "overview" && isWarehouseProdHead && (
-            <div className="wd-orders-section">
+            /* --wide: this tab is a card grid, not a table. The 1000px cap
+               squeezed the 13 stage cards into ragged rows and left the Total
+               stranded on a row of its own. */
+            <div className="wd-orders-section wd-orders-section--wide">
               <div className="wd-orders-header">
                 <h2 className="wd-section-title">Production Stages (Components)</h2>
                 <span className="wd-orders-count">{periodScopedOrders.length} orders in your channel</span>
@@ -1971,7 +1974,7 @@ const WarehouseDashboard = () => {
             <ProductionHeadVendors currentUserEmail={currentUserEmail} channel="retail" />
           )}
           {activeTab === "qc_history" && isWarehouseProdHead && (
-            <div className="wd-orders-section" style={{ maxWidth: "none" }}>
+            <div className="wd-orders-section wd-orders-section--wide">
               <div className="wd-orders-header">
                 <h2 className="wd-section-title">QC History</h2>
                 <span className="wd-orders-count">{scopedOrders.length} orders in your channel</span>
@@ -1980,7 +1983,7 @@ const WarehouseDashboard = () => {
             </div>
           )}
           {activeTab === "rejourneys" && isWarehouseProdHead && (
-            <div className="wd-orders-section" style={{ maxWidth: "none" }}>
+            <div className="wd-orders-section wd-orders-section--wide">
               <div className="wd-orders-header">
                 <h2 className="wd-section-title">Re-journeys</h2>
                 <span className="wd-orders-count">Currently in rework · your channel</span>
