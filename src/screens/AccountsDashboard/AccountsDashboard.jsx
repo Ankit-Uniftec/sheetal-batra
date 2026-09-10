@@ -3,12 +3,12 @@ import "./AccountsDashboard.css";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { useNavigate } from "react-router-dom";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
+import DashboardHeader from "../../components/DashboardHeader";
 
 export default function AccountsDashboard() {
   const navigate = useNavigate();
@@ -346,22 +346,10 @@ export default function AccountsDashboard() {
   return (
     <div className="acc-page">
       {/* Header */}
-      <header className="acc-header">
-        <div className="acc-header-left">
-          <img
-            src={Logo}
-            alt="logo"
-            className="acc-logo"
-            onClick={() => navigate("/login")}
-          />
-        </div>
-        <h1 className="acc-title">Accounts Dashboard</h1>
-        <div className="acc-header-right">
-          <button className="acc-logout-btn" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Accounts Dashboard"
+          onLogout={handleLogout}
+      />
 
       {/* Main Content */}
       <div className="acc-content">

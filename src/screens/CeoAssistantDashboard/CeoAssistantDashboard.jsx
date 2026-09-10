@@ -3,14 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./CeoAssistantDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { isRevenueOrder } from "../../utils/revenue";
 import { usePopup } from "../../components/Popup";
-import NotificationBell from "../../components/NotificationBell";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import useTabParam from "../../hooks/useTabParam";
+import DashboardHeader from "../../components/DashboardHeader";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -321,19 +320,13 @@ export default function CeoAssistantDashboard() {
     <div className="ca-dashboard-wrapper">
       {PopupComponent}
 
-      <header className="ca-header">
-        <img src={Logo} alt="logo" className="ca-logo" onClick={handleLogout} />
-        <h1 className="ca-title">CEO Assistant</h1>
-        <div className="ca-header-right">
-          <NotificationBell userEmail={currentUserEmail} />
-          <button className="ca-logout-btn" onClick={handleLogout}>Logout</button>
-          <div className="ca-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
-            <div className="ca-bar"></div>
-            <div className="ca-bar"></div>
-            <div className="ca-bar"></div>
-          </div>
-        </div>
-      </header>
+      <DashboardHeader
+          title="CEO Assistant"
+          onHome={() => setActiveTab("store_performance")}
+          onMenuToggle={() => setShowSidebar(!showSidebar)}
+          userEmail={currentUserEmail}
+          onLogout={handleLogout}
+      />
 
       <div className="ca-layout">
         <aside className={`ca-sidebar ${showSidebar ? "ca-open" : ""}`}>

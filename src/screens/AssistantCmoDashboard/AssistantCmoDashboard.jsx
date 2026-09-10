@@ -4,11 +4,9 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isRevenueOrder } from "../../utils/revenue";
 import "./AssistantCmoDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { splitPhoneNumber } from "../../utils/formatPhoneNumber";
 import { usePopup } from "../../components/Popup";
-import NotificationBell from "../../components/NotificationBell";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import WalkInsView from "../../components/WalkInsView/WalkInsView";
 import { usePeriodFilter } from "../../components/PeriodFilter";
@@ -22,6 +20,7 @@ import {
   LineChart, Line,
 } from "recharts";
 import { startOrderMode } from "../../utils/orderMode";
+import DashboardHeader from "../../components/DashboardHeader";
 
 const COLOR_NAME_MAP = {
   black: "#1a1a1a", white: "#f5f5f5", red: "#c62828", blue: "#1565c0",
@@ -919,19 +918,13 @@ export default function AssistantCmoDashboard() {
     <div className="acmo-dashboard-wrapper">
       {PopupComponent}
 
-      <header className="acmo-header">
-        <img src={Logo} alt="logo" className="acmo-logo" onClick={handleLogout} />
-        <h1 className="acmo-title">Assistant CMO</h1>
-        <div className="acmo-header-right">
-          <NotificationBell userEmail={currentUserEmail} />
-          <button className="acmo-logout-btn" onClick={handleLogout}>Logout</button>
-          <div className="acmo-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
-            <div className="acmo-bar"></div>
-            <div className="acmo-bar"></div>
-            <div className="acmo-bar"></div>
-          </div>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Assistant CMO"
+          onHome={() => setActiveTab("overview")}
+          onMenuToggle={() => setShowSidebar(!showSidebar)}
+          userEmail={currentUserEmail}
+          onLogout={handleLogout}
+      />
 
       <div className="acmo-layout">
         <aside className={`acmo-sidebar ${showSidebar ? "acmo-open" : ""}`}>

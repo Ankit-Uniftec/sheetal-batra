@@ -4,7 +4,6 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import config from "../../config/config";
 import "./InventoryDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
 import InventoryOverviewTab from "./InventoryOverviewTab";
@@ -16,6 +15,7 @@ import AddProduct from "../../components/AddProduct/AddProduct";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import { poolsForUser } from "../../utils/stockVisibility";
+import DashboardHeader from "../../components/DashboardHeader";
 
 const ITEMS_PER_PAGE = 15;
 
@@ -680,27 +680,12 @@ export default function InventoryDashboard() {
       )}
 
       {/* Header */}
-      <header className="inv-header">
-        <div className="inv-header-left">
-          <img
-            src={Logo}
-            alt="logo"
-            className="inv-logo"
-            onClick={() => navigate("/login")}
-          />
-        </div>
-        <h1 className="inv-title">Inventory Dashboard</h1>
-        <div className="inv-header-right">
-          <button className="inv-logout-btn" onClick={handleLogout}>
-            Logout
-          </button>
-          <div className="inv-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
-            <div className="inv-bar"></div>
-            <div className="inv-bar"></div>
-            <div className="inv-bar"></div>
-          </div>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Inventory Dashboard"
+          onHome={() => setActiveTab("inventory")}
+          onMenuToggle={() => setShowSidebar(!showSidebar)}
+          onLogout={handleLogout}
+      />
 
       {/* Layout with Sidebar */}
       <div className={`inv-layout ${showSidebar ? "inv-sidebar-open" : ""}`}>

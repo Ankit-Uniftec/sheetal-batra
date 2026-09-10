@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
-import Logo from "../../images/logo.png";
 import ScanStation from "../../components/ScanStation";
 import "../../components/ScanStation.css";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
@@ -9,6 +8,7 @@ import ScanStationOrders from "../../components/ScanStationOrders";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import "./ScanStationPage.css";
 import useTabParam from "../../hooks/useTabParam";
+import DashboardHeader from "../../components/DashboardHeader";
 
 // Standalone Scan Station page — for workers whose only role is
 // `scan_station`. They land here on login. A small sidebar switches between
@@ -110,18 +110,13 @@ export default function ScanStationPage() {
 
   return (
     <div className="ssp-page">
-      <header className="ssp-header">
-        <div className="ssp-header-left">
-          <button className="ssp-hamburger" onClick={() => setShowSidebar(v => !v)} aria-label="Menu">
-            <span /><span /><span />
-          </button>
-          <img src={Logo} alt="Logo" className="ssp-logo" />
-          <h1 className="ssp-title">{TAB_TITLES[activeTab] || "Scan Station"}</h1>
-        </div>
-        <div className="ssp-header-right">
-          {userName && <span className="ssp-user">{userName}</span>}
-        </div>
-      </header>
+      <DashboardHeader
+          title={TAB_TITLES[activeTab] || "Scan Station"}
+          onHome={() => setActiveTab("scan")}
+          onMenuToggle={() => setShowSidebar(v => !v)}
+          userName={userName}
+          onLogout={handleLogout}
+      />
 
       <div className="ssp-layout">
         <aside className={`ssp-sidebar ${showSidebar ? "open" : ""}`}>

@@ -4,8 +4,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 import WalkInsView from "../../components/WalkInsView/WalkInsView";
-import Logo from "../../images/logo.png";
 import "./WalkInDashboard.css";
+import DashboardHeader from "../../components/DashboardHeader";
 
 /**
  * WalkInDashboard — a dedicated, walk-in-ONLY login.
@@ -90,15 +90,10 @@ export default function WalkInDashboard() {
 
   return (
     <div className="wid-page">
-      <header className="wid-header">
-        <div className="wid-header-left">
-          <img src={Logo} alt="logo" className="wid-logo" onClick={() => navigate("/login")} />
-        </div>
-        <h1 className="wid-title">Walk-In Dashboard</h1>
-        <div className="wid-header-right">
-          <button className="wid-logout-btn" onClick={handleLogout}>Logout</button>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Walk-In Dashboard"
+          onLogout={handleLogout}
+      />
 
       <main className="wid-main">
         {loading ? (

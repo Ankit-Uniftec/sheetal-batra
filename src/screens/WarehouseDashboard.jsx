@@ -3,12 +3,10 @@ import "./WarehouseDashboard.css";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "../utils/fetchAllRows";
-import Logo from "../images/logo.png";
 import formatDate from "../utils/formatDate";
 import { getWarehouseDate as sharedWarehouseDate, getWarehouseDateObj } from "../utils/warehouseDate";
 import { downloadWarehousePdf } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
-import NotificationBell from "../components/NotificationBell";
 import ScanStation from "../components/ScanStation";
 import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
@@ -30,6 +28,7 @@ import Paginator from "../components/Paginator";
 import CompletePicker from "../components/CompletePicker";
 import { runManualCompleteWithOverride } from "../utils/manualComplete";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../components/PeriodFilter";
+import DashboardHeader from "../components/DashboardHeader";
 
 // Warehouse production stages (manual dropdown)
 // const WAREHOUSE_STAGES = [
@@ -1151,23 +1150,14 @@ const WarehouseDashboard = () => {
       )}
 
       {/* HEADER */}
-      <div className="wd-top-header">
-        <div className="wd-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
-          <div className="wd-bar"></div>
-          <div className="wd-bar"></div>
-          <div className="wd-bar"></div>
-        </div>
-        <div className="wd-header-left">
-          <img src={Logo} className="logo" alt="logo" />
-        </div>
-        <h1 className="wd-title">{dashboardTitle}</h1>
-        <div className="wd-header-right">
-          <NotificationBell
-            userEmail={currentUserEmail}
-            onOrderClick={goToOrder}
-          />
-        </div>
-      </div>
+      <DashboardHeader
+        title={dashboardTitle}
+        onHome={() => setActiveTab("orders")}
+        onMenuToggle={() => setShowSidebar(!showSidebar)}
+        userEmail={currentUserEmail}
+        onOrderClick={goToOrder}
+        onLogout={handleLogout}
+      />
 
       {/* MAIN LAYOUT */}
       <div className="wd-main-layout">

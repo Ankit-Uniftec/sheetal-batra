@@ -3,14 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bMerchandiserDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
-import NotificationBell from "../../components/NotificationBell";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import QcReportModal from "../../components/QcReportModal";
@@ -29,6 +27,7 @@ import StockExchangeTab from "../../components/stock/StockExchangeTab";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
 import downloadCsv from "../../utils/downloadCsv";
+import DashboardHeader from "../../components/DashboardHeader";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -909,22 +908,14 @@ export default function B2bMerchandiserDashboard() {
         <div className="merch-dashboard-wrapper">
             {PopupComponent}
             {/* ===== HEADER ===== */}
-            <header className="merch-header">
-                <img src={Logo} alt="logo" className="merch-header-logo" onClick={() => setActiveTab("dashboard")} />
-                <h1 className="merch-header-title">B2B Merchandiser</h1>
-                <div className="merch-header-right">
-                    <NotificationBell
-                        userEmail={user?.email}
-                        onOrderClick={(orderId) => handleViewOrder(orderId)}
-                    />
-                    <button className="merch-header-btn" onClick={handleLogout}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></svg>
-                    </button>
-                    <div className="merch-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
-                        <div className="merch-bar"></div><div className="merch-bar"></div><div className="merch-bar"></div>
-                    </div>
-                </div>
-            </header>
+            <DashboardHeader
+                title="B2B Merchandiser"
+                onHome={() => setActiveTab("dashboard")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={user?.email}
+                onOrderClick={handleViewOrder}
+                onLogout={handleLogout}
+            />
 
             {/* Period filter — dashboard tab stat cards only (grid cells below are
                 explicitly placed, so the control sits above the grid). */}

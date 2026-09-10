@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isAssignedToHead } from "../../utils/stockProductionHead";
 import "./B2bProductionDashboard.css";
-import Logo from "../../images/logo.png";
 import formatDate from "../../utils/formatDate";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
-import NotificationBell from "../../components/NotificationBell";
+import DashboardHeader from "../../components/DashboardHeader";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
@@ -109,7 +109,11 @@ export default function B2bProductionDashboard() {
     const {
         control: ordersPeriodControl, timeline: ordersTimeline,
         inPeriod: inOrdersPeriod, range: ordersPeriodRange, props: ordersPeriodProps,
-    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
+    // No label: every sibling control in this toolbar is a self-describing
+    // "All Status"/"All Types" select, and the caption both read as clutter and
+    // wrapped onto its own line — pushing the date select below the row while
+    // its siblings stayed put. The "All time" option names the control already.
+    } = usePeriodFilter("all", { variant: "select", label: "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { setCurrentPage(1); }, [ordersPeriodRange]);
     // Stage-card drill-through: filter the All Orders list to a stage (and kind).
@@ -151,6 +155,9 @@ export default function B2bProductionDashboard() {
             // the form changed.
             const COMMS_ASSIGN_DESIGNATION = "B2B Production Head";
             const COMMS_ASSIGN_LEGACY_EMAIL = "production1.sheetalbatra@gmail.com";
+            // Same designation, different column: stock orders raised in ANY
+            // channel and pointed at this head via the stock-order head picker.
+            const B2B_HEAD_DESIGNATION = "B2B Production Head";
 
             const [profileResult, ordersResult] = await Promise.all([
                 supabase.from("salesperson").select("*").eq("email", user.email?.toLowerCase()).maybeSingle(),
@@ -163,9 +170,15 @@ export default function B2bProductionDashboard() {
                 // Assign" is what puts the order on this dashboard. See the
                 // designation constants above for why it is matched by
                 // designation and not by email.
+                // The third OR term is the stock-order head override: a RETAIL
+                // stock order (SB-STOCK-…, is_b2b = false) that an SA explicitly
+                // assigned to this head. Without it such an order exists but is
+                // invisible here, because every other term keys off is_b2b.
+                // Additive — it stays on the offline head's and the SA's
+                // dashboards too. See utils/stockProductionHead.js.
                 fetchAllRows("orders", (q) => q
                     .select("*")
-                    .or(`is_b2b.eq.true,comms_order_assign.eq."${COMMS_ASSIGN_DESIGNATION}",comms_order_assign.eq.${COMMS_ASSIGN_LEGACY_EMAIL}`)
+                    .or(`is_b2b.eq.true,comms_order_assign.eq."${COMMS_ASSIGN_DESIGNATION}",comms_order_assign.eq.${COMMS_ASSIGN_LEGACY_EMAIL},production_head_designation.eq."${B2B_HEAD_DESIGNATION}"`)
                     .order("created_at", { ascending: false }))
             ]);
 
@@ -180,9 +193,32 @@ export default function B2bProductionDashboard() {
                 // trips the >Rs 35,000 gate (CommsReviewOrder writes null below
                 // it), so a null status on a Comms row means "no approval needed"
                 // — treat it as approved or every assigned Comms order vanishes.
+                //
+                // A stock order assigned to this head via the head picker is the
+                // THIRD case with no approval to wait for, and it needs its own
+                // branch for a non-obvious reason.
+                //
+                // A RETAIL stock order is placed through ReviewDetail, which
+                // never writes approval_status — retail has no approval concept,
+                // only B2B and Comms do. But the COLUMN DEFAULTS TO 'pending' in
+                // the DB, so the row does not arrive null: it arrives 'pending',
+                // indistinguishable from a B2B order genuinely awaiting the
+                // merchandiser. Verified against live data — every SB-DLC- and
+                // SB-STOCK- row reads 'pending', while B2B stock is explicitly
+                // set 'approved' by B2bReviewOrder.
+                //
+                // So this branch must NOT test !approval_status the way the
+                // comms branch does; a retail stock order would never pass.
+                // Internal stock has no counterparty to approve it (the same
+                // reasoning db/…/v2/54 uses to auto-approve B2B stock), so the
+                // default 'pending' is noise, not a real pending decision — the
+                // only status that must still hide the order is an explicit
+                // rejection.
                 const approvedOrders = ordersResult.data.filter(o =>
                     o.approval_status === "approved" ||
-                    (o.is_comms && !o.approval_status)
+                    (o.is_comms && !o.approval_status) ||
+                    (isAssignedToHead(o, B2B_HEAD_DESIGNATION) &&
+                     o.approval_status !== "rejected")
                 );
                 setOrders(approvedOrders);
                 const vendorIds = [...new Set(approvedOrders.map(o => o.vendor_id).filter(Boolean))];
@@ -557,19 +593,14 @@ export default function B2bProductionDashboard() {
     return (
         <div className="prod-dashboard-wrapper">
             {/* ===== HEADER ===== */}
-            <header className="prod-header">
-                <img src={Logo} alt="logo" className="prod-header-logo" onClick={() => setActiveTab("dashboard")} />
-                <h1 className="prod-header-title">B2B Production</h1>
-                <div className="prod-header-right">
-                    <NotificationBell
-                        userEmail={user?.email}
-                        onOrderClick={(orderId) => handleViewOrder(orderId)}
-                    />
-                    <div className="prod-hamburger-icon" onClick={() => setShowSidebar(!showSidebar)}>
-                        <div className="prod-bar"></div><div className="prod-bar"></div><div className="prod-bar"></div>
-                    </div>
-                </div>
-            </header>
+            <DashboardHeader
+                title="B2B Production"
+                onHome={() => setActiveTab("dashboard")}
+                onMenuToggle={() => setShowSidebar(!showSidebar)}
+                userEmail={user?.email}
+                onOrderClick={handleViewOrder}
+                onLogout={handleLogout}
+            />
 
             {/* ===== GRID LAYOUT ===== */}
             <div className={`prod-grid-table ${showSidebar ? "prod-sidebar-open" : ""}`}>
@@ -802,14 +833,14 @@ export default function B2bProductionDashboard() {
                             {ordersPeriodControl}
                             {stageFilter && (
                                 <button onClick={() => { setStageFilter(null); setStageKindFilter("both"); setCurrentPage(1); }} title="Clear stage filter"
-                                    style={{ padding: "6px 12px", borderRadius: 999, border: "1px solid #d5b85a", background: "#faf6e8", color: "#6b5842", fontSize: 12, cursor: "pointer", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                    className="prod-stage-chip">
                                     {(STAGE_GROUPS.find(g => g.key === stageFilter)?.label || stageFilter)}
                                     {stageKindFilter === "internal" ? " · In-house" : stageKindFilter === "external" ? " · Vendor" : ""}
                                     <span aria-hidden="true">{"✕"}</span>
                                 </button>
                             )}
                             {(prodFilter !== "all" || allTypeFilter !== "all" || merchandiserFilter !== "all" || ordersTimeline !== "all") && (
-                                <button onClick={() => { setProdFilter("all"); setAllTypeFilter("all"); setMerchandiserFilter("all"); ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); setCurrentPage(1); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#e53935", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Clear</button>
+                                <button onClick={() => { setProdFilter("all"); setAllTypeFilter("all"); setMerchandiserFilter("all"); ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); setCurrentPage(1); }} className="prod-clear-filters">Clear filters</button>
                             )}
                         </div>
                         <div className="prod-list-scroll">

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./HeadOfDesignDashboard.css";
-import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import {
@@ -15,6 +14,7 @@ import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import { getOrderChannelLabel, getOrderProgressStatusStage } from "../../utils/barcodeService";
 import { usePeriodFilter } from "../../components/PeriodFilter";
+import DashboardHeader from "../../components/DashboardHeader";
 
 // Head of Design Dashboard — read-only view for Tanuja Singh.
 // Two focused tabs:
@@ -292,19 +292,13 @@ export default function HeadOfDesignDashboard() {
   return (
     <div className="hod-page">
       {/* HEADER */}
-      <header className="hod-header">
-        <div className="hod-header-left">
-          <button className="hod-hamburger" onClick={() => setShowSidebar(!showSidebar)}>
-            <span /><span /><span />
-          </button>
-          <img src={Logo} alt="Logo" className="hod-logo" />
-        </div>
-        <h1 className="hod-title">Head of Design</h1>
-        <div className="hod-header-right">
-          {currentUserName && <span className="hod-user">{currentUserName}</span>}
-          <button className="hod-logout-btn" onClick={handleLogout}>Logout</button>
-        </div>
-      </header>
+      <DashboardHeader
+        title="Head of Design"
+        onHome={() => setActiveTab("status")}
+        onMenuToggle={() => setShowSidebar(!showSidebar)}
+        userName={currentUserName}
+        onLogout={handleLogout}
+      />
 
       <div className="hod-layout">
         {/* SIDEBAR */}

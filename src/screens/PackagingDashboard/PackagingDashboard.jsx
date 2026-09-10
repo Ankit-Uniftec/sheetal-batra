@@ -6,7 +6,6 @@ import { usePopup } from "../../components/Popup";
 import { usePeriodFilterParam } from "../../components/PeriodFilter";
 import Paginator from "../../components/Paginator";
 import SearchByDropdown from "../../components/SearchByDropdown";
-import NotificationBell from "../../components/NotificationBell";
 import QcReportModal from "../../components/QcReportModal";
 import ScanStation from "../../components/ScanStation";
 import "../../components/ScanStation.css";
@@ -16,8 +15,8 @@ import useTabParam from "../../hooks/useTabParam";
 import formatDate from "../../utils/formatDate";
 import { getWarehouseDate } from "../../utils/warehouseDate";
 import { getOrderStatusLabel, getOrderChannelLabel, CHANNEL_SEGMENTS } from "../../utils/barcodeService";
-import Logo from "../../images/logo.png";
 import "./PackagingDashboard.css";
+import DashboardHeader from "../../components/DashboardHeader";
 
 // ============================================================
 // PackagingDashboard — the packaging & dispatch desk (Aryadeep).
@@ -278,19 +277,13 @@ export default function PackagingDashboard() {
       )}
 
       {/* HEADER */}
-      <header className="pkg-header">
-        <div className="pkg-header-left">
-          <button className="pkg-hamburger" onClick={() => setShowSidebar(!showSidebar)} aria-label="Menu">
-            <span /><span /><span />
-          </button>
-          <img src={Logo} alt="Sheetal Batra" className="pkg-logo" />
-        </div>
-        <h1 className="pkg-title">Packaging &amp; Dispatch</h1>
-        <div className="pkg-header-right">
-          <NotificationBell userEmail={profile?.email} />
-          <button className="pkg-logout-btn" onClick={handleLogout}>Logout</button>
-        </div>
-      </header>
+      <DashboardHeader
+          title="Packaging & Dispatch"
+          onHome={() => setActiveTab("queue")}
+          onMenuToggle={() => setShowSidebar(!showSidebar)}
+          userEmail={profile?.email}
+          onLogout={handleLogout}
+      />
 
       <div className="pkg-layout">
         {/* SIDEBAR */}
