@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "./fetchAllRows";
+import { isAssignedToHead } from "./stockProductionHead";
 
 /**
  * BarcodeService
@@ -599,7 +600,25 @@ const CHANNELS_OWNED_BY_DESIGNATION = {
 export function scopeOrdersToDesignation(orders, designation) {
   if (!Array.isArray(orders)) return [];
   const d = (designation || "").trim().toLowerCase();
-  if (d === "online production head") return orders.filter(isLxrtsOrder);
+
+  // A stock order EXPLICITLY assigned to this head is always in scope, whatever
+  // channel it was raised in — that is the whole point of the override (see
+  // utils/stockProductionHead.js). Held separately and merged at the end so it
+  // survives every filter below: the offline head's LXRTS exclusion would
+  // otherwise drop an assigned LXRTS-type stock order, and the online head
+  // returns early before the channel map is ever consulted.
+  //
+  // ADDITIVE: this only ever ADDS orders to a head's queue. Nothing here
+  // removes an order from the head who owns it by channel — an assigned order
+  // shows to both, by design.
+  const assigned = orders.filter((o) => isAssignedToHead(o, designation));
+  const withAssigned = (list) => {
+    if (!assigned.length) return list;
+    const have = new Set(list.map((o) => o.id));
+    return list.concat(assigned.filter((o) => !have.has(o.id)));
+  };
+
+  if (d === "online production head") return withAssigned(orders.filter(isLxrtsOrder));
 
   const channel = getChannelKeyForDesignation(designation);
   if (!channel) return orders;
@@ -607,7 +626,7 @@ export function scopeOrdersToDesignation(orders, designation) {
   let scoped = orders.filter((o) => owned.includes(getOrderChannelKey(o)));
   // LXRTS-type pieces are the online head's workload, not the offline head's.
   if (channel === "offline") scoped = scoped.filter((o) => !isLxrtsOrder(o));
-  return scoped;
+  return withAssigned(scoped);
 }
 
 // ============================================================

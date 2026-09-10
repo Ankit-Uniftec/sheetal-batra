@@ -14,6 +14,7 @@ import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
 import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
+import { isAssignedToHead } from "../utils/stockProductionHead";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import ComponentStageBadge from "../components/ComponentStageBadge";
 import QcReportModal from "../components/QcReportModal";
@@ -218,9 +219,17 @@ const WarehouseDashboard = () => {
   // B2B orders carry the store but not the flag, so !is_b2b alone let them slip
   // through (this is why they were still showing).
   const isB2bOrder = (o) => o?.is_b2b === true || (o?.salesperson_store || "").trim().toUpperCase() === "B2B";
+  // EXCEPT a stock order explicitly assigned to this head via the stock-order
+  // head picker. That assignment is the SA saying "this one is yours" and it
+  // must beat the blanket B2B exclusion above — otherwise picking the Offline
+  // head on a B2B stock order writes the designation, passes every other gate,
+  // and the order still never appears here. Additive: the B2B head keeps it too.
+  // See utils/stockProductionHead.js.
   const visibleOrders = useMemo(
-    () => (isOfflineProdHead ? orders.filter(o => !isB2bOrder(o)) : orders),
-    [orders, isOfflineProdHead]
+    () => (isOfflineProdHead
+      ? orders.filter(o => !isB2bOrder(o) || isAssignedToHead(o, userDesignation))
+      : orders),
+    [orders, isOfflineProdHead, userDesignation]
   );
 
   // Get unique salespersons from orders

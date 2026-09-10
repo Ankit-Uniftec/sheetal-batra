@@ -10,6 +10,7 @@ import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
+import { isValidStockHeadDesignation } from "../../utils/stockProductionHead";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -315,6 +316,15 @@ export default function B2bReviewOrder() {
                 // warehouse.
                 if (isStockOrder) {
                     orderPayload.is_stock_order = true;
+                    // The head the merchandiser explicitly assigned on the
+                    // details step, or null to derive from channel. Validated
+                    // rather than passed through: the column carries a CHECK
+                    // constraint, so a stale session value naming a designation
+                    // no longer offered would fail the insert outright.
+                    orderPayload.production_head_designation =
+                        isValidStockHeadDesignation(detailsData?.productionHead)
+                            ? detailsData.productionHead
+                            : null;
                     orderPayload.delivery_name = B2B_STOCK_DELIVERY.delivery_name;
                     orderPayload.advance_payment = 0;
                     orderPayload.remaining_payment = 0;

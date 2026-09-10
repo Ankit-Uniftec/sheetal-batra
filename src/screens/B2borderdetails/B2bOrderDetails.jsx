@@ -9,6 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { isB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
+import { STOCK_HEAD_OPTIONS } from "../../utils/stockProductionHead";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -27,6 +28,11 @@ export default function B2bOrderDetails() {
     const [vendorData, setVendorData] = useState(null);
     const [productData, setProductData] = useState(null);
     const [orderNotes, setOrderNotes] = useState("");
+    // Stock orders only: the Production Head this order is assigned to,
+    // independent of channel. Blank = channel default (the B2B head). Picking
+    // the Offline head ADDS it to their queue without removing it from here.
+    // See utils/stockProductionHead.js.
+    const [productionHead, setProductionHead] = useState("");
 
     // Load data from session
     useEffect(() => {
@@ -86,9 +92,9 @@ export default function B2bOrderDetails() {
         const deliveryAddress = isStockOrder
             ? B2B_STOCK_DELIVERY.delivery_address
             : (vendor?.shipping_address || vendor?.location || "N/A");
-        const data = { deliveryAddress, orderNotes };
+        const data = { deliveryAddress, orderNotes, productionHead };
         sessionStorage.setItem(DETAILS_SESSION_KEY, JSON.stringify(data));
-    }, [vendorData, orderNotes, isStockOrder]);
+    }, [vendorData, orderNotes, productionHead, isStockOrder]);
 
     // Derived data
     const vendor = vendorData?.vendor;
@@ -118,7 +124,7 @@ export default function B2bOrderDetails() {
         : (vendor?.shipping_address || vendor?.location || "N/A");
 
     const handleContinue = () => {
-        const detailsData = { deliveryAddress, orderNotes };
+        const detailsData = { deliveryAddress, orderNotes, productionHead };
         sessionStorage.setItem(DETAILS_SESSION_KEY, JSON.stringify(detailsData));
         navigate("/b2b-review-order");
     };
@@ -214,6 +220,31 @@ export default function B2bOrderDetails() {
                         <div className="b2b-od-field"><label>Delivery Address:</label><span>{deliveryAddress}</span></div>
                         <div className="b2b-od-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "B2B Store"}</span></div>
                     </div>
+                    {/* STOCK ONLY — assign a Production Head regardless of channel.
+                        Blank keeps the existing behaviour (this order stays with the
+                        B2B head only). Selecting the Offline head also surfaces it on
+                        the warehouse Production Head dashboard, without removing it
+                        from here. See utils/stockProductionHead.js. */}
+                    {isStockOrder && (
+                        <div className="b2b-od-row3" style={{ marginTop: 16 }}>
+                            <div className="b2b-od-field" style={{ flex: "1 1 100%" }}>
+                                <label>Production Head (Optional):</label>
+                                <select
+                                    className="input-line"
+                                    value={productionHead}
+                                    onChange={(e) => setProductionHead(e.target.value)}
+                                >
+                                    <option value="">Default (by channel)</option>
+                                    {STOCK_HEAD_OPTIONS.map((h) => (
+                                        <option key={h.designation} value={h.designation}>
+                                            {h.name} ({h.designation})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="b2b-od-row3" style={{ marginTop: 16 }}>
                         <div className="b2b-od-field" style={{ flex: "1 1 100%" }}>
                             <label>Additional Notes (Optional):</label>

@@ -14,6 +14,7 @@ import { usePopup } from "../components/Popup"; // Import Popup component
 import ExtrasPopup from "../components/ExtrasPopup";
 import config from "../config/config";
 import { isOrderMode } from "../utils/orderMode";
+import { STOCK_HEAD_OPTIONS, isValidStockHeadDesignation } from "../utils/stockProductionHead";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -655,6 +656,13 @@ export default function ProductForm() {
   const [selectedDupattaColor, setSelectedDupattaColor] = useState("");
 
   const [modeOfDelivery, setModeOfDelivery] = useState(isStockOrder ? "WH Delhi" : "Delhi Store");
+
+  // Stock orders only: the Production Head this order is assigned to,
+  // independent of the channel it is raised in. Optional — blank keeps the
+  // legacy behaviour (the channel decides the head). Picking one ADDS the
+  // order to that head's dashboard; it never removes it from anyone else's.
+  // See utils/stockProductionHead.js.
+  const [productionHead, setProductionHead] = useState("");
   const [orderFlag, setOrderFlag] = useState("Normal");
   // Comms orders prefill from the single CommsOrderForm delivery date (the
   // per-item field is hidden for them); regular orders start blank.
@@ -1159,6 +1167,7 @@ export default function ProductForm() {
         if (draftData.deliveryDate) setDeliveryDate(draftData.deliveryDate);
         if (draftData.deliveryNotes) setDeliveryNotes(draftData.deliveryNotes);
         if (draftData.modeOfDelivery) setModeOfDelivery(draftData.modeOfDelivery);
+        if (draftData.productionHead) setProductionHead(draftData.productionHead);
         if (draftData.orderFlag) setOrderFlag(draftData.orderFlag);
         if (draftData.comments) setComments(draftData.comments);
         if (draftData.attachments) setAttachments(draftData.attachments);
@@ -1247,6 +1256,7 @@ export default function ProductForm() {
         if (data.deliveryDate) setDeliveryDate(data.deliveryDate);
         if (data.deliveryNotes) setDeliveryNotes(data.deliveryNotes); // ✅ ADD
         if (data.modeOfDelivery) setModeOfDelivery(data.modeOfDelivery);
+        if (data.productionHead) setProductionHead(data.productionHead);
         if (data.orderFlag) setOrderFlag(data.orderFlag);
         if (data.comments) setComments(data.comments);
         if (data.attachments) setAttachments(data.attachments);
@@ -1300,6 +1310,7 @@ export default function ProductForm() {
       deliveryDate,
       deliveryNotes,
       modeOfDelivery,
+      productionHead,
       orderFlag,
       comments,
       attachments,
@@ -1341,6 +1352,7 @@ export default function ProductForm() {
     deliveryDate,
     deliveryNotes,
     modeOfDelivery,
+    productionHead,
     orderFlag,
     comments,
     attachments,
@@ -2800,6 +2812,15 @@ export default function ProductForm() {
       // delivery_* uses the broken-out columns the schema does provide.
       ...(isStockOrder && {
         is_stock_order: true,
+        // The head the SA explicitly assigned, or null to derive from channel.
+        // Validated rather than passed through: the DB has a CHECK constraint
+        // on this column, so a stale draft holding a designation that has since
+        // been removed from STOCK_HEAD_OPTIONS would fail the insert at
+        // placement — after the SA has filled the whole form. Drop it here
+        // instead and fall back to the channel default.
+        production_head_designation: isValidStockHeadDesignation(productionHead)
+          ? productionHead
+          : null,
         delivery_name: "Internal Stock",
         delivery_phone: "",
         delivery_email: "",
@@ -3929,6 +3950,28 @@ export default function ProductForm() {
                   />
                 </div>
               </div>
+
+              {/* STOCK ONLY — assign a Production Head regardless of the channel
+                  this order is raised in. Optional: left blank, the order behaves
+                  exactly as before (channel decides). Picking one ADDS the order
+                  to that head's dashboard without removing it from the SA's, the
+                  warehouse's or the PM's. See utils/stockProductionHead.js. */}
+              {isStockOrder && (
+                <div className="field">
+                  <label>Production Head</label>
+                  <div className="field-control">
+                    <SearchableSelect
+                      options={STOCK_HEAD_OPTIONS.map((h) => ({
+                        label: `${h.name} (${h.designation})`,
+                        value: h.designation,
+                      }))}
+                      value={productionHead}
+                      onChange={setProductionHead}
+                      placeholder="Default (by channel)"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="field">
                 <label>Order Flag</label>

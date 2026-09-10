@@ -500,6 +500,14 @@ export default function ReviewDetail() {
         ), { userFacing: true });
       }
       orderDataToInsert.is_stock_order = true;
+    } else {
+      // Non-stock orders never carry an explicit head — the override is a
+      // stock-only feature and the channel resolver owns every other order.
+      // Stripped at the write boundary (not just left unset) so an abandoned
+      // stock flow resumed as a client order cannot smuggle the field through
+      // sessionStorage and silently reroute a real customer order's
+      // escalations. Same reasoning as the stock-permission re-check above.
+      delete orderDataToInsert.production_head_designation;
     }
 
     setLoadingMessage("Generating invoice PDFs...");
