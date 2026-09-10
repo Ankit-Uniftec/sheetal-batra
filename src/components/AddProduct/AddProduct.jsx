@@ -1499,7 +1499,9 @@ Re-open the product and add the sizes.`
                 ))}
               </select>
               <span className="ap-help">
-                "All Stores" shows in every store's order form. "Delhi"/"Ludhiana" show only to that store's SAs.
+                "All Stores" shows in every store's order form. "Delhi"/"Ludhiana"
+                show only to that store's SAs. "Factory One" is stock held at the
+                factory — it shows in Inventory but in no store's order form.
               </span>
             </div>
 

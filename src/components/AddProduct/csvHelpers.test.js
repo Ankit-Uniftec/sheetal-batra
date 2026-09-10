@@ -1,4 +1,5 @@
 import { parseCsv, validateRow, SIZE_OPTIONS, checkDuplicateName } from "./csvHelpers";
+import { isProductVisibleForStore } from "../../utils/storeCategory";
 
 // Minimal valid row; each test overrides only what it's about.
 const base = {
@@ -36,6 +37,30 @@ test("a quoted, space-padded cell imports clean", () => {
 test("a doubled quote inside a cell unescapes to one quote", () => {
   const csv = ["name", '"He said ""hi"""', ""].join("\n");
   expect(parseCsv(csv).data[0].name).toBe('He said "hi"');
+});
+
+// ─── Factory One ──────────────────────────────────────────────────────
+// A holding location, not a shop floor. Adding it to STORE_CATEGORIES makes
+// the CSV importer accept it; the point of the value is that a product tagged
+// with it reaches NO salesperson's order form, so pin both halves.
+describe("Factory One store category", () => {
+  it("is accepted by the CSV importer", () => {
+    const r = validateRow({ ...base, store_category: "Factory One" }, 2);
+    expect(r.ok).toBe(true);
+    expect(r.normalized.store_category).toBe("Factory One");
+  });
+
+  it("is hidden from both stores' order forms", () => {
+    const factoryPiece = { store_category: "Factory One" };
+    expect(isProductVisibleForStore(factoryPiece, "Delhi")).toBe(false);
+    expect(isProductVisibleForStore(factoryPiece, "Ludhiana")).toBe(false);
+  });
+
+  it("does not change what other categories do", () => {
+    expect(isProductVisibleForStore({ store_category: "All Stores" }, "Delhi")).toBe(true);
+    expect(isProductVisibleForStore({ store_category: "Delhi" }, "Delhi")).toBe(true);
+    expect(isProductVisibleForStore({ store_category: "Delhi" }, "Ludhiana")).toBe(false);
+  });
 });
 
 // ─── checkDuplicateName ───────────────────────────────────────────────

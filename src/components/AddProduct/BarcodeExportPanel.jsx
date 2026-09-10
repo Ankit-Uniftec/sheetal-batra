@@ -36,6 +36,16 @@ export default function BarcodeExportPanel({ onReserved }) {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(() => new Set());
 
+  // ── Re-print an already-filled barcode ──
+  // The list above is is_draft only, which is correct for "awaiting details"
+  // but left no way to re-print a tag once its product was filled in — the
+  // common case, since that is when a sticker gets damaged or a garment is
+  // re-tagged. Searched rather than listed: there are thousands of live
+  // products and printing the wrong one wastes a label and mislabels a garment.
+  const [filledQuery, setFilledQuery] = useState("");
+  const [filledResults, setFilledResults] = useState(null); // null = not searched
+  const [filledSearching, setFilledSearching] = useState(false);
+
   const parsedCount = parseInt(count, 10);
   const countValid = Number.isFinite(parsedCount) && parsedCount >= 1 && parsedCount <= MAX_PER_BATCH;
 
@@ -110,6 +120,36 @@ export default function BarcodeExportPanel({ onReserved }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Look up filled-in products by SKU or name so their tag can be re-printed.
+  // products_live: a draft row is already in the list above, and offering it
+  // here too would print the same number from two places.
+  const searchFilled = async () => {
+    const q = filledQuery.trim();
+    if (!q) { setFilledResults(null); return; }
+
+    setFilledSearching(true);
+    const { data, error } = await supabase
+      .from("products_live")
+      .select("id, sku_id, name")
+      .or(`sku_id.ilike.%${q}%,name.ilike.%${q}%`)
+      .order("sku_id")
+      .limit(50);
+
+    if (error) {
+      console.error("Filled-SKU search failed:", error);
+      showPopup({
+        type: "error",
+        title: "Search Failed",
+        message: error.message || "Could not search products.",
+        confirmText: "OK",
+      });
+      setFilledResults([]);
+    } else {
+      setFilledResults(data || []);
+    }
+    setFilledSearching(false);
   };
 
   // Re-print never reserves. It re-renders labels for numbers that already
@@ -247,6 +287,59 @@ export default function BarcodeExportPanel({ onReserved }) {
 
           <Paginator page={page} totalPages={totalPages} onChange={setPage} />
         </>
+      )}
+
+      {/* ── Re-print a tag that already has details ── */}
+      <div className="ap-section-title">Re-print an assigned barcode</div>
+      <p className="ap-help">
+        For a barcode that has already been filled in — a damaged sticker, or a
+        garment being re-tagged. Search by SKU or product name. This only
+        re-prints an existing number; it never reserves a new one.
+      </p>
+
+      <div className="ap-barcode-controls">
+        <div className="ap-field">
+          <label>SKU or product name</label>
+          <input
+            className="ap-input"
+            value={filledQuery}
+            onChange={(e) => setFilledQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); searchFilled(); } }}
+            placeholder="e.g. SKU-1042 or Hafsa"
+            disabled={busy}
+          />
+        </div>
+        <button
+          type="button"
+          className="ap-btn-primary"
+          disabled={busy || filledSearching || !filledQuery.trim()}
+          onClick={searchFilled}
+        >
+          {filledSearching ? "Searching…" : "Search"}
+        </button>
+      </div>
+
+      {filledResults !== null && (
+        filledResults.length === 0 ? (
+          <p className="ap-help">No filled-in products match that search.</p>
+        ) : (
+          <div className="ap-reprint-list">
+            {filledResults.map((p) => (
+              <div key={p.id} className="ap-reprint-row">
+                <span className="ap-reprint-sku">{p.sku_id}</span>
+                <span className="ap-reprint-name">{p.name || "—"}</span>
+                <button
+                  type="button"
+                  className="ap-text-btn"
+                  disabled={busy}
+                  onClick={() => rePrint([p.sku_id])}
+                >
+                  Re-print
+                </button>
+              </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   );

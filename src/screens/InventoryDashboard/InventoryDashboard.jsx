@@ -40,7 +40,9 @@ const CHANNEL_COLUMN_LABELS = {
 };
 
 // Columns before + after the variable channel block, for colSpan on empty rows.
-const FIXED_INVENTORY_COLUMNS = 11;
+// Bump this whenever a fixed column is added or removed, or the empty-state row
+// and the expanded variant row stop spanning the full table.
+const FIXED_INVENTORY_COLUMNS = 12;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
 
 // Shopify CDN supports per-request resizing by injecting `_WxH` before the
@@ -106,6 +108,10 @@ export default function InventoryDashboard() {
   // updates that row, 'duplicate' copies it onto a fresh SKU. Nothing is
   // written here; the Add Product form's Save does the writing.
   const [prefillProduct, setPrefillProduct] = useState(null);
+
+  // Id of a product just saved from the Add Product tab. The catalogue scrolls
+  // to it and flashes it, so a save never looks like the row disappeared.
+  const [justSavedId, setJustSavedId] = useState(null);
 
   const openInAddProduct = (product, mode) => {
     setPrefillProduct({ product, mode });
@@ -211,11 +217,38 @@ export default function InventoryDashboard() {
 
     fetchChannelStock();
 
-    // After products load, sync LXRTS inventory from Shopify
-    const lxrtsProducts = (data || []).filter((p) => p.sync_enabled);
-    if (lxrtsProducts.length > 0) {
-      fetchAllLxrtsInventory(lxrtsProducts);
+    // Awaited: callers chain on this to locate a just-saved row, and an LXRTS
+    // product's position in the list depends on its variant total.
+    // LXRTS variant numbers come from product_variants, which the Shopify sync
+    // writes back into. Read them here — one query for every product — so the
+    // table has real totals immediately.
+    //
+    // The Shopify fan-out is NOT started here. It is one HTTP round-trip per
+    // LXRTS product plus a write per variant, so on a catalogue with dozens of
+    // synced products it pinned the dashboard for the better part of a minute
+    // AND re-ran in full every time a product was saved (onProductAdded →
+    // fetchProducts). It is now the "Sync LXRTS" button only: an explicit,
+    // visible action rather than a tax on every page load.
+    await fetchVariantInventory();
+  };
+
+  // Per-size stock straight from product_variants — no Shopify round-trip.
+  // Paged past the 1000-row cap: several rows per LXRTS product.
+  const fetchVariantInventory = async () => {
+    const { data, error } = await fetchAllRows("product_variants", (q) =>
+      q.select("product_id, size, inventory"));
+
+    if (error) {
+      console.error("Error fetching variant inventory:", error);
+      return;
     }
+
+    const map = {};
+    (data || []).forEach((v) => {
+      if (!map[v.product_id]) map[v.product_id] = {};
+      map[v.product_id][v.size] = v.inventory || 0;
+    });
+    setVariantInventory(map);
   };
 
   // Channel balances for every product, folded into a lookup keyed by product.
@@ -318,7 +351,10 @@ export default function InventoryDashboard() {
       })
     );
 
-    setVariantInventory(inventoryMap);
+    // Merge, don't replace. fetchVariantInventory has already populated this
+    // from product_variants; a product whose Shopify call failed keeps its
+    // database number instead of blanking to 0 mid-sync.
+    setVariantInventory((prev) => ({ ...prev, ...inventoryMap }));
     setLxrtsSyncLoading(false);
   };
 
@@ -326,7 +362,6 @@ export default function InventoryDashboard() {
   const handleRefreshLxrts = () => {
     const lxrtsProducts = products.filter((p) => p.sync_enabled);
     if (lxrtsProducts.length > 0) {
-      setVariantInventory({});
       fetchAllLxrtsInventory(lxrtsProducts);
     } else {
       showPopup({
@@ -566,9 +601,12 @@ export default function InventoryDashboard() {
                     p.sku_id?.toLowerCase().includes(q);
         if (!hit) return false;
       }
-      // Sync filter
+      // Type filter — the three product types are mutually exclusive on the
+      // row (sync_enabled and is_custom_piece are never both true), so this
+      // reads them as one bucket rather than two independent flags.
       if (syncFilter === "lxrts" && !p.sync_enabled) return false;
-      if (syncFilter === "regular" && p.sync_enabled) return false;
+      if (syncFilter === "custom" && !p.is_custom_piece) return false;
+      if (syncFilter === "regular" && (p.sync_enabled || p.is_custom_piece)) return false;
       // Stock filter
       if (stockFilters.length > 0) {
         if (!stockFilters.includes(stockBucket(getStock(p)))) return false;
@@ -576,12 +614,23 @@ export default function InventoryDashboard() {
       return true;
     });
 
-    // Sort: low/out-of-stock first so they're impossible to miss.
+    // Sort: low/out-of-stock first so they're impossible to miss, then by name
+    // WITHIN each bucket.
+    //
+    // The name tiebreak is not cosmetic. Array.prototype.sort is stable, so
+    // without it two products in the same bucket keep their incoming order —
+    // which came from the fetch. Editing a product's inventory re-runs this
+    // memo, and any row whose bucket changed jumped somewhere else in the list;
+    // on a 15-per-page table that reads as "the product I just edited is gone".
+    // Ordering by name makes a row's position depend only on its name and its
+    // bucket, so an edit that doesn't cross a bucket boundary never moves it.
     const rank = (p) => {
       const b = stockBucket(getStock(p));
       return b === "out" ? 0 : b === "low" ? 1 : 2;
     };
-    return [...matches].sort((a, b) => rank(a) - rank(b));
+    return [...matches].sort(
+      (a, b) => rank(a) - rank(b) || (a.name || "").localeCompare(b.name || "")
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, searchTerm, syncFilter, stockFilters, variantInventory]);
 
@@ -593,6 +642,33 @@ export default function InventoryDashboard() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, syncFilter, stockFilters]);
+
+  // After a save, jump to the page the product now sits on and flash it.
+  //
+  // Editing can move a row across the stock buckets this list sorts by, so it
+  // legitimately changes page — the row was never lost, it was just no longer
+  // among the 15 on screen. Rather than freeze the sort (out-of-stock-first is
+  // the point of this table), follow the row to wherever it went.
+  useEffect(() => {
+    if (!justSavedId) return;
+    const idx = filteredProducts.findIndex((p) => p.id === justSavedId);
+    if (idx === -1) {
+      // Filtered out by the active search/filters rather than missing. Say so;
+      // silently doing nothing is what makes a save look like a deletion.
+      setJustSavedId(null);
+      showPopup({
+        title: "Saved — but hidden by your filters",
+        message: "The product was saved. It isn't in the list right now because the current search or filters exclude it. Clear them to see it.",
+        type: "warning",
+        confirmText: "Ok",
+      });
+      return;
+    }
+    setCurrentPage(Math.floor(idx / ITEMS_PER_PAGE) + 1);
+    const timer = setTimeout(() => setJustSavedId(null), 2500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justSavedId, filteredProducts]);
 
   // Close the lightbox on Escape — a tiny convenience but expected behavior.
   useEffect(() => {
@@ -859,8 +935,9 @@ export default function InventoryDashboard() {
               <div className="inv-filter-chips">
                 {[
                   { value: "all", label: "All" },
+                  { value: "regular", label: "Normal" },
                   { value: "lxrts", label: "LXRTS" },
-                  { value: "regular", label: "Regular" },
+                  { value: "custom", label: "Custom" },
                 ].map((opt) => (
                   <button
                     key={opt.value}
@@ -890,6 +967,10 @@ export default function InventoryDashboard() {
                 <th className="inv-th-image">Image</th>
                 <th>SKU Code</th>
                 <th>Name</th>
+                {/* Which store(s) this product belongs to — products.store_category.
+                    The only location a PRODUCT carries; physical per-location
+                    counts live in warehouse_stock (Warehouses tab). */}
+                <th>Location</th>
                 <th>Top</th>
                 <th>Top Color</th>
                 <th>Bottom</th>
@@ -934,7 +1015,7 @@ export default function InventoryDashboard() {
                   return (
                     <React.Fragment key={product.id}>
                       {/* Main Product Row */}
-                      <tr className={`${isShopifyProduct ? "inv-shopify-row" : ""} ${isSyncEnabled && isExpanded ? "inv-row-expanded" : ""}`}>
+                      <tr className={`${isShopifyProduct ? "inv-shopify-row" : ""} ${isSyncEnabled && isExpanded ? "inv-row-expanded" : ""} ${justSavedId === product.id ? "inv-row-saved" : ""}`}>
                         {/* Expand Arrow (only for LXRTS) */}
                         <td className="inv-expand-cell">
                           {isSyncEnabled ? (
@@ -972,11 +1053,21 @@ export default function InventoryDashboard() {
                               LXRTS
                             </span>
                           )}
+                          {product.is_custom_piece && (
+                            <span className="inv-custom-badge" title="Custom / bespoke piece">
+                              CUSTOM
+                            </span>
+                          )}
                           {isShopifyProduct && !isSyncEnabled && (
                             <span className="inv-shopify-badge" title="Available on Shopify">
                               🔗
                             </span>
                           )}
+                        </td>
+                        <td>
+                          <span className="inv-location-tag">
+                            {product.store_category || "All Stores"}
+                          </span>
                         </td>
                         <td>{product.default_top || "—"}</td>
                         <td>
@@ -1246,7 +1337,14 @@ export default function InventoryDashboard() {
         {activeTab === "exchanges" && <StockExchangeTab />}
         {activeTab === "addProduct" && (
           <AddProduct
-            onProductAdded={() => fetchProducts()}
+            onProductAdded={(saved) => {
+              // Await the refetch before flagging the row: the effect that
+              // pages to it searches the CURRENT list, and the pre-save list
+              // may not contain a product that was just created.
+              fetchProducts().then(() => {
+                if (saved?.id) setJustSavedId(saved.id);
+              });
+            }}
             prefill={prefillProduct}
             onPrefillConsumed={() => setPrefillProduct(null)}
           />
