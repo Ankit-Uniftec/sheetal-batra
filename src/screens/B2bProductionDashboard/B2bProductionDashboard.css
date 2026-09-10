@@ -189,7 +189,33 @@
 .prod-filters-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 18px; align-items: center; }
 .prod-search-input { flex: 1 1 100%; padding: 9px 14px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 14px; outline: none; }
 .prod-search-input:focus { border-color: #b79b3d; }
-.prod-filter-select { flex: 1 1 150px; min-width: 130px; max-width: 220px; padding: 9px 12px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 13px; outline: none; background: white; cursor: pointer; }
+
+/* EVERY control on this row is sized by an explicit height, not by padding.
+   Padding-sized controls each compute their own height from their font-size
+   and border, so the native selects, the shared PeriodFilter select and the
+   Clear button all landed on slightly different heights and could not line up
+   however the row was aligned. Same approach as .merch-filter-select on the
+   B2B Merchandiser dashboard, which is why that toolbar sits flush.
+   Change one height here and you must change all of them. */
+.prod-filter-select { flex: 1 1 150px; min-width: 130px; max-width: 220px; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5b85a; font-size: 13px; outline: none; background: white; cursor: pointer; font-family: inherit; }
+
+/* The shared PeriodFilter (variant "select") drops into this row as a nested
+   flex wrapper. Two of its own defaults fight the row: a bottom margin meant
+   for standalone use, which pushes it off the shared centre line, and its
+   padding-based select height. Overridden HERE, scoped to this toolbar, rather
+   than in PeriodFilter.css — that file has ~120 consumers and this is a
+   layout quirk of this row, not a defect in the component. */
+.prod-filters-row .pfx { margin-bottom: 0; }
+.prod-filters-row .pfx-select { height: 38px; padding: 0 12px; }
+
+/* Clear-filters button. Muted outline, not the solid red it used to be: it is
+   a quiet escape hatch sitting among filters, not a destructive action, and
+   the red read as a warning. Matches .qch-clear on the QC History panel. */
+.prod-clear-filters { height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #e0d8c6; background: #fff; color: #8b7355; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.prod-clear-filters:hover { background: #faf6e8; }
+
+/* Stage drill-through chip — same height so it never breaks the row either. */
+.prod-stage-chip { height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid #d5b85a; background: #faf6e8; color: #6b5842; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; white-space: nowrap; }
 
 /* Pagination */
 .prod-pagination { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 30px 0; padding: 20px; }
