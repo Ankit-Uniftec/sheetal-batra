@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isSaleOrder } from "../../utils/revenue";
 import "./B2bExecutiveDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
@@ -114,8 +115,12 @@ export default function B2bExecutiveDashboard() {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-        const consignmentOrders = periodOrders.filter(o => o.b2b_order_type === "Consignment");
-        const totalOrders = periodOrders.length;
+        // Same sales basis as totalOrders below — it is subtracted from it.
+        const consignmentOrders = periodOrders.filter(o => o.b2b_order_type === "Consignment" && isSaleOrder(o));
+        // Sales only. The "Sales Orders" card renders totalOrders minus
+        // consignment, so a B2BSTOCK movement (an internal transfer worth ₹0)
+        // was being counted as a sale.
+        const totalOrders = periodOrders.filter(isSaleOrder).length;
         const pendingOrders = periodOrders.filter(o => o.approval_status === "pending");
         // Explicitly-named windows stay absolute — they say what they are.
         const thisMonthOrders = orders.filter(o => o.created_at >= monthStart);

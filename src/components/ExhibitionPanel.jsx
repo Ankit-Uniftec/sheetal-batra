@@ -4,6 +4,7 @@ import { usePopup } from "./Popup";
 import Badge from "./Badge";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import { supabase } from "../lib/supabaseClient";
+import { isSaleOrder } from "../utils/revenue";
 import { fetchAllRows } from "../utils/fetchAllRows";
 import {
   EXHIBITION_STATUS,
@@ -57,7 +58,9 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
       if (ids.length > 0) {
         // Paged past Supabase's 1000-row cap
         const { data: ords, error: ordErr } = await fetchAllRows("orders", (q) => q
-          .select("id, exhibition_id, created_at, net_total, grand_total_after_discount, grand_total, user_id, delivery_phone")
+          // status/refund_status/is_stock_order/is_alteration feed isSaleOrder —
+          // without them every row looks like a live sale to the summary cards.
+          .select("id, exhibition_id, created_at, net_total, grand_total_after_discount, grand_total, user_id, delivery_phone, status, refund_status, is_stock_order, is_alteration")
           .in("exhibition_id", ids));
         // Surface (don't swallow) a failed orders fetch — otherwise the summary
         // cards silently read as 0 when the query errors.
@@ -100,7 +103,10 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
 
     let gross = 0, net = 0;
     const clientKeys = new Set();
-    periodOrders.forEach((o) => {
+    // Sales only: a cancelled or refunded exhibition order was still adding to
+    // gross/net revenue and counting its buyer as a client.
+    const periodSales = periodOrders.filter(isSaleOrder);
+    periodSales.forEach((o) => {
       const val = o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0;
       gross += Number(val) || 0;
       net += netSbRevenue(val, commissionByExb[o.exhibition_id] || 0);
@@ -111,7 +117,7 @@ const ExhibitionPanel = ({ currentUserEmail }) => {
 
     return {
       activeExhibitions: activeCount,
-      totalOrders: periodOrders.length,
+      totalOrders: periodSales.length,
       totalClients: clientKeys.size,
       grossRevenue: gross,
       netSbRevenue: net,

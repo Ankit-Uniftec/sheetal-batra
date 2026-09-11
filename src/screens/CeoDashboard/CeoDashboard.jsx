@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isRevenueOrder, isSaleOrder } from "../../utils/revenue";
 import "./CeoDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
@@ -58,6 +58,42 @@ const COMPARISON_OPTIONS = [
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+
+// ── The money rule for this dashboard ────────────────────────────────────────
+// Most blocks below open-coded `net_total ?? grand_total_after_discount ??
+// grand_total`, which is GROSS: an exhibition order's commission belongs to the
+// partner, so SB only earned net_sb_revenue. dashboardStats already reported
+// net while every other block reported gross, so the CEO's headline figure and
+// the tabs underneath it disagreed. One helper, used everywhere money is summed.
+const orderNetRevenue = (o) => totalNetSbRevenue([o]);
+const periodRevenue = (orders) => totalNetSbRevenue(orders);
+
+// Revenue-bearing orders only: drops cancelled/revoked/returned/refunded.
+// Counting those in a denominator while excluding them from the sum is what
+// made averages and growth arrows disagree with the revenue beside them.
+const revenueOrdersIn = (orders, inWindow) =>
+    orders.filter(o => inWindow(o.created_at) && isRevenueOrder(o));
+
+// Sales in a window: revenue orders MINUS internal stock movements and
+// alterations. Both are 0-value, so they never moved a revenue total, but they
+// inflated every order count and deflated every average. Use for any block that
+// counts orders or divides by a count.
+const saleOrdersIn = (orders, inWindow) =>
+    orders.filter(o => inWindow(o.created_at) && isSaleOrder(o));
+
+// ── Day bucketing ────────────────────────────────────────────────────────────
+// Keys carry the YEAR (buckets keyed on "D/M" merged Jan 2025 into Jan 2026 on
+// one bar) and are built from LOCAL parts, not toISOString(), which is UTC and
+// pushed late-evening IST orders onto the previous day.
+const two = (n) => String(n).padStart(2, "0");
+const dayKey = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+};
+const dayLabel = (ts) => {
+    const d = new Date(ts);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+};
 
 // Chart colors
 const CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B", "#DAA520", "#B8860B", "#CD853F", "#DEB887"];
@@ -408,23 +444,39 @@ export default function CEODashboard() {
     // Dashboard Stats (ALL orders: store + website/LXRTS + B2B)
     const dashboardStats = useMemo(() => {
         const comparisonRange = comparisonPeriodRange(periodRangeValue, comparison);
-        const currentOrders = orders.filter(o => inPeriod(o.created_at));
-        const previousOrders = comparisonRange ? orders.filter(o => inRange(comparisonRange, o.created_at)) : [];
+        const allCurrent = orders.filter(o => inPeriod(o.created_at));
+        const allPrevious = comparisonRange ? orders.filter(o => inRange(comparisonRange, o.created_at)) : [];
+        // Sales slice drives every money/volume figure: revenue orders minus
+        // internal stock movements and alterations, which are 0-value and so
+        // only ever distorted the counts and AOV. The full slice is kept only to
+        // count cancellations, which are by definition excluded from it.
+        const currentOrders = allCurrent.filter(isSaleOrder);
+        const previousOrders = allPrevious.filter(isSaleOrder);
 
-        const totalRevenue = currentOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
-        const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
+        // This pair is deliberately gross-vs-net and must stay distinct: the
+        // "Total Revenue" card is what was billed, "Net SB Revenue" is what SB
+        // kept after exhibition partners took their commission.
+        const totalRevenue = currentOrders.reduce(
+            (sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const netSbRev = periodRevenue(currentOrders);
         const totalOrders = currentOrders.length;
-        const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
+        const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
         const deliveredOrders = currentOrders.filter(o => o.status === "delivered").length;
-        const cancelledOrders = currentOrders.filter(o => o.status === "cancelled").length;
+        // Cancelled REAL orders: a cancelled internal stock movement is not a
+        // lost sale, so it is excluded here the same way it is from the counts.
+        const isCancelledSale = (o) => !isRevenueOrder(o) && !o.is_stock_order && !o.is_alteration;
+        const cancelledOrders = allCurrent.filter(isCancelledSale).length;
 
-        const prevRevenue = previousOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        // Same gross basis as totalRevenue — the growth arrow sits on the Total
+        // Revenue card, so comparing a net figure against it would invent drift.
+        const prevRevenue = previousOrders.reduce(
+            (sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const prevTotalOrders = previousOrders.length;
-        const prevPendingOrders = previousOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
+        const prevPendingOrders = previousOrders.filter(o => o.status !== "completed" && o.status !== "delivered").length;
         const prevPreparedOrders = previousOrders.filter(o => o.status === "completed").length;
         const prevDeliveredOrders = previousOrders.filter(o => o.status === "delivered").length;
-        const prevCancelledOrders = previousOrders.filter(o => o.status === "cancelled").length;
+        const prevCancelledOrders = allPrevious.filter(isCancelledSale).length;
 
         return {
             totalRevenue, netSbRev, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
@@ -461,7 +513,9 @@ export default function CEODashboard() {
 
     // Analytics Data
     const analyticsData = useMemo(() => {
-        const validOrders = orders.filter(o => isRevenueOrder(o) && inAnalyticsPeriod(o.created_at));
+        // Sales only: the store and salesperson blocks below carry per-row
+        // counts alongside their sales figures.
+        const validOrders = orders.filter(o => isSaleOrder(o) && inAnalyticsPeriod(o.created_at));
 
         // 1. Sales by Top 10 Products (net of proportional order discount)
         const productSales = {};
@@ -506,7 +560,7 @@ export default function CEODashboard() {
         validOrders.forEach(order => {
             const store = getOrderChannel(order);
             if (!storeSales[store]) storeSales[store] = { name: store, sales: 0, count: 0 };
-            storeSales[store].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
+            storeSales[store].sales += orderNetRevenue(order);
             storeSales[store].count += 1;
         });
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);
@@ -517,7 +571,7 @@ export default function CEODashboard() {
             const sp = getOrderSalesperson(order);
             if (!sp || !isPersonName(sp)) return;
             if (!salespersonData[sp]) salespersonData[sp] = { name: sp, sales: 0, discount: 0, count: 0 };
-            salespersonData[sp].sales += Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
+            salespersonData[sp].sales += orderNetRevenue(order);
             salespersonData[sp].discount += Number(order.discount_amount || 0);
             salespersonData[sp].count += 1;
         });
@@ -680,52 +734,58 @@ export default function CEODashboard() {
         return Array.from(spSet).sort();
     }, [orders, knownStoreNames]);
 
-    const filteredByStatus = useMemo(() => {
-        return orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
-            const status = o.status?.toLowerCase();
-            switch (statusTab) {
-                case "unfulfilled": return status !== "completed" && status !== "delivered" && status !== "cancelled";
-                case "prepared": return status === "completed";
-                case "delivered": return status === "delivered";
-                case "cancelled": return status === "cancelled";
-                default: return true;
-            }
-        });
-    }, [orders, statusTab]);
+    // "Unfulfilled" means still owed to the customer. Excluding only
+    // completed/delivered/cancelled left returned, revoked and refunded orders
+    // sitting in the queue as if they were outstanding work.
+    const matchesStatusTab = (o, tab) => {
+        const status = (o.status || "").toLowerCase();
+        switch (tab) {
+            case "unfulfilled":
+                return status !== "completed" && status !== "delivered" && isRevenueOrder(o);
+            case "prepared": return status === "completed";
+            case "delivered": return status === "delivered";
+            case "cancelled": return !isRevenueOrder(o);
+            default: return true;
+        }
+    };
 
-    const filteredOrders = useMemo(() => {
-        let result = filteredByStatus;
+    const filteredByStatus = useMemo(
+        () => orders.filter(o => !isLxrtsOrder(o) && matchesStatusTab(o, statusTab)),
+        [orders, statusTab]
+    );
+
+    // Every filter EXCEPT the status tab. Shared by the list and the tab counts,
+    // so a badge can never contradict the rows underneath it.
+    const passesNonStatusFilters = (order) => {
+        if (isLxrtsOrder(order)) return false;
         if (orderSearch.trim()) {
             const q = orderSearch.trim().toLowerCase();
-            result = result.filter(order => {
-                switch (orderSearchField) {
-                    case "product_name":
-                        return (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
-                    case "client_name":
-                        return order.delivery_name?.toLowerCase().includes(q);
-                    case "phone":
-                        return (order.delivery_phone || "").includes(q);
-                    case "salesperson":
-                        return (getOrderSalesperson(order) || "").toLowerCase().includes(q);
-                    case "order_no":
-                    default:
-                        return order.order_no?.toLowerCase().includes(q);
-                }
-            });
+            const hit = orderSearchField === "product_name"
+                ? (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
+                : orderSearchField === "client_name"
+                    ? order.delivery_name?.toLowerCase().includes(q)
+                    : orderSearchField === "phone"
+                        ? (order.delivery_phone || "").includes(q)
+                        : orderSearchField === "salesperson"
+                            ? (getOrderSalesperson(order) || "").toLowerCase().includes(q)
+                            : order.order_no?.toLowerCase().includes(q);
+            if (!hit) return false;
         }
-        if (ordersPeriodRange) result = result.filter(order => inOrdersPeriod(order.created_at));
+        if (ordersPeriodRange && !inOrdersPeriod(order.created_at)) return false;
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-            result = result.filter(order => {
-                const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-                return total >= filters.minPrice && total <= filters.maxPrice;
-            });
+            const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
+            if (total < filters.minPrice || total > filters.maxPrice) return false;
         }
-        if (filters.payment.length > 0) result = result.filter(order => filters.payment.includes(getPaymentStatus(order)));
-        if (filters.priority.length > 0) result = result.filter(order => filters.priority.includes(getPriority(order)));
-        if (filters.orderType.length > 0) result = result.filter(order => filters.orderType.includes(getOrderType(order)));
-        if (filters.store.length > 0) result = result.filter(order => filters.store.includes(order.salesperson_store));
-        if (filters.salesperson) result = result.filter(order => getOrderSalesperson(order) === filters.salesperson);
+        if (filters.payment.length > 0 && !filters.payment.includes(getPaymentStatus(order))) return false;
+        if (filters.priority.length > 0 && !filters.priority.includes(getPriority(order))) return false;
+        if (filters.orderType.length > 0 && !filters.orderType.includes(getOrderType(order))) return false;
+        if (filters.store.length > 0 && !filters.store.includes(order.salesperson_store)) return false;
+        if (filters.salesperson && getOrderSalesperson(order) !== filters.salesperson) return false;
+        return true;
+    };
+
+    const filteredOrders = useMemo(() => {
+        let result = filteredByStatus.filter(passesNonStatusFilters);
 
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
@@ -745,16 +805,16 @@ export default function CEODashboard() {
         return result;
     }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
 
+    // Counted over the same filtered set the list uses — these used to be
+    // computed over ALL orders, so with a date range or store filter applied the
+    // badges showed totals that no longer matched a single visible row.
     const orderTabCounts = useMemo(() => {
-        const validOrders = orders.filter(o => !isLxrtsOrder(o));
-        return {
-            all: validOrders.length,
-            unfulfilled: validOrders.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length,
-            prepared: validOrders.filter(o => o.status?.toLowerCase() === "completed").length,
-            delivered: validOrders.filter(o => o.status?.toLowerCase() === "delivered").length,
-            cancelled: validOrders.filter(o => o.status?.toLowerCase() === "cancelled").length,
-        };
-    }, [orders]);
+        const validOrders = orders.filter(passesNonStatusFilters);
+        return STATUS_TABS.reduce((acc, t) => {
+            acc[t.value] = validOrders.filter(o => matchesStatusTab(o, t.value)).length;
+            return acc;
+        }, {});
+    }, [orders, orderSearch, orderSearchField, filters, ordersPeriodRange, inOrdersPeriod]);
 
     const ordersTotalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
     const currentOrders = useMemo(() => {
@@ -910,9 +970,13 @@ export default function CEODashboard() {
     // NEW: ENHANCED DASHBOARD STATS (Channel breakdown, AOV)
     // ═══════════════════════════════════════════════════════════
     const enhancedDashboardStats = useMemo(() => {
-        const validOrders = orders.filter(o => inPeriod(o.created_at));
+        // Had no revenue guard at all: cancelled, returned and refunded orders
+        // counted as sales here, so the channel mix and AOV ran ahead of the
+        // Cumulative Sales cards above for the very same period. Sales-only, so
+        // AOV divides by real orders rather than by stock movements too.
+        const validOrders = saleOrdersIn(orders, inPeriod);
 
-        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = periodRevenue(validOrders);
         const totalOrders = validOrders.length;
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
         const totalItems = validOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
@@ -922,7 +986,7 @@ export default function CEODashboard() {
         validOrders.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            channelMap[ch].revenue += orderNetRevenue(o);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -940,13 +1004,14 @@ export default function CEODashboard() {
     // NEW: ORDER VALUE TREND (Daily line chart)
     // ═══════════════════════════════════════════════════════════
     const orderValueTrend = useMemo(() => {
-        const validOrders = orders.filter(o => inPeriod(o.created_at));
+        // Sales only — this chart's whole point is the daily AOV line, which a
+        // 0-value stock movement would drag down on whatever day it landed.
+        const validOrders = saleOrdersIn(orders, inPeriod);
         const buckets = {};
         validOrders.forEach(o => {
-            const d = new Date(o.created_at);
-            const key = `${d.getDate()}/${d.getMonth() + 1}`;
-            if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
-            buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            const key = dayKey(o.created_at);
+            if (!buckets[key]) buckets[key] = { date: dayLabel(o.created_at), fullDate: key, revenue: 0, orders: 0 };
+            buckets[key].revenue += orderNetRevenue(o);
             buckets[key].orders += 1;
         });
         return Object.values(buckets)
@@ -958,7 +1023,12 @@ export default function CEODashboard() {
     // NEW: ENHANCED ANALYTICS (bottom products, colors, flagged)
     // ═══════════════════════════════════════════════════════════
     const enhancedAnalytics = useMemo(() => {
-        const validOrders = orders.filter(o => o.status !== "cancelled" && inAnalyticsPeriod(o.created_at));
+        // Was a hand-rolled `status !== "cancelled"`, which let returned,
+        // revoked and refunded orders through — the shared rule catches all of
+        // them, so bottom products/colours no longer rank on undone sales.
+        // (alterationOrders below keeps its own filter and is unaffected: the
+        // alteration stats deliberately count the rows excluded here.)
+        const validOrders = saleOrdersIn(orders, inAnalyticsPeriod);
 
         // Products (net of proportional order discount)
         const productSales = {};
@@ -1018,7 +1088,11 @@ export default function CEODashboard() {
     // NEW: CLIENT ANALYTICS
     // ═══════════════════════════════════════════════════════════
     const clientAnalytics = useMemo(() => {
-        const allOrders = orders;
+        // Client spend, order counts and segmentation must reflect sales that
+        // stuck. Counting every row meant a cancelled order still promoted a
+        // client into "Repeat (2-3)" and inflated their lifetime spend; an
+        // alteration did the same, making a one-time buyer look like a repeat.
+        const allOrders = orders.filter(isSaleOrder);
         const clientMap = {};
         const now = new Date();
         const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate());
@@ -1037,7 +1111,7 @@ export default function CEODashboard() {
                 };
             }
             const c = clientMap[phone];
-            const amount = Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
+            const amount = orderNetRevenue(order);
             c.totalSpend += amount;
             c.orderCount += 1;
             c.items += (order.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
@@ -1114,7 +1188,10 @@ export default function CEODashboard() {
     // NEW: B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
-        const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B");
+        // Real B2B sales only — a cancelled B2B order was counting toward
+        // account sales, order-type values and the growth arrows, and a
+        // B2BSTOCK movement was counting as a B2B order.
+        const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B" && isSaleOrder(o));
         let currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
 
         // Merchandiser filter
@@ -1129,17 +1206,28 @@ export default function CEODashboard() {
         const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
         const consignmentOrders = currentB2b.filter(o => o.b2b_order_type === "Consignment");
         const clientOrderOrders = currentB2b.filter(o => o.b2b_order_type === "Client Order");
-        const buyoutValue = buyoutOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const consignmentValue = consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const clientOrderValue = clientOrderOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const buyoutValue = periodRevenue(buyoutOrders);
+        const consignmentValue = periodRevenue(consignmentOrders);
+        const clientOrderValue = periodRevenue(clientOrderOrders);
 
         // Client sales map
+        // Keyed on vendor_id FIRST: delivery_name is free text, so one account
+        // spelled two ways ("Aza", "AZA Fashions") split into two rows and
+        // neither showed the account's real volume. Matches how the B2B
+        // merchandiser dashboard keys the same data.
+        const b2bClientKey = (o) => {
+            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
+            return {
+                key: vendorInfo?.id || (o.delivery_name || "").trim().toLowerCase() || "unknown",
+                name: vendorInfo?.store_brand_name || o.delivery_name || "Unknown",
+            };
+        };
+
         const clientSales = {};
         currentB2b.forEach(o => {
-            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
-            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
-            if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
-            clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            const { key: client, name } = b2bClientKey(o);
+            if (!clientSales[client]) clientSales[client] = { name, sales: 0, orders: 0, advance: 0, balance: 0, firstSeen: o.created_at };
+            clientSales[client].sales += orderNetRevenue(o);
             clientSales[client].orders += 1;
             // Collections, not the order-time advance — read total_paid.
             clientSales[client].advance += Number(o.total_paid ?? o.advance_payment) || 0;
@@ -1151,16 +1239,15 @@ export default function CEODashboard() {
         // (no growth figure when the period is unbounded / "All time").
         const prevRange = comparisonPeriodRange(periodRangeValue, "previous_period");
         const prevB2b = prevRange ? allB2bOrders.filter(o => inRange(prevRange, o.created_at)) : [];
-        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const prevRevenue = periodRevenue(prevB2b);
+        const totalB2bRevenue = periodRevenue(currentB2b);
         const revenueGrowth = prevRevenue > 0 ? ((totalB2bRevenue - prevRevenue) / prevRevenue * 100) : 0;
         const ordersGrowth = prevB2b.length > 0 ? ((currentB2b.length - prevB2b.length) / prevB2b.length * 100) : 0;
 
         // New clients this period (first order within date range)
         const allClientFirstOrders = {};
         allB2bOrders.forEach(o => {
-            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
-            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
+            const { key: client } = b2bClientKey(o);
             if (!allClientFirstOrders[client] || o.created_at < allClientFirstOrders[client]) {
                 allClientFirstOrders[client] = o.created_at;
             }
@@ -1240,10 +1327,12 @@ export default function CEODashboard() {
     // NEW: FINANCIAL STATS (Discounts by channel, salesperson)
     // ═══════════════════════════════════════════════════════════
     const financialStats = useMemo(() => {
-        const validOrders = orders.filter(o => inPeriod(o.created_at));
+        // Discount given away on an order that was then cancelled was never a
+        // real giveaway — including those overstated the discount rate.
+        const validOrders = revenueOrdersIn(orders, inPeriod);
 
         const totalDiscount = validOrders.reduce((s, o) => s + Number(o.discount_amount || 0), 0);
-        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = periodRevenue(validOrders);
         const grossRevenue = totalRevenue + totalDiscount;
         const discountPercent = grossRevenue > 0 ? ((totalDiscount / grossRevenue) * 100).toFixed(1) : 0;
 
@@ -1253,7 +1342,7 @@ export default function CEODashboard() {
             const ch = getOrderChannel(o);
             if (!channelDiscounts[ch]) channelDiscounts[ch] = { name: ch, discount: 0, revenue: 0 };
             channelDiscounts[ch].discount += Number(o.discount_amount || 0);
-            channelDiscounts[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            channelDiscounts[ch].revenue += orderNetRevenue(o);
         });
 
         return {
@@ -1271,13 +1360,16 @@ export default function CEODashboard() {
         const currentMonth = new Date().getMonth();
 
         // Calculate actual monthly revenue from orders
+        // Achievement against target counts only revenue that stuck.
         const monthlyRevenue = {};
         const currentYear = new Date().getFullYear();
-        orders.filter(o => new Date(o.created_at).getFullYear() === currentYear).forEach(o => {
-            const m = new Date(o.created_at).getMonth();
-            if (!monthlyRevenue[m]) monthlyRevenue[m] = 0;
-            monthlyRevenue[m] += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-        });
+        orders
+            .filter(o => isSaleOrder(o) && new Date(o.created_at).getFullYear() === currentYear)
+            .forEach(o => {
+                const m = new Date(o.created_at).getMonth();
+                if (!monthlyRevenue[m]) monthlyRevenue[m] = 0;
+                monthlyRevenue[m] += orderNetRevenue(o);
+            });
 
         const monthlyData = months.map((m, i) => ({
             month: m,
@@ -1289,11 +1381,11 @@ export default function CEODashboard() {
         // Store-wise growth (compare current period to previous; skipped on "All time")
         const prevRange = comparisonPeriodRange(periodRangeValue, "previous_period");
         const storeGrowth = {};
-        orders.forEach(o => {
+        orders.filter(isSaleOrder).forEach(o => {
             const store = getOrderChannel(o);
             if (!storeGrowth[store]) storeGrowth[store] = { name: store, current: 0, previous: 0 };
-            if (inPeriod(o.created_at)) storeGrowth[store].current += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            else if (prevRange && inRange(prevRange, o.created_at)) storeGrowth[store].previous += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (inPeriod(o.created_at)) storeGrowth[store].current += orderNetRevenue(o);
+            else if (prevRange && inRange(prevRange, o.created_at)) storeGrowth[store].previous += orderNetRevenue(o);
         });
         const storeGrowthList = Object.values(storeGrowth).map(s => ({
             ...s,
@@ -1317,14 +1409,19 @@ export default function CEODashboard() {
     // ═══════════════════════════════════════════════════════════
     const storePerformanceStats = useMemo(() => {
         const storeOrders = orders.filter(o => !isLxrtsOrder(o) && !(o.is_b2b || (o.salesperson_store || "").toLowerCase() === "b2b"));
-        const current = storeOrders.filter(o => inPeriod(o.created_at));
+        // `current` drives the revenue/SA/day/daily-sales blocks, which all
+        // count orders, so it is SALES only. The saIssues block below
+        // deliberately uses currentAll — its whole job is to COUNT the
+        // cancellations and returns that isSaleOrder excludes here.
+        const currentAll = storeOrders.filter(o => inPeriod(o.created_at));
+        const current = currentAll.filter(isSaleOrder);
 
         // Store-wise breakdown
         const storeMap = {};
         current.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!storeMap[store]) storeMap[store] = { name: store, revenue: 0, orders: 0, items: 0 };
-            storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            storeMap[store].revenue += orderNetRevenue(o);
             storeMap[store].orders += 1;
             storeMap[store].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
         });
@@ -1337,7 +1434,7 @@ export default function CEODashboard() {
             if (!sp || !isPersonName(sp)) return;
             const store = o.salesperson_store || "Other";
             if (!saMap[sp]) saMap[sp] = { name: sp, store, revenue: 0, orders: 0, items: 0, discount: 0, newClients: 0 };
-            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            saMap[sp].revenue += orderNetRevenue(o);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);
@@ -1350,14 +1447,18 @@ export default function CEODashboard() {
             const d = new Date(o.created_at);
             const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
             if (!dayMap[dayName]) dayMap[dayName] = { name: dayName, revenue: 0, orders: 0 };
-            dayMap[dayName].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            dayMap[dayName].revenue += orderNetRevenue(o);
             dayMap[dayName].orders += 1;
         });
         const topDays = Object.values(dayMap).sort((a, b) => b.revenue - a.revenue);
 
         // SA-wise returns/refunds/exchanges/cancellations
+        // currentAll, not current: these ARE the cancelled/returned rows, which
+        // `current` excludes. Reading `current` here meant a cancelled order
+        // could never be attributed to the SA who took it, so the whole panel
+        // under-reported and "SA with most issues" was picked from a short list.
         const saIssues = {};
-        current.forEach(o => {
+        currentAll.forEach(o => {
             const sp = getOrderSalesperson(o);
             if (!sp || !isPersonName(sp)) return;
             if (!saIssues[sp]) saIssues[sp] = { name: sp, refunds: 0, returns: 0, exchanges: 0, cancellations: 0, total: 0 };
@@ -1372,14 +1473,13 @@ export default function CEODashboard() {
         // Store-wise daily sales
         const dailySales = {};
         current.forEach(o => {
-            const d = new Date(o.created_at);
-            const key = d.toISOString().split("T")[0];
-            const label = `${d.getDate()}/${d.getMonth() + 1}`;
+            const key = dayKey(o.created_at);
             const store = o.salesperson_store || "Other";
-            if (!dailySales[key]) dailySales[key] = { date: label, fullDate: key };
+            const amount = orderNetRevenue(o);
+            if (!dailySales[key]) dailySales[key] = { date: dayLabel(o.created_at), fullDate: key };
             if (!dailySales[key][store]) dailySales[key][store] = 0;
-            dailySales[key][store] += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            dailySales[key].total = (dailySales[key].total || 0) + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            dailySales[key][store] += amount;
+            dailySales[key].total = (dailySales[key].total || 0) + amount;
         });
         const dailySalesData = Object.values(dailySales).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 

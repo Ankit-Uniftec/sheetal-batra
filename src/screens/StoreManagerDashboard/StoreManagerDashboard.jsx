@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isSaleOrder } from "../../utils/revenue";
 import "./StoreManagerDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
@@ -317,13 +317,24 @@ export default function StoreManagerDashboard() {
         [storeOrders, inPeriod]
     );
 
+    // The SALES slice of the above. Internal stock movements and alterations
+    // carry 0 in every money column, so they never moved a revenue total but
+    // did inflate every order count and deflate every average (10 sales worth
+    // 10,00,000 plus 5 stock rows reported an AOV of 66,667, not 1,00,000).
+    // periodStoreOrders stays as-is for the blocks that must count cancelled
+    // and altered rows — the alterations tab and the SA cancellation column.
+    const periodStoreSales = useMemo(
+        () => periodStoreOrders.filter(isSaleOrder),
+        [periodStoreOrders]
+    );
+
     // ═══════════════════════════════════════════════════════════
     // TAB 1: SALES OVERVIEW
     // ═══════════════════════════════════════════════════════════
     const salesStats = useMemo(() => {
-        const period = periodStoreOrders;
+        const period = periodStoreSales;
 
-        const totalRevenue = period.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const totalRevenue = period.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const totalOrders = period.length;
         const totalItems = period.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
         const aov = totalOrders > 0 ? totalRevenue / totalOrders : 0;
@@ -346,10 +357,12 @@ export default function StoreManagerDashboard() {
         const buckets = {};
         period.forEach(o => {
             const d = new Date(o.created_at);
-            const key = d.toISOString().split("T")[0];
+            // Local parts, not toISOString() — that is UTC and pushed
+            // late-evening IST orders onto the previous day.
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
             const label = `${d.getDate()}/${d.getMonth() + 1}`;
             if (!buckets[key]) buckets[key] = { date: label, fullDate: key, revenue: 0, orders: 0 };
-            if (isRevenueOrder(o)) buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             buckets[key].orders += 1;
         });
         const dailySales = Object.values(buckets)
@@ -362,7 +375,7 @@ export default function StoreManagerDashboard() {
         const unpaid = period.filter(o => getPaymentStatus(o) === "unpaid").length;
 
         return { totalRevenue, totalOrders, totalItems, aov, totalDiscount, dailySales, paid, partial, unpaid, extrasIncluded, extrasExcluded, extrasTotal };
-    }, [periodStoreOrders]);
+    }, [periodStoreSales]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 2: SA PERFORMANCE
@@ -370,17 +383,21 @@ export default function StoreManagerDashboard() {
     const saPerformance = useMemo(() => {
         const period = periodStoreOrders;
 
+        // Walks the FULL period so the cancelled column can still count the
+        // rows a sales-only slice would drop; everything else — revenue,
+        // orders, items, AOV — only accrues for real sales.
         const saMap = {};
         period.forEach(o => {
             const sp = getOrderSalesperson(o);
             if (!sp || !isPersonName(sp)) return;
             if (!saMap[sp]) saMap[sp] = { name: sp, revenue: 0, orders: 0, items: 0, discount: 0, delivered: 0, cancelled: 0 };
-            if (isRevenueOrder(o)) saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            if (o.status === "cancelled") saMap[sp].cancelled += 1;
+            if (!isSaleOrder(o)) return;
+            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);
             if (o.status === "delivered" || o.status === "completed") saMap[sp].delivered += 1;
-            if (o.status === "cancelled") saMap[sp].cancelled += 1;
         });
 
         const saList = Object.values(saMap).sort((a, b) => b.revenue - a.revenue).map(sa => ({
@@ -688,8 +705,11 @@ export default function StoreManagerDashboard() {
     // TAB 6: CLIENT BOOK
     // ═══════════════════════════════════════════════════════════
     const clientBook = useMemo(() => {
+        // Sales only: a cancelled order used to keep inflating a client's
+        // lifetime spend, and an alteration counted as a second purchase —
+        // promoting a one-time buyer into the repeat bucket.
         const clientMap = {};
-        storeOrders.forEach(order => {
+        storeOrders.filter(isSaleOrder).forEach(order => {
             const phone = order.delivery_phone || order.phone;
             const name = order.delivery_name || "Unknown";
             if (!phone) return;
@@ -804,7 +824,11 @@ export default function StoreManagerDashboard() {
     const alterationStats = useMemo(() => {
         const period = periodStoreOrders;
         const alterations = period.filter(o => o.is_alteration);
-        const totalOrders = period.length;
+        // "What share of our sales came back for alteration?" — so the
+        // denominator is SALES. It used to be every row, which put the
+        // alterations themselves (and stock movements) into their own
+        // denominator and understated the rate.
+        const totalOrders = periodStoreSales.length;
         const alterationRate = totalOrders > 0 ? ((alterations.length / totalOrders) * 100).toFixed(1) : 0;
 
         // By outfit
@@ -841,7 +865,7 @@ export default function StoreManagerDashboard() {
         const flagged = byOutfit.filter(a => a.count >= 3);
 
         return { total: alterations.length, alterationRate, byOutfit, byCustomer, bySA, flagged };
-    }, [periodStoreOrders]);
+    }, [periodStoreOrders, periodStoreSales]);
 
     // Resets
     useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, sortBy, filters, ordersPeriodRange]);

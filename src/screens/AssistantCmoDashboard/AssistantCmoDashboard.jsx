@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isRevenueOrder, isSaleOrder } from "../../utils/revenue";
 import "./AssistantCmoDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { splitPhoneNumber } from "../../utils/formatPhoneNumber";
@@ -241,8 +241,13 @@ export default function AssistantCmoDashboard() {
     _orders.forEach((o) => {
       const store = getOrderStore(o);
       if (!storeMap[store]) storeMap[store] = { name: store, orderCount: 0, revenue: 0, refundCount: 0, cancelCount: 0, returnCount: 0 };
-      storeMap[store].orderCount += 1;
-      if (isRevenueOrder(o)) storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+      // orderCount counts SALES: internal stock movements and alterations are
+      // 0-value, so they never moved revenue but did inflate this count. The
+      // refund/cancel/return counters below deliberately stay on every row.
+      if (isSaleOrder(o)) {
+        storeMap[store].orderCount += 1;
+        storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+      }
       if (o.refund_status === "processed" || o.refund_status === "completed" || o.refund_status === "refunded") storeMap[store].refundCount += 1;
       if (o.status === "cancelled") storeMap[store].cancelCount += 1;
       if (o.return_reason || o.status === "returned") storeMap[store].returnCount += 1;
@@ -384,8 +389,10 @@ export default function AssistantCmoDashboard() {
     let todayRev = 0, yesterdayRev = 0, mtdRev = 0, lastMonthRev = 0, ytdRev = 0, lastYearRev = 0;
     let mtdCount = 0, ytdCount = 0;
 
+    // Sales only: mtdCount and ytdCount are AOV denominators below, so a
+    // 0-value stock movement or alteration would drag the average down.
     orders.forEach((o) => {
-      if (!isRevenueOrder(o)) return;
+      if (!isSaleOrder(o)) return;
       const d = new Date(o.delivered_at || o.created_at);
       if (isNaN(d.getTime())) return;
       const amt = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
@@ -411,7 +418,7 @@ export default function AssistantCmoDashboard() {
     // ticket size across locations.
     const aovStoreMap = {};
     orders.forEach((o) => {
-      if (!isRevenueOrder(o)) return;
+      if (!isSaleOrder(o)) return;
       const d = new Date(o.delivered_at || o.created_at);
       if (isNaN(d.getTime())) return;
       if (d.getFullYear() !== thisYear) return;
@@ -727,7 +734,9 @@ export default function AssistantCmoDashboard() {
     // not vendor or internal-stock orders ("Internal Stock" is not a person).
     orders.forEach((o) => {
       if (!inDateRange(o)) return;
-      if (o.is_b2b || o.is_comms || o.is_stock_order) return;
+      // isSaleOrder also covers alterations and cancellations, which the old
+      // is_stock_order-only check let through as extra orders per client.
+      if (o.is_b2b || o.is_comms || !isSaleOrder(o)) return;
       if (o.user_id) {
         addToIndex(`uid:${o.user_id}`, o);
       } else {

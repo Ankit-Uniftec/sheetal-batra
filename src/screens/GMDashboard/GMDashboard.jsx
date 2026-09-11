@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isSaleOrder } from "../../utils/revenue";
 import "./GMDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
@@ -56,6 +56,18 @@ const COMPARISON_OPTIONS = [
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+
+// Day buckets built from LOCAL parts — toISOString() is UTC and pushed
+// late-evening IST orders onto the previous day.
+const two = (n) => String(n).padStart(2, "0");
+const dayKey = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+};
+const dayLabel = (ts) => {
+    const d = new Date(ts);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+};
 
 const CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B", "#DAA520", "#B8860B", "#CD853F", "#DEB887"];
 const PIE_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37"];
@@ -399,20 +411,25 @@ export default function GMDashboard() {
     // ═══════════════════════════════════════════════════════════
     const storePerformanceStats = useMemo(() => {
         const compRange = comparisonPeriodRange(periodRangeValue, comparison);
-        const currentOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at));
-        const prevOrders = compRange ? orders.filter(o => !isLxrtsOrder(o) && inRange(compRange, o.created_at)) : [];
+        // Sales only. The counts below (totalOrders, per-store orders/items,
+        // per-SA orders, staff productivity, AOV) were running over every row,
+        // so 0-value stock movements and alterations inflated them and dragged
+        // AOV down; the revenue sums were already guarded, which is why only
+        // the counts were wrong.
+        const currentOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at) && isSaleOrder(o));
+        const prevOrders = compRange ? orders.filter(o => !isLxrtsOrder(o) && inRange(compRange, o.created_at) && isSaleOrder(o)) : [];
 
-        const totalRevenue = currentOrders.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
-        const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
+        const totalRevenue = currentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const netSbRev = totalNetSbRevenue(currentOrders);
         const totalOrders = currentOrders.length;
-        const prevRevenue = prevOrders.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const prevRevenue = prevOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
 
         // Store-wise breakdown
         const storeMap = {};
         currentOrders.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!storeMap[store]) storeMap[store] = { name: store, revenue: 0, orders: 0, items: 0 };
-            if (isRevenueOrder(o)) storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             storeMap[store].orders += 1;
             storeMap[store].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
         });
@@ -425,7 +442,7 @@ export default function GMDashboard() {
             if (!sp || !isPersonName(sp)) return;
             const store = o.salesperson_store || "Other";
             if (!saMap[sp]) saMap[sp] = { name: sp, store, revenue: 0, orders: 0, items: 0, discount: 0 };
-            if (isRevenueOrder(o)) saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             saMap[sp].orders += 1;
             saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
             saMap[sp].discount += Number(o.discount_amount || 0);
@@ -438,7 +455,7 @@ export default function GMDashboard() {
         prevOrders.forEach(o => {
             const store = o.salesperson_store || "Other";
             if (!prevStoreMap[store]) prevStoreMap[store] = { revenue: 0 };
-            if (isRevenueOrder(o)) prevStoreMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            prevStoreMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
         });
         const storeGrowth = storeBreakdown.map(s => ({
             ...s,
@@ -476,15 +493,16 @@ export default function GMDashboard() {
     // DAY-WISE SALES
     // ═══════════════════════════════════════════════════════════
     const dayWiseSales = useMemo(() => {
-        const validOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at));
+        // Sales only. This block used to count EVERY row against the day's
+        // order total while summing revenue from only the real ones, so a day
+        // with stock movements or cancellations reported more orders than it
+        // had sales.
+        const validOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at) && isSaleOrder(o));
         const buckets = {};
         validOrders.forEach(o => {
-            const d = new Date(o.created_at);
-            const key = d.toISOString().split("T")[0];
-            const label = `${d.getDate()}/${d.getMonth() + 1}`;
-            if (!buckets[key]) buckets[key] = { date: label, fullDate: key, revenue: 0, orders: 0, delhiRevenue: 0, ludhianaRevenue: 0, b2bRevenue: 0 };
-            // Revenue counts only for non-cancelled/refunded orders; order count is all.
-            const amount = isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0;
+            const key = dayKey(o.created_at);
+            if (!buckets[key]) buckets[key] = { date: dayLabel(o.created_at), fullDate: key, revenue: 0, orders: 0, delhiRevenue: 0, ludhianaRevenue: 0, b2bRevenue: 0 };
+            const amount = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             buckets[key].revenue += amount;
             buckets[key].orders += 1;
             const store = (o.salesperson_store || "").toLowerCase();
@@ -499,11 +517,12 @@ export default function GMDashboard() {
     // B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
-        const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B");
+        // Real B2B sales only — a B2BSTOCK movement is an internal transfer.
+        const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B" && isSaleOrder(o));
         const currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
 
-        const totalB2bRevenue = currentB2b.reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
-        const totalAllRevenue = orders.filter(o => inPeriod(o.created_at)).reduce((s, o) => s + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalAllRevenue = orders.filter(o => inPeriod(o.created_at) && isSaleOrder(o)).reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const b2bContribution = totalAllRevenue > 0 ? ((totalB2bRevenue / totalAllRevenue) * 100).toFixed(1) : 0;
 
         const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
@@ -515,7 +534,7 @@ export default function GMDashboard() {
             const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
             const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
             if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
-            if (isRevenueOrder(o)) clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
             clientSales[client].orders += 1;
             // Collections, not the order-time advance — read total_paid.
             clientSales[client].advance += Number(o.total_paid ?? o.advance_payment) || 0;

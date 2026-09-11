@@ -233,6 +233,14 @@
     margin: 24px 0 12px 0;
 }
 
+/* Reconciles the Combined card with the three store cards above it. */
+.rm-daywise-note {
+    margin: 10px 0 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #777;
+}
+
 /* ============================================
    TAB HEADER / FILTER BAR (CMO-style)
    ============================================ */
