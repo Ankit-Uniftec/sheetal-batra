@@ -5,6 +5,7 @@ import "./B2bOrderView.css";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
+import { getWarehouseDate } from "../../utils/warehouseDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 
@@ -324,10 +325,14 @@ export default function B2bOrderView() {
                                         <label>Quantity:</label>
                                         <span>{item.quantity || 1}</span>
                                     </div>
-                                    <div className="b2bov-field">
-                                        <label>Price:</label>
-                                        <span>₹{formatIndianNumber(item.price || 0)}</span>
-                                    </div>
+                                    {/* Order money is withheld from Production — they build the
+                                        garment, they don't price it. See utils/productionPrivacy.js */}
+                                    {userRole !== "production" && (
+                                        <div className="b2bov-field">
+                                            <label>Price:</label>
+                                            <span>₹{formatIndianNumber(item.price || 0)}</span>
+                                        </div>
+                                    )}
                                 </div>
                                 {Array.isArray(item.extras) && item.extras.length > 0 && (
                                     <div className="b2bov-field b2bov-field-wide">
@@ -335,7 +340,7 @@ export default function B2bOrderView() {
                                         <div className="b2bov-extras-display">
                                             {item.extras.map((extra, idx) => (
                                                 <div key={idx} className="b2bov-extra-item">
-                                                    <span>{extra.name} ({"\u20B9"}{formatIndianNumber(extra.price || 0)})</span>
+                                                    <span>{extra.name}{userRole !== "production" && ` (${"\u20B9"}${formatIndianNumber(extra.price || 0)})`}</span>
                                                     {extra.color && extra.color.name && <ColorDotDisplay colorObject={extra.color} />}
                                                 </div>
                                             ))}
@@ -380,14 +385,20 @@ export default function B2bOrderView() {
                             </>
                         )}
                         <div className="b2bov-field">
-                            <label>Delivery Date:</label>
-                            <span>{formatDate(order.delivery_date) || "—"}</span>
+                            <label>{userRole === "production" ? "Dispatch Date (T-2):" : "Delivery Date:"}</label>
+                            <span>{userRole === "production"
+                                ? getWarehouseDate(order.delivery_date, order.created_at)
+                                : formatDate(order.delivery_date) || "—"}</span>
                         </div>
-                        <div className="b2bov-field">
-                            <label>Delivery Address:</label>
-                            <span>{order.delivery_address || "\u2014"}</span>
-                        </div>
-                        {vendorContacts.length > 0 && vendorContacts.map((contact, idx) => (
+                        {/* Client identity \u2014 address and contacts \u2014 withheld from
+                            Production. See utils/productionPrivacy.js */}
+                        {userRole !== "production" && (
+                            <div className="b2bov-field">
+                                <label>Delivery Address:</label>
+                                <span>{order.delivery_address || "\u2014"}</span>
+                            </div>
+                        )}
+                        {userRole !== "production" && vendorContacts.length > 0 && vendorContacts.map((contact, idx) => (
                             <div key={idx} className="b2bov-field">
                                 <label>{contact.is_primary ? "Primary Contact:" : "Contact:"}</label>
                                 <span>
@@ -406,7 +417,8 @@ export default function B2bOrderView() {
                     )}
                 </div>
 
-                {/* Payment Details */}
+                {/* Payment Details — hidden entirely from Production (order money). */}
+                {userRole !== "production" && (
                 <div className="b2bov-section">
                     <h3>Payment Details</h3>
                     <div className="b2bov-info-grid">
@@ -434,6 +446,12 @@ export default function B2bOrderView() {
                             <label>Grand Total:</label>
                             <span>₹{formatIndianNumber(grandTotal)}</span>
                         </div>
+                    </div>
+                </div>
+                )}
+                {/* Quantity is production data, not money — shown to every role. */}
+                <div className="b2bov-section">
+                    <div className="b2bov-info-grid">
                         <div className="b2bov-field">
                             <label>Total Quantity:</label>
                             <span>{order.total_quantity || 1} unit(s)</span>

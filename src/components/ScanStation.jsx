@@ -3,6 +3,7 @@ import { usePopup } from "../components/Popup";
 import { supabase } from "../lib/supabaseClient";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { isSkuBarcode } from "../utils/barcodeKind";
+import { getWarehouseDate } from "../utils/warehouseDate";
 import {
     advanceComponentStage,
     activateComponents,
@@ -1611,11 +1612,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                             )}
                         </div>
 
-                        {/* Order Info */}
+                        {/* Order Info — no client identity, and the WAREHOUSE (T-2)
+                            deadline rather than the customer's promised date.
+                            See utils/productionPrivacy.js */}
                         {selectedComponent.orders && (
                             <div className="wd-detail-order-info">
-                                <p><strong>Client:</strong> {selectedComponent.orders.delivery_name}</p>
-                                <p><strong>Delivery:</strong> {selectedComponent.orders.delivery_date}</p>
+                                <p><strong>Dispatch by:</strong> {getWarehouseDate(selectedComponent.orders.delivery_date, selectedComponent.orders.created_at)}</p>
                                 <p><strong>SA:</strong> {selectedComponent.orders.salesperson}</p>
                             </div>
                         )}

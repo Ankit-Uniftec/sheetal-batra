@@ -98,10 +98,8 @@ const WarehouseDashboard = () => {
   // Overview date-period filter — shared PeriodFilter (scopes the stage cards +
   // Production Overview).
   const { control: overviewPeriodControl, inPeriod: inOverviewPeriod } = usePeriodFilter("all", { variant: "pills" });
-  // Maps vendor.id → vendor row. Used to resolve B2B orders' "client name"
-  // (B2B orders have no delivery_name; the vendor's store_brand_name is the
-  // operations-facing analogue, same convention as PM dashboard + PDFs).
-  const [vendorMap, setVendorMap] = useState({});
+  // The vendor lookup that backed B2B "client name" was removed with it —
+  // production does not see client identity (utils/productionPrivacy.js).
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useTabParam("orders");
   const [showSidebar, setShowSidebar] = useState(false);
@@ -149,8 +147,6 @@ const WarehouseDashboard = () => {
 
   // Secondary Filters
   const [filters, setFilters] = useState({
-    minPrice: 0,
-    maxPrice: 500000,
     priority: [],
     orderType: [],
     store: [],
@@ -303,10 +299,25 @@ const WarehouseDashboard = () => {
     });
   };
 
+  // Exactly the columns this dashboard renders. Deliberately NOT select("*"):
+  // that shipped every client-identity and money column to the browser, where
+  // they were visible in devtools even once the JSX stopped rendering them.
+  // See utils/productionPrivacy.js. Adding a field here is fine — adding a
+  // money or delivery_name column is the thing to think twice about.
+  const ORDER_COLUMNS = [
+    "id", "order_no", "created_at", "delivery_date", "status", "warehouse_stage",
+    "items", "attachments", "priority", "order_flag", "is_urgent",
+    "is_b2b", "approval_status", "po_number", "is_private_order", "is_stock_order",
+    "is_rework", "parent_order_id", "mode_of_delivery", "exb_name",
+    "salesperson", "salesperson_name", "salesperson_store", "sb_representative_name",
+    "is_alteration", "alteration_type", "alteration_status", "alteration_notes",
+    "alteration_number", "alteration_location", "alteration_attachments",
+  ].join(", ");
+
   const fetchOrders = async () => {
     // Paginate past Supabase's default 1000-row cap so warehouse can see all orders
     const { data, error } = await fetchAllRows("orders", (q) =>
-      q.select("*").order("created_at", { ascending: false })
+      q.select(ORDER_COLUMNS).order("created_at", { ascending: false })
     );
     if (!error) {
       const filtered = (data || []).filter(o => {
@@ -321,35 +332,12 @@ const WarehouseDashboard = () => {
       setOrders(filtered);
 
       // Resolve B2B "client name" — fetch vendors referenced by B2B orders.
-      const vendorIds = [...new Set(
-        filtered
-          .filter(o => o.is_b2b && o.vendor_id)
-          .map(o => o.vendor_id)
-      )];
-      if (vendorIds.length > 0) {
-        const { data: vData } = await supabase
-          .from("vendors")
-          .select("id, store_brand_name, vendor_code")
-          .in("id", vendorIds);
-        if (vData) {
-          const vMap = {};
-          vData.forEach(v => { vMap[v.id] = v; });
-          setVendorMap(vMap);
-        }
-      }
     }
     setLoading(false);
   };
 
-  // Returns the client-facing name for an order. B2B orders use the vendor's
-  // store_brand_name (resolved via vendorMap); retail uses delivery_name.
-  const getClientName = (order) => {
-    if (order?.is_b2b) {
-      const v = order.vendor_id ? vendorMap[order.vendor_id] : null;
-      return v?.store_brand_name || order.delivery_name || "";
-    }
-    return order?.delivery_name || "";
-  };
+  // getClientName was removed with the client-name displays and the CSV column —
+  // production does not see client identity (utils/productionPrivacy.js).
 
   // Jump to the Orders tab, scope filters to make the order visible, and
   // visually highlight its card. Used by the NotificationBell click and by
@@ -674,14 +662,6 @@ const WarehouseDashboard = () => {
       });
     }
 
-    // Price range filter
-    if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-      result = result.filter((order) => {
-        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-        return total >= filters.minPrice && total <= filters.maxPrice;
-      });
-    }
-
     // Priority filter
     if (filters.priority.length > 0) {
       result = result.filter((order) => filters.priority.includes(getPriority(order)));
@@ -741,10 +721,6 @@ const WarehouseDashboard = () => {
           return getOrderNum(a.order_no) - getOrderNum(b.order_no);
         case "delivery":
           return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-        case "amount_high":
-          return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
-        case "amount_low":
-          return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
         default:
           return getOrderNum(b.order_no) - getOrderNum(a.order_no);
       }
@@ -755,18 +731,20 @@ const WarehouseDashboard = () => {
 
   const handleExportCSV = () => {
     if (filteredOrders.length === 0) return;
+    // Matches what the dashboard shows: no client identity, and the WAREHOUSE
+    // (T-2) deadline rather than the customer's promised date. The export is the
+    // usual way this leaks back out — see utils/productionPrivacy.js.
     const headers = [
-      "Order No", "Order Date", "Customer Name", "Product Name",
-      "Delivery Date", "Mode of Delivery", "Item Count",
+      "Order No", "Order Date", "Product Name",
+      "Dispatch By (T-2)", "Mode of Delivery", "Item Count",
       "Priority", "Status", "Salesperson", "Store",
     ];
     const rows = filteredOrders.map((order) => [
       order.order_no || "",
       order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
-      getClientName(order) || "",
       getProductNames(order),
-      order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
-      order.mode_of_delivery || order.delivery_location || order.delivery_city || "",
+      sharedWarehouseDate(order.delivery_date, order.created_at, ""),
+      order.mode_of_delivery || "",
       Array.isArray(order.items) ? order.items.length : 0,
       getPriority(order),
       order.status || "",
@@ -811,9 +789,6 @@ const WarehouseDashboard = () => {
     if (ordersTimeline !== "all") {
       chips.push({ type: "date", label: periodLabel(ordersTimeline) });
     }
-    if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-      chips.push({ type: "price", label: `Rs.${(filters.minPrice / 1000).toFixed(0)}K - Rs.${(filters.maxPrice / 1000).toFixed(0)}K` });
-    }
     filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
     filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t === "b2b" ? "B2B" : (t.charAt(0).toUpperCase() + t.slice(1)) }));
     filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
@@ -832,8 +807,6 @@ const WarehouseDashboard = () => {
   const removeFilter = (type, value) => {
     if (type === "date") {
       clearOrdersPeriod();
-    } else if (type === "price") {
-      setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
     } else if (type === "salesperson") {
       setFilters(prev => ({ ...prev, salesperson: "" }));
     } else if (type === "stage") {
@@ -847,8 +820,6 @@ const WarehouseDashboard = () => {
   const clearAllFilters = () => {
     clearOrdersPeriod();
     setFilters({
-      minPrice: 0,
-      maxPrice: 500000,
       priority: [],
       orderType: [],
       store: [],
@@ -1260,8 +1231,6 @@ const WarehouseDashboard = () => {
                     <option value="newest">Newest First</option>
                     <option value="oldest">Oldest First</option>
                     <option value="delivery">Delivery Date</option>
-                    <option value="amount_high">Amount: High to Low</option>
-                    <option value="amount_low">Amount: Low to High</option>
                   </select>
                   {userDesignation?.trim().toLowerCase() === "offline production head" && (
                     <button
@@ -1315,75 +1284,9 @@ const WarehouseDashboard = () => {
                   )}
                 </div>
 
-                {/* Price Filter */}
-                <div className="wd-filter-dropdown">
-                  <button
-                    className={`wd-filter-btn ${(filters.minPrice > 0 || filters.maxPrice < 500000) ? "active" : ""}`}
-                    onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")}
-                  >
-                    Price
-                    <span className="wd-dropdown-arrow">&#9662;</span>
-                  </button>
-                  {openDropdown === "price" && (
-                    <div className="wd-dropdown-panel wd-price-panel">
-                      <div className="wd-dropdown-title">Order Value</div>
-                      <div className="wd-price-slider-container">
-                        <div className="wd-price-track">
-                          <div
-                            className="wd-price-track-filled"
-                            style={{
-                              left: `${(filters.minPrice / 500000) * 100}%`,
-                              width: `${((filters.maxPrice - filters.minPrice) / 500000) * 100}%`
-                            }}
-                          />
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="500000"
-                          step="5000"
-                          value={filters.minPrice}
-                          onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 5000) }))}
-                          className="wd-price-slider wd-price-slider-min"
-                        />
-                        <input
-                          type="range"
-                          min="0"
-                          max="500000"
-                          step="5000"
-                          value={filters.maxPrice}
-                          onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 5000) }))}
-                          className="wd-price-slider wd-price-slider-max"
-                        />
-                      </div>
-                      <div className="wd-price-labels">
-                        <span>Rs.0</span>
-                        <span>Rs.5,00,000</span>
-                      </div>
-                      <div className="wd-price-inputs">
-                        <div className="wd-price-input-wrap">
-                          <span>Rs.</span>
-                          <input
-                            type="number"
-                            value={filters.minPrice}
-                            onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 5000) }))}
-                          />
-                        </div>
-                        <span>to</span>
-                        <div className="wd-price-input-wrap">
-                          <span>Rs.</span>
-                          <input
-                            type="number"
-                            value={filters.maxPrice}
-                            onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 5000) }))}
-                          />
-                        </div>
-                      </div>
-                      <button className="wd-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                    </div>
-                  )}
-                </div>
-
+                {/* Price filter, amount sorts and the price chip were removed with
+                    their state and logic — order value is withheld from production.
+                    See utils/productionPrivacy.js */}
                 {/* Priority Filter */}
                 <div className="wd-filter-dropdown">
                   <button
@@ -1700,8 +1603,10 @@ const WarehouseDashboard = () => {
 
                             {/* Client & SA Name — responsive row. For exhibition orders the SA is
                                 always stored as "Exhibition"; the actual person is on sb_representative_name. */}
+                            {/* Client identity is withheld from production — see
+                                utils/productionPrivacy.js. The SA stays: internal staff,
+                                and the PH needs someone to raise queries with. */}
                             <div className="wd-info-row">
-                              <p><strong className="wd-label">Client Name:</strong> {getClientName(order) || "-"}</p>
                               <p><strong className="wd-label">SA Name:</strong> {order.sb_representative_name || order.salesperson_name || order.salesperson || "-"}</p>
                             </div>
 
@@ -1954,7 +1859,6 @@ const WarehouseDashboard = () => {
                             {order.is_b2b && order.po_number && (
                               <p><b>PO Number:</b> {order.po_number}</p>
                             )}
-                            <p><b>Client Name:</b> {getClientName(order) || "-"}</p>
                             <p><b>Status:</b> {order.status === "pending" || order.status === "order_received" || !order.status ? "Order Received" : order.status}</p>
                           </div>
                         ))

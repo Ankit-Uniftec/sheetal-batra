@@ -19,6 +19,7 @@ import {
   getStageColor,
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
+import { getWarehouseDate } from "../utils/warehouseDate";
 
 const ProductionOverrides = ({ currentUserEmail }) => {
   const [searchBarcode, setSearchBarcode] = useState("");
@@ -449,17 +450,16 @@ const ProductionOverrides = ({ currentUserEmail }) => {
               <span className="pm-detail-label">Re-journeys</span>
               <span className="pm-detail-value">{component.re_journey_count || 0}</span>
             </div>
+            {/* No client identity here, and the WAREHOUSE (T-2) deadline rather
+                than the customer's date — this is a production surface.
+                See utils/productionPrivacy.js */}
             {component.orders && (
-              <>
-                <div className="pm-override-detail-item">
-                  <span className="pm-detail-label">Client</span>
-                  <span className="pm-detail-value">{component.orders.delivery_name}</span>
-                </div>
-                <div className="pm-override-detail-item">
-                  <span className="pm-detail-label">Delivery Date</span>
-                  <span className="pm-detail-value">{component.orders.delivery_date}</span>
-                </div>
-              </>
+              <div className="pm-override-detail-item">
+                <span className="pm-detail-label">Dispatch By</span>
+                <span className="pm-detail-value">
+                  {getWarehouseDate(component.orders.delivery_date, component.orders.created_at)}
+                </span>
+              </div>
             )}
           </div>
 

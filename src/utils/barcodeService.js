@@ -1017,8 +1017,12 @@ export async function fetchOrderComponents(orderId) {
 // ============================================================
 // 7. FETCH COMPONENT BY BARCODE — Quick lookup after scan
 // ============================================================
+// delivery_name is deliberately absent: this select feeds the scan stations and
+// override screens, which are production surfaces — client identity is withheld
+// there (utils/productionPrivacy.js). delivery_date stays because the screens
+// render it through getWarehouseDate (T-2), never raw.
 const COMPONENT_SELECT =
-  "*, orders(order_no, delivery_name, delivery_date, salesperson, salesperson_email, status)";
+  "*, orders(order_no, delivery_date, created_at, salesperson, salesperson_email, status)";
 
 // A prefix-less barcode a worker might type: a FULL 6-digit sequence, a dash,
 // then the component tail. The component tail is letters+digits, optionally

@@ -5,6 +5,9 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isAssignedToHead } from "../../utils/stockProductionHead";
 import "./B2bProductionDashboard.css";
 import formatDate from "../../utils/formatDate";
+// Production works to the WAREHOUSE deadline (T-2), never the customer's
+// promised delivery_date — see utils/productionPrivacy.js.
+import { getWarehouseDate } from "../../utils/warehouseDate";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
 import DashboardHeader from "../../components/DashboardHeader";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
@@ -395,10 +398,10 @@ export default function B2bProductionDashboard() {
         };
     }, [orders, pendingProduction, inProduction, readyForDispatch, dispatched]);
 
-    // Calendar orders by delivery date
+    // Calendar orders by WAREHOUSE date (T-2), not the customer's delivery date.
     const ordersByDate = useMemo(() => {
         return orders.reduce((acc, order) => {
-            const date = order.delivery_date ? formatDate(order.delivery_date) : null;
+            const date = getWarehouseDate(order.delivery_date, order.created_at, null);
             if (date) acc[date] = (acc[date] || 0) + 1;
             return acc;
         }, {});
@@ -423,12 +426,14 @@ export default function B2bProductionDashboard() {
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
-            // Client + product included so legacy SA-placed B2B orders (no PO or
-            // vendor recorded) are still findable by what they DO have.
+            // Product included so legacy SA-placed B2B orders (no PO or vendor
+            // recorded) are still findable by what they DO have. Searching by
+            // CLIENT NAME was removed: matching on it confirms a customer's
+            // identity even though nothing renders it (utils/productionPrivacy.js).
             filtered = filtered.filter(o =>
                 o.order_no?.toLowerCase().includes(q) || o.po_number?.toLowerCase().includes(q) ||
                 vendorMap[o.vendor_id]?.store_brand_name?.toLowerCase().includes(q) ||
-                o.delivery_name?.toLowerCase().includes(q) || (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
+                (o.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
             );
         }
         // Stage-card drill-through: any-piece-at-stage, narrowed by kind.
@@ -700,7 +705,7 @@ export default function B2bProductionDashboard() {
                                                             <p><b>Vendor:</b> {vendorMap[o.vendor_id]?.store_brand_name || "\u2014"} &nbsp;|&nbsp; <b>Type:</b> {o.b2b_order_type || "\u2014"}</p>
                                                         </>
                                                     )}
-                                                    <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Delivery:</b> {formatDate(o.delivery_date) || "\u2014"}</p>
+                                                    <p><b>Order Date:</b> {formatDate(o.created_at) || "\u2014"} &nbsp;|&nbsp; <b>Dispatch by:</b> {getWarehouseDate(o.delivery_date, o.created_at)}</p>
                                                     <p><b>Status:</b> <span className={getStageStatusClass(o)}>{getStageStatusLabel(o)}</span></p>
                                                 </div>
                                             );
@@ -892,16 +897,21 @@ export default function B2bProductionDashboard() {
                             </div>
                         </div>
 
-                        {selectedCalendarDate && (
+                        {selectedCalendarDate && (() => {
+                            // Keyed on the WAREHOUSE date (T-2), matching ordersByDate above.
+                            const dayOrders = orders.filter(
+                                o => getWarehouseDate(o.delivery_date, o.created_at, null) === selectedCalendarDate
+                            );
+                            return (
                             <div className="prod-calendar-orders-section">
                                 <div className="prod-card-header">
-                                    <span className="prod-card-title">Deliveries for {selectedCalendarDate} ({orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length})</span>
+                                    <span className="prod-card-title">Dispatch deadline {selectedCalendarDate} ({dayOrders.length})</span>
                                 </div>
                                 <div className="prod-calendar-orders-list">
-                                    {orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).length === 0 ? (
-                                        <p className="prod-muted">No deliveries on this date</p>
+                                    {dayOrders.length === 0 ? (
+                                        <p className="prod-muted">Nothing due on this date</p>
                                     ) : (
-                                        orders.filter(o => formatDate(o.delivery_date) === selectedCalendarDate).map(order => {
+                                        dayOrders.map(order => {
                                             return (
                                                 <div className="prod-order-item" key={order.id} onClick={() => handleViewOrder(order.id)} style={{ cursor: "pointer" }}>
                                                     {isB2bStockOrderRow(order) ? (
@@ -919,7 +929,8 @@ export default function B2bProductionDashboard() {
                                     )}
                                 </div>
                             </div>
-                        )}
+                            );
+                        })()}
                     </div>
                 )}
 
@@ -1016,7 +1027,7 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                 <div className="prod-ocard-info">
                     <div className="prod-ocard-field"><span className="prod-ocard-label">ORDER NO:</span><span className="prod-ocard-val">{order.order_no || "\u2014"}</span></div>
                     <div className="prod-ocard-field"><span className="prod-ocard-label">ORDER DATE:</span><span className="prod-ocard-val">{formatDate(order.created_at) || "\u2014"}</span></div>
-                    <div className="prod-ocard-field"><span className="prod-ocard-label">DELIVERY:</span><span className="prod-ocard-val">{formatDate(order.delivery_date) || "\u2014"}</span></div>
+                    <div className="prod-ocard-field"><span className="prod-ocard-label">DISPATCH BY:</span><span className="prod-ocard-val" title="Warehouse deadline (T-2)">{getWarehouseDate(order.delivery_date, order.created_at)}</span></div>
                     {!isStock && (<div className="prod-ocard-field"><span className="prod-ocard-label">PO NUMBER:</span><span className="prod-ocard-val">{order.po_number || "\u2014"}</span></div>)}
                 </div>
                 <div className="prod-ocard-badges">
