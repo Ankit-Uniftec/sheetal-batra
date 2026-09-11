@@ -11,17 +11,19 @@ import {
   fetchAllMovements,
   updateExternalMovement,
   fetchComponentByBarcode,
+  fetchPriorVendorIds,
   EXTERNAL_ELIGIBLE_STEPS,
   PRODUCTION_STAGES,
   getStepLabel,
 } from "../utils/barcodeService";
-import { externalMovementsToCsvRows } from "../utils/externalMovements";
+import { externalMovementsToCsvRows, markRepeats } from "../utils/externalMovements";
 import { buildCsv, downloadCsv } from "./AddProduct/csvHelpers";
 import { usePeriodFilter } from "./PeriodFilter";
 
 const EXT_CSV_HEADERS = [
   "Barcode", "Order No", "Component", "Vendor", "Vendor Location",
-  "Stage (out for)", "Status", "Overdue (days)", "Sent Out", "Return By", "Returned", "Ordered",
+  "Stage (out for)", "Status", "Repeat Visit", "Repeat Reason",
+  "Overdue (days)", "Sent Out", "Return By", "Returned", "Ordered",
 ];
 
 // The skippable (optional) production steps — mirrors the DB is_step_skippable().
@@ -65,10 +67,14 @@ const MOVEMENT_ERROR_MESSAGES = {
   NO_STAGES: "Select at least one stage that goes outside.",
   INVALID_STAGE_FOR_MOVEMENT: "This piece isn't ready to go to a vendor yet — Cloth Issue must be completed first.",
   PRIOR_STAGE_IN_PROGRESS: "This piece has a stage still In-Progress. Scan it to Completed before sending it to a vendor.",
+  REPEAT_REASON_REQUIRED: "This piece has already been to that vendor. Give the reason for sending it back.",
   NOT_EDITABLE: "This movement has already been scanned out, so it can no longer be edited.",
   MOVEMENT_NOT_FOUND: "That movement no longer exists.",
 };
+// The repeat-vendor message names the actual vendor, so prefer the RPC's own
+// text there; every other code has a friendlier canned message than the raw DB one.
 const friendlyMovementError = (res) =>
+  (res?.error === "REPEAT_REASON_REQUIRED" && res?.message) ||
   MOVEMENT_ERROR_MESSAGES[res?.error] || res?.message || "Could not complete the request. Please try again.";
 
 /**
@@ -102,6 +108,10 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
   const [vendorId, setVendorId] = useState("");
   const [returnDate, setReturnDate] = useState("");
   const [stages, setStages] = useState([]); // logical steps
+  const [repeatReason, setRepeatReason] = useState("");
+  // Vendor ids the typed barcode's component has already been sent to — so the
+  // form can ask WHY before submitting instead of bouncing off the RPC.
+  const [priorVendorIds, setPriorVendorIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   // Vendor-failure / replacement-journey form
@@ -122,6 +132,7 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
   const [movVendorFilter, setMovVendorFilter] = useState("");
   const [movTypeFilter, setMovTypeFilter] = useState("");      // component category
   const [movReturnFilter, setMovReturnFilter] = useState("");  // exact return date
+  const [movRepeatOnly, setMovRepeatOnly] = useState(false);   // re-sends only
   // Sent-out period (exit_scan_at) — shared PeriodFilter (select).
   const {
     control: movPeriodControl, timeline: movTimeline,
@@ -135,6 +146,8 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
   const [editVendorId, setEditVendorId] = useState("");
   const [editReturnDate, setEditReturnDate] = useState("");
   const [editStages, setEditStages] = useState([]);
+  const [editRepeatReason, setEditRepeatReason] = useState("");
+  const [editPriorVendorIds, setEditPriorVendorIds] = useState([]);
   const [editSaving, setEditSaving] = useState(false);
 
   const loadVendors = useCallback(async () => {
@@ -157,7 +170,10 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
   const loadMovements = useCallback(async () => {
     setMovementsLoading(true);
     try {
-      let rows = (await fetchAllMovements()) || [];
+      // Repeats marked over the FULL set, before scoping — an earlier trip the
+      // channel/order filter drops must still count, or its re-send would look
+      // like a first visit.
+      let rows = markRepeats((await fetchAllMovements()) || []);
       // Channel scope: the retail PH must not see B2B trips, and vice versa.
       // is_b2b is resolved per movement inside fetchAllMovements.
       if (channel === "retail") rows = rows.filter((m) => !m.is_b2b);
@@ -191,13 +207,17 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
       if (movVendorFilter && m.vendor_name !== movVendorFilter) return false;
       if (movTypeFilter && m.component_type !== movTypeFilter) return false;
       if (movReturnFilter && m.return_date !== movReturnFilter) return false;
+      if (movRepeatOnly && !m.isRepeat) return false;
       // A still-configured piece has no exit_scan_at, so it drops out of a
       // bounded period, which is correct (it hasn't gone out yet).
       if (movPeriodRange && !(m.exit_scan_at && inMovPeriod(m.exit_scan_at))) return false;
       return true;
     });
-  }, [movements, movVendorFilter, movTypeFilter, movReturnFilter, movPeriodRange, inMovPeriod]);
-  useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter, movPeriodRange]);
+  }, [movements, movVendorFilter, movTypeFilter, movReturnFilter, movRepeatOnly, movPeriodRange, inMovPeriod]);
+  useEffect(() => { setMovPage(1); }, [movVendorFilter, movTypeFilter, movReturnFilter, movRepeatOnly, movPeriodRange]);
+
+  // How many of the visible movements are re-sends — the headline the PH needs.
+  const movRepeatCount = useMemo(() => movements.filter((m) => m.isRepeat).length, [movements]);
 
   // Export the currently-filtered movement history as a UTF-8-BOM CSV (Excel
   // opens it natively; the app has no XLSX library). Same helper the PM panel
@@ -224,13 +244,24 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
   }, [allVendors, vendorSearch, vendorStageFilter, vendorStatusFilter]);
   useEffect(() => { setVendorPage(1); }, [vendorSearch, vendorStageFilter, vendorStatusFilter]);
 
-  // Open the edit modal for a still-'configured' movement.
-  const openEdit = (m) => {
+  // Open the edit modal for a still-'configured' movement. Prior vendors are
+  // fetched so switching the vendor to one the piece has already visited asks
+  // for a reason, exactly like the configure form.
+  const openEdit = async (m) => {
     setEditMov(m);
     setEditVendorId(m.vendor_id || "");
     setEditReturnDate(m.return_date || "");
     setEditStages(Array.isArray(m.stages_outside) ? m.stages_outside : []);
+    setEditRepeatReason(m.repeat_reason || "");
+    setEditPriorVendorIds([]);
+    if (m.component_id) {
+      setEditPriorVendorIds(await fetchPriorVendorIds(m.component_id, m.id));
+    }
   };
+  const editIsRepeat = !!editVendorId && editPriorVendorIds.includes(editVendorId);
+  const editRepeatVendorName = editIsRepeat
+    ? (approvedVendors.find((v) => v.id === editVendorId)?.vendor_name || "this vendor")
+    : null;
   const toggleEditStage = (step) =>
     setEditStages((prev) => prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step]);
 
@@ -258,6 +289,7 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
     if (!editVendorId) return showPopup({ title: "Required", message: "Select an approved vendor", type: "warning", confirmText: "OK" });
     if (!editReturnDate) return showPopup({ title: "Required", message: "Pick a return date", type: "warning", confirmText: "OK" });
     if (editStages.length === 0) return showPopup({ title: "Required", message: "Select at least one stage", type: "warning", confirmText: "OK" });
+    if (editIsRepeat && !editRepeatReason.trim()) return showPopup({ title: "Required", message: `This piece has already been to ${editRepeatVendorName}. Give the reason for sending it back.`, type: "warning", confirmText: "OK" });
     setEditSaving(true);
     try {
       const res = await updateExternalMovement({
@@ -266,6 +298,7 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
         returnDate: editReturnDate,
         stagesOutside: editStages,
         updatedBy: currentUserEmail,
+        repeatReason: editRepeatReason.trim() || null,
       });
       if (res?.success) {
         showPopup({ title: "Movement Updated", message: `Now sent to ${res.vendor} — return by ${res.return_date}.`, type: "success", confirmText: "OK" });
@@ -310,11 +343,35 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
     }
   }, [vendorOptions, vendorId]);
 
+  // Look up where this component has already been, debounced while the barcode
+  // is still being typed/scanned. A failed lookup clears the list — the RPC is
+  // the real gate, this only decides whether to SHOW the reason box.
+  useEffect(() => {
+    const bc = barcode.trim().toUpperCase();
+    if (!bc) { setPriorVendorIds([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const comp = await fetchComponentByBarcode(bc);
+        const ids = await fetchPriorVendorIds(comp.id);
+        if (!cancelled) setPriorVendorIds(ids);
+      } catch { if (!cancelled) setPriorVendorIds([]); }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [barcode]);
+
+  // This piece has been to the selected vendor before → the reason is required.
+  const isRepeatVendor = !!vendorId && priorVendorIds.includes(vendorId);
+  const repeatVendorName = isRepeatVendor
+    ? (approvedVendors.find((v) => v.id === vendorId)?.vendor_name || "this vendor")
+    : null;
+
   const handleConfigure = async () => {
     if (!barcode.trim()) return showPopup({ title: "Required", message: "Enter the component barcode", type: "warning", confirmText: "OK" });
     if (!vendorId) return showPopup({ title: "Required", message: "Select an approved vendor", type: "warning", confirmText: "OK" });
     if (!returnDate) return showPopup({ title: "Required", message: "Pick a return date (cannot be backdated)", type: "warning", confirmText: "OK" });
     if (stages.length === 0) return showPopup({ title: "Required", message: "Select at least one stage being done outside", type: "warning", confirmText: "OK" });
+    if (isRepeatVendor && !repeatReason.trim()) return showPopup({ title: "Required", message: `This piece has already been to ${repeatVendorName}. Give the reason for sending it back.`, type: "warning", confirmText: "OK" });
 
     setSubmitting(true);
     try {
@@ -324,10 +381,11 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
         returnDate,
         stagesOutside: stages,
         createdBy: currentUserEmail,
+        repeatReason: repeatReason.trim() || null,
       });
       if (res?.success) {
         showPopup({ title: "Movement Configured", message: `Sent to ${res.vendor} — return by ${res.return_date}. It can now be scanned out at the Security Gate.`, type: "success", confirmText: "OK" });
-        setBarcode(""); setVendorId(""); setReturnDate(""); setStages([]);
+        setBarcode(""); setVendorId(""); setReturnDate(""); setStages([]); setRepeatReason("");
       } else {
         const msg = await stageAwareError(res, barcode.trim().toUpperCase(), stages);
         showPopup({ title: "Could not configure", message: msg, type: "error", confirmText: "OK" });
@@ -414,6 +472,22 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
               </label>
             ))}
           </div>
+
+          {/* Only shown when this piece has been to the chosen vendor before —
+              a re-send is rework, and the RPC refuses it without a reason. */}
+          {isRepeatVendor && (
+            <div className="phv-repeat-box">
+              <label className="phv-label">Reason for sending it back to {repeatVendorName}</label>
+              <p className="phv-hint">This component has already been to this vendor. Say what was wrong with the work.</p>
+              <textarea
+                className="phv-input"
+                rows={3}
+                value={repeatReason}
+                onChange={(e) => setRepeatReason(e.target.value)}
+                placeholder="e.g. Embroidery thread colour mismatched the sample — vendor to redo"
+              />
+            </div>
+          )}
 
           <button className="phv-submit" onClick={handleConfigure} disabled={submitting}>
             {submitting ? "Configuring…" : "Configure Movement"}
@@ -514,8 +588,12 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
               <input type="date" value={movReturnFilter} onChange={(e) => setMovReturnFilter(e.target.value)} />
             </label>
             {movPeriodControl}
-            {(movVendorFilter || movTypeFilter || movReturnFilter || movTimeline !== "all") && (
-              <button className="phv-filter-clear" onClick={() => { setMovVendorFilter(""); setMovTypeFilter(""); setMovReturnFilter(""); movPeriodProps.setTimeline("all"); movPeriodProps.setCustomFrom(""); movPeriodProps.setCustomTo(""); }}>Clear</button>
+            <label className="phv-filter-check">
+              <input type="checkbox" checked={movRepeatOnly} onChange={() => setMovRepeatOnly((p) => !p)} />
+              Repeat visits only ({movRepeatCount})
+            </label>
+            {(movVendorFilter || movTypeFilter || movReturnFilter || movRepeatOnly || movTimeline !== "all") && (
+              <button className="phv-filter-clear" onClick={() => { setMovVendorFilter(""); setMovTypeFilter(""); setMovReturnFilter(""); setMovRepeatOnly(false); movPeriodProps.setTimeline("all"); movPeriodProps.setCustomFrom(""); movPeriodProps.setCustomTo(""); }}>Clear</button>
             )}
             <button className="phv-filter-export" onClick={handleMovementsExport} disabled={filteredMovements.length === 0} title="Download the filtered list as a CSV (opens in Excel)">
               Export ({filteredMovements.length})
@@ -535,9 +613,11 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
                       <span className="phv-mov-bc">
                         {m.barcode || "—"}
                         {m.component_type && <span className="phv-mov-type"> · {m.component_type.charAt(0).toUpperCase() + m.component_type.slice(1)}</span>}
+                        {m.isRepeat && <span className="phv-mov-repeat" title="Sent back to a vendor this piece had already been to">Repeat visit</span>}
                       </span>
                       <span className="phv-mov-vendor">{m.vendor_name}{m.vendor_location ? ` · ${m.vendor_location}` : ""}</span>
                       <span className="phv-mov-stages">{stepLabels(m.stages_outside)}</span>
+                      {m.repeat_reason && <span className="phv-mov-reason">↩ Sent back: {m.repeat_reason}</span>}
                     </div>
                     <div className="phv-mov-meta">
                       <span>Ordered {m.order_created_at ? formatDate(m.order_created_at) : "—"}</span>
@@ -587,6 +667,20 @@ const ProductionHeadVendors = ({ currentUserEmail, channel, orderIds }) => {
                 </label>
               ))}
             </div>
+
+            {editIsRepeat && (
+              <div className="phv-repeat-box">
+                <label className="phv-label">Reason for sending it back to {editRepeatVendorName}</label>
+                <p className="phv-hint">This component has already been to this vendor. Say what was wrong with the work.</p>
+                <textarea
+                  className="phv-input"
+                  rows={3}
+                  value={editRepeatReason}
+                  onChange={(e) => setEditRepeatReason(e.target.value)}
+                  placeholder="e.g. Embroidery thread colour mismatched the sample — vendor to redo"
+                />
+              </div>
+            )}
 
             <button className="phv-submit" onClick={handleUpdateMovement} disabled={editSaving}>
               {editSaving ? "Saving…" : "Save Changes"}

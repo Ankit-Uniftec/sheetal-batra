@@ -1471,17 +1471,32 @@ export async function setVendorApproval({ vendorId, approve, approvedBy, reason 
 }
 
 // Configure an external movement for a component (Production Head).
-// RPC enforces: vendor approved + return date not backdated.
-export async function configureExternalMovement({ barcode, vendorId, returnDate, stagesOutside, createdBy }) {
+// RPC enforces: vendor approved + return date not backdated + a reason when the
+// piece is going BACK to a vendor it has already been to (80_repeat_vendor_reason).
+export async function configureExternalMovement({ barcode, vendorId, returnDate, stagesOutside, createdBy, repeatReason = null }) {
   const { data, error } = await supabase.rpc("configure_external_movement", {
     p_barcode: barcode,
     p_vendor_id: vendorId,
     p_return_date: returnDate,
     p_stages_outside: stagesOutside,
     p_created_by: createdBy,
+    p_repeat_reason: repeatReason,
   });
   if (error) throw error;
   return data;
+}
+
+// Vendor ids this component has ALREADY been sent to. A movement to one of
+// these is a re-send (rework), so the UI must ask why before submitting — the
+// RPC refuses it without a reason. Derived from the movement rows, never stored.
+// excludeMovementId: when editing a movement, its own row must not count — a
+// movement is never a repeat of itself (mirrors is_repeat_vendor's p_exclude_id).
+export async function fetchPriorVendorIds(componentId, excludeMovementId = null) {
+  let q = supabase.from("external_movements").select("vendor_id").eq("component_id", componentId);
+  if (excludeMovementId) q = q.neq("id", excludeMovementId);
+  const { data, error } = await q;
+  if (error) { console.error("fetchPriorVendorIds failed:", error); return []; }
+  return [...new Set((data || []).map((m) => m.vendor_id).filter(Boolean))];
 }
 
 // The PH-approved external movement awaiting an exit scan for this component —
@@ -1507,7 +1522,7 @@ export async function getConfiguredMovement(componentId) {
 export async function fetchMovementHistory(componentId) {
   const { data, error } = await supabase
     .from("external_movements")
-    .select("id, vendor_name, vendor_location, stages_outside, return_date, status, created_at, exit_scan_at, entry_scan_at")
+    .select("id, vendor_name, vendor_location, stages_outside, return_date, status, created_at, exit_scan_at, entry_scan_at, repeat_reason")
     .eq("component_id", componentId)
     .order("created_at", { ascending: false });
   if (error) { console.error("fetchMovementHistory failed:", error); return []; }
@@ -1550,7 +1565,7 @@ export async function enrichComponentsWithMovements(components) {
 export async function fetchAllMovements() {
   // Paged past Supabase's 1000-row cap — full movements table grows without bound.
   const { data, error } = await fetchAllRows("external_movements", (q) => q
-    .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, order_components ( barcode, order_no, component_type, order_id )")
+    .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, repeat_reason, component_id, order_components ( barcode, order_no, component_type, order_id )")
     .order("created_at", { ascending: false }));
   if (error) { console.error("fetchAllMovements failed:", error); return []; }
 
@@ -1589,13 +1604,14 @@ export async function fetchAllMovements() {
 // Edit a still-'configured' movement (vendor / return date / stages). The RPC
 // rejects edits to exited/returned movements and re-applies the vendor + stage
 // guards. Returns the RPC result { success, ... }.
-export async function updateExternalMovement({ movementId, vendorId, returnDate, stagesOutside, updatedBy }) {
+export async function updateExternalMovement({ movementId, vendorId, returnDate, stagesOutside, updatedBy, repeatReason = null }) {
   const { data, error } = await supabase.rpc("update_external_movement", {
     p_movement_id: movementId,
     p_vendor_id: vendorId,
     p_return_date: returnDate,
     p_stages_outside: stagesOutside,
     p_updated_by: updatedBy,
+    p_repeat_reason: repeatReason,
   });
   if (error) throw error;
   return data;
@@ -1639,6 +1655,47 @@ export async function recordOverride({
 
   if (error) throw error;
   return data;
+}
+
+// Human labels for stage_overrides.override_type. One map so the PM, Admin and
+// GM override reports can't drift into three different names for one action.
+export const OVERRIDE_TYPE_LABELS = {
+  manual_advance: "Manual Advance",
+  skip_stage: "Skip Stage",
+  timeline_extension: "Timeline Extension",
+  vendor_return: "Forced Vendor Return",
+  packaging_override: "Packaging Override",
+};
+
+export const getOverrideTypeLabel = (t) =>
+  OVERRIDE_TYPE_LABELS[t] || (t || "Override");
+
+/**
+ * Every production override, newest first — the audit trail behind the PM's
+ * override actions (who, when, why, and on which piece).
+ *
+ * Written by recordOverride() above. Until now nothing read this table back,
+ * so an override was recorded and then invisible; this is the read half.
+ *
+ * Paged past Supabase's 1000-row cap — overrides accumulate forever.
+ *
+ * @param {object}  [opts]
+ * @param {string}  [opts.overriddenBy]  Filter to one person's overrides.
+ * @returns {Promise<object[]>} rows, or [] when the table can't be read (the
+ *          caller renders an empty report rather than crashing a dashboard).
+ */
+export async function fetchStageOverrides({ overriddenBy } = {}) {
+  const { data, error } = await fetchAllRows("stage_overrides", (q) => {
+    let query = q.select("*").order("created_at", { ascending: false });
+    if (overriddenBy) query = query.eq("overridden_by", overriddenBy);
+    return query;
+  });
+
+  if (error) {
+    console.error("Failed to load stage overrides:", error);
+    return [];
+  }
+  return data || [];
 }
 
 // ============================================================

@@ -14,6 +14,7 @@ import DashboardHeader from "../../components/DashboardHeader";
 import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
 import ExhibitionApprovals from "../../components/ExhibitionApprovals";
+import OverrideHistory from "../../components/OverrideHistory";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
@@ -909,6 +910,7 @@ export default function GMDashboard() {
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
                         <button className={`admin-nav-item ${activeTab === "exhibition_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("exhibition_approvals"); setShowSidebar(false); }}>Exhibition Approvals</button>
+                        <button className={`admin-nav-item ${activeTab === "override_log" ? "active" : ""}`} onClick={() => { setActiveTab("override_log"); setShowSidebar(false); }}>Override Log</button>
                         {currentUserProfile?.can_place_stock_orders && (
                             <button
                                 className="admin-nav-item"
@@ -1599,6 +1601,10 @@ export default function GMDashboard() {
                     {activeTab === "exhibition_approvals" && (
                         <ExhibitionApprovals currentUserEmail={currentUserEmail} />
                     )}
+
+                    {/* Audit of every production override — read-only here;
+                        overrides themselves are performed on the PM dashboard. */}
+                    {activeTab === "override_log" && <OverrideHistory />}
 
                 </main>
             </div>

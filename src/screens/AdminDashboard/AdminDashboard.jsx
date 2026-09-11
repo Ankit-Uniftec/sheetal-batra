@@ -27,6 +27,7 @@ import {
 } from "recharts";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import { startOrderMode } from "../../utils/orderMode";
+import OverrideHistory from "../../components/OverrideHistory";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -1823,6 +1824,7 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "walkins" ? "active" : ""}`} onClick={() => { setActiveTab("walkins"); setShowSidebar(false); }}>Walk-Ins</button>
                         <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
                         <button className={`admin-nav-item ${activeTab === "sa_targets" ? "active" : ""}`} onClick={() => { setActiveTab("sa_targets"); setShowSidebar(false); }}>SA Targets</button>
+                        <button className={`admin-nav-item ${activeTab === "override_log" ? "active" : ""}`} onClick={() => { setActiveTab("override_log"); setShowSidebar(false); }}>Override Log</button>
                         <button className={`admin-nav-item ${activeTab === "comms_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("comms_approvals"); setShowSidebar(false); }}>
                             Comms Approvals
                             {(() => {
@@ -3597,6 +3599,15 @@ export default function AdminDashboard() {
                         </div>
                         );
                     })()}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* OVERRIDE LOG — audit of every production override    */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "override_log" && (
+                        <div className="admin-clients-tab">
+                            <OverrideHistory />
+                        </div>
+                    )}
 
                     {/* ═══════════════════════════════════════════════════ */}
                     {/* SA TARGETS TAB — per-SA monthly target editor        */}

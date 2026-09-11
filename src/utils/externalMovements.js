@@ -34,13 +34,37 @@ function decorate(row) {
     };
 }
 
+// A re-send: this component has been to this vendor before. Derived from the
+// rows themselves (same component_id + vendor_id, earlier created_at) so it can
+// never disagree with the movement history. repeat_reason is only captured on
+// such a row, so an existing reason also marks one (covers a movement whose
+// earlier trip is outside the fetched scope).
+export function markRepeats(rows) {
+    // Walk oldest-first so the FIRST trip to a vendor is never flagged, but
+    // build the flags into a map — the caller's own ordering must survive
+    // (fetchAllMovements returns newest-first and its callers rely on that).
+    const seen = new Set();
+    const repeatIds = new Set();
+    [...rows]
+        .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+        .forEach((r) => {
+            const key = `${r.component_id || ""}|${r.vendor_id || ""}`;
+            if (!!r.component_id && !!r.vendor_id && seen.has(key)) repeatIds.add(r.id);
+            seen.add(key);
+        });
+    return rows.map((r) => ({ ...r, isRepeat: !!r.repeat_reason || repeatIds.has(r.id) }));
+}
+
 // Fetch every external movement, decorated and sorted (still-out first, then
 // overdue, then most recently created). PM sees all; a channel-scoped caller
 // passes channel to keep only its own side: "retail" drops B2B movements,
 // "b2b" keeps only B2B. (orderIds still works for an explicit id-scoped view.)
 export async function fetchExternalMovements({ orderIds, channel } = {}) {
     try {
-        let rows = (await fetchAllMovements()) || [];
+        // Repeats are marked over the FULL set, before any scoping — a first
+        // trip that a channel/order filter drops must still count, or its
+        // re-send would look like a first visit.
+        let rows = markRepeats((await fetchAllMovements()) || []);
         if (Array.isArray(orderIds)) {
             if (orderIds.length === 0) return [];
             const idSet = new Set(orderIds);
@@ -69,7 +93,21 @@ export function externalMovementSummary(rows = []) {
         out: rows.filter((r) => r.isOut).length,
         overdue: rows.filter((r) => r.overdue).length,
         returned: rows.filter((r) => r.status === "returned").length,
+        repeat: rows.filter((r) => r.isRepeat).length,
     };
+}
+
+// Vendors ranked by how many re-sends they caused — the rework leaderboard.
+// Busiest first; vendors with no repeat are omitted.
+export function repeatVendorCounts(rows = []) {
+    const counts = {};
+    rows.forEach((r) => {
+        if (!r.isRepeat || !r.vendor_name) return;
+        counts[r.vendor_name] = (counts[r.vendor_name] || 0) + 1;
+    });
+    return Object.entries(counts)
+        .map(([vendor, count]) => ({ vendor, count }))
+        .sort((a, b) => b.count - a.count);
 }
 
 // Per-stage counts (by the stage a piece went OUT for), busiest first.
@@ -96,7 +134,8 @@ export function externalMovementVendors(rows = []) {
 //                   (exit_scan_at). A piece still awaiting scan-out has no
 //                   exit_scan_at, so it falls outside any bounded range — which
 //                   is correct: it has not gone out yet.
-export function filterExternalMovements(rows = [], { search, vendor, componentType, status, overdueOnly, stage, from, to } = {}) {
+//   repeatOnly    : only re-sends to a vendor the piece had already been to
+export function filterExternalMovements(rows = [], { search, vendor, componentType, status, overdueOnly, repeatOnly, stage, from, to } = {}) {
     const q = (search || "").trim().toLowerCase();
     const fromT = from ? new Date(from + "T00:00:00").getTime() : null;
     const toT = to ? new Date(to + "T23:59:59.999").getTime() : null;
@@ -106,6 +145,7 @@ export function filterExternalMovements(rows = [], { search, vendor, componentTy
         if (componentType && r.component_type !== componentType) return false;
         if (status && r.status !== status) return false;
         if (overdueOnly && !r.overdue) return false;
+        if (repeatOnly && !r.isRepeat) return false;
         if (fromT || toT) {
             if (!r.exit_scan_at) return false;
             const t = new Date(r.exit_scan_at).getTime();
@@ -113,7 +153,7 @@ export function filterExternalMovements(rows = [], { search, vendor, componentTy
             if (toT && t > toT) return false;
         }
         if (q) {
-            const hay = `${r.order_no || ""} ${r.barcode || ""}`.toLowerCase();
+            const hay = `${r.order_no || ""} ${r.barcode || ""} ${r.repeat_reason || ""}`.toLowerCase();
             if (!hay.includes(q)) return false;
         }
         return true;
@@ -135,6 +175,8 @@ export function externalMovementsToCsvRows(rows = [], { formatDate } = {}) {
         "Vendor Location": r.vendor_location || "",
         "Stage (out for)": r.stageLabel || "",
         "Status": STATUS[r.status] || r.status || "",
+        "Repeat Visit": r.isRepeat ? "Yes" : "",
+        "Repeat Reason": r.repeat_reason || "",
         "Overdue (days)": r.overdue ? r.daysOverdue : "",
         "Sent Out": r.exit_scan_at ? fmt(r.exit_scan_at) : "",
         "Return By": r.return_date ? fmt(r.return_date) : "",

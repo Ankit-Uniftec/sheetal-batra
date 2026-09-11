@@ -7,6 +7,7 @@ import {
     externalMovementStages,
     filterExternalMovements,
     externalMovementsToCsvRows,
+    repeatVendorCounts,
 } from "../utils/externalMovements";
 import { buildCsv, downloadCsv } from "./AddProduct/csvHelpers";
 import { usePeriodFilter } from "./PeriodFilter";
@@ -14,7 +15,8 @@ import "./ExternalVendorsPanel.css";
 
 const CSV_HEADERS = [
     "Barcode", "Order No", "Component", "Vendor", "Vendor Location",
-    "Stage (out for)", "Status", "Overdue (days)", "Sent Out", "Return By", "Returned", "Ordered",
+    "Stage (out for)", "Status", "Repeat Visit", "Repeat Reason",
+    "Overdue (days)", "Sent Out", "Return By", "Returned", "Ordered",
 ];
 
 const PAGE_SIZE = 20;
@@ -30,17 +32,23 @@ const TYPE_LABEL = { top: "Top", bottom: "Bottom", dupatta: "Dupatta", extra: "E
  * currently-out / returned / awaiting scan-out. Self-contained client-side
  * filtering. Reusable across the Production Manager and Production Head dashboards.
  *
- * @param {object[]} rows           from fetchExternalMovements
+ * @param {object[]} rows                from fetchExternalMovements
  * @param {boolean}  loading
- * @param {function} [onOrderClick] (orderId, orderNo) => void — jump to the order
+ * @param {function} [onOrderClick]      (orderId, orderNo) => void — jump to the order
+ * @param {boolean}  [initialRepeatOnly] open with the repeat-visit filter on
+ *                                       (the Overview "Vendor Rework" card drills in this way)
  */
-export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick }) {
+export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick, initialRepeatOnly = false }) {
     const [search, setSearch] = useState("");
     const [vendor, setVendor] = useState("");
     const [componentType, setComponentType] = useState("");
     const [stage, setStage] = useState("");
     const [status, setStatus] = useState(""); // "" = all statuses (full history)
     const [overdueOnly, setOverdueOnly] = useState(false);
+    const [repeatOnly, setRepeatOnly] = useState(initialRepeatOnly);
+    // Re-apply when the caller drills in again (the panel may already be mounted,
+    // so the initial state alone wouldn't pick up a second click of the card).
+    useEffect(() => { if (initialRepeatOnly) setRepeatOnly(true); }, [initialRepeatOnly]);
     // Sent-out period (exit_scan_at) — shared PeriodFilter (select).
     const {
         control: periodControl, timeline: periodTimeline,
@@ -52,26 +60,28 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
     // "most out for" insight chip.
     const stageCounts = useMemo(() => externalMovementStages(rows), [rows]);
     const topStage = stageCounts[0] || null;
+    // Vendor causing the most re-sends — the rework the house is absorbing.
+    const topRepeatVendor = useMemo(() => repeatVendorCounts(rows)[0] || null, [rows]);
     const filtered = useMemo(() => {
         const periodRows = periodRange ? rows.filter((r) => r.exit_scan_at && inPeriod(r.exit_scan_at)) : rows;
-        return filterExternalMovements(periodRows, { search, vendor, componentType, status, overdueOnly, stage });
-    }, [rows, search, vendor, componentType, status, overdueOnly, stage, periodRange, inPeriod]);
+        return filterExternalMovements(periodRows, { search, vendor, componentType, status, overdueOnly, repeatOnly, stage });
+    }, [rows, search, vendor, componentType, status, overdueOnly, repeatOnly, stage, periodRange, inPeriod]);
     // Summary reflects the whole dataset (so the counts don't collapse to the
     // filtered subset) — same intent as the other panels' summary strips.
     const summary = useMemo(() => externalMovementSummary(rows), [rows]);
 
     // Page within the filtered set; filter changes reset to page 1.
     const [page, setPage] = useState(1);
-    useEffect(() => { setPage(1); }, [rows, search, vendor, componentType, status, overdueOnly, stage, periodRange]);
+    useEffect(() => { setPage(1); }, [rows, search, vendor, componentType, status, overdueOnly, repeatOnly, stage, periodRange]);
     const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
     const pageRows = useMemo(
         () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
         [filtered, page]
     );
 
-    const hasFilters = search || vendor || componentType || status || overdueOnly || stage || periodTimeline !== "all";
+    const hasFilters = search || vendor || componentType || status || overdueOnly || repeatOnly || stage || periodTimeline !== "all";
     const clear = () => {
-        setSearch(""); setVendor(""); setComponentType(""); setStatus(""); setOverdueOnly(false); setStage("");
+        setSearch(""); setVendor(""); setComponentType(""); setStatus(""); setOverdueOnly(false); setRepeatOnly(false); setStage("");
         periodProps.setTimeline("all"); periodProps.setCustomFrom(""); periodProps.setCustomTo("");
     };
 
@@ -117,6 +127,8 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
                     <option value="configured">Awaiting scan-out</option>
                 </select>
                 <label className="ev-check"><input type="checkbox" checked={overdueOnly} onChange={toggleOverdue} /> Overdue only</label>
+                {/* Orthogonal to status/overdue — a re-send can be out, returned or late. */}
+                <label className="ev-check"><input type="checkbox" checked={repeatOnly} onChange={() => setRepeatOnly((p) => !p)} /> Repeat visits only</label>
                 {/* Sent-out period (filters on exit_scan_at). */}
                 {periodControl}
                 {hasFilters && <button className="ev-clear" onClick={clear}>Clear</button>}
@@ -129,6 +141,12 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
                 <button type="button" className={`ev-sum-item ev-sum-out ${status === "exited" ? "ev-sum-active" : ""}`} onClick={() => toggleStatus("exited")}><b>{summary.out}</b> out at vendors</button>
                 <button type="button" className={`ev-sum-item ev-sum-overdue ${overdueOnly ? "ev-sum-active" : ""}`} onClick={toggleOverdue}><b>{summary.overdue}</b> overdue</button>
                 <button type="button" className={`ev-sum-item ev-sum-returned ${status === "returned" ? "ev-sum-active" : ""}`} onClick={() => toggleStatus("returned")}><b>{summary.returned}</b> returned</button>
+                <button
+                    type="button"
+                    className={`ev-sum-item ev-sum-repeat ${repeatOnly ? "ev-sum-active" : ""}`}
+                    title="Trips back to a vendor the piece had already been to — rework. Click to filter."
+                    onClick={() => setRepeatOnly((p) => !p)}
+                ><b>{summary.repeat}</b> repeat visits</button>
                 <button type="button" className={`ev-sum-item ${!status && !overdueOnly ? "ev-sum-active" : ""}`} onClick={clear}><b>{summary.total}</b> total trips</button>
                 {topStage && (
                     <button
@@ -138,6 +156,16 @@ export default function ExternalVendorsPanel({ rows = [], loading, onOrderClick 
                         onClick={() => setStage(stage === topStage.stage ? "" : topStage.stage)}
                     >
                         Most out for: <b>{topStage.stage}</b> ({topStage.count})
+                    </button>
+                )}
+                {topRepeatVendor && (
+                    <button
+                        type="button"
+                        className={`ev-sum-item ev-sum-repeat ${vendor === topRepeatVendor.vendor ? "ev-sum-active" : ""}`}
+                        title="The vendor pieces are sent back to most — click to filter to that vendor"
+                        onClick={() => setVendor(vendor === topRepeatVendor.vendor ? "" : topRepeatVendor.vendor)}
+                    >
+                        Most rework: <b>{topRepeatVendor.vendor}</b> ({topRepeatVendor.count})
                     </button>
                 )}
             </div>
@@ -174,6 +202,7 @@ function ExternalVendorsList({ rows, loading, emptyText, onOrderClick }) {
                         {m.order_no && <span className="ev-order">{m.order_no}</span>}
                         {m.component_type && <span className="ev-type">{TYPE_LABEL[m.component_type] || m.component_type}</span>}
                         <span className={`ev-status ev-status-${m.status}`}>{STATUS_LABEL[m.status] || m.status}</span>
+                        {m.isRepeat && <span className="ev-repeat" title="Sent back to a vendor this piece had already been to">Repeat visit</span>}
                         {m.overdue && <span className="ev-overdue">{m.daysOverdue} day{m.daysOverdue === 1 ? "" : "s"} overdue</span>}
                     </div>
 
@@ -181,6 +210,8 @@ function ExternalVendorsList({ rows, loading, emptyText, onOrderClick }) {
                         <span className="ev-vendor">🏭 {m.vendor_name || "—"}{m.vendor_location ? ` · ${m.vendor_location}` : ""}</span>
                         <span className="ev-stage">For: {m.stageLabel}</span>
                     </div>
+
+                    {m.repeat_reason && <div className="ev-reason">↩ Sent back: {m.repeat_reason}</div>}
 
                     <div className="ev-dates">
                         <span>Sent out: <b>{m.exit_scan_at ? formatDate(m.exit_scan_at) : "—"}</b></span>

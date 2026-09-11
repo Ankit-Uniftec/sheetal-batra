@@ -230,6 +230,22 @@ const ProductionOverrides = ({ currentUserEmail }) => {
         });
 
         if (result.success) {
+          // Audit it like the other three. Without this the reason lived ONLY in
+          // the movement-history notes, so a vendor return was invisible to any
+          // override report — the one override type that bypasses a physical
+          // security scan is the one most worth being able to review.
+          await recordOverride({
+            componentId: component.id,
+            orderId: component.order_id,
+            orderNo: component.order_no,
+            barcode: component.barcode,
+            overrideType: "vendor_return",
+            fromStage: component.current_stage,
+            toStage: component.current_stage,
+            reason: overrideReason.trim(),
+            overriddenBy: currentUserEmail,
+          });
+
           setActionResult({ success: true, message: result.message || "Returned from vendor." });
 
           const updated = await fetchComponentByBarcode(component.barcode);
