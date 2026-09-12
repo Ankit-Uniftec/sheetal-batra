@@ -49,3 +49,36 @@ export const isRevenueOrder = (o) => {
  */
 export const orderRevenueAmount = (o) =>
   Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
+
+// ============================================================
+// SALE vs REVENUE — two different questions.
+//
+// isRevenueOrder answers "did this bring money in?" and is the right filter
+// for any SUM of rupees.
+//
+// isSaleOrder answers "was this a sale at all?" and is the right filter for
+// any COUNT of orders, or for an average with a count in the denominator.
+// Two kinds of row are real work but are not sales:
+//
+//   - Internal stock orders (SB-STOCK-, SB-B2BSTOCK-). Moving garments onto a
+//     shelf, not selling them. Every one carries 0 in all three money columns.
+//   - Alterations (SB-…-A child orders). Rework on a garment already sold and
+//     already counted; also 0 in all three money columns.
+//
+// Because both are 0-value, they never moved a revenue TOTAL — which is why
+// this went unnoticed. What they did move is every COUNT and therefore every
+// average: 10 real sales worth 10,00,000 plus 5 stock movements reported an
+// AOV of 66,667 instead of 1,00,000. Order counts read high, AOV read low.
+// ============================================================
+
+/**
+ * Was this row an actual sale to a customer?
+ * Use for order COUNTS and for the denominator of any average.
+ * Use isRevenueOrder (not this) when summing rupees.
+ */
+export const isSaleOrder = (o) => {
+  if (!isRevenueOrder(o)) return false;
+  if (o.is_stock_order === true) return false;
+  if (o.is_alteration === true) return false;
+  return true;
+};

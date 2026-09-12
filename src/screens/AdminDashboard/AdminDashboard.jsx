@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isRevenueOrder, isSaleOrder } from "../../utils/revenue";
 import "./AdminDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
@@ -27,6 +27,7 @@ import {
 } from "recharts";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import { startOrderMode } from "../../utils/orderMode";
+import OverrideHistory from "../../components/OverrideHistory";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -59,6 +60,20 @@ const COMPARISON_OPTIONS = [
 
 const ITEMS_PER_PAGE = 15;
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+
+// ── Day bucketing ────────────────────────────────────────────────────────────
+// Keys carry the YEAR (buckets keyed on "D/M" merged Jan 2025 into Jan 2026 on
+// one bar) and are built from LOCAL parts, not toISOString(), which is UTC and
+// pushed late-evening IST orders onto the previous day.
+const two = (n) => String(n).padStart(2, "0");
+const dayKey = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+};
+const dayLabel = (ts) => {
+    const d = new Date(ts);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+};
 
 // Chart colors
 const CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B", "#DAA520", "#B8860B", "#CD853F", "#DEB887"];
@@ -651,23 +666,33 @@ export default function AdminDashboard() {
     // Dashboard Stats (ALL orders: store + website/LXRTS + B2B). Comms orders are excluded — they live in the Comms Approvals tab.
     const dashboardStats = useMemo(() => {
         const comparisonRange = comparisonPeriodRange(periodRangeValue, comparison);
-        const currentOrders = nonCommsOrders.filter(o => inPeriod(o.created_at));
-        const previousOrders = comparisonRange ? nonCommsOrders.filter(o => inRange(comparisonRange, o.created_at)) : [];
+        const allCurrent = nonCommsOrders.filter(o => inPeriod(o.created_at));
+        const allPrevious = comparisonRange ? nonCommsOrders.filter(o => inRange(comparisonRange, o.created_at)) : [];
+        // Counts run over SALES: internal stock movements and alterations are
+        // 0-value, so they never moved these revenue totals but did inflate
+        // every count and deflate AOV. The full slices stay for the cancelled
+        // cards, which count rows isSaleOrder excludes.
+        const currentOrders = allCurrent.filter(isSaleOrder);
+        const previousOrders = allPrevious.filter(isSaleOrder);
 
-        const totalRevenue = currentOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
-        const netSbRev = totalNetSbRevenue(currentOrders.filter(isRevenueOrder));
+        // Gross (what was billed) and net (after exhibition commission) are a
+        // deliberate pair of cards — keep them distinct.
+        const totalRevenue = currentOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const netSbRev = totalNetSbRevenue(currentOrders);
         const totalOrders = currentOrders.length;
-        const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
+        const pendingOrders = currentOrders.filter(o => o.status !== "completed" && o.status !== "delivered").length;
         const preparedOrders = currentOrders.filter(o => o.status === "completed").length;
         const deliveredOrders = currentOrders.filter(o => o.status === "delivered").length;
-        const cancelledOrders = currentOrders.filter(o => o.status === "cancelled").length;
+        // A cancelled stock movement is not a lost sale.
+        const isCancelledSale = (o) => !isRevenueOrder(o) && !o.is_stock_order && !o.is_alteration;
+        const cancelledOrders = allCurrent.filter(isCancelledSale).length;
 
-        const prevRevenue = previousOrders.reduce((sum, o) => sum + (isRevenueOrder(o) ? Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) : 0), 0);
+        const prevRevenue = previousOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
         const prevTotalOrders = previousOrders.length;
-        const prevPendingOrders = previousOrders.filter(o => o.status !== "completed" && o.status !== "delivered" && o.status !== "cancelled").length;
+        const prevPendingOrders = previousOrders.filter(o => o.status !== "completed" && o.status !== "delivered").length;
         const prevPreparedOrders = previousOrders.filter(o => o.status === "completed").length;
         const prevDeliveredOrders = previousOrders.filter(o => o.status === "delivered").length;
-        const prevCancelledOrders = previousOrders.filter(o => o.status === "cancelled").length;
+        const prevCancelledOrders = allPrevious.filter(isCancelledSale).length;
 
         return {
             totalRevenue, netSbRev, totalOrders, pendingOrders, preparedOrders, deliveredOrders, cancelledOrders,
@@ -1222,9 +1247,13 @@ export default function AdminDashboard() {
     // NEW: ENHANCED DASHBOARD STATS (Channel breakdown, AOV)
     // ═══════════════════════════════════════════════════════════
     const enhancedDashboardStats = useMemo(() => {
-        const validOrders = nonCommsOrders.filter(o => inPeriod(o.created_at));
+        // Had no revenue guard at all — cancelled, returned and refunded orders
+        // counted as sales here, so channel mix and AOV ran ahead of the cards
+        // above for the same period. isSaleOrder also drops the 0-value stock
+        // movements and alterations that were deflating AOV.
+        const validOrders = nonCommsOrders.filter(o => inPeriod(o.created_at) && isSaleOrder(o));
 
-        const totalRevenue = validOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
+        const totalRevenue = totalNetSbRevenue(validOrders);
         const totalOrders = validOrders.length;
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
         const totalItems = validOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
@@ -1234,7 +1263,7 @@ export default function AdminDashboard() {
         validOrders.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            channelMap[ch].revenue += totalNetSbRevenue([o]);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -1252,13 +1281,14 @@ export default function AdminDashboard() {
     // NEW: ORDER VALUE TREND (Daily line chart)
     // ═══════════════════════════════════════════════════════════
     const orderValueTrend = useMemo(() => {
-        const validOrders = nonCommsOrders.filter(o => inPeriod(o.created_at));
+        // Sales only — this chart's point is the daily AOV line, which a
+        // 0-value stock movement drags down on whatever day it landed.
+        const validOrders = nonCommsOrders.filter(o => inPeriod(o.created_at) && isSaleOrder(o));
         const buckets = {};
         validOrders.forEach(o => {
-            const d = new Date(o.created_at);
-            const key = `${d.getDate()}/${d.getMonth() + 1}`;
-            if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
-            buckets[key].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+            const key = dayKey(o.created_at);
+            if (!buckets[key]) buckets[key] = { date: dayLabel(o.created_at), fullDate: key, revenue: 0, orders: 0 };
+            buckets[key].revenue += totalNetSbRevenue([o]);
             buckets[key].orders += 1;
         });
         return Object.values(buckets)
@@ -1330,7 +1360,10 @@ export default function AdminDashboard() {
     // NEW: CLIENT ANALYTICS
     // ═══════════════════════════════════════════════════════════
     const clientAnalytics = useMemo(() => {
-        const allOrders = nonCommsOrders;
+        // Sales only: a cancelled order used to keep inflating a client's
+        // lifetime spend, and an alteration counted as a second purchase —
+        // promoting a one-time buyer into the "Repeat (2-3)" bucket.
+        const allOrders = nonCommsOrders.filter(isSaleOrder);
         const clientMap = {};
         const now = new Date();
         const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate());
@@ -1447,7 +1480,10 @@ export default function AdminDashboard() {
         // stock orders ("Internal Stock" is not a real client; comms already
         // excluded via nonCommsOrders).
         nonCommsOrders.forEach((o) => {
-            if (o.is_b2b || o.is_stock_order) return;
+            // isSaleOrder covers stock AND alterations (and cancellations),
+            // which the old is_stock_order-only check let through — an
+            // alteration was counting as another order against the client.
+            if (o.is_b2b || !isSaleOrder(o)) return;
             if (o.user_id) {
                 addToIndex(`uid:${o.user_id}`, o);
             } else {
@@ -1567,7 +1603,9 @@ export default function AdminDashboard() {
     // NEW: B2B STATS
     // ═══════════════════════════════════════════════════════════
     const b2bStats = useMemo(() => {
-        const allB2bOrders = nonCommsOrders.filter(o => getOrderChannel(o) === "B2B");
+        // Real B2B sales only: a B2BSTOCK movement is an internal transfer, not
+        // a B2B order, and a cancelled one is not account volume.
+        const allB2bOrders = nonCommsOrders.filter(o => getOrderChannel(o) === "B2B" && isSaleOrder(o));
         let currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
 
         // Merchandiser filter
@@ -1823,6 +1861,7 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "walkins" ? "active" : ""}`} onClick={() => { setActiveTab("walkins"); setShowSidebar(false); }}>Walk-Ins</button>
                         <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
                         <button className={`admin-nav-item ${activeTab === "sa_targets" ? "active" : ""}`} onClick={() => { setActiveTab("sa_targets"); setShowSidebar(false); }}>SA Targets</button>
+                        <button className={`admin-nav-item ${activeTab === "override_log" ? "active" : ""}`} onClick={() => { setActiveTab("override_log"); setShowSidebar(false); }}>Override Log</button>
                         <button className={`admin-nav-item ${activeTab === "comms_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("comms_approvals"); setShowSidebar(false); }}>
                             Comms Approvals
                             {(() => {
@@ -3400,15 +3439,24 @@ export default function AdminDashboard() {
                     {activeTab === "sales_team" && (() => {
                         // Roles eligible for stock-order permission. Matches the
                         // dashboards that have a "Stock Order" sidebar item wired
-                        // up — SA (salesperson + sa_services), Admin, GM, and
-                        // Assistant CMO. Other roles don't have the button yet,
-                        // so listing them here would be misleading.
+                        // up — SA (salesperson + sa_services), Admin, GM,
+                        // Assistant CMO and Store Manager. Other roles don't have
+                        // the button yet, so listing them here would be
+                        // misleading: the toggle would save but do nothing.
+                        //
+                        // KEEP IN SYNC with the dashboards themselves. A role
+                        // added here without the matching sidebar item grants a
+                        // permission its owner can never use; a dashboard that
+                        // gains the item but isn't added here has no way to be
+                        // granted the permission at all (which is exactly how
+                        // store_manager was stuck).
                         const STOCK_ELIGIBLE_ROLES = new Set([
                             "salesperson",
                             "sa_services",
                             "admin",
                             "gm",
                             "assistant_cmo",
+                            "store_manager",
                         ]);
                         // Roles eligible for B2B stock-order permission — only the
                         // merchandiser dashboard has the "B2B Stock Order" item
@@ -3588,6 +3636,15 @@ export default function AdminDashboard() {
                         </div>
                         );
                     })()}
+
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {/* OVERRIDE LOG — audit of every production override    */}
+                    {/* ═══════════════════════════════════════════════════ */}
+                    {activeTab === "override_log" && (
+                        <div className="admin-clients-tab">
+                            <OverrideHistory />
+                        </div>
+                    )}
 
                     {/* ═══════════════════════════════════════════════════ */}
                     {/* SA TARGETS TAB — per-SA monthly target editor        */}

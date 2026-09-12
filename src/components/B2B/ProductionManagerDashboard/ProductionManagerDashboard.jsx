@@ -8,6 +8,7 @@ import { isRevenueOrder } from "../../../utils/revenue";
 import { usePopup } from "../../../components/Popup";
 import SearchByDropdown from "../../../components/SearchByDropdown";
 import ProductionOverrides from "../../../components/ProductionOverrides";
+import OverrideHistory from "../../../components/OverrideHistory";
 import VendorRequest from "../../../components/VendorRequest";
 import ReplacementApprovals from "../../../components/ReplacementApprovals";
 import StageCountCards from "../../../components/StageCountCards";
@@ -17,7 +18,7 @@ import { runManualCompleteWithOverride, describeBlocking } from "../../../utils/
 import ReJourneyPanel from "../../../components/ReJourneyPanel";
 import { fetchReJourneys } from "../../../utils/reJourneys";
 import ExternalVendorsPanel from "../../../components/ExternalVendorsPanel";
-import { fetchExternalMovements } from "../../../utils/externalMovements";
+import { fetchExternalMovements, repeatVendorCounts } from "../../../utils/externalMovements";
 // The PM works to the WAREHOUSE deadline (T-2), the same date the warehouse
 // dashboard and the warehouse PDF show — not the customer's delivery date.
 import { getWarehouseDate, getWarehouseDateObj } from "../../../utils/warehouseDate";
@@ -284,6 +285,8 @@ export default function ProductionManagerDashboard() {
     const [reJourneysLoading, setReJourneysLoading] = useState(false);
     const [extMovements, setExtMovements] = useState([]);
     const [extMovementsLoading, setExtMovementsLoading] = useState(false);
+    // Set by the Overview "Vendor Rework" card so the panel opens pre-filtered.
+    const [extRepeatOnly, setExtRepeatOnly] = useState(false);
     // Which product to force-complete, for multi-product orders.
     // { order, products:[itemIndex] } — null when closed.
     const [completePicker, setCompletePicker] = useState(null);
@@ -483,7 +486,7 @@ export default function ProductionManagerDashboard() {
             while (!cDone) {
                 const { data: cData, error: cErr } = await supabase
                     .from("order_components")
-                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts, is_rework, is_active")
+                    .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts, is_rework, is_active, channel_key")
                     .order("created_at", { ascending: false })
                     .range(cFrom, cFrom + PAGE_SIZE - 1);
                 if (cErr) {
@@ -562,9 +565,11 @@ export default function ProductionManagerDashboard() {
     }, [activeTab]);
 
     // Load external vendor movements when the Vendors → At External Vendors
-    // sub-tab opens.
+    // sub-tab opens, and on Overview (the Vendor Rework card needs the counts).
+    // Still lazy — never fetched on the other dozen tabs.
     useEffect(() => {
-        if (!(activeTab === "vendors" && subTab === "external")) return;
+        const needed = activeTab === "overview" || (activeTab === "vendors" && subTab === "external");
+        if (!needed) return;
         let cancelled = false;
         (async () => {
             setExtMovementsLoading(true);
@@ -708,6 +713,13 @@ export default function ProductionManagerDashboard() {
         setStatusTab(which === "open" ? "unfulfilled" : "completed");
         setFilters(prev => ({ ...prev, delayedOnly: which === "open", orderIdSet: null, orderIdSetLabel: "" }));
         setActiveTab("orders");
+    };
+
+    // Vendor Rework card → the vendor panel, opened on the repeat-visit filter.
+    const handleVendorReworkClick = () => {
+        setExtRepeatOnly(true);
+        setSubTab("external");
+        setActiveTab("vendors");
     };
 
     const handleDisposedClick = () => {
@@ -1141,6 +1153,23 @@ export default function ProductionManagerDashboard() {
         () => disposals.filter((r) => inOverviewPeriod(r.created_at)).length,
         [disposals, inOverviewPeriod]
     );
+
+    // Vendor rework: trips BACK to a vendor the piece had already been to.
+    // Period-scoped on created_at like the other overview cards (a movement is
+    // configured then scanned out later, so created_at is when it was decided).
+    // isRepeat is already resolved over the FULL set by fetchExternalMovements,
+    // so scoping here cannot mis-flag a re-send whose first trip is older.
+    const vendorRework = useMemo(() => {
+        const inPeriod = extMovements.filter((m) => inOverviewPeriod(m.created_at));
+        const repeats = inPeriod.filter((m) => m.isRepeat);
+        const worst = repeatVendorCounts(repeats)[0] || null;
+        return {
+            count: repeats.length,
+            total: inPeriod.length,
+            pct: inPeriod.length ? Math.round((repeats.length / inPeriod.length) * 100) : 0,
+            worst,
+        };
+    }, [extMovements, inOverviewPeriod]);
     // Orders (all-time, not period-scoped) that have ever had a piece disposed —
     // the set the "Disposed" card drills the order list into.
     const disposedOrderIds = useMemo(
@@ -2304,7 +2333,8 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "rejourneys" ? "active" : ""}`} onClick={() => { setActiveTab("rejourneys"); setShowSidebar(false); }}>Re-journeys</a>
                             <a className={`pm-menu-item ${activeTab === "delivery_report" ? "active" : ""}`} onClick={() => { setActiveTab("delivery_report"); setSubTab("dispatch"); setShowSidebar(false); }}>Delivery Report</a>
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
-                            <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setSubTab("directory"); setShowSidebar(false); }}>Vendors</a>
+                            <a className={`pm-menu-item ${activeTab === "override_log" ? "active" : ""}`} onClick={() => { setActiveTab("override_log"); setShowSidebar(false); }}>Override Log</a>
+                            <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setSubTab("directory"); setExtRepeatOnly(false); setShowSidebar(false); }}>Vendors</a>
                             <a className={`pm-menu-item ${activeTab === "replacements" ? "active" : ""}`} onClick={() => { setActiveTab("replacements"); setShowSidebar(false); }}>Replacement Approvals</a>
                             <a className={`pm-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
@@ -2388,6 +2418,18 @@ export default function ProductionManagerDashboard() {
                                 </div>
                                 <div className="pm-stats-row-3">
                                     <StatCard title="Dispatch Backlog" value={productionMetricsOv.dispatchBacklog.pending} subtitle={productionMetricsOv.dispatchBacklog.pending > 0 ? `${productionMetricsOv.dispatchBacklog.overdue} overdue ${"\u00B7"} ready to dispatch` : "Nothing awaiting dispatch"} highlight={productionMetricsOv.dispatchBacklog.overdue > 0} icon={Icons.truck} onClick={productionMetricsOv.dispatchBacklog.pending > 0 ? handleDispatchBacklogClick : undefined} />
+                                    {/* Vendor rework \u2014 pieces sent BACK to a vendor they had already been to.
+                                        Clicks through to the vendor panel, pre-filtered to those trips. */}
+                                    <StatCard
+                                        title="Vendor Rework"
+                                        value={vendorRework.count}
+                                        subtitle={vendorRework.count > 0
+                                            ? `${vendorRework.pct}% of ${vendorRework.total} trips ${"\u00B7"} worst: ${vendorRework.worst.vendor} (${vendorRework.worst.count})`
+                                            : vendorRework.total > 0 ? `No re-sends across ${vendorRework.total} trips` : "No vendor movements"}
+                                        highlight={vendorRework.count > 0}
+                                        icon={Icons.refresh}
+                                        onClick={vendorRework.count > 0 ? handleVendorReworkClick : undefined}
+                                    />
                                 </div>
                                 <div className="pm-channel-card">
                                     <p className="pm-card-title">Orders by Channel</p>
@@ -4377,17 +4419,23 @@ export default function ProductionManagerDashboard() {
                                 <ProductionOverrides currentUserEmail={currentUserEmail} />
                             </div>
                         )}
+                        {/* ===== OVERRIDE LOG — the audit trail of what was overridden ===== */}
+                        {activeTab === "override_log" && (
+                            <div className="pm-orders-tab">
+                                <OverrideHistory />
+                            </div>
+                        )}
                         {/* ===== VENDORS (Directory + At External Vendors sub-tabs) ===== */}
                         {activeTab === "vendors" && (
                             <div className="pm-orders-tab">
                                 <div className="pm-subtab-bar">
                                     <button className={`pm-subtab ${subTab === "directory" ? "active" : ""}`} onClick={() => setSubTab("directory")}>Vendor Directory</button>
-                                    <button className={`pm-subtab ${subTab === "external" ? "active" : ""}`} onClick={() => setSubTab("external")}>At External Vendors</button>
+                                    <button className={`pm-subtab ${subTab === "external" ? "active" : ""}`} onClick={() => { setExtRepeatOnly(false); setSubTab("external"); }}>At External Vendors</button>
                                 </div>
                                 {subTab === "external" ? (
                                     <>
                                         <p className="pm-card-title" style={{ margin: "0 0 14px 2px", color: "#8B7355" }}>At External Vendors — Items Out & History (All Channels)</p>
-                                        <ExternalVendorsPanel rows={extMovements} loading={extMovementsLoading} onOrderClick={goToOrder} />
+                                        <ExternalVendorsPanel rows={extMovements} loading={extMovementsLoading} onOrderClick={goToOrder} initialRepeatOnly={extRepeatOnly} />
                                     </>
                                 ) : (
                                     <VendorRequest currentUserEmail={currentUserEmail} />

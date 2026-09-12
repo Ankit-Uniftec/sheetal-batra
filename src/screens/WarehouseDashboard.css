@@ -178,8 +178,15 @@
 }
 
 /* ========== ORDERS SECTION ========== */
+/* The cap keeps the order LIST readable — a table stretched to 2000px is worse
+   than one at 1000px. It is wrong for grid/card layouts, which should use the
+   width they are given; those opt out with .wd-orders-section--wide. */
 .wd-orders-section {
   max-width: 1000px;
+}
+
+.wd-orders-section--wide {
+  max-width: none;
 }
 
 .wd-orders-header {

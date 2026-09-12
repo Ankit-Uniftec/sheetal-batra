@@ -1,0 +1,177 @@
+/* OverrideHistory — shared by the PM, Admin and GM dashboards, so it carries
+   its own surface styling rather than inheriting whichever dashboard hosts it. */
+
+.ovh-wrap {
+  width: 100%;
+}
+
+.ovh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.ovh-title {
+  font-family: "Athleas", serif;
+  font-size: 22px;
+  color: #d5b85a;
+  margin: 0;
+}
+
+.ovh-count {
+  font-size: 13px;
+  color: #7a6f5f;
+  background: #faf6ee;
+  border: 1px solid #eee6d8;
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+
+.ovh-note {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: #8a7f6d;
+  line-height: 1.5;
+}
+
+.ovh-muted {
+  color: #8a7f6d;
+  font-size: 14px;
+  padding: 16px 2px;
+}
+
+.ovh-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.ovh-search {
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #e6ded0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  outline: none;
+  background: #fff;
+}
+
+.ovh-search:focus,
+.ovh-select:focus { border-color: #d5b85a; }
+
+.ovh-select {
+  padding: 9px 12px;
+  border: 1px solid #e6ded0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  background: #fff;
+  outline: none;
+  cursor: pointer;
+}
+
+/* The table can outgrow a narrow dashboard column; it scrolls inside its own
+   box rather than pushing the page sideways. */
+.ovh-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #eee6d8;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ovh-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 900px;
+}
+
+.ovh-table th {
+  text-align: left;
+  padding: 12px 14px;
+  background: #faf6ee;
+  border-bottom: 1px solid #eee6d8;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a7f6d;
+  white-space: nowrap;
+}
+
+.ovh-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f4efe5;
+  color: #3f3a31;
+  vertical-align: top;
+}
+
+.ovh-table tbody tr:last-child td { border-bottom: none; }
+.ovh-table tbody tr:hover { background: #fffdf8; }
+
+.ovh-when {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: #5c5346;
+}
+
+.ovh-by {
+  color: #5c5346;
+  word-break: break-word;
+  max-width: 200px;
+}
+
+.ovh-order { font-weight: 600; white-space: nowrap; }
+
+.ovh-barcode {
+  margin-top: 2px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: #8a7f6d;
+  white-space: nowrap;
+}
+
+.ovh-stage { white-space: nowrap; color: #5c5346; }
+.ovh-arrow { margin: 0 6px; color: #b5a68f; }
+.ovh-days { font-weight: 600; color: #b06a00; }
+
+/* Reason wraps in full — truncating the justification would defeat the record. */
+.ovh-reason {
+  min-width: 220px;
+  max-width: 420px;
+  color: #3f3a31;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Type pills — colour-coded by how far the override departs from the normal
+   flow, so a scan-bypassing action doesn't read the same as a date change. */
+.ovh-type {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #f0ebe1;
+  color: #6b5f4c;
+}
+
+.ovh-type-manual_advance { background: #e8f0fb; color: #1a5fa8; }
+.ovh-type-skip_stage { background: #fdeceb; color: #b3261e; }
+.ovh-type-timeline_extension { background: #fdf2e2; color: #9a6100; }
+.ovh-type-vendor_return { background: #eae6f7; color: #5b3fa8; }
+.ovh-type-packaging_override { background: #e6f4ea; color: #1e6b34; }
+
+@media (max-width: 640px) {
+  .ovh-search { flex-basis: 100%; }
+}

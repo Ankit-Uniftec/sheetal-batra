@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
+import { isSaleOrder } from "../../utils/revenue";
 import "./HeadOfDesignDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
@@ -197,8 +198,10 @@ export default function HeadOfDesignDashboard() {
   useEffect(() => { setOrdersPage(1); }, [statusFilter, orderSearch, orderSearchField, periodRangeValue]);
 
   // ─── B2B (Tab 2) ─────────────────────────────────────────────
+  // Sales only: the per-vendor `orders` count below was counting B2BSTOCK
+  // movements (internal transfers worth ₹0) as vendor orders.
   const b2bAll = useMemo(
-    () => periodOrders.filter(o => o.is_b2b || (o.salesperson_store || "").toLowerCase() === "b2b"),
+    () => periodOrders.filter(o => (o.is_b2b || (o.salesperson_store || "").toLowerCase() === "b2b") && isSaleOrder(o)),
     [periodOrders]
   );
 

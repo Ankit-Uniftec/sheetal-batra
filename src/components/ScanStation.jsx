@@ -3,6 +3,7 @@ import { usePopup } from "../components/Popup";
 import { supabase } from "../lib/supabaseClient";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { isSkuBarcode } from "../utils/barcodeKind";
+import { getWarehouseDate } from "../utils/warehouseDate";
 import {
     advanceComponentStage,
     activateComponents,
@@ -72,12 +73,19 @@ const findOrderByMasterBarcode = async (barcode) => {
 // agree on what "expected" means — they used to spell this out separately.
 const isPackableComponent = (c) => c.is_active && !TERMINAL_STAGES.includes(c.current_stage);
 
-// A piece that can go in the box RIGHT NOW: packable and marked Completed
-// (packaging requires production_complete; packaging_dispatch = a piece whose
-// earlier dispatch attempt half-advanced, still re-submittable). Anything
-// earlier renders in the packaging checklist greyed-out with its stage.
+// A piece that can go in the box RIGHT NOW: packable and past Final QC.
+// Mirrors the server gate in verify_packaging_components (91) exactly — the
+// two must agree or the checklist greys out a piece the RPC would accept.
+//   final_qc_passed    — made and QC'd; the packaging scan auto-completes it,
+//                        so a forgotten "Mark as Completed" no longer blocks
+//                        dispatch (91).
+//   production_complete — already marked completed by hand.
+//   packaging_dispatch  — an earlier dispatch attempt half-advanced it; it
+//                        must stay re-submittable.
+// Anything earlier renders greyed-out with its stage.
 const isDispatchableComponent = (c) =>
-    isPackableComponent(c) && ["production_complete", "packaging_dispatch"].includes(c.current_stage);
+    isPackableComponent(c) &&
+    ["final_qc_passed", "production_complete", "packaging_dispatch"].includes(c.current_stage);
 
 // Replace raw stage tokens (e.g. "embroidery_in_progress") with friendly
 // labels (e.g. "Embroidery In-Progress") so RPC error messages read
@@ -583,14 +591,16 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     return;
                 }
 
-                // Only a Completed piece can go in the box (packaging requires
-                // production_complete). Catch it on the scan so the packer hears
-                // it immediately instead of at Verify — the RPC enforces it too.
+                // Only a piece past Final QC can go in the box. Catch it on the
+                // scan so the packer hears it immediately instead of at Verify —
+                // the RPC enforces the same rule. Since 91 the remedy is Final
+                // QC, not "Mark as Completed": a QC-passed piece is completed by
+                // the packaging scan itself.
                 if (!isDispatchableComponent(component)) {
                     setScanResult({
                         success: false,
                         error: "NOT_COMPLETED",
-                        message: `${barcode} (${component.component_label || component.component_type}) is at ${getStageLabel(component.current_stage)} — mark it Completed before packaging.`,
+                        message: `${barcode} (${component.component_label || component.component_type}) is at ${getStageLabel(component.current_stage)} — it must pass Final QC before packaging.`,
                     });
                     setIsProcessing(false);
                     return;
@@ -1282,10 +1292,13 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                     });
                 }
                 if (missing.length > 0) {
-                    // Since 85 missing_details = ticked pieces not yet marked
-                    // Completed (NOT_ALL_QC_PASSED); held-back pieces are fine.
+                    // Since 85 missing_details = ticked pieces that can't ship;
+                    // held-back pieces are fine. Since 91 the only thing that
+                    // blocks them is Final QC — a piece that has passed it is
+                    // auto-completed by the scan, so "Mark as Completed first"
+                    // is no longer the remedy.
                     detailMsg += result.error === "NOT_ALL_QC_PASSED"
-                        ? "\n\nNot ready (Mark as Completed first):"
+                        ? "\n\nNot ready (Final QC not passed yet):"
                         : "\n\nNot yet scanned (expected for this order):";
                     missing.forEach((m) => {
                         detailMsg += `\n• ${m.barcode}` + (m.component_label ? ` (${m.component_label})` : "") +
@@ -1611,11 +1624,12 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                             )}
                         </div>
 
-                        {/* Order Info */}
+                        {/* Order Info — no client identity, and the WAREHOUSE (T-2)
+                            deadline rather than the customer's promised date.
+                            See utils/productionPrivacy.js */}
                         {selectedComponent.orders && (
                             <div className="wd-detail-order-info">
-                                <p><strong>Client:</strong> {selectedComponent.orders.delivery_name}</p>
-                                <p><strong>Delivery:</strong> {selectedComponent.orders.delivery_date}</p>
+                                <p><strong>Dispatch by:</strong> {getWarehouseDate(selectedComponent.orders.delivery_date, selectedComponent.orders.created_at)}</p>
                                 <p><strong>SA:</strong> {selectedComponent.orders.salesperson}</p>
                             </div>
                         )}

@@ -2,21 +2,26 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder, orderRevenueAmount } from "../../utils/revenue";
+import { isRevenueOrder, isSaleOrder } from "../../utils/revenue";
 import "./RetailManagerDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
+    PieChart, Pie, Cell, Line, AreaChart, Area
 } from "recharts";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import StockPanel from "../../components/stock/StockPanel";
+import ProductionOverview from "../../components/ProductionOverview";
+import StageCountCards from "../../components/StageCountCards";
+import { isOrderStillRunning } from "../../utils/productionMetrics";
+import { getWarehouseDate, getWarehouseDateObj } from "../../utils/warehouseDate";
 import { poolsForUser } from "../../utils/stockVisibility";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
-import { getOrderChannelLabel } from "../../utils/barcodeService";
+import { getOrderChannelLabel, getStageLabel, PRODUCTION_STAGES } from "../../utils/barcodeService";
+import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import DashboardHeader from "../../components/DashboardHeader";
 
@@ -35,6 +40,30 @@ const STATUS_TABS = [
 ];
 
 const ITEMS_PER_PAGE = 15;
+
+// ── The money rule for this dashboard ────────────────────────────────────────
+// An exhibition order's headline value is gross, but the commission belongs to
+// the exhibition partner, so SB only earned net_sb_revenue. Admin/GM/COO/CEO/
+// Accountant all report net (utils/exhibitionService.js). This dashboard used
+// raw gross, so its revenue read HIGHER than every management dashboard for the
+// same period. Route every rupee through these two so it can't drift again.
+const orderNetRevenue = (o) => totalNetSbRevenue([o]);
+const periodRevenue = (orders) => totalNetSbRevenue(orders);
+
+// ── Day bucketing ────────────────────────────────────────────────────────────
+// dayKey is the sort/identity key and carries the YEAR: buckets used to key on
+// "D/M", so a 12-month range merged Jan 2025 into Jan 2026 on one bar. It is
+// also built from LOCAL parts, not toISOString(), which is UTC — an IST order
+// placed after 05:30 IST reported on the previous day.
+const two = (n) => String(n).padStart(2, "0");
+const dayKey = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+};
+const dayLabel = (ts) => {
+    const d = new Date(ts);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+};
 
 const CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B", "#DAA520", "#B8860B", "#CD853F", "#DEB887"];
 const PIE_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37"];
@@ -111,8 +140,14 @@ export default function RetailManagerDashboard() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
-    const [products, setProducts] = useState([]);
     const [vendors, setVendors] = useState([]);
+    // Production tab (view-only) — lazy-loaded, see the effect below.
+    const [components, setComponents] = useState([]);
+    const [componentsLoaded, setComponentsLoaded] = useState(false);
+    const [componentsLoading, setComponentsLoading] = useState(false);
+    const [prodStageFilter, setProdStageFilter] = useState("all");
+    const [prodSearch, setProdSearch] = useState("");
+    const [prodPage, setProdPage] = useState(1);
     const [activeTab, setActiveTab] = useTabParam("store_analytics");
     const [showSidebar, setShowSidebar] = useState(false);
 
@@ -175,19 +210,40 @@ export default function RetailManagerDashboard() {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [ordersRes, productsRes, vendorsRes] = await Promise.all([
+            // products_live was fetched here (a full paged scan of every SKU) and
+            // then never read — the Stock tab gets its own data from StockPanel.
+            const [ordersRes, vendorsRes] = await Promise.all([
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                // products_live, not products: excludes reserved-but-unfilled
-                // barcode rows (name IS NULL). See v2/74_reserve_sku_rows.sql.
-                fetchAllRows("products_live", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
                 supabase.from("vendors").select("id, store_brand_name, vendor_code, location"),
             ]);
             if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
-            if (productsRes.data) setProducts(productsRes.data);
             if (vendorsRes.data) setVendors(vendorsRes.data);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
+
+    // Production pieces — fetched only when the Production tab is first opened,
+    // and once per session. order_components is the largest table in the app;
+    // loading it on mount would slow every other tab down for a read-only view
+    // most visits never open.
+    useEffect(() => {
+        if (activeTab !== "production" || componentsLoaded) return;
+        let cancelled = false;
+        (async () => {
+            setComponentsLoading(true);
+            const { data } = await fetchAllRows("order_components", (q) =>
+                // stages_outside is NOT a column here — it lives on external_movements
+                // and is attached by enrichComponentsWithMovements. Without it a piece
+                // at a vendor falls back to its current_stage bucket and is still
+                // correctly marked external, which is all this read-only view needs.
+                q.select("id, order_id, order_no, barcode, component_type, component_label, current_stage, stage_updated_at, is_active, is_rework, is_outside_wh, vendor_name, item_index, channel_key"));
+            if (cancelled) return;
+            setComponents(data || []);
+            setComponentsLoaded(true);
+            setComponentsLoading(false);
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab, componentsLoaded]);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -274,13 +330,20 @@ export default function RetailManagerDashboard() {
     // ═══════════════════════════════════════════════════════════
     const dashboardStats = useMemo(() => {
         const compRange = comparisonPeriodRange(periodRangeValue, comparison);
-        const cur = analyticsOrders.filter(o => inPeriod(o.created_at));
-        const prev = compRange ? analyticsOrders.filter(o => inRange(compRange, o.created_at)) : [];
+        // Every number below is computed over SALES only — isSaleOrder drops
+        // cancelled/returned rows (which would otherwise sit in a denominator
+        // while being excluded from the sum) and also internal stock movements
+        // and alterations, which are 0-value and so never moved a revenue total
+        // but did inflate every count and deflate every average.
+        const cur = analyticsOrders.filter(o => inPeriod(o.created_at) && isSaleOrder(o));
+        const prev = compRange
+            ? analyticsOrders.filter(o => inRange(compRange, o.created_at) && isSaleOrder(o))
+            : [];
 
-        const totalRevenue = cur.reduce((s, o) => s + (isRevenueOrder(o) ? orderRevenueAmount(o) : 0), 0);
+        const totalRevenue = periodRevenue(cur);
         const totalOrders = cur.length;
         const deliveredOrders = cur.filter(o => o.status === "delivered").length;
-        const prevRevenue = prev.reduce((s, o) => s + (isRevenueOrder(o) ? orderRevenueAmount(o) : 0), 0);
+        const prevRevenue = periodRevenue(prev);
         const prevOrders = prev.length;
         const prevDelivered = prev.filter(o => o.status === "delivered").length;
 
@@ -292,7 +355,7 @@ export default function RetailManagerDashboard() {
         cur.forEach(o => {
             const ch = getOrderChannel(o);
             if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            if (isRevenueOrder(o)) channelMap[ch].revenue += orderRevenueAmount(o);
+            channelMap[ch].revenue += orderNetRevenue(o);
             channelMap[ch].orders += 1;
         });
         const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
@@ -301,10 +364,9 @@ export default function RetailManagerDashboard() {
             percent: totalRevenue > 0 ? ((ch.revenue / totalRevenue) * 100).toFixed(1) : 0
         }));
 
-        // Top products
+        // Top products ('cur' is already revenue-only)
         const productSales = {};
         cur.forEach(order => {
-            if (!isRevenueOrder(order)) return;
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
@@ -349,20 +411,27 @@ export default function RetailManagerDashboard() {
     // TAB 2: DAY-WISE SALES (Delhi, Ludhiana & B2B)
     // ═══════════════════════════════════════════════════════════
     const dayWiseData = useMemo(() => {
-        const storeOrders = retailOrders.filter(o => inPeriod(o.created_at) && !isLxrtsOrder(o));
-        const b2bPeriodOrders = b2bOrders.filter(o => inPeriod(o.created_at));
+        // isRevenueOrder was missing here entirely: cancelled, returned and
+        // refunded orders were counted as sales on this tab while the Store
+        // Analytics tab excluded them, so the same period showed two totals.
+        const storeOrders = retailOrders.filter(o => inPeriod(o.created_at) && !isLxrtsOrder(o) && isSaleOrder(o));
+        const b2bPeriodOrders = b2bOrders.filter(o => inPeriod(o.created_at) && isSaleOrder(o));
 
-        // Split by store
-        const delhiOrders = storeOrders.filter(o => (o.salesperson_store || "").toLowerCase().includes("delhi") || (o.salesperson_store || "") === "DLC");
-        const ludhianaOrders = storeOrders.filter(o => (o.salesperson_store || "").toLowerCase().includes("ludhiana") || (o.salesperson_store || "") === "Ludhiana Store" || (o.salesperson_store || "").toLowerCase().includes("ldhc") || (o.salesperson_store || "").toLowerCase().includes("llc"));
+        // Split by store via the ORDER-NUMBER PREFIX, not salesperson_store.
+        // The prefix is the authoritative channel signal (barcodeService.js:243);
+        // matching store free-text counted a stock order raised through the
+        // Ludhiana flow as Ludhiana store revenue, because it carries both
+        // SB-LDHC- and a Ludhiana salesperson_store. getOrderChannel calls that
+        // same row "Retail Stock", which is why the two tabs disagreed.
+        const delhiOrders = storeOrders.filter(o => getOrderChannel(o) === "Delhi Store");
+        const ludhianaOrders = storeOrders.filter(o => getOrderChannel(o) === "Ludhiana Store");
 
         const buildDailyBuckets = (ordersList) => {
             const buckets = {};
             ordersList.forEach(o => {
-                const d = new Date(o.created_at);
-                const key = `${d.getDate()}/${d.getMonth() + 1}`;
-                if (!buckets[key]) buckets[key] = { date: key, fullDate: d.toISOString().split("T")[0], revenue: 0, orders: 0 };
-                buckets[key].revenue += orderRevenueAmount(o);
+                const key = dayKey(o.created_at);
+                if (!buckets[key]) buckets[key] = { date: dayLabel(o.created_at), fullDate: key, revenue: 0, orders: 0 };
+                buckets[key].revenue += orderNetRevenue(o);
                 buckets[key].orders += 1;
             });
             return Object.values(buckets).sort((a, b) => a.fullDate.localeCompare(b.fullDate)).map(b => ({
@@ -377,23 +446,34 @@ export default function RetailManagerDashboard() {
         // Combined daily (merge by date) — Delhi, Ludhiana, B2B as 3 series
         const combinedMap = {};
         const touchBucket = (o, field) => {
-            const d = new Date(o.created_at);
-            const key = `${d.getDate()}/${d.getMonth() + 1}`;
-            if (!combinedMap[key]) combinedMap[key] = { date: key, fullDate: d.toISOString().split("T")[0], delhi: 0, ludhiana: 0, b2b: 0 };
-            combinedMap[key][field] += orderRevenueAmount(o);
+            const key = dayKey(o.created_at);
+            if (!combinedMap[key]) combinedMap[key] = { date: dayLabel(o.created_at), fullDate: key, delhi: 0, ludhiana: 0, b2b: 0 };
+            combinedMap[key][field] += orderNetRevenue(o);
         };
         delhiOrders.forEach(o => touchBucket(o, "delhi"));
         ludhianaOrders.forEach(o => touchBucket(o, "ludhiana"));
         b2bPeriodOrders.forEach(o => touchBucket(o, "b2b"));
         const combinedDaily = Object.values(combinedMap).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
-        const delhiTotal = delhiOrders.reduce((s, o) => s + orderRevenueAmount(o), 0);
-        const ludhianaTotal = ludhianaOrders.reduce((s, o) => s + orderRevenueAmount(o), 0);
-        const b2bTotal = b2bPeriodOrders.reduce((s, o) => s + orderRevenueAmount(o), 0);
+        const delhiTotal = periodRevenue(delhiOrders);
+        const ludhianaTotal = periodRevenue(ludhianaOrders);
+        const b2bTotal = periodRevenue(b2bPeriodOrders);
+
+        // Everything in the period that is NOT one of the three cards above:
+        // Private, Exhibition, Shopify, the stock pools, and any order whose
+        // channel can't be resolved. The "Total" card used to be delhi+ludhiana+
+        // b2b, so these rows silently vanished and the total never matched the
+        // Store Analytics tab. Surfaced rather than dropped.
+        const otherOrders = storeOrders.filter(o => {
+            const ch = getOrderChannel(o);
+            return ch !== "Delhi Store" && ch !== "Ludhiana Store";
+        });
+        const otherTotal = periodRevenue(otherOrders);
 
         return {
             delhiDaily, ludhianaDaily, b2bDaily, combinedDaily,
             delhiTotal, ludhianaTotal, b2bTotal,
+            otherTotal, otherCount: otherOrders.length,
             delhiOrders: delhiOrders.length,
             ludhianaOrders: ludhianaOrders.length,
             b2bOrders: b2bPeriodOrders.length,
@@ -407,7 +487,9 @@ export default function RetailManagerDashboard() {
     // TAB 3: PRODUCT ANALYTICS (retail stores + B2B as a channel)
     // ═══════════════════════════════════════════════════════════
     const productAnalytics = useMemo(() => {
-        const valid = analyticsOrders.filter(o => isRevenueOrder(o) && inAnalyticsPeriod(o.created_at));
+        // isSaleOrder, not isRevenueOrder: the salesperson and store blocks below
+        // divide by a count, so a 0-value stock movement would deflate them.
+        const valid = analyticsOrders.filter(o => isSaleOrder(o) && inAnalyticsPeriod(o.created_at));
 
         // Products (net of proportional order discount)
         const productSales = {};
@@ -452,7 +534,7 @@ export default function RetailManagerDashboard() {
             const sp = getOrderSalesperson(order);
             if (!sp || !isPersonName(sp)) return;
             if (!spData[sp]) spData[sp] = { name: sp, sales: 0, discount: 0, count: 0 };
-            spData[sp].sales += orderRevenueAmount(order);
+            spData[sp].sales += orderNetRevenue(order);
             spData[sp].discount += Number(order.discount_amount || 0);
             spData[sp].count += 1;
         });
@@ -463,13 +545,17 @@ export default function RetailManagerDashboard() {
         valid.forEach(order => {
             const store = getOrderChannel(order);
             if (!storeSales[store]) storeSales[store] = { name: store, sales: 0, count: 0 };
-            storeSales[store].sales += orderRevenueAmount(order);
+            storeSales[store].sales += orderNetRevenue(order);
             storeSales[store].count += 1;
         });
         const salesByStore = Object.values(storeSales).sort((a, b) => b.sales - a.sales);
 
         return { topProducts, bottomProducts, topColors, bottomColors, salesBySalesperson, salesByStore };
-    }, [analyticsOrders, retailOrders, inAnalyticsPeriod]);
+        // knownStoreNames is a real dependency: isPersonName closes over it to
+        // tell a salesperson from a store name. Omitting it left this memo
+        // holding a stale empty Set on first paint, so store names leaked into
+        // the Sales by Salesperson chart as if they were people.
+    }, [analyticsOrders, inAnalyticsPeriod, knownStoreNames]);
 
     // ═══════════════════════════════════════════════════════════
     // B2B-SPECIFIC block on Store Analytics — only the two things B2B has that
@@ -478,27 +564,42 @@ export default function RetailManagerDashboard() {
     // they're deliberately NOT repeated here. Shares the page's timeline filter.
     // ═══════════════════════════════════════════════════════════
     const b2bAnalytics = useMemo(() => {
-        const periodOrders = b2bOrders.filter(o => inPeriod(o.created_at));
+        // Real B2B orders only: a B2BSTOCK movement is an internal transfer and
+        // an alteration is rework, so neither belongs in these counts. Cancelled
+        // and returned orders DO belong — the fourth card counts them — so this
+        // set deliberately keeps them and only the money set drops them.
+        const periodOrders = b2bOrders.filter(o =>
+            inPeriod(o.created_at) && !o.is_stock_order && !o.is_alteration);
         const revenueOrders = periodOrders.filter(isRevenueOrder);
 
         const newCount = periodOrders.length;
-        const pendingCount = periodOrders.filter(o => ["order_received", "in_production", "ready", "dispatched"].includes((o.status || "").toLowerCase())).length;
-        const fulfilledCount = periodOrders.filter(o => ["delivered", "completed"].includes((o.status || "").toLowerCase())).length;
-        const cancelledReturnedCount = periodOrders.filter(o =>
-            (o.status || "").toLowerCase() === "cancelled" ||
-            (o.status || "").toLowerCase() === "returned" ||
+        // Pending = placed but not yet in a terminal state. The old list matched
+        // "ready" and "dispatched", which are not order-status values in this
+        // schema, so those two contributed nothing and the count under-reported.
+        // Derive it as the remainder instead of guessing at status spellings.
+        const isFulfilled = (o) => ["delivered", "completed"].includes((o.status || "").toLowerCase());
+        const isCancelledOrReturned = (o) =>
+            ["cancelled", "returned", "revoked"].includes((o.status || "").toLowerCase()) ||
             o.return_reason ||
-            (Array.isArray(o.returned_items) && o.returned_items.length > 0)
-        ).length;
+            (Array.isArray(o.returned_items) && o.returned_items.length > 0);
 
-        // Top 10 B2B customers/accounts by sales
+        const fulfilledCount = periodOrders.filter(isFulfilled).length;
+        const cancelledReturnedCount = periodOrders.filter(isCancelledOrReturned).length;
+        const pendingCount = periodOrders.filter(o => !isFulfilled(o) && !isCancelledOrReturned(o)).length;
+
+        // Top 10 B2B customers/accounts by sales.
+        // Keyed on vendor_id FIRST — the B2B merchandiser dashboard keys on it
+        // too, and delivery_name is free text, so one account spelled two ways
+        // ("Aza", "AZA Fashions") used to split into two rows and neither
+        // reflected the account's real volume.
         const clientSales = {};
         revenueOrders.forEach(o => {
-            const client = o.delivery_name || vendors.find(v => v.id === o.vendor_id)?.store_brand_name || "Unknown";
-            const amt = orderRevenueAmount(o);
-            if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0 };
-            clientSales[client].sales += amt;
-            clientSales[client].orders += 1;
+            const vendor = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
+            const key = vendor?.id || (o.delivery_name || "").trim().toLowerCase() || "unknown";
+            const name = vendor?.store_brand_name || o.delivery_name || "Unknown";
+            if (!clientSales[key]) clientSales[key] = { name, sales: 0, orders: 0 };
+            clientSales[key].sales += orderNetRevenue(o);
+            clientSales[key].orders += 1;
         });
         const top10Clients = Object.values(clientSales)
             .map(c => ({ ...c, aov: c.orders > 0 ? Math.round(c.sales / c.orders) : 0 }))
@@ -507,6 +608,71 @@ export default function RetailManagerDashboard() {
 
         return { newCount, pendingCount, fulfilledCount, cancelledReturnedCount, top10Clients };
     }, [b2bOrders, vendors, inPeriod]);
+
+    // ═══════════════════════════════════════════════════════════
+    // TAB: PRODUCTION (VIEW-ONLY)
+    // The retail manager needs to answer "where are the orders my stores are
+    // still waiting on?". Read-only by design: no stage overrides, no vendor
+    // moves, no status edits — those stay with Production.
+    //
+    // Scope is retailOrders (Delhi + Ludhiana + the other non-B2B channels),
+    // the same slice the rest of this dashboard treats as "retail".
+    // ═══════════════════════════════════════════════════════════
+
+    // Still on the floor: not delivered/completed/cancelled. isOrderStillRunning
+    // is the shared rule (it also reads warehouse_stage, so a dispatched-but-
+    // unstatused order isn't counted as outstanding).
+    const outstandingOrders = useMemo(
+        () => retailOrders.filter(isOrderStillRunning),
+        [retailOrders]
+    );
+
+    // Pieces belonging to those orders only — the cards below are piece-level.
+    const outstandingComponents = useMemo(() => {
+        if (!components.length) return [];
+        const ids = new Set(outstandingOrders.map((o) => o.id));
+        return components.filter((c) => ids.has(c.order_id));
+    }, [components, outstandingOrders]);
+
+    // Pieces for every retail order, outstanding or not — ProductionOverview
+    // uses this as the denominator for its re-journey rate.
+    const retailComponents = useMemo(() => {
+        if (!components.length) return [];
+        const ids = new Set(retailOrders.map((o) => o.id));
+        return components.filter((c) => ids.has(c.order_id));
+    }, [components, retailOrders]);
+
+    // The list underneath the cards. Overdue first — that is the whole point of
+    // the view — then by deadline, so the most urgent work reads top-down.
+    const productionList = useMemo(() => {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        let rows = outstandingOrders.map((o) => {
+            const deadline = getWarehouseDateObj(o.delivery_date, o.created_at);
+            return {
+                order: o,
+                stage: o.warehouse_stage || "order_received",
+                deadline,
+                overdue: deadline ? deadline < today : false,
+            };
+        });
+        if (prodStageFilter !== "all") rows = rows.filter((r) => r.stage === prodStageFilter);
+        if (prodSearch.trim()) {
+            const q = prodSearch.trim().toLowerCase();
+            rows = rows.filter((r) => r.order.order_no?.toLowerCase().includes(q));
+        }
+        return rows.sort((a, b) => {
+            if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+            return (a.deadline?.getTime() || Infinity) - (b.deadline?.getTime() || Infinity);
+        });
+    }, [outstandingOrders, prodStageFilter, prodSearch]);
+
+    const productionTotalPages = Math.ceil(productionList.length / ITEMS_PER_PAGE);
+    const currentProductionRows = useMemo(() => {
+        const start = (prodPage - 1) * ITEMS_PER_PAGE;
+        return productionList.slice(start, start + ITEMS_PER_PAGE);
+    }, [productionList, prodPage]);
+
+    useEffect(() => { setProdPage(1); }, [prodStageFilter, prodSearch]);
 
     // ═══════════════════════════════════════════════════════════
     // TAB 4: ORDERS (B2B included by default)
@@ -522,52 +688,58 @@ export default function RetailManagerDashboard() {
 
     // Non-LXRTS orders in the orders tab — B2B included by default (Store filter
     // below can isolate it, same as Delhi/Ludhiana), only website/LXRTS is excluded.
-    const filteredByStatus = useMemo(() => {
-        return orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
-            const status = o.status?.toLowerCase();
-            switch (statusTab) {
-                case "unfulfilled": return status !== "completed" && status !== "delivered" && status !== "cancelled";
-                case "prepared": return status === "completed";
-                case "delivered": return status === "delivered";
-                case "cancelled": return status === "cancelled";
-                default: return true;
-            }
-        });
-    }, [orders, statusTab]);
+    // "Unfulfilled" means still owed to the customer. Excluding only
+    // completed/delivered/cancelled left returned, revoked and refunded orders
+    // sitting in the queue as if they were outstanding work.
+    const matchesStatusTab = (o, tab) => {
+        const status = (o.status || "").toLowerCase();
+        switch (tab) {
+            case "unfulfilled":
+                return status !== "completed" && status !== "delivered" && isRevenueOrder(o);
+            case "prepared": return status === "completed";
+            case "delivered": return status === "delivered";
+            case "cancelled": return !isRevenueOrder(o);
+            default: return true;
+        }
+    };
 
-    const filteredOrders = useMemo(() => {
-        let result = filteredByStatus;
+    const filteredByStatus = useMemo(
+        () => orders.filter(o => !isLxrtsOrder(o) && matchesStatusTab(o, statusTab)),
+        [orders, statusTab]
+    );
+
+    // Every filter EXCEPT the status tab. Shared by the list and the tab
+    // counts, so a badge can never contradict the rows underneath it.
+    const passesNonStatusFilters = (order) => {
+        if (isLxrtsOrder(order)) return false;
         if (orderSearch.trim()) {
             const q = orderSearch.trim().toLowerCase();
-            result = result.filter(order => {
-                switch (orderSearchField) {
-                    case "product_name":
-                        return (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
-                    case "salesperson":
-                        return (getOrderSalesperson(order) || "").toLowerCase().includes(q);
-                    case "order_no":
-                    default:
-                        return order.order_no?.toLowerCase().includes(q);
-                }
-            });
+            const hit = orderSearchField === "product_name"
+                ? (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
+                : orderSearchField === "salesperson"
+                    ? (getOrderSalesperson(order) || "").toLowerCase().includes(q)
+                    : order.order_no?.toLowerCase().includes(q);
+            if (!hit) return false;
         }
-        if (ordersPeriodRange) result = result.filter(order => inOrdersPeriod(order.created_at));
+        if (ordersPeriodRange && !inOrdersPeriod(order.created_at)) return false;
         if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-            result = result.filter(order => {
-                const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-                return total >= filters.minPrice && total <= filters.maxPrice;
-            });
+            const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
+            if (total < filters.minPrice || total > filters.maxPrice) return false;
         }
-        if (filters.payment.length > 0) result = result.filter(order => filters.payment.includes(getPaymentStatus(order)));
-        if (filters.priority.length > 0) result = result.filter(order => filters.priority.includes(getPriority(order)));
-        if (filters.orderType.length > 0) result = result.filter(order => filters.orderType.includes(getOrderType(order)));
-        if (filters.store.length > 0) result = result.filter(order => {
-            // "B2B" isn't a literal salesperson_store value — match it via the
-            // same channel classifier the rest of the dashboard uses.
-            return filters.store.some(s => s === "B2B" ? getOrderChannel(order) === "B2B" : order.salesperson_store === s);
-        });
-        if (filters.salesperson) result = result.filter(order => getOrderSalesperson(order) === filters.salesperson);
+        if (filters.payment.length > 0 && !filters.payment.includes(getPaymentStatus(order))) return false;
+        if (filters.priority.length > 0 && !filters.priority.includes(getPriority(order))) return false;
+        if (filters.orderType.length > 0 && !filters.orderType.includes(getOrderType(order))) return false;
+        // "B2B" isn't a literal salesperson_store value — match it via the
+        // same channel classifier the rest of the dashboard uses.
+        if (filters.store.length > 0 && !filters.store.some(
+            s => s === "B2B" ? getOrderChannel(order) === "B2B" : order.salesperson_store === s
+        )) return false;
+        if (filters.salesperson && getOrderSalesperson(order) !== filters.salesperson) return false;
+        return true;
+    };
+
+    const filteredOrders = useMemo(() => {
+        let result = filteredByStatus.filter(passesNonStatusFilters);
 
         const getOrderNum = (no) => {
             const clean = (no || "").replace(/-[A-Z]\d*$/, "");
@@ -587,16 +759,16 @@ export default function RetailManagerDashboard() {
         return result;
     }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
 
+    // Counted over the same filtered set the list uses — these used to be
+    // computed over ALL orders, so with a date range or store filter applied
+    // the badges showed totals that no longer matched a single visible row.
     const orderTabCounts = useMemo(() => {
-        const valid = orders.filter(o => !isLxrtsOrder(o));
-        return {
-            all: valid.length,
-            unfulfilled: valid.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length,
-            prepared: valid.filter(o => o.status?.toLowerCase() === "completed").length,
-            delivered: valid.filter(o => o.status?.toLowerCase() === "delivered").length,
-            cancelled: valid.filter(o => o.status?.toLowerCase() === "cancelled").length,
-        };
-    }, [orders]);
+        const valid = orders.filter(passesNonStatusFilters);
+        return STATUS_TABS.reduce((acc, t) => {
+            acc[t.value] = valid.filter(o => matchesStatusTab(o, t.value)).length;
+            return acc;
+        }, {});
+    }, [orders, orderSearch, orderSearchField, filters, ordersPeriodRange, inOrdersPeriod]);
 
     const ordersTotalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
     const currentOrders = useMemo(() => {
@@ -668,6 +840,7 @@ export default function RetailManagerDashboard() {
                         <button className={`rm-nav-item ${activeTab === "daywise_sales" ? "active" : ""}`} onClick={() => { setActiveTab("daywise_sales"); setShowSidebar(false); }}>Day-wise Sales</button>
                         <button className={`rm-nav-item ${activeTab === "product_analytics" ? "active" : ""}`} onClick={() => { setActiveTab("product_analytics"); setShowSidebar(false); }}>Product Analytics</button>
                         <button className={`rm-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
+                        <button className={`rm-nav-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</button>
                         <button className={`rm-nav-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</button>
                         <button className="rm-nav-item logout" onClick={handleLogout}>Logout</button>
                     </nav>
@@ -689,6 +862,104 @@ export default function RetailManagerDashboard() {
                         </div>
                     )}
 
+                    {/* ═══════════ TAB: PRODUCTION (VIEW-ONLY) ═══════════ */}
+                    {activeTab === "production" && (
+                        <div className="rm-analytics-tab">
+                            <div className="rm-tab-header">
+                                <h2 className="rm-section-title">Production {"—"} Orders Still Outstanding</h2>
+                            </div>
+
+                            {componentsLoading ? (
+                                <div className="rm-loading"><div className="rm-spinner"></div><span>Loading production data{"…"}</span></div>
+                            ) : (
+                                <>
+                                    {/* Piece-level stage cards — one order can be half-finished, so
+                                        pieces are the honest unit here. */}
+                                    <StageCountCards components={outstandingComponents} />
+
+                                    {/* Shared operational metrics, same compute as every other
+                                        production dashboard, scoped to retail. */}
+                                    <ProductionOverview
+                                        orders={retailOrders}
+                                        components={outstandingComponents}
+                                        allComponents={retailComponents}
+                                        totalLabel="Total Retail Orders"
+                                    />
+
+                                    {/* The list: what is late, and where it is sitting. */}
+                                    <div className="rm-chart-card" style={{ marginTop: 20 }}>
+                                        <div className="rm-prod-toolbar">
+                                            <h3 className="rm-chart-title" style={{ margin: 0 }}>Outstanding Orders</h3>
+                                            <div className="rm-prod-controls">
+                                                <input
+                                                    className="rm-prod-search"
+                                                    type="text"
+                                                    placeholder="Search order no."
+                                                    value={prodSearch}
+                                                    onChange={(e) => setProdSearch(e.target.value)}
+                                                />
+                                                <select
+                                                    className="rm-prod-select"
+                                                    value={prodStageFilter}
+                                                    onChange={(e) => setProdStageFilter(e.target.value)}
+                                                >
+                                                    <option value="all">All stages</option>
+                                                    {PRODUCTION_STAGES.map((s) => (
+                                                        <option key={s.value} value={s.value}>{s.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {productionList.length > 0 ? (
+                                            <>
+                                                <div className="rm-table-wrapper">
+                                                    <div className="rm-table-container">
+                                                        <table className="rm-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Order No.</th>
+                                                                    <th>Channel</th>
+                                                                    <th>Stage</th>
+                                                                    <th>Dispatch By (T-2)</th>
+                                                                    <th>Status</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {currentProductionRows.map(({ order, stage, overdue }) => (
+                                                                    <tr key={order.id} className={overdue ? "rm-row-overdue" : ""}>
+                                                                        <td className="rm-product-cell">{order.order_no}</td>
+                                                                        <td>{getOrderChannel(order)}</td>
+                                                                        <td>{getStageLabel(stage)}</td>
+                                                                        <td>{getWarehouseDate(order.delivery_date, order.created_at)}</td>
+                                                                        <td>
+                                                                            {overdue
+                                                                                ? <span className="rm-badge-overdue">Overdue</span>
+                                                                                : <span className="rm-badge-ontrack">On track</span>}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                                {productionTotalPages > 1 && (
+                                                    <Paginator page={prodPage} totalPages={productionTotalPages} onChange={setProdPage} />
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="rm-no-chart-data">
+                                                {outstandingOrders.length === 0
+                                                    ? "Nothing outstanding — every retail order has cleared production."
+                                                    : "No orders match this filter."}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
                     {/* ═══════════ TAB 1: STORE ANALYTICS ═══════════ */}
                     {activeTab === "store_analytics" && (
                         <div className="rm-analytics-tab">
@@ -701,8 +972,11 @@ export default function RetailManagerDashboard() {
                                 </PeriodFilter>
                             </div>
 
-                            {/* KPIs */}
-                            <h3 className="rm-subsection-title">Retail Performance</h3>
+                            {/* KPIs — computed over analyticsOrders, which is EVERY
+                                channel (B2B, Private, Exhibition, Shopify, stock), not
+                                just the two retail stores. Titled accordingly: it read
+                                "Retail Performance" while showing company-wide numbers. */}
+                            <h3 className="rm-subsection-title">Overall Performance {"—"} all channels</h3>
                             <div className="rm-stats-grid overview-grid">
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Total Revenue</span>
@@ -935,10 +1209,19 @@ export default function RetailManagerDashboard() {
                                 </div>
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Combined Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.b2bTotal)}</span>
-                                    <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders + dayWiseData.b2bOrders} orders</span>
+                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.b2bTotal + dayWiseData.otherTotal)}</span>
+                                    <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders + dayWiseData.b2bOrders + dayWiseData.otherCount} orders</span>
                                 </div>
                             </div>
+
+                            {/* Everything not on a card above (Private, Exhibition, Shopify,
+                                stock, unresolved channel). Shown only when non-zero so the
+                                Combined figure is always explainable. */}
+                            {dayWiseData.otherCount > 0 && (
+                                <p className="rm-daywise-note">
+                                    Combined also includes {"₹"}{formatIndianNumber(dayWiseData.otherTotal)} from {dayWiseData.otherCount} order{dayWiseData.otherCount === 1 ? "" : "s"} in other channels (Private, Exhibition, Shopify, stock), which have no card above.
+                                </p>
+                            )}
 
                             {/* AOV comparison \u2014 Delhi vs Ludhiana vs B2B, side by side */}
                             <div className="rm-chart-card" style={{ marginBottom: 20 }}>

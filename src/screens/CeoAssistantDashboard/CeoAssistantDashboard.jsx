@@ -5,7 +5,7 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./CeoAssistantDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isRevenueOrder, isSaleOrder } from "../../utils/revenue";
 import { usePopup } from "../../components/Popup";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import useTabParam from "../../hooks/useTabParam";
@@ -144,8 +144,11 @@ export default function CeoAssistantDashboard() {
           revokeCount: 0, revokeAmount: 0,
         };
       }
-      stores[store].orderCount += 1;
-      if (isRevenueOrder(o)) {
+      // orderCount counts SALES: internal stock movements and alterations are
+      // 0-value, so they never moved revenue but did inflate this count. The
+      // refund/return/exchange/cancel counters below stay on every row.
+      if (isSaleOrder(o)) {
+        stores[store].orderCount += 1;
         stores[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
       }
       const amt = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);

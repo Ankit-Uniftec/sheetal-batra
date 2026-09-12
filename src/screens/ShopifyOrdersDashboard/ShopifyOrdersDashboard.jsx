@@ -577,7 +577,7 @@ export default function ShopifyOrdersDashboard() {
         for (let i = 0; i < ids.length; i += 100) {
           const { data: chunk, error: compErr } = await supabase
             .from("order_components")
-            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_active, is_rework, is_delayed, qc_status, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts")
+            .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_active, is_rework, is_delayed, qc_status, is_outside_wh, vendor_name, vendor_location, vendor_exit_at, stage_updated_at, re_journey_count, stage_pass_counts, channel_key")
             .in("order_id", ids.slice(i, i + 100));
           if (compErr) { console.error("Shopify component fetch failed:", compErr); break; }
           comps = comps.concat(chunk || []);
@@ -756,9 +756,10 @@ export default function ShopifyOrdersDashboard() {
     setExporting(true);
     try {
       const headers = [
-        // "Dispatch Date (T-2)" matches the card and the warehouse PDF; the
-        // customer's own date is the separate column beside it.
-        "Order No", "Shopify Order No", "Order Date", "Dispatch Date (T-2)", "Customer Delivery Date",
+        // "Dispatch Date (T-2)" matches the card and the warehouse PDF. The
+        // customer's own date is NOT exported — production works to T-2 and the
+        // export is how that leaks back out (utils/productionPrivacy.js).
+        "Order No", "Shopify Order No", "Order Date", "Dispatch Date (T-2)",
         "Status", "Payment", "Tags", "Qty", "Products",
         "Size", "Top", "Bottom", "Dupatta",
         ...(withIssues ? ["Issues"] : ["Pieces", "Piece Stages"]),
@@ -783,7 +784,6 @@ export default function ShopifyOrdersDashboard() {
           o.shopify_order_name || "",
           formatDate(o.created_at) || "",
           getWarehouseDate(o.delivery_date, o.created_at, ""),
-          o.delivery_date ? formatDate(o.delivery_date) : "",
           getOrderStatusLabel(o.status),
           // Payment STATE only — Shopify's own word, no amounts. Lets the floor
           // pull a COD dispatch run without money ever entering this screen.
@@ -1245,14 +1245,10 @@ export default function ShopifyOrdersDashboard() {
                   customer receives it. The tooltip still surfaces the customer
                   date, which is the only place it appears on this screen. */}
               <span className="sho-header-label">DISPATCH DATE:</span>
-              <span
-                className="sho-header-value"
-                title={
-                  order.delivery_date
-                    ? `Dispatch deadline (T-2). Customer delivery date: ${formatDate(order.delivery_date)}`
-                    : undefined
-                }
-              >
+              {/* The tooltip used to reveal the customer's own delivery date,
+                  which defeats the point of showing T-2 — see
+                  utils/productionPrivacy.js */}
+              <span className="sho-header-value" title="Dispatch deadline (T-2)">
                 {getWarehouseDate(order.delivery_date, order.created_at)}
               </span>
             </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import { isRevenueOrder } from "../../utils/revenue";
+import { isSaleOrder } from "../../utils/revenue";
 import "./AccountantDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
@@ -158,17 +158,19 @@ export default function AccountantDashboard() {
   // ─── Channel stats ───────────────────────────────────────────
   const channelStats = useMemo(() => {
     const map = {};
-    periodOrders.forEach(o => {
+    // Sales only: the per-channel order counts (and the Total Orders KPI they
+    // feed) were counting 0-value stock movements and alterations as orders.
+    periodOrders.filter(isSaleOrder).forEach(o => {
       const ch = getOrderChannel(o);
       if (!map[ch]) map[ch] = { name: ch, orders: 0, revenue: 0 };
       map[ch].orders += 1;
-      if (isRevenueOrder(o)) map[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
+      map[ch].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
     });
     const list = Object.values(map).sort((a, b) => b.revenue - a.revenue);
     const totalRevenue = list.reduce((s, c) => s + c.revenue, 0);
     const totalOrders = list.reduce((s, c) => s + c.orders, 0);
     // Net SB Revenue: exhibition orders net of commission, others at gross.
-    const netSb = totalNetSbRevenue(periodOrders.filter(isRevenueOrder));
+    const netSb = totalNetSbRevenue(periodOrders.filter(isSaleOrder));
     return { list, totalRevenue, totalOrders, netSb };
   }, [periodOrders]);
 
