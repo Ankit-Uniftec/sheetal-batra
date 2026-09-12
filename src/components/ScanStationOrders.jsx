@@ -67,7 +67,10 @@ const STATUS_TABS = [
 // (legacy SB-GEN-/SB-LLC-/SB-PO- rows). Without them those orders would all
 // classify as "offline" and land under Store in the channel filter.
 const ORDER_COLUMNS =
-    "id, order_no, delivery_name, delivery_phone, delivery_date, status, warehouse_stage, created_at, is_b2b, is_private_order, is_stock_order, vendor_id, salesperson_store, shopify_order_id, approval_status, refund_status, refund_reason, exchange_reason, return_reason, revoked_at";
+    // is_comms pairs with shopify_order_id: both are getOrderChannelKey's
+    // fallbacks when salesperson_store doesn't name the channel. Selecting one
+    // without the other left Comms orders misclassified in the channel filter.
+    "id, order_no, delivery_name, delivery_phone, delivery_date, status, warehouse_stage, created_at, is_b2b, is_comms, is_private_order, is_stock_order, vendor_id, salesperson_store, shopify_order_id, approval_status, refund_status, refund_reason, exchange_reason, return_reason, revoked_at";
 
 // Matches WarehouseDashboard's component select (the fields ComponentStageBadge
 // and ComponentJourneyModal need), plus order_id so one query can cover the

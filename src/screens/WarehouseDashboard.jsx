@@ -101,6 +101,10 @@ const WarehouseDashboard = () => {
   // The vendor lookup that backed B2B "client name" was removed with it —
   // production does not see client identity (utils/productionPrivacy.js).
   const [loading, setLoading] = useState(true);
+  // A failed order fetch must never render as "No orders found." — that reads
+  // as an empty warehouse and hides an outage. Set on error, shown in place of
+  // the list.
+  const [ordersError, setOrdersError] = useState("");
   const [activeTab, setActiveTab] = useTabParam("orders");
   const [showSidebar, setShowSidebar] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(null);
@@ -306,20 +310,43 @@ const WarehouseDashboard = () => {
   // money or delivery_name column is the thing to think twice about.
   const ORDER_COLUMNS = [
     "id", "order_no", "created_at", "delivery_date", "status", "warehouse_stage",
-    "items", "attachments", "priority", "order_flag", "is_urgent",
+    "items", "attachments", "priority", "order_flag",
     "is_b2b", "approval_status", "po_number", "is_private_order", "is_stock_order",
+    // getOrderChannelKey's fallbacks when salesperson_store doesn't say
+    // "COMMS"/"Shopify". No row needs them today, but a Comms or web order
+    // whose store string is blank would otherwise misclassify as offline and
+    // land in the wrong head's analytics.
+    "is_comms", "shopify_order_id",
     "is_rework", "parent_order_id", "mode_of_delivery", "exb_name",
-    "salesperson", "salesperson_name", "salesperson_store", "sb_representative_name",
-    "is_alteration", "alteration_type", "alteration_status", "alteration_notes",
+    // Drives isAssignedToHead: a stock order explicitly assigned to this head
+    // must beat the blanket B2B exclusion in visibleOrders. Omitted from the
+    // original narrowed select, which silently made every assignment read as
+    // "unassigned" and dropped those orders from the list.
+    "production_head_designation",
+    "salesperson", "salesperson_store", "sb_representative_name",
+    "is_alteration", "alteration_type", "alteration_notes",
     "alteration_number", "alteration_location", "alteration_attachments",
   ].join(", ");
+  // NOT listed because they do not exist on `orders`: is_urgent,
+  // salesperson_name, alteration_status. PostgREST fails the WHOLE select on
+  // one unknown column (42703), which emptied this dashboard entirely. Every
+  // reader of the three falls back on its own (order_flag/priority for
+  // urgency, sb_representative_name/salesperson for the SA), so dropping them
+  // costs nothing. Verify a column exists before adding it here.
 
   const fetchOrders = async () => {
     // Paginate past Supabase's default 1000-row cap so warehouse can see all orders
     const { data, error } = await fetchAllRows("orders", (q) =>
       q.select(ORDER_COLUMNS).order("created_at", { ascending: false })
     );
-    if (!error) {
+    if (error) {
+      // Fail loudly. Swallowing this left every tab reading 0 and the page
+      // saying "No orders found." — indistinguishable from a real empty list.
+      console.error("Failed to fetch orders:", error);
+      setOrdersError(error.message || "Could not load orders. Please refresh.");
+      setOrders([]);
+    } else {
+      setOrdersError("");
       const filtered = (data || []).filter(o => {
         // Private orders are not visible in warehouse — handled outside warehouse flow
         if (o.is_private_order) return false;
@@ -1441,6 +1468,8 @@ const WarehouseDashboard = () => {
               <div className="wd-orders-scroll-container">
                 {loading ? (
                   <p className="wd-loading-text">Loading orders...</p>
+                ) : ordersError ? (
+                  <p className="wd-no-orders">Could not load orders — {ordersError}</p>
                 ) : filteredOrders.length === 0 ? (
                   <p className="wd-no-orders">No orders found.</p>
                 ) : (

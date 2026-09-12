@@ -92,6 +92,13 @@ export default function PackagingDashboard() {
         "delivery_name", "delivery_phone", "delivery_email",
         "delivery_address", "delivery_city", "delivery_state", "delivery_pincode",
         "is_b2b", "is_comms", "is_gifting", "is_stock_order", "is_alteration",
+        // getOrderChannelLabel/getOrderChannelKey fallbacks. salesperson_store
+        // is the last resort for an order whose order_no prefix is unrecognised
+        // (SB-LLC-, SB-GEN-, SB-PO-…) — without it those 4 orders label as a
+        // bare "Store" and drop out of the channel filter. is_private_order and
+        // shopify_order_id cover a row whose store string doesn't name the
+        // channel. Not optional just because the prefix usually wins.
+        "salesperson_store", "is_private_order", "shopify_order_id",
       ].join(", ");
 
       // fetchAllRows everywhere — all three tables grow past the silent

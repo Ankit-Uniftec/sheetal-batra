@@ -177,7 +177,10 @@ export default function AssistantCmoDashboard() {
         "id", "created_at", "delivered_at", "delivery_date",
         "delivery_email", "delivery_name", "delivery_phone",
         "discount_amount", "grand_total", "grand_total_after_discount", "net_total",
-        "is_alteration", "is_b2b", "is_comms",
+        // is_stock_order feeds isSaleOrder alongside is_alteration. Without it
+        // every ₹0 stock movement counts as a sale, inflating order counts and
+        // deflating AOV — the same near-silent failure fixed in ExhibitionPanel.
+        "is_alteration", "is_stock_order", "is_b2b", "is_comms",
         "items", "order_no", "refund_status", "return_reason",
         "salesperson", "salesperson_store", "status", "user_id",
       ].join(", ");
