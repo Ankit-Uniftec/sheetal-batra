@@ -242,6 +242,88 @@
 }
 
 /* ============================================
+   PRODUCTION TAB
+   ============================================ */
+
+.rm-prod-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.rm-prod-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.rm-prod-search,
+.rm-prod-select {
+    padding: 7px 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    font-family: inherit;
+    color: #333;
+}
+
+.rm-prod-search {
+    min-width: 160px;
+}
+
+.rm-prod-search:focus,
+.rm-prod-select:focus {
+    outline: none;
+    border-color: #d5b85a;
+}
+
+/* A late order should be findable by scanning the column, not by reading. */
+.rm-row-overdue {
+    background: rgba(198, 40, 40, 0.05);
+}
+
+.rm-badge-overdue,
+.rm-badge-ontrack {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.rm-badge-overdue {
+    background: rgba(198, 40, 40, 0.12);
+    color: #c62828;
+}
+
+.rm-badge-ontrack {
+    background: rgba(46, 125, 50, 0.12);
+    color: #2e7d32;
+}
+
+@media (max-width: 640px) {
+    .rm-prod-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .rm-prod-controls {
+        width: 100%;
+    }
+
+    .rm-prod-search,
+    .rm-prod-select {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+}
+
+/* ============================================
    TAB HEADER / FILTER BAR (CMO-style)
    ============================================ */
 

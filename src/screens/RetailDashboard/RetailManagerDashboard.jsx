@@ -14,9 +14,13 @@ import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import StockPanel from "../../components/stock/StockPanel";
+import ProductionOverview from "../../components/ProductionOverview";
+import StageCountCards from "../../components/StageCountCards";
+import { isOrderStillRunning } from "../../utils/productionMetrics";
+import { getWarehouseDate, getWarehouseDateObj } from "../../utils/warehouseDate";
 import { poolsForUser } from "../../utils/stockVisibility";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
-import { getOrderChannelLabel } from "../../utils/barcodeService";
+import { getOrderChannelLabel, getStageLabel, PRODUCTION_STAGES } from "../../utils/barcodeService";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import DashboardHeader from "../../components/DashboardHeader";
@@ -137,6 +141,13 @@ export default function RetailManagerDashboard() {
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
     const [vendors, setVendors] = useState([]);
+    // Production tab (view-only) — lazy-loaded, see the effect below.
+    const [components, setComponents] = useState([]);
+    const [componentsLoaded, setComponentsLoaded] = useState(false);
+    const [componentsLoading, setComponentsLoading] = useState(false);
+    const [prodStageFilter, setProdStageFilter] = useState("all");
+    const [prodSearch, setProdSearch] = useState("");
+    const [prodPage, setProdPage] = useState(1);
     const [activeTab, setActiveTab] = useTabParam("store_analytics");
     const [showSidebar, setShowSidebar] = useState(false);
 
@@ -210,6 +221,29 @@ export default function RetailManagerDashboard() {
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
+
+    // Production pieces — fetched only when the Production tab is first opened,
+    // and once per session. order_components is the largest table in the app;
+    // loading it on mount would slow every other tab down for a read-only view
+    // most visits never open.
+    useEffect(() => {
+        if (activeTab !== "production" || componentsLoaded) return;
+        let cancelled = false;
+        (async () => {
+            setComponentsLoading(true);
+            const { data } = await fetchAllRows("order_components", (q) =>
+                // stages_outside is NOT a column here — it lives on external_movements
+                // and is attached by enrichComponentsWithMovements. Without it a piece
+                // at a vendor falls back to its current_stage bucket and is still
+                // correctly marked external, which is all this read-only view needs.
+                q.select("id, order_id, order_no, barcode, component_type, component_label, current_stage, stage_updated_at, is_active, is_rework, is_outside_wh, vendor_name, item_index, channel_key"));
+            if (cancelled) return;
+            setComponents(data || []);
+            setComponentsLoaded(true);
+            setComponentsLoading(false);
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab, componentsLoaded]);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -576,6 +610,71 @@ export default function RetailManagerDashboard() {
     }, [b2bOrders, vendors, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
+    // TAB: PRODUCTION (VIEW-ONLY)
+    // The retail manager needs to answer "where are the orders my stores are
+    // still waiting on?". Read-only by design: no stage overrides, no vendor
+    // moves, no status edits — those stay with Production.
+    //
+    // Scope is retailOrders (Delhi + Ludhiana + the other non-B2B channels),
+    // the same slice the rest of this dashboard treats as "retail".
+    // ═══════════════════════════════════════════════════════════
+
+    // Still on the floor: not delivered/completed/cancelled. isOrderStillRunning
+    // is the shared rule (it also reads warehouse_stage, so a dispatched-but-
+    // unstatused order isn't counted as outstanding).
+    const outstandingOrders = useMemo(
+        () => retailOrders.filter(isOrderStillRunning),
+        [retailOrders]
+    );
+
+    // Pieces belonging to those orders only — the cards below are piece-level.
+    const outstandingComponents = useMemo(() => {
+        if (!components.length) return [];
+        const ids = new Set(outstandingOrders.map((o) => o.id));
+        return components.filter((c) => ids.has(c.order_id));
+    }, [components, outstandingOrders]);
+
+    // Pieces for every retail order, outstanding or not — ProductionOverview
+    // uses this as the denominator for its re-journey rate.
+    const retailComponents = useMemo(() => {
+        if (!components.length) return [];
+        const ids = new Set(retailOrders.map((o) => o.id));
+        return components.filter((c) => ids.has(c.order_id));
+    }, [components, retailOrders]);
+
+    // The list underneath the cards. Overdue first — that is the whole point of
+    // the view — then by deadline, so the most urgent work reads top-down.
+    const productionList = useMemo(() => {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        let rows = outstandingOrders.map((o) => {
+            const deadline = getWarehouseDateObj(o.delivery_date, o.created_at);
+            return {
+                order: o,
+                stage: o.warehouse_stage || "order_received",
+                deadline,
+                overdue: deadline ? deadline < today : false,
+            };
+        });
+        if (prodStageFilter !== "all") rows = rows.filter((r) => r.stage === prodStageFilter);
+        if (prodSearch.trim()) {
+            const q = prodSearch.trim().toLowerCase();
+            rows = rows.filter((r) => r.order.order_no?.toLowerCase().includes(q));
+        }
+        return rows.sort((a, b) => {
+            if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+            return (a.deadline?.getTime() || Infinity) - (b.deadline?.getTime() || Infinity);
+        });
+    }, [outstandingOrders, prodStageFilter, prodSearch]);
+
+    const productionTotalPages = Math.ceil(productionList.length / ITEMS_PER_PAGE);
+    const currentProductionRows = useMemo(() => {
+        const start = (prodPage - 1) * ITEMS_PER_PAGE;
+        return productionList.slice(start, start + ITEMS_PER_PAGE);
+    }, [productionList, prodPage]);
+
+    useEffect(() => { setProdPage(1); }, [prodStageFilter, prodSearch]);
+
+    // ═══════════════════════════════════════════════════════════
     // TAB 4: ORDERS (B2B included by default)
     // ═══════════════════════════════════════════════════════════
     const salespersons = useMemo(() => {
@@ -741,6 +840,7 @@ export default function RetailManagerDashboard() {
                         <button className={`rm-nav-item ${activeTab === "daywise_sales" ? "active" : ""}`} onClick={() => { setActiveTab("daywise_sales"); setShowSidebar(false); }}>Day-wise Sales</button>
                         <button className={`rm-nav-item ${activeTab === "product_analytics" ? "active" : ""}`} onClick={() => { setActiveTab("product_analytics"); setShowSidebar(false); }}>Product Analytics</button>
                         <button className={`rm-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
+                        <button className={`rm-nav-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</button>
                         <button className={`rm-nav-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</button>
                         <button className="rm-nav-item logout" onClick={handleLogout}>Logout</button>
                     </nav>
@@ -759,6 +859,104 @@ export default function RetailManagerDashboard() {
                                 <h2 className="rm-section-title">Stock</h2>
                             </div>
                             <StockPanel pools={poolsForUser({ role: "retail_manager" })} />
+                        </div>
+                    )}
+
+                    {/* ═══════════ TAB: PRODUCTION (VIEW-ONLY) ═══════════ */}
+                    {activeTab === "production" && (
+                        <div className="rm-analytics-tab">
+                            <div className="rm-tab-header">
+                                <h2 className="rm-section-title">Production {"—"} Orders Still Outstanding</h2>
+                            </div>
+
+                            {componentsLoading ? (
+                                <div className="rm-loading"><div className="rm-spinner"></div><span>Loading production data{"…"}</span></div>
+                            ) : (
+                                <>
+                                    {/* Piece-level stage cards — one order can be half-finished, so
+                                        pieces are the honest unit here. */}
+                                    <StageCountCards components={outstandingComponents} />
+
+                                    {/* Shared operational metrics, same compute as every other
+                                        production dashboard, scoped to retail. */}
+                                    <ProductionOverview
+                                        orders={retailOrders}
+                                        components={outstandingComponents}
+                                        allComponents={retailComponents}
+                                        totalLabel="Total Retail Orders"
+                                    />
+
+                                    {/* The list: what is late, and where it is sitting. */}
+                                    <div className="rm-chart-card" style={{ marginTop: 20 }}>
+                                        <div className="rm-prod-toolbar">
+                                            <h3 className="rm-chart-title" style={{ margin: 0 }}>Outstanding Orders</h3>
+                                            <div className="rm-prod-controls">
+                                                <input
+                                                    className="rm-prod-search"
+                                                    type="text"
+                                                    placeholder="Search order no."
+                                                    value={prodSearch}
+                                                    onChange={(e) => setProdSearch(e.target.value)}
+                                                />
+                                                <select
+                                                    className="rm-prod-select"
+                                                    value={prodStageFilter}
+                                                    onChange={(e) => setProdStageFilter(e.target.value)}
+                                                >
+                                                    <option value="all">All stages</option>
+                                                    {PRODUCTION_STAGES.map((s) => (
+                                                        <option key={s.value} value={s.value}>{s.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {productionList.length > 0 ? (
+                                            <>
+                                                <div className="rm-table-wrapper">
+                                                    <div className="rm-table-container">
+                                                        <table className="rm-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Order No.</th>
+                                                                    <th>Channel</th>
+                                                                    <th>Stage</th>
+                                                                    <th>Dispatch By (T-2)</th>
+                                                                    <th>Status</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {currentProductionRows.map(({ order, stage, overdue }) => (
+                                                                    <tr key={order.id} className={overdue ? "rm-row-overdue" : ""}>
+                                                                        <td className="rm-product-cell">{order.order_no}</td>
+                                                                        <td>{getOrderChannel(order)}</td>
+                                                                        <td>{getStageLabel(stage)}</td>
+                                                                        <td>{getWarehouseDate(order.delivery_date, order.created_at)}</td>
+                                                                        <td>
+                                                                            {overdue
+                                                                                ? <span className="rm-badge-overdue">Overdue</span>
+                                                                                : <span className="rm-badge-ontrack">On track</span>}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                                {productionTotalPages > 1 && (
+                                                    <Paginator page={prodPage} totalPages={productionTotalPages} onChange={setProdPage} />
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="rm-no-chart-data">
+                                                {outstandingOrders.length === 0
+                                                    ? "Nothing outstanding — every retail order has cleared production."
+                                                    : "No orders match this filter."}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 
