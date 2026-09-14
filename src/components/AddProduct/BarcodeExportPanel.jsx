@@ -4,6 +4,7 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 import { downloadSkuBarcodeSheet } from "../../utils/pdfLazy";
 import Popup, { usePopup } from "../Popup";
 import Paginator from "../Paginator";
+import LabelDesigner from "../LabelDesigner/LabelDesigner";
 
 /**
  * BarcodeExportPanel — reserve a block of SKUs and print them as barcode tags.
@@ -341,6 +342,15 @@ export default function BarcodeExportPanel({ onReserved }) {
           </div>
         )
       )}
+
+      {/* ── What the slip says ──
+          The designer edits a STORED template, so this mount is the whole
+          integration — another dashboard adds the same one-liner and gets the
+          same design. See utils/labelTemplate.js. */}
+      {/* The designer picks its own sample product. It used to be handed
+          reserved[0], which is by definition a DRAFT — no colour, price or
+          category — so every preview printed empty rows. */}
+      <LabelDesigner surface="sku" />
     </div>
   );
 }
