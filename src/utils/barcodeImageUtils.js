@@ -89,13 +89,18 @@ export function generateMasterBarcodeDataUrl(text) {
  * If the label stock or printer DPI changes, re-tune this ALONGSIDE
  * SkuBarcodeSheetPdf.js. The two are one decision, not two.
  */
-export function generateLabelBarcodeDataUrl(text) {
+export function generateLabelBarcodeDataUrl(text, showValue = true) {
   return generateBarcodeDataUrl(text, {
     width: 2,
     height: 90,
     fontSize: 16,
     textMargin: 4,
     margin: 6,
+    // The label template can print the SKU as one of its own text lines, in
+    // which case jsbarcode's built-in value would print it a second time. The
+    // PDF drops VALUE_PX from the image height to match — the two must agree
+    // or the <Image> box stops matching the PNG's aspect ratio.
+    displayValue: showValue,
   });
 }
 

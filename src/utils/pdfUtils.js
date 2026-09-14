@@ -3,6 +3,11 @@ import { supabase } from "../lib/supabaseClient";
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
 import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
 import SkuBarcodeSheetPdf from "../pdf/SkuBarcodeSheetPdf";
+import {
+  fetchLabelTemplate,
+  labelProductsBySku,
+  labelValues,
+} from "./labelTemplate";
 // Full-resolution copy reserved for PDF embedding — logo.png (used by screens)
 // is downscaled for the web and must not end up inside generated PDFs.
 import Logo from "../images/logo-pdf.png";
@@ -561,17 +566,34 @@ export const clearPdfUrls = async (orderId) => {
  * Throws on failure rather than alert()-ing like its older neighbours here —
  * the caller owns the popup (usePopup), per the app-wide convention.
  *
+ * What each slip SAYS comes from the saved label template (label_templates,
+ * migration 92) — the client edits it in the designer instead of asking for a
+ * code change. An un-customised template prints bars + the SKU, exactly as
+ * this function always did.
+ *
  * @param {string[]} skus  e.g. ["SKU-1051", …]. Already reserved in `products`
  *                         by reserve_sku_rows() before this is called.
+ * @param {object} [templateOverride]  Print an unsaved design (the designer's
+ *                         preview). Omit to use the saved one.
  * @returns {Promise<number>} how many labels were rendered
  */
-export const downloadSkuBarcodeSheet = async (skus) => {
+export const downloadSkuBarcodeSheet = async (skus, templateOverride) => {
   const list = (skus || []).filter(Boolean);
   if (list.length === 0) throw new Error("No SKUs to print.");
 
+  // The saved design, unless the caller hands one in — the designer's preview
+  // passes its unsaved draft so the client can see a change before committing
+  // a roll of stickers to it.
+  const template = templateOverride || (await fetchLabelTemplate());
+
+  // One query for the whole batch, and none at all when the slip prints only
+  // bars. Per-SKU lookups would put 500 round trips in front of a print.
+  const products = await labelProductsBySku(list, template);
+
   const labels = list.map((sku) => ({
     sku,
-    image: generateLabelBarcodeDataUrl(sku),
+    image: generateLabelBarcodeDataUrl(sku, template.show_value !== false),
+    values: labelValues(products[sku], template),
   }));
 
   const printedOn = new Date().toLocaleDateString("en-IN", {
@@ -581,7 +603,7 @@ export const downloadSkuBarcodeSheet = async (skus) => {
   });
 
   const blob = await pdf(
-    <SkuBarcodeSheetPdf labels={labels} printedOn={printedOn} />
+    <SkuBarcodeSheetPdf labels={labels} template={template} printedOn={printedOn} />
   ).toBlob();
 
   const url = URL.createObjectURL(blob);
