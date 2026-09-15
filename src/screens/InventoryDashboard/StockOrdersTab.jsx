@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { getOrderChannelKey } from "../../utils/barcodeService";
+import { cancelOrder } from "../../utils/cancelOrder";
 import { usePopup } from "../../components/Popup";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
 import Paginator from "../../components/Paginator";
@@ -185,15 +186,14 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
       onConfirm: async () => {
         setActionLoadingId(order.id);
         try {
-          const { error } = await supabase
-            .from("orders")
-            .update({
-              status: "cancelled",
-              cancellation_reason: "stock_cancellation",
-              cancelled_at: new Date().toISOString(),
-            })
-            .eq("id", order.id);
-          if (error) throw error;
+          // restoreInventory:false is belt-and-braces — restoreOrderInventory
+          // already self-skips is_stock_order (procurement ADDS warehouse stock,
+          // it never reserved sellable inventory), but saying so here keeps the
+          // intent visible at the call site.
+          await cancelOrder(order, "stock_cancellation", {
+            email: localStorage.getItem("sp_email") || "",
+            restoreInventory: false,
+          });
           setOrders((prev) =>
             prev.map((o) => (o.id === order.id ? { ...o, status: "cancelled" } : o))
           );

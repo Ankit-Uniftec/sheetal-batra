@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
-import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
+import { cancelOrder } from "../../utils/cancelOrder";
 import "./EditOrder.css";
 import { usePopup } from "../../components/Popup";
 
@@ -234,23 +234,15 @@ export default function EditOrder() {
 
     if (!window.confirm("Are you sure you want to cancel this order?")) return;
 
-    const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
     try {
       setSaving(true);
 
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          status: "cancelled",
-          cancellation_reason: cancellationReason,
-          cancelled_at: new Date().toISOString(),
-        })
-        .eq("id", order.id);
-
-      if (error) throw error;
-
-      // Restore the inventory this order reserved at placement (once).
-      if (!wasCancelled) await restoreOrderInventory(order);
+      // Status, components off the production floor, inventory and B2B credit
+      // all live in utils/cancelOrder — one cancel path for the app.
+      await cancelOrder(order, cancellationReason, {
+        cancelledBy: order.salesperson || "",
+        email: localStorage.getItem("sp_email") || "",
+      });
 
       showPopup({
         title: "Order update",

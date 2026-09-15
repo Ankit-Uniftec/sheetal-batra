@@ -10,6 +10,7 @@ import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { isB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
 import { STOCK_HEAD_OPTIONS } from "../../utils/stockProductionHead";
+import { b2bPricing } from "../../utils/b2bPricing";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -105,10 +106,10 @@ export default function B2bOrderDetails() {
     const totalQuantity = productData?.totalQuantity || 0;
 
     const discountPercent = vendorData?.discountPercent || 0;
-    const markdownAmount = grandTotal * (discountPercent / 100);
     const collectorDiscount = vendorData?.collectorDiscount || 0;
-    const collectorDiscountAmount = grandTotal * (collectorDiscount / 100);
-    const finalTotal = grandTotal - markdownAmount - collectorDiscountAmount;
+    // Collector code applies to the POST-markdown price, not MRP. See b2bPricing.js.
+    const { markdownAmount, collectorDiscountAmount, finalTotal } =
+        b2bPricing(grandTotal, discountPercent, collectorDiscount);
 
     const availableCredit = vendorData?.availableCredit || 0;
     const orderType = vendorData?.orderType || "Buyout";

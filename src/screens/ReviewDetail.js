@@ -632,26 +632,13 @@ export default function ReviewDetail() {
       items: normalizedOrder.items || order.items || [],
     };
 
+    // generateAllPdfs writes customer_url/warehouse_urls to the row, so the
+    // `insertedOrder` snapshot taken before it still has them null. Everything
+    // below (notification attachments, the ORDER_PLACED WhatsApp) must read the
+    // returned URLs, not the stale snapshot.
+    let pdfUrls = null;
     try {
-      const pdfUrls = await generateAllPdfs(orderWithItems);
-
-      // Send WhatsApp with Customer PDF — sendPdfRef.current is decided BEFORE
-      // the signature step (asked for Private SA, defaulted to true for regular SA).
-      // No post-insert popup, single straight-line path through the rest of the function.
-      if (pdfUrls?.customer_url && sendPdfRef.current) {
-        try {
-          await fetch(`${config.SUPABASE_URL}/functions/v1/spur-whatsapp`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "apikey": config.SUPABASE_KEY, "Authorization": `Bearer ${config.SUPABASE_KEY}` },
-            body: JSON.stringify({
-              customerName: orderWithItems.delivery_name,
-              customerPhone: orderWithItems.delivery_phone,
-              customerCountry: orderWithItems.delivery_country || "India",
-              pdfUrl: pdfUrls.customer_url,
-            }),
-          });
-        } catch (err) { console.error("WhatsApp error:", err); }
-      }
+      pdfUrls = await generateAllPdfs(orderWithItems);
     } catch (pdfError) {
       console.error("❌ PDF generation failed:", pdfError);
     }
@@ -662,16 +649,14 @@ export default function ReviewDetail() {
       const source = items.some(i => i.sync_enabled) ? "Shopify" :
         order.is_b2b ? "B2B" : "Offline";
 
-      // Get PDF attachments from the inserted order (saved by generateAllPdfs)
+      // PDF attachments come from the generateAllPdfs return value (see above).
       const notifAttachments = [];
-      if (insertedOrder.customer_url) {
-        notifAttachments.push({ type: "order_pdf", url: insertedOrder.customer_url });
+      if (pdfUrls?.customer_url) {
+        notifAttachments.push({ type: "order_pdf", url: pdfUrls.customer_url });
       }
-      if (insertedOrder.warehouse_urls?.length) {
-        insertedOrder.warehouse_urls.forEach(url => {
-          notifAttachments.push({ type: "order_pdf", url });
-        });
-      }
+      pdfUrls?.warehouse_urls?.forEach(url => {
+        notifAttachments.push({ type: "order_pdf", url });
+      });
 
       await sendNotification(NOTIFICATION_TYPES.ORDER_PLACED, {
         orderId: insertedOrder.id,
@@ -702,14 +687,18 @@ export default function ReviewDetail() {
         }).catch(err => console.error("PVT notification error:", err));
       }
 
-      // WhatsApp to client — Order Placed
-      sendWhatsApp({
-        customerName: normalizedOrder.delivery_name,
-        customerPhone: normalizedOrder.delivery_phone,
-        customerCountry: normalizedOrder.delivery_country,
-        template: WA_TEMPLATES.ORDER_PLACED,
-        pdfUrl: insertedOrder.customer_url,
-      }).catch(err => console.error("WA order placed error:", err));
+      // WhatsApp to client — Order Placed. Skipped when the SA chose not to send
+      // the PDF, and when the PDF failed to generate: the template's only button
+      // is the PDF link, so sending without a URL delivers a dead button.
+      if (sendPdfRef.current && pdfUrls?.customer_url) {
+        sendWhatsApp({
+          customerName: normalizedOrder.delivery_name,
+          customerPhone: normalizedOrder.delivery_phone,
+          customerCountry: normalizedOrder.delivery_country,
+          template: WA_TEMPLATES.ORDER_PLACED,
+          pdfUrl: pdfUrls.customer_url,
+        }).catch(err => console.error("WA order placed error:", err));
+      }
     } catch (notifErr) {
       console.error("❌ Notification error (non-blocking):", notifErr);
     }
