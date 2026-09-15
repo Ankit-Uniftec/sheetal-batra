@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "../utils/fetchAllRows";
 import { isRevenueOrder } from "../utils/revenue";
-import { restoreOrderInventory } from "../utils/restoreOrderInventory";
+import { cancelOrder } from "../utils/cancelOrder";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import formatDate from "../utils/formatDate";
@@ -952,22 +952,14 @@ export default function Dashboard() {
       confirmText: "Yes, Cancel",
       cancelText: "No",
       onConfirm: async () => {
-        const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
         setActionLoading(order.id);
         try {
-          const { error } = await supabase
-            .from("orders")
-            .update({
-              status: "cancelled",
-              cancellation_reason: reason,
-              cancelled_at: new Date().toISOString(),
-            })
-            .eq("id", order.id);
-
-          if (error) throw error;
-
-          // Restore the inventory this order reserved at placement (once).
-          if (!wasCancelled) await restoreOrderInventory(order);
+          // Status, components off the production floor, inventory and B2B
+          // credit all live in utils/cancelOrder — one cancel path for the app.
+          await cancelOrder(order, reason, {
+            cancelledBy: order.salesperson || "",
+            email: localStorage.getItem("sp_email") || "",
+          });
 
           setOrders(prev => prev.map(o =>
             o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: reason } : o

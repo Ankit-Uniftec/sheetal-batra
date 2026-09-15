@@ -360,6 +360,16 @@
 .pm-manual-complete-btn:hover:not(:disabled) { background: #fff6ee; }
 .pm-manual-complete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Destructive — red, and last in the row so it isn't hit by accident. */
+.pm-cancel-btn { background: #fff; border: 1px solid #f0c9c9 !important; color: #c62828 !important; margin-left: auto; }
+.pm-cancel-btn:hover:not(:disabled) { background: #c62828; border-color: #c62828 !important; color: #fff !important; }
+.pm-cancel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pm-cancel-warning { margin: 0 0 14px; padding: 10px 12px; background: #fff5f5; border: 1px solid #f0c9c9; border-radius: 8px; color: #8c2f2f; font-size: 13px; line-height: 1.5; }
+.pm-cancel-confirm { padding: 10px 24px; background: #c62828; color: #fff !important; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
+.pm-cancel-confirm:hover:not(:disabled) { background: #a81f1f; }
+.pm-cancel-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Pagination */
 .pm-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 20px; padding: 10px 0; }
 .pm-pagination-btn { padding: 8px 20px; background: white; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; transition: all 0.2s; }

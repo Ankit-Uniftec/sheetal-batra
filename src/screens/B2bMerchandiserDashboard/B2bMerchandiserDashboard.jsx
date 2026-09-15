@@ -13,10 +13,11 @@ import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import QcReportModal from "../../components/QcReportModal";
 import { isB2bMerchandiserEmail } from "../../utils/appEnvironment";
-import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel } from "../../utils/barcodeService";
+import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel, getOrderProgressStatus } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
-import { restoreOrderInventory } from "../../utils/restoreOrderInventory";
+// Aliased: `cancelOrder` is already a state variable here (the looked-up order).
+import { cancelOrder as runCancelOrder } from "../../utils/cancelOrder";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
@@ -685,6 +686,31 @@ export default function B2bMerchandiserDashboard() {
     // (offline). Indexing it with a JS key renders a raw "offline" for every
     // store order.
     const hoursSince = (ts) => (ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : Infinity);
+
+    // Show the card's Cancel button only when the cancel would actually be
+    // allowed — the same two rules handleConfirmCancel enforces. A button that
+    // exists only to alert "the window has expired" is worse than no button.
+    const canCancelFromCard = (o) => {
+        if (!o) return false;
+        // DERIVED status, not o.status: an order reads "Dispatched" off
+        // warehouse_stage / its components while orders.status can still say
+        // something earlier, and a garment that has physically shipped must not
+        // offer Cancel whichever column recorded that.
+        if (["Dispatched", "Delivered", "Cancelled"].includes(getOrderProgressStatus(o, componentsByOrder[o.id]))) return false;
+        return hoursSince(o.created_at) < 24 || isB2bMerchandiserEmail(user?.email);
+    };
+
+    // The Cancel Order tab already owns the reason box, the eligibility banner
+    // and the confirm. Jump to it with the order preloaded instead of building
+    // a second cancel UI on the card.
+    const openCancelForOrder = (o) => {
+        setCancelOrder(o);
+        setCancelResults(null);
+        setCancelError("");
+        setCancelReason("");
+        setCancelSearch(o.order_no || "");
+        setActiveTab("cancel_order");
+    };
     const orderAmount = (o) => Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
 
     const handleFindCancelOrder = async () => {
@@ -740,50 +766,27 @@ export default function B2bMerchandiserDashboard() {
         if (!cancelReason.trim()) { alert("Please enter a reason for cancellation."); return; }
         // The designated B2B merchandiser can cancel past the 24h window.
         if (hoursSince(order.created_at) >= 24 && !isB2bMerchandiserEmail(user?.email)) { alert("The 24-hour cancellation window has expired."); return; }
-        const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
         setCancelProcessing(true);
         try {
-            // 1. Cancel — same 3 fields every existing cancel handler writes.
-            const { error } = await supabase.from("orders").update({
-                status: "cancelled",
-                cancellation_reason: cancelReason.trim(),
-                cancelled_at: new Date().toISOString(),
-            }).eq("id", order.id);
-            if (error) throw error;
-
-            // Restore the inventory this order reserved at placement (once).
-            if (!wasCancelled) await restoreOrderInventory(order);
-
-            // 2. B2B Buyout credit reversal — only for an approved Buyout order that
-            //    actually added to the vendor's used credit at approval time.
-            if (order.is_b2b && order.b2b_order_type === "Buyout" && order.vendor_id && order.approval_status === "approved") {
-                try {
-                    const { data: v } = await supabase.from("vendors").select("current_credit_used").eq("id", order.vendor_id).single();
-                    await supabase.from("vendors").update({
-                        current_credit_used: Math.max(0, Number(v?.current_credit_used || 0) - orderAmount(order)),
-                    }).eq("id", order.vendor_id);
-                } catch (creditErr) {
-                    console.error("Credit reversal failed (order still cancelled):", creditErr);
-                }
-            }
-
-            // 3. Notify production — PM always (static), channel-correct head added
-            //    dynamically. No customer notification.
-            let headEmail = null;
-            try {
-                const { data: he } = await supabase.rpc("get_production_head_email", { p_order_id: order.id });
-                headEmail = he || null;
-            } catch (e) { /* non-fatal — PM still gets it */ }
-            sendNotification(NOTIFICATION_TYPES.ORDER_CANCELLED, {
-                orderId: order.id,
-                orderNo: order.order_no,
-                metadata: { client_name: order.delivery_name, source: order.salesperson_store, cancelled_by: profile?.saleperson || "" },
-                extraRecipients: headEmail ? [{ email: headEmail.toLowerCase(), channel: "in_app" }] : [],
-            }).catch(err => console.error("Notification error:", err));
+            // Whole cancellation (status, components, inventory, credit, notify)
+            // lives in utils/cancelOrder so the PM dashboard runs the same steps.
+            const { cancelledComponents } = await runCancelOrder(order, cancelReason.trim(), {
+                cancelledBy: profile?.saleperson || "",
+                email: user?.email || "",
+            });
 
             setCancelOrder(prev => prev ? { ...prev, status: "cancelled", cancellation_reason: cancelReason.trim() } : prev);
+            // The card in the All Orders list is a different object — patch it too,
+            // or the badge stays green until the next reload.
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled" } : o));
             setCancelReason("");
-            showPopup({ type: "success", title: "Order Cancelled", message: `Order ${order.order_no} has been cancelled.`, confirmText: "OK" });
+            showPopup({
+                type: "success",
+                title: "Order Cancelled",
+                message: `Order ${order.order_no} has been cancelled.`
+                    + (cancelledComponents ? ` ${cancelledComponents} piece(s) pulled out of production.` : ""),
+                confirmText: "OK",
+            });
         } catch (err) {
             console.error("Cancel error:", err);
             showPopup({ type: "error", title: "Error", message: "Failed to cancel: " + (err.message || "Unknown error"), confirmText: "OK" });
@@ -1224,14 +1227,14 @@ export default function B2bMerchandiserDashboard() {
                                                 ))}
                                             </div>
                                         )}
-                                        {(order.approval_status === "pending" || (canViewProduction && order.approval_status === "approved")) && (
+                                        {(order.approval_status === "pending" || (canViewProduction && order.approval_status === "approved") || canCancelFromCard(order)) && (
                                             <div className="merch-ocard-actions" onClick={(e) => e.stopPropagation()}>
                                                 {order.approval_status === "pending" ? (
                                                     <>
                                                         <button className="merch-btn-approve" onClick={() => setApprovalModal({ order, action: "approve" })}>{"\u2713"} Approve</button>
                                                         <button className="merch-btn-reject" onClick={() => setApprovalModal({ order, action: "reject" })}>{"\u2715"} Reject</button>
                                                     </>
-                                                ) : (
+                                                ) : (canViewProduction && order.approval_status === "approved") ? (
                                                     <>
                                                         {/* Barcodes are only minted at approval, so a pending order has
                                                             no journey to show \u2014 hence approved-only. */}
@@ -1242,6 +1245,12 @@ export default function B2bMerchandiserDashboard() {
                                                             and "has this been checked yet?" is itself the question. */}
                                                         <button className="merch-btn-qc" onClick={() => setQcReportOrder({ id: order.id, order_no: order.order_no })}>QC Report</button>
                                                     </>
+                                                ) : null}
+                                                {/* Straight to the existing Cancel Order tab with this order already
+                                                    loaded \u2014 the reason box and eligibility banner live there, and
+                                                    cancelling still costs a typed reason plus a confirm. */}
+                                                {canCancelFromCard(order) && (
+                                                    <button className="merch-btn-cancel" onClick={() => openCancelForOrder(order)}>Cancel Order</button>
                                                 )}
                                             </div>
                                         )}

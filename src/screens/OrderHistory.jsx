@@ -12,7 +12,7 @@ import { usePopup } from "../components/Popup";
 import config from "../config/config";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
-import { restoreOrderInventory } from "../utils/restoreOrderInventory";
+import { cancelOrder } from "../utils/cancelOrder";
 import useTabParam from "../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../hooks/useFilterParam";
 import { usePeriodFilterParam } from "../components/PeriodFilter";
@@ -667,24 +667,18 @@ export default function OrderHistory() {
 
     const order = actionModal.order;
     const finalReason = actionReason === "other" ? `Other: ${actionOtherReason}` : actionReason;
-    const wasCancelled = (order.status || "").toLowerCase() === "cancelled";
-
     setActionLoading(order.id);
     try {
-      // MUST check the update error: an unchecked failure here silently left
-      // the order un-cancelled while the success popup + ORDER_CANCELLED
-      // notification still fired (a "cancellation" notification with no actual
-      // cancellation and no audit trail). Throw so the catch surfaces it and
-      // nothing downstream runs.
-      const { error: cancelErr } = await supabase.from("orders").update({
-        status: "cancelled",
-        cancellation_reason: finalReason,
-        cancelled_at: new Date().toISOString(),
-      }).eq("id", order.id);
-      if (cancelErr) throw cancelErr;
-
-      // Restore the inventory this order reserved at placement (once).
-      if (!wasCancelled) await restoreOrderInventory(order);
+      // Whole cancellation (status, components off the production floor,
+      // inventory, B2B credit) lives in utils/cancelOrder — it throws on the
+      // status write, so a failed cancel can never reach the success popup or
+      // the ORDER_CANCELLED notification below. notify:false because this
+      // screen sends its own, with the customer PDF attached.
+      await cancelOrder(order, finalReason, {
+        cancelledBy: order.salesperson || "",
+        email: localStorage.getItem("sp_email") || "",
+        notify: false,
+      });
 
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: finalReason } : o));
       closeActionModal();
@@ -728,12 +722,20 @@ export default function OrderHistory() {
 
     setActionLoading(order.id);
     try {
-      const { error: revokeErr } = await supabase.from("orders").update({
+      // A revoke is a cancellation the brand initiated — same physical outcome
+      // (the garment is not being delivered), so it must take the pieces off
+      // the production floor too. notify:false: the two revoke-specific
+      // notifications below replace the generic cancellation one.
+      // restoreInventory:false preserves this path's existing behaviour — revoke
+      // has never restored inventory (only cancel did). Whether it should is a
+      // separate question; this change is about the production floor, not stock.
+      await cancelOrder(order, "Brand-Initiated (Pre-Delivery) - Unable to fulfil order", {
         status: "revoked",
-        revoked_at: new Date().toISOString(),
-        cancellation_reason: "Brand-Initiated (Pre-Delivery) - Unable to fulfil order",
-      }).eq("id", order.id);
-      if (revokeErr) throw revokeErr;
+        cancelledBy: order.salesperson || "",
+        email: localStorage.getItem("sp_email") || "",
+        notify: false,
+        restoreInventory: false,
+      });
 
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "revoked" } : o));
       closeActionModal();

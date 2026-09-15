@@ -15,6 +15,7 @@ import StageCountCards from "../../../components/StageCountCards";
 import QcHistoryPanel from "../../../components/QcHistoryPanel";
 import { fetchQcRecords, whichQcLabel } from "../../../utils/qcHistory";
 import { runManualCompleteWithOverride, describeBlocking } from "../../../utils/manualComplete";
+import { cancelOrder } from "../../../utils/cancelOrder";
 import ReJourneyPanel from "../../../components/ReJourneyPanel";
 import { fetchReJourneys } from "../../../utils/reJourneys";
 import ExternalVendorsPanel from "../../../components/ExternalVendorsPanel";
@@ -347,6 +348,8 @@ export default function ProductionManagerDashboard() {
     // Priority modal
     const [priorityOrder, setPriorityOrder] = useState(null);
     const [priorityValue, setPriorityValue] = useState("");
+    const [cancelTarget, setCancelTarget] = useState(null);
+    const [cancelReason, setCancelReason] = useState("");
     const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
     const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
@@ -2127,6 +2130,41 @@ export default function ProductionManagerDashboard() {
         finally { setActionLoading(null); }
     };
 
+    // ==================== CANCEL ORDER ====================
+    // No 24h window here (unlike the merchandiser): the PM is the senior
+    // production role and is usually told about a store-side cancellation days
+    // later — which is exactly when the pieces most need pulling off the floor.
+    const openCancelModal = (e, order) => { e.stopPropagation(); setCancelTarget(order); setCancelReason(""); };
+
+    const handleConfirmCancel = async () => {
+        if (!cancelTarget) return;
+        if (!cancelReason.trim()) {
+            showPopup({ type: "error", title: "Reason Required", message: "Enter why this order is being cancelled.", confirmText: "OK" });
+            return;
+        }
+        setActionLoading(cancelTarget.id);
+        try {
+            const { cancelledComponents } = await cancelOrder(cancelTarget, cancelReason.trim(), {
+                cancelledBy: profile?.saleperson || currentUserEmail || "",
+                email: currentUserEmail || "",
+            });
+            setOrders(prev => prev.map(o => o.id === cancelTarget.id
+                ? { ...o, status: "cancelled", cancellation_reason: cancelReason.trim() } : o));
+            const orderNo = cancelTarget.order_no;
+            setCancelTarget(null);
+            setCancelReason("");
+            showPopup({
+                type: "success",
+                title: "Order Cancelled",
+                message: `Order ${orderNo} has been cancelled.`
+                    + (cancelledComponents ? ` ${cancelledComponents} piece(s) pulled out of production.` : ""),
+                confirmText: "OK",
+            });
+        } catch (err) {
+            showPopup({ type: "error", title: "Cancellation Failed", message: err.message || "Could not cancel this order.", confirmText: "OK" });
+        } finally { setActionLoading(null); }
+    };
+
     const viewOrderDetails = (order) => {
         navigate(`/order/${order.id}`, { state: { fromProductionManager: true } });
     };
@@ -2309,7 +2347,43 @@ export default function ProductionManagerDashboard() {
                 </div>
             )}
 
-            <div className={`pm-dashboard-wrapper ${editingOrder || priorityOrder ? "pm-blurred" : ""}`}>
+            {cancelTarget && (
+                <div className="pm-edit-modal">
+                    <div className="pm-edit-box" style={{ maxWidth: 460 }}>
+                        <h3>Cancel Order — {cancelTarget.order_no}</h3>
+                        <button className="pm-close-modal" onClick={() => setCancelTarget(null)}>✕</button>
+                        <div className="pm-edit-form">
+                            <p className="pm-cancel-warning">
+                                This cancels the order and pulls every piece off the production
+                                floor — the scan station will refuse them. Reserved inventory is
+                                returned and production is notified. This is not reversible here.
+                            </p>
+                            <div className="pm-edit-field">
+                                <label>Reason for cancellation *</label>
+                                <textarea
+                                    rows={3}
+                                    value={cancelReason}
+                                    onChange={(e) => setCancelReason(e.target.value)}
+                                    placeholder="e.g. Cancelled by the store on 15 Sep"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="pm-edit-actions">
+                                <button className="pm-edit-cancel" onClick={() => setCancelTarget(null)}>Keep Order</button>
+                                <button
+                                    className="pm-cancel-confirm"
+                                    onClick={handleConfirmCancel}
+                                    disabled={actionLoading === cancelTarget.id || !cancelReason.trim()}
+                                >
+                                    {actionLoading === cancelTarget.id ? "Cancelling..." : "Cancel Order"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className={`pm-dashboard-wrapper ${editingOrder || priorityOrder || cancelTarget ? "pm-blurred" : ""}`}>
                 {/* ===== HEADER ===== */}
                 <DashboardHeader
                     title="Production Manager"
@@ -2878,7 +2952,7 @@ export default function ProductionManagerDashboard() {
                                                         <button className="pm-action-btn pm-journey-btn" onClick={(e) => openJourney(e, order, componentsByOrder[order.id])}>View Journey</button>
                                                     )}
                                                     {/* A cancelled order can't be edited or re-prioritised. */}
-                                                    {order.status !== "cancelled" && (
+                                                    {statusLabel !== "Cancelled" && (
                                                         <>
                                                             <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
                                                             <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
@@ -2887,13 +2961,29 @@ export default function ProductionManagerDashboard() {
                                                     {/* Production completion only — dispatch belongs to Packaging
                                                         (Aryadeep's flow), delivery to the SA flow. Final QC is
                                                         enforced by the RPC. */}
-                                                    {!["completed", "delivered", "cancelled"].includes(order.status) && (
+                                                    {!["Completed", "Delivered", "Dispatched", "Cancelled"].includes(statusLabel) && (
                                                         <button
                                                             className="pm-action-btn pm-manual-complete-btn"
                                                             disabled={actionLoading === order.id}
                                                             onClick={(e) => markManualComplete(order, e)}
                                                         >
                                                             {actionLoading === order.id ? "Marking..." : "Mark as Completed"}
+                                                        </button>
+                                                    )}
+                                                    {/* Dispatched/delivered pieces have physically left — cancelling
+                                                        the order can't unship them, so it isn't offered.
+                                                        Gated on statusLabel (the DERIVED status the badge shows),
+                                                        NOT order.status: a card reading "Dispatched" off
+                                                        warehouse_stage/components while orders.status still says
+                                                        something else was still offering Cancel. The button must
+                                                        agree with the badge the user is looking at. */}
+                                                    {!["Dispatched", "Delivered", "Cancelled"].includes(statusLabel) && (
+                                                        <button
+                                                            className="pm-action-btn pm-cancel-btn"
+                                                            disabled={actionLoading === order.id}
+                                                            onClick={(e) => openCancelModal(e, order)}
+                                                        >
+                                                            Cancel Order
                                                         </button>
                                                     )}
                                                     {/* <span className={`pm-recent-status ${getStatusClass(statusLabel)}`} style={{ marginLeft: "auto" }}>{statusLabel}</span> */}
