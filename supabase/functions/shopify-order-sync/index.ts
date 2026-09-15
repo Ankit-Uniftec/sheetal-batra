@@ -462,6 +462,50 @@ function rawIsStale(storedRaw: any): boolean {
 }
 
 /**
+ * Have a product's TAGS changed in Shopify since the snapshot was stored?
+ *
+ * The companion to rawIsStale, for the staleness it cannot see: rawIsStale only
+ * ever inspects the STORED blob, so it can detect an absent key but never a
+ * changed value. This one compares stored against the fresh node.
+ *
+ * Why tags specifically: they carry the dupatta signal ("WITH DUPATTA") and the
+ * accessory signal ("Odhanis/Dupattas"), the two product fields that decide
+ * which barcodes get minted. A tag added AFTER ingest is invisible to every
+ * recovery mode — the key is present, so refresh-raw says "not stale", and
+ * remap-items replays the pre-tag blob and re-derives "no dupatta" forever.
+ * Seen live on 6 orders whose product was tagged after the order came in.
+ *
+ * Compared as a SET per product id, for the same reason as the order-tag diff
+ * above: Shopify does not promise tag order, and a re-ordered list must not read
+ * as a change and churn the table on every reconcile poll.
+ *
+ * Only products present in BOTH is a deliberate choice: a line whose product
+ * appears or disappears is a line-item change, which rawIsStale and the
+ * items-level paths already own.
+ */
+function productTagsChanged(storedRaw: any, node: any): boolean {
+  const tagsById = (raw: any): Map<string, string> => {
+    const m = new Map<string, string>();
+    for (const e of raw?.lineItems?.edges || []) {
+      const p = e?.node?.variant?.product;
+      // Absent key is rawIsStale's job, not ours — skip rather than treat the
+      // missing list as an empty one, which would read as a change every run.
+      if (!p?.id || !Array.isArray(p.tags)) continue;
+      m.set(String(p.id), [...p.tags].map(String).sort().join("\n"));
+    }
+    return m;
+  };
+  const before = tagsById(storedRaw);
+  if (before.size === 0) return false;
+  const after = tagsById(node);
+  for (const [id, sig] of before) {
+    const now = after.get(id);
+    if (now !== undefined && now !== sig) return true;
+  }
+  return false;
+}
+
+/**
  * Fire the Order Cancelled (#21) notification for an order Shopify killed.
  *
  * Mirrors the in-app cancel paths (OrderHistory.jsx:701-715 is the reference)
@@ -672,7 +716,23 @@ async function refreshExistingOrder(
   // payment state is identical. Without this the fresh node is fetched, found
   // "unchanged", and thrown away — leaving remap-items replaying a blob that
   // can never answer the new question.
-  if (rawIsStale(existing.shopify_raw)) changed.push("shopify_raw");
+  //
+  // Two kinds of staleness, and only the first is structural:
+  //   1. The snapshot never carried the field at all (rawIsStale) — it predates
+  //      a query change, so the key is absent.
+  //   2. The snapshot carries the field but its VALUE has since changed in
+  //      Shopify. Product tags are the case that bites: the catalogue team tags
+  //      "WITH DUPATTA" after an order has already been ingested, and the stored
+  //      blob keeps the pre-tag list forever. Every recovery path replays that
+  //      blob, so the dupatta never gets a barcode and no mode can heal it —
+  //      refresh-raw reports "stale: 0" because the key IS there.
+  // Tags only: they are the product fields production actually branches on
+  // (resolveDupatta / isAccessoryProduct). Deliberately not a deep diff of the
+  // whole node — Shopify re-serialises with incidental churn, which is the write
+  // amplification the change-detection exists to prevent.
+  if (rawIsStale(existing.shopify_raw) || productTagsChanged(existing.shopify_raw, node)) {
+    changed.push("shopify_raw");
+  }
 
   // Cancelled on Shopify. `cancelledAt` has been in ORDER_FIELDS all along and
   // was read by nothing — every path fetched it and threw it away.
