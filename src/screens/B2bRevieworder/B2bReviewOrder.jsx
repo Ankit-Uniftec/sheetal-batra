@@ -11,6 +11,7 @@ import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
 import { isValidStockHeadDesignation } from "../../utils/stockProductionHead";
+import { b2bPricing } from "../../utils/b2bPricing";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -143,9 +144,9 @@ export default function B2bReviewOrder() {
     const deliveryAddress = detailsData?.deliveryAddress || "";
     const orderNotes = detailsData?.orderNotes || "";
 
-    const markdownAmount = grandTotal * (discountPercent / 100);
-    const collectorDiscountAmount = grandTotal * (collectorDiscount / 100);
-    const finalTotal = grandTotal - markdownAmount - collectorDiscountAmount;
+    // Collector code applies to the POST-markdown price, not MRP. See b2bPricing.js.
+    const { markdownAmount, collectorDiscountAmount, finalTotal } =
+        b2bPricing(grandTotal, discountPercent, collectorDiscount);
 
     const projectedCredit = (vendor?.current_credit_used || 0) + (orderType === "Buyout" ? finalTotal : 0);
     const creditLimit = vendor?.credit_limit || 0;
