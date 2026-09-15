@@ -1174,7 +1174,11 @@ export function getBarcodeRoot(orderNo) {
   return { storeCode, seqPart };
 }
 
-export async function generateOrderComponents(order) {
+// Builds the component ROWS for an order without touching the database. Split
+// out of generateOrderComponents so ensureOrderComponents can work out what is
+// missing using the very same rules — two copies of "what pieces does this
+// order have" would drift, and the copy that drifted would mint wrong barcodes.
+export function buildOrderComponents(order) {
   const components = [];
   const orderNo = order.order_no;
   const { storeCode, seqPart } = getBarcodeRoot(orderNo);
@@ -1275,9 +1279,13 @@ export async function generateOrderComponents(order) {
     });
   }
 
+  return components;
+}
+
+export async function generateOrderComponents(order) {
   const { data, error } = await supabase
     .from("order_components")
-    .insert(components)
+    .insert(buildOrderComponents(order))
     .select();
 
   if (error) throw error;
@@ -1288,19 +1296,40 @@ export async function generateOrderComponents(order) {
 // 10b. ENSURE COMPONENTS — idempotent wrapper around generateOrderComponents.
 // Safe to call more than once for the same order (e.g. B2B orders whose
 // approval can fire from multiple paths, or an edit→re-approve cycle).
-// No-ops and returns the existing rows if components already exist.
+//
+// Mints the barcodes that are MISSING, keyed on the barcode itself — it does
+// not bail out just because the order already has some. A piece can be added
+// to an order after its first approval: the commonest case is a product whose
+// `has_dupatta` was corrected to true afterwards, which flips the item's
+// `includes_dupatta` and calls for a DUP barcode the order never got. The
+// earlier "any row exists → return" check made that unreachable, so the
+// dupatta could never be tracked or scanned no matter how the data was fixed.
+//
+// Never deletes and never updates. A component whose barcode is already there
+// is left exactly as it is — it may have been printed, scanned and advanced
+// through production, and re-minting it would reset a physical garment's
+// journey. Removing a piece from an order is deliberately NOT handled here.
 // ============================================================
 export async function ensureOrderComponents(order) {
   const { data: existing, error } = await supabase
     .from("order_components")
-    .select("id")
-    .eq("order_id", order.id)
-    .limit(1);
+    .select("*")
+    .eq("order_id", order.id);
 
   if (error) throw error;
-  if (existing && existing.length > 0) return existing;
+  if (!existing || existing.length === 0) return generateOrderComponents(order);
 
-  return generateOrderComponents(order);
+  const have = new Set(existing.map((c) => c.barcode));
+  const missing = buildOrderComponents(order).filter((c) => !have.has(c.barcode));
+  if (missing.length === 0) return existing;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("order_components")
+    .insert(missing)
+    .select();
+
+  if (insertError) throw insertError;
+  return [...existing, ...(inserted || [])];
 }
 
 // ============================================================
