@@ -69,7 +69,8 @@ export default function SALogin() {
       } else if (userRecord.role === "warehouse") {
         navigate("/warehouseDashboard");
       } else if (userRecord.role === "inventory") {
-        navigate("/inventoryDashboard");
+        // Inventory lands on the Stock Room; /inventoryDashboard stays reachable from its menu.
+        navigate("/stock-room");
       } else if (userRecord.role === "accounts") {
         navigate("/accounts")
       } else if (userRecord.role === "accountant") {

@@ -19,6 +19,7 @@ const OrderHistory = lazy(() => import("./screens/OrderHistory"));
 const OrderPlaced = lazy(() => import("./screens/OrderPlacedScreen/OrderPlaced"));
 const EditOrder = lazy(() => import("./screens/EditOrder/EditOrder"));
 const InventoryDashboard = lazy(() => import("./screens/InventoryDashboard/InventoryDashboard"));
+const StockRoom = lazy(() => import("./screens/StockRoom/StockRoom"));
 const AccountsDashboard = lazy(() => import("./screens/AccountsDashboard/AccountsDashboard"));
 const AccountantDashboard = lazy(() => import("./screens/AccountantDashboard/AccountantDashboard"));
 const HeadOfDesignDashboard = lazy(() => import("./screens/HeadOfDesignDashboard/HeadOfDesignDashboard"));
@@ -89,6 +90,7 @@ function App() {
         <Route path="order-placed" element={<PrivateRoute><OrderPlaced /></PrivateRoute>} />
         <Route path="/edit-order" element={<PrivateRoute><EditOrder /></PrivateRoute>} />
         <Route path="/inventoryDashboard" element={<PrivateRoute><InventoryDashboard /></PrivateRoute>} />
+        <Route path="/stock-room" element={<PrivateRoute><StockRoom /></PrivateRoute>} />
         <Route path="/accounts" element={<PrivateRoute><AccountsDashboard /></PrivateRoute>} />
         <Route path="/accountant-dashboard" element={<PrivateRoute><AccountantDashboard /></PrivateRoute>} />
         <Route path="/head-of-design-dashboard" element={<PrivateRoute><HeadOfDesignDashboard /></PrivateRoute>} />
