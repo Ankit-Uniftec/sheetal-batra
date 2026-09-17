@@ -4,7 +4,7 @@ import { PField, FieldRow, Combo, StockHint } from "./ProductFormUi";
 import {
   placeStock, transferStock, sellStock, receiveStock, adjustStock, assignSale, newRequestId,
 } from "./stockRoomData";
-import { settleShopify, SHOPIFY_SYNC_ON } from "./stockRoomShopify";
+import { settleShopify, pullShopifyStock, SHOPIFY_SYNC_ON } from "./stockRoomShopify";
 import { formatUnits, formatInr, sizeLabel, sortSizes, orderPrefix, formatDay, TYPE_LXRTS, TYPE_CUSTOM } from "./stockRoomModel";
 
 // ============================================================
@@ -233,6 +233,14 @@ export default function StockActionForm({ mode, initial = {}, view, onClose, onD
     setSubmitting(true);
     setError("");
     try {
+      // Before changing an LXRTS count, take Shopify's current number first (as the
+      // old dashboard does on load), so the change starts from what Shopify holds.
+      if (SHOPIFY_SYNC_ON && ["sell", "receive", "adjust"].includes(mode)) {
+        const ids = [...new Set(lines.map((l) => l.productId))].filter((id) => view.rowsById[id]?.type === TYPE_LXRTS);
+        if (ids.length) {
+          await pullShopifyStock(ids.map((id) => view.productsById[id]), ids.flatMap((id) => view.variantsByProduct[id] || []));
+        }
+      }
       const payloadLines = lines.map((l) => ({ productId: l.productId, size: l.size, qty: Number(l.qty), orderLine: l.orderLine }));
       let result;
       let message;

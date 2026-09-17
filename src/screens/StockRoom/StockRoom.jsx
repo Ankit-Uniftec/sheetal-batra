@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Logo from "../../images/logo.png";
 import useTabParam from "../../hooks/useTabParam";
@@ -6,7 +6,7 @@ import { isProdEnvironment } from "../../utils/appEnvironment";
 import {
   loadStockRoomUser, loadStockRoomCatalogue, loadStockOrders, loadSales, loadLedger, signOutOfStockRoom,
 } from "./stockRoomData";
-import { WRITES_ON, SHOPIFY_SYNC_ON, COUNT_CHANGES_ON, PRODUCT_WRITES_ON, COUNT_CHANGING_ACTIONS } from "./stockRoomShopify";
+import { WRITES_ON, SHOPIFY_SYNC_ON, COUNT_CHANGES_ON, PRODUCT_WRITES_ON, COUNT_CHANGING_ACTIONS, pullShopifyStock } from "./stockRoomShopify";
 import useStockRoomView from "./useStockRoomView";
 import { Icon, Toast } from "./StockRoomUi";
 import { formatUnits, timeAgo } from "./stockRoomModel";
@@ -84,12 +84,33 @@ export default function StockRoom() {
   // One dialog at a time: { kind: "action" | "product" | "import" | "location", ... }
   const [dialog, setDialog] = useState(null);
   const [toast, setToast] = useState(null);
+  // Shopify → database pull, as the old inventory dashboard does: { running, result }.
+  const [shopifySync, setShopifySync] = useState({ running: false, result: null });
+  const syncingRef = useRef(false);
   // Signed in, but not a role the Stock Room serves: say so, keep the session.
   const [denied, setDenied] = useState(false);
 
   const fail = useCallback((err) => {
     console.error("Stock Room load failed:", err);
     setError(err.message || "Could not load stock.");
+  }, []);
+
+  // Copy Shopify's LXRTS counts into product_variants (Shopify wins), then
+  // re-read the catalogue if anything changed. Production with sync on only.
+  const syncFromShopify = useCallback(async (cat) => {
+    if (!SHOPIFY_SYNC_ON || !cat || syncingRef.current) return;
+    syncingRef.current = true;
+    setShopifySync((s) => ({ ...s, running: true }));
+    try {
+      const result = await pullShopifyStock(cat.products, cat.variants);
+      if (result?.updated) setCatalogue(await loadStockRoomCatalogue());
+      setShopifySync({ running: false, result });
+    } catch (err) {
+      console.error("Shopify sync failed:", err);
+      setShopifySync({ running: false, result: { checked: 0, updated: 0, failed: [err.message || "Shopify could not be read"], at: new Date().toISOString() } });
+    } finally {
+      syncingRef.current = false;
+    }
   }, []);
 
   // Stock first, orders after. The catalogue and locations are what every
@@ -101,12 +122,15 @@ export default function StockRoom() {
     const recent = loadSales(days).then((rows) => setSales({ days, rows })).catch(fail);
     const places = loadLedger().then(setLedger).catch((err) => { setLedger({ installed: false }); fail(err); });
     try {
-      setCatalogue(await loadStockRoomCatalogue());
+      const cat = await loadStockRoomCatalogue();
+      setCatalogue(cat);
+      // Not awaited: the screen shows at once, and Shopify's counts land a few seconds later.
+      syncFromShopify(cat);
     } catch (err) {
       fail(err);
     }
     await Promise.all([orders, recent, places]);
-  }, [fail]);
+  }, [fail, syncFromShopify]);
 
   // After a change: stock totals and locations, not a year of orders.
   const reloadStock = useCallback(async () => {
@@ -144,6 +168,22 @@ export default function StockRoom() {
     })();
     return () => { cancelled = true; };
   }, [navigate, load]);
+
+  // Keep Shopify's counts fresh while the screen is open: every 5 minutes, and
+  // on returning to the tab if the last pull is over a minute old.
+  useEffect(() => {
+    if (!SHOPIFY_SYNC_ON || !catalogue) return undefined;
+    const stale = (ms) => !shopifySync.result || Date.now() - new Date(shopifySync.result.at).getTime() > ms;
+    const onVisible = () => { if (document.visibilityState === "visible" && stale(60000)) syncFromShopify(catalogue); };
+    const timer = setInterval(() => { if (document.visibilityState === "visible" && stale(4.5 * 60000)) syncFromShopify(catalogue); }, 60000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [catalogue, shopifySync.result, syncFromShopify]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -293,6 +333,19 @@ export default function StockRoom() {
         <span>{formatUnits(view.totals.trackedUnits)} units</span>
         <span className="is-extra">{formatUnits(view.tracked.length)} tracked designs</span>
         <span>Updated {timeAgo(data.loadedAt)}</span>
+        {SHOPIFY_SYNC_ON && (
+          shopifySync.running ? <span>Syncing with Shopify…</span>
+            : shopifySync.result?.failed?.length ? (
+              <span className="is-live" title={shopifySync.result.failed.slice(0, 20).join(", ")}>
+                Shopify: {shopifySync.result.failed.length} not read
+              </span>
+            )
+            : shopifySync.result ? (
+              <span className="is-extra">
+                Shopify synced {timeAgo(shopifySync.result.at)}{shopifySync.result.updated ? ` · ${formatUnits(shopifySync.result.updated)} sizes updated` : ""}
+              </span>
+            ) : null
+        )}
       </div>
 
       <nav className="sr-nav" aria-label="Stock Room">
