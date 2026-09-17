@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FormModal, Icon, Badge } from "./StockRoomUi";
+import { FormModal, Badge, Seg } from "./StockRoomUi";
+import { FormSection, PField, DropZone } from "./ProductFormUi";
 import {
   loadProductFormOptions, loadLiveProductNames, loadAllSkus, importProducts, placeStock, newRequestId,
 } from "./stockRoomData";
@@ -21,30 +22,6 @@ import { formatUnits, sizeLabel, sortSizes, TYPE_CUSTOM, TYPE_LXRTS } from "./st
 // ============================================================
 
 const OPENING_COLUMNS = ["sku_id", "design", "size", "unassigned_now", "location", "units"];
-
-function FilePicker({ file, onFile }) {
-  const ref = useRef(null);
-  const [over, setOver] = useState(false);
-  const read = (f) => {
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => onFile({ name: f.name, size: f.size, text: String(reader.result || "") });
-    reader.readAsText(f);
-  };
-  return (
-    <div className={`sr-drop${over ? " is-over" : ""}${file ? " is-loaded" : ""}`}
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-      onDrop={(e) => { e.preventDefault(); setOver(false); read(e.dataTransfer.files?.[0]); }}>
-      <input ref={ref} type="file" accept=".csv,text/csv" hidden onChange={(e) => { read(e.target.files?.[0]); e.target.value = ""; }} />
-      <span className="sr-drop-ico"><Icon name="upload" width={1.7} /></span>
-      <span className="sr-drop-text">
-        <b>{file ? file.name : "Drop a CSV file here"}</b>
-        <span>{file ? `${formatUnits(Math.ceil(file.size / 1024))} KB · choose another to replace it` : "or choose one from your computer"}</span>
-      </span>
-      <button type="button" className="sr-btn" onClick={() => ref.current?.click()}>{file ? "Replace file" : "Choose file"}</button>
-    </div>
-  );
-}
 
 // ---------------- products ----------------
 
@@ -97,7 +74,7 @@ function ProductsImport({ onDone, setError, setSubmit }) {
   const valid = (checked || []).filter((r) => !r.errors.length);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setSubmit({
-    label: valid.length ? `Import ${valid.length} product${valid.length === 1 ? "" : "s"}` : "Import",
+    label: valid.length ? `Import ${valid.length} Valid Row${valid.length === 1 ? "" : "s"}` : "Import Valid Rows",
     disabled: !valid.length,
     run: async () => {
       const { saved, failed } = await importProducts(valid.map((r) => r.normalized));
@@ -108,38 +85,40 @@ function ProductsImport({ onDone, setError, setSubmit }) {
     },
   }));
 
+  const useSample = () => check({ name: "sample-row.csv", size: 0, text: buildCsv(CSV_COLUMNS, TEMPLATE_DEMO_ROWS) });
+
   return (
     <>
-      <p className="sr-card-sub">
-        For made-to-order and custom products. LXRTS products need a Shopify ID and sizes, so add those one at a time with Add product.
-        Leave <code>sku_id</code> empty to number them automatically; write <code>MTO</code> in <code>inventory</code> for made to order.
-      </p>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button type="button" className="sr-btn" onClick={() => downloadCsv("stock-room-products-template.csv", buildCsv(CSV_COLUMNS, TEMPLATE_DEMO_ROWS))}>
-          <Icon name="download" width={1.7} />Download template
-        </button>
-      </div>
-      <FilePicker file={file} onFile={check} />
-      {checking && <p className="sr-muted" style={{ marginTop: 14 }}>Checking the file…</p>}
+      <FormSection title="Choose File"
+        note="Header row must match the export. Use | between multiple values, and MTO for unlimited stock. LXRTS designs need a Shopify ID and sizes, so add those with Add Product." />
+      <PField label="CSV File"
+        actions={(
+          <>
+            <button type="button" className="sr-linkbtn" onClick={useSample}>Use Sample Row</button>
+            <button type="button" className="sr-linkbtn" onClick={() => downloadCsv("stock-room-products-template.csv", buildCsv(CSV_COLUMNS, TEMPLATE_DEMO_ROWS))}>Download Template</button>
+          </>
+        )}
+        help="Leave sku_id empty to number new designs automatically.">
+        <DropZone file={file} rows={checked ? checked.length : null} onFile={check} onClear={() => { setFile(null); setChecked(null); setError(""); }} />
+      </PField>
+      {checking && <p className="sr-help">Checking the file…</p>}
       {checked && (
-        <>
-          <p className="sr-summary-line" style={{ margin: "16px 0 10px" }}>
-            {valid.length} ready to import · {checked.length - valid.length} with problems (skipped)
-          </p>
-          <div className="sr-scroller" style={{ maxHeight: 340, overflowY: "auto" }}>
-            <table className="sr-table" style={{ "--sr-table-min": "720px" }}>
-              <thead><tr><th>Row</th><th>Design</th><th>Type</th><th>Sizes</th><th className="n">Stock</th><th>Check</th></tr></thead>
+        <PField label="Preview" actions={<span className="sr-help" style={{ marginTop: 0 }}>{valid.length} of {checked.length} rows will import</span>}>
+          <div className="sr-grid-scroll" style={{ maxHeight: 420, overflowY: "auto" }}>
+            <table className="sr-grid-table">
+              <thead><tr><th>Row</th><th>Design</th><th>Type</th><th>Sizes</th><th className="n">Price</th><th className="n">Stock</th><th>Status</th></tr></thead>
               <tbody>
                 {checked.map((r) => (
-                  <tr key={r.line}>
-                    <td className="sr-muted">{r.line}</td>
-                    <td className="wrap">{r.normalized?.name || r.raw.name || <span className="sr-muted">no name</span>}</td>
-                    <td>{r.normalized ? (r.normalized.is_custom_piece ? "Custom piece" : "Made to order") : "—"}</td>
-                    <td className="wrap">{r.normalized?.available_size?.join(", ") || "—"}</td>
-                    <td className="n">{r.normalized ? (r.normalized.inventory === 9999 ? "MTO" : formatUnits(r.normalized.inventory)) : "—"}</td>
-                    <td className="wrap">
+                  <tr key={r.line} className={r.errors.length ? "is-off" : undefined}>
+                    <td className="sr-g-size">{r.line}</td>
+                    <td>{r.normalized?.name || r.raw.name || <span className="sr-muted">no name</span>}</td>
+                    <td>{r.normalized ? (r.normalized.is_custom_piece ? "Custom Piece" : "Made to Order") : "—"}</td>
+                    <td>{r.normalized?.available_size?.join(" ") || "—"}</td>
+                    <td className="n">{r.normalized?.base_price ?? r.raw.base_price ?? "—"}</td>
+                    <td className="n">{r.normalized ? (r.normalized.inventory === 9999 ? "MTO" : formatUnits(r.normalized.inventory)) : (r.raw.inventory || "—")}</td>
+                    <td>
                       {r.errors.length
-                        ? <span className="sr-neg">{r.errors.join(" ")}</span>
+                        ? <Badge tone="crit">{r.errors[0]}</Badge>
                         : <Badge tone={r.renamed ? "low" : "ok"}>{r.renamed ? "Renamed for store" : "Ready"}</Badge>}
                     </td>
                   </tr>
@@ -147,7 +126,7 @@ function ProductsImport({ onDone, setError, setSubmit }) {
               </tbody>
             </table>
           </div>
-        </>
+        </PField>
       )}
     </>
   );
@@ -242,7 +221,7 @@ function OpeningImport({ view, onDone, setError, setSubmit }) {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setSubmit({
-    label: valid.length ? `Place ${formatUnits(valid.reduce((a, r) => a + r.units, 0))} units` : "Place stock",
+    label: valid.length ? `Place ${formatUnits(valid.reduce((a, r) => a + r.units, 0))} Units` : "Place Stock",
     disabled: !valid.length,
     run: async () => {
       const done = [];
@@ -269,39 +248,38 @@ function OpeningImport({ view, onDone, setError, setSubmit }) {
 
   return (
     <>
-      <p className="sr-card-sub">
-        Download the template: it lists every design and size that still has unassigned units. Fill in <code>location</code> (the name exactly as
-        on the Locations screen) and <code>units</code>, delete rows you are not placing, and upload it. To split a size across locations, copy the row.
-      </p>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button type="button" className="sr-btn" onClick={downloadTemplate} disabled={!ledger.totals.unassignedUnits}>
-          <Icon name="download" width={1.7} />Download template ({formatUnits(ledger.totals.unassignedUnits)} unassigned units)
-        </button>
-      </div>
-      <FilePicker file={file} onFile={check} />
+      <FormSection title="Choose File"
+        note="The template lists every design and size with unassigned units. Fill in location (the name as on the Locations screen) and units; copy a row to split a size." />
+      <PField label="CSV File"
+        actions={(
+          <button type="button" className="sr-linkbtn" onClick={downloadTemplate} disabled={!ledger.totals.unassignedUnits}>
+            Download Template ({formatUnits(ledger.totals.unassignedUnits)} unassigned units)
+          </button>
+        )}>
+        <DropZone file={file} rows={checked ? checked.length : null} onFile={check} hint="or drag it here · use the downloaded template"
+          onClear={() => { setFile(null); setChecked(null); setError(""); }} />
+      </PField>
       {checked && (
-        <>
-          <p className="sr-summary-line" style={{ margin: "16px 0 10px" }}>
-            {valid.length} row{valid.length === 1 ? "" : "s"} ready across {groups.length} location{groups.length === 1 ? "" : "s"} · {checked.length - valid.length} with problems (skipped)
-          </p>
-          <div className="sr-scroller" style={{ maxHeight: 340, overflowY: "auto" }}>
-            <table className="sr-table" style={{ "--sr-table-min": "720px" }}>
-              <thead><tr><th>Row</th><th>Design</th><th>Size</th><th>Location</th><th className="n">Units</th><th>Check</th></tr></thead>
+        <PField label="Preview"
+          actions={<span className="sr-help" style={{ marginTop: 0 }}>{valid.length} of {checked.length} rows will be placed across {groups.length} location{groups.length === 1 ? "" : "s"}</span>}>
+          <div className="sr-grid-scroll" style={{ maxHeight: 420, overflowY: "auto" }}>
+            <table className="sr-grid-table">
+              <thead><tr><th>Row</th><th>Design</th><th>Size</th><th>Location</th><th className="n">Units</th><th>Status</th></tr></thead>
               <tbody>
                 {checked.map((r) => (
-                  <tr key={r.line}>
-                    <td className="sr-muted">{r.line}</td>
-                    <td className="wrap">{r.row?.product.name || r.raw.sku_id}</td>
+                  <tr key={r.line} className={r.errors.length ? "is-off" : undefined}>
+                    <td className="sr-g-size">{r.line}</td>
+                    <td>{r.row?.product.name || r.raw.sku_id}</td>
                     <td>{r.size ? sizeLabel(r.size) : "—"}</td>
                     <td>{r.location?.name || r.raw.location}</td>
                     <td className="n">{r.raw.units}</td>
-                    <td className="wrap">{r.errors.length ? <span className="sr-neg">{r.errors.join(" ")}</span> : <Badge tone="ok">Ready</Badge>}</td>
+                    <td>{r.errors.length ? <Badge tone="crit">{r.errors[0]}</Badge> : <Badge tone="ok">Ready</Badge>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </>
+        </PField>
       )}
     </>
   );
@@ -339,15 +317,25 @@ export default function ProductImport({ mode: initialMode = "products", view, on
 
   const ledgerReady = view.ledger?.installed;
 
+  const switchMode = (next) => {
+    setMode(next);
+    setError("");
+    submitRef.current = { label: next === "products" ? "Import Valid Rows" : "Place Stock", disabled: true, run: null };
+  };
+
   return (
-    <FormModal title="Import from CSV" onClose={onClose} onSubmit={run} submitLabel={submitRef.current.label}
-      disabled={submitRef.current.disabled} submitting={submitting} error={error} width={940}>
-      <div className="sr-seg" style={{ display: "inline-flex", marginBottom: 16 }} role="group" aria-label="What to import">
-        <button type="button" aria-pressed={mode === "products"} onClick={() => { setMode("products"); setError(""); submitRef.current = { label: "Import", disabled: true, run: null }; }}>New products</button>
-        {ledgerReady && (
-          <button type="button" aria-pressed={mode === "opening"} onClick={() => { setMode("opening"); setError(""); submitRef.current = { label: "Place stock", disabled: true, run: null }; }}>Opening stock by location</button>
-        )}
-      </div>
+    <FormModal title={mode === "products" ? "Import Products" : "Import Opening Stock"} submitInHead width={1280}
+      sub={mode === "products"
+        ? "Every row is checked before anything is written. Nothing imports until the whole file has been read."
+        : "Place unassigned stock into locations in bulk. Every row is checked first."}
+      onClose={onClose} onSubmit={run} submitLabel={submitRef.current.label}
+      disabled={submitRef.current.disabled} submitting={submitting} error={error}>
+      {ledgerReady && (
+        <div style={{ marginBottom: 18 }}>
+          <Seg label="What to import" value={mode} onChange={switchMode}
+            options={[{ value: "products", label: "New Products" }, { value: "opening", label: "Opening Stock by Location" }]} />
+        </div>
+      )}
       {mode === "products"
         ? <ProductsImport key="products" onDone={onDone} setError={setError} setSubmit={setSubmit} />
         : <OpeningImport key="opening" view={view} onDone={onDone} setError={setError} setSubmit={setSubmit} />}

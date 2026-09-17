@@ -379,7 +379,7 @@ export default function StockRoom() {
         <ReceiveTransferForm transfer={dialog.transfer} view={view} onClose={() => setDialog(null)} onDone={finishDialog} />
       )}
       {dialog?.kind === "location" && (
-        <LocationForm location={dialog.location} onClose={() => setDialog(null)} onDone={finishDialog} />
+        <LocationForm location={dialog.location} existingNames={(view.ledger?.locations || []).map((l) => l.name.trim().toLowerCase())} onClose={() => setDialog(null)} onDone={finishDialog} />
       )}
 
       <Toast toast={toast} onDone={dismissToast} />

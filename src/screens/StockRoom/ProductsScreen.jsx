@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from "react";
 import {
   Topline, SearchField, FilterButton, FilterDrawer, Facet, ActiveFilters, ProductCell, StockBadge, usePaged, SizeSummary,
-  Icon, SearchSelect,
+  Icon, SearchSelect, FormModal,
 } from "./StockRoomUi";
+import { FormSection, PField, FieldRow, Combo } from "./ProductFormUi";
 import { formatUnits, formatInr, sizeLabel, SIZE_SCALE, CUSTOM_SIZE, TYPE_LABELS, TYPE_LXRTS, TYPE_CUSTOM, TYPE_MTO } from "./stockRoomModel";
 import { loadProductsForExport } from "./stockRoomData";
 import { CSV_COLUMNS, buildCsv, downloadCsv } from "../../components/AddProduct/csvHelpers";
@@ -32,6 +33,129 @@ const DATA_STATES = [
   { value: "noSizes", label: "No sizes listed" },
   { value: "noCollection", label: "In no collection" },
 ];
+
+const EXPORT_STOCK = [
+  { value: "", label: "Any status" },
+  { value: "held", label: "Has stock on hand" },
+  { value: "ok", label: "In stock" },
+  { value: "low", label: "Low" },
+  { value: "out", label: "Out of stock" },
+  { value: "mto", label: "Made to order" },
+];
+
+/** Every product (or a filtered set) in the Add Product CSV columns — the same file the importer reads. */
+async function downloadProductsCsv(view, rows) {
+  const shown = new Set(rows.map((r) => r.id));
+  const full = (await loadProductsForExport()).filter((p) => shown.has(p.id));
+  const headers = [...CSV_COLUMNS, "type", "on_hand", "shopify_product_id"];
+  const data = full.map((p) => {
+    const r = view.rowsById[p.id];
+    return {
+      sku_id: p.sku_id, name: p.name, image_url: p.image_url, base_price: p.base_price,
+      top_options: (p.top_options || []).join("|"), bottom_options: (p.bottom_options || []).join("|"),
+      default_top: p.default_top, default_bottom: p.default_bottom, default_color: p.default_color,
+      store_category: p.store_category, has_dupatta: p.has_dupatta ? "yes" : "no",
+      default_dupatta_color: p.default_dupatta_color, is_custom_piece: p.is_custom_piece ? "yes" : "no",
+      available_size: (p.available_size || []).join("|"),
+      inventory: r?.type === TYPE_MTO || Number(p.inventory) >= 9999 ? "MTO" : p.inventory,
+      type: r ? TYPE_LABELS[r.type] : "", on_hand: r?.stock.tracked && !r.stock.unlimited ? r.stock.total : "",
+      shopify_product_id: p.shopify_product_id || "",
+    };
+  });
+  downloadCsv(`products-export-${new Date().toISOString().slice(0, 10)}.csv`, buildCsv(headers, data));
+  return data.length;
+}
+
+function ExportProductsForm({ view, onClose, onDone }) {
+  const ledger = view.ledger;
+  const [collection, setCollection] = useState("");
+  const [type, setType] = useState("");
+  const [colour, setColour] = useState("");
+  const [size, setSize] = useState("");
+  const [stock, setStock] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const colours = useMemo(() => Array.from(new Set(view.rows.map((r) => (r.product.default_color || "").trim()).filter(Boolean))).sort(), [view.rows]);
+
+  const matches = useMemo(() => view.rows.filter((r) => {
+    if (collection && !(ledger?.collectionsByProduct?.[r.id] || []).includes(collection)) return false;
+    if (type && r.type !== type) return false;
+    if (colour && (r.product.default_color || "").trim() !== colour) return false;
+    if (size && !r.stock.sizes.some((s) => sizeLabel(s) === size)) return false;
+    if (stock === "held" && !(r.stock.tracked && !r.stock.unlimited && r.stock.total > 0)) return false;
+    if (stock === "mto" && r.type !== TYPE_MTO) return false;
+    if (["ok", "low", "out"].includes(stock) && r.status !== stock) return false;
+    return true;
+  }), [view.rows, ledger, collection, type, colour, size, stock]);
+
+  const submit = async () => {
+    if (!matches.length) { setError("No design matches those filters — widen one of them."); return; }
+    setSubmitting(true);
+    setError("");
+    try {
+      const n = await downloadProductsCsv(view, matches);
+      onDone(`${formatUnits(n)} design${n === 1 ? "" : "s"} exported.`);
+    } catch (e) {
+      setError(e.message);
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <FormModal title="Export Products" sub="Choose what to include. The file uses the same columns the importer expects."
+      onClose={onClose} onSubmit={submit} submitLabel="Download CSV" submitting={submitting} error={error} width={940} submitInHead>
+      <FormSection title="Filters" note="Leave everything on All to export the whole catalogue." />
+      <FieldRow>
+        <PField label="Collection" htmlFor="ex-col">
+          <Combo id="ex-col" value={collection} onChange={setCollection}
+            options={[{ value: "", label: "All collections" }, ...(ledger?.collections || []).map((c) => ({ value: c.id, label: c.name }))]} />
+        </PField>
+        <PField label="Product Type" htmlFor="ex-type">
+          <Combo id="ex-type" value={type} onChange={setType}
+            options={[{ value: "", label: "All types" }, { value: TYPE_LXRTS, label: "LXRTS (Shopify)" }, { value: TYPE_MTO, label: "Made to Order" }, { value: TYPE_CUSTOM, label: "Custom Piece" }]} />
+        </PField>
+      </FieldRow>
+      <FieldRow>
+        <PField label="Colour" htmlFor="ex-colour">
+          <Combo id="ex-colour" value={colour} onChange={setColour}
+            options={[{ value: "", label: "All colours" }, ...colours.map((c) => ({ value: c, label: c }))]} />
+        </PField>
+        <PField label="Size" htmlFor="ex-size">
+          <Combo id="ex-size" value={size} onChange={setSize}
+            options={[{ value: "", label: "All sizes" }, ...[...SIZE_SCALE, CUSTOM_SIZE].map((s) => ({ value: s, label: `Size ${s}` }))]} />
+        </PField>
+      </FieldRow>
+      <FieldRow>
+        <PField label="Stock Status" htmlFor="ex-stock">
+          <Combo id="ex-stock" value={stock} onChange={setStock} options={EXPORT_STOCK} />
+        </PField>
+        <div />
+      </FieldRow>
+      <PField label="Matching Designs" actions={<span className="sr-help" style={{ marginTop: 0 }}>{formatUnits(matches.length)} of {formatUnits(view.rows.length)} designs · {CSV_COLUMNS.length + 3} columns</span>}>
+        {matches.length ? (
+          <div className="sr-grid-scroll">
+            <table className="sr-grid-table">
+              <thead><tr><th>Design</th><th>SKU</th><th>Type</th><th>Sizes</th><th className="n">Stock</th></tr></thead>
+              <tbody>
+                {matches.slice(0, 12).map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.product.name}</td>
+                    <td className="sr-g-size">{r.product.sku_id || "—"}</td>
+                    <td>{TYPE_LABELS[r.type]}</td>
+                    <td>{r.stock.sizes.map(sizeLabel).join(" ") || "—"}</td>
+                    <td className="n">{r.type === TYPE_MTO ? "MTO" : r.stock.unlimited ? "Unlimited" : formatUnits(r.stock.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="sr-form-err">Nothing matches those filters.</div>}
+        {matches.length > 12 && <div className="sr-help">Showing the first 12 · all {formatUnits(matches.length)} will be exported.</div>}
+      </PField>
+    </FormModal>
+  );
+}
 
 export default function ProductsScreen({ view, openProduct, canEditProducts, openEditor, openImport }) {
   const ledger = view.ledger;
@@ -92,45 +216,14 @@ export default function ProductsScreen({ view, openProduct, canEditProducts, ope
   const dataStateOptions = DATA_STATES.filter((d) => d.value !== "noCollection" || ledger?.installed);
   const { totals } = view;
 
-  // Every live product in the Add Product CSV columns, plus type and stock —
-  // the same file the CSV import reads, so it can be edited and re-imported.
-  const exportCsv = async () => {
-    setExporting(true);
-    setExportError("");
-    try {
-      const shown = new Set(rows.map((r) => r.id));
-      const full = (await loadProductsForExport()).filter((p) => shown.has(p.id));
-      const headers = [...CSV_COLUMNS, "type", "on_hand", "shopify_product_id"];
-      const data = full.map((p) => {
-        const r = view.rowsById[p.id];
-        return {
-          sku_id: p.sku_id, name: p.name, image_url: p.image_url, base_price: p.base_price,
-          top_options: (p.top_options || []).join("|"), bottom_options: (p.bottom_options || []).join("|"),
-          default_top: p.default_top, default_bottom: p.default_bottom, default_color: p.default_color,
-          store_category: p.store_category, has_dupatta: p.has_dupatta ? "yes" : "no",
-          default_dupatta_color: p.default_dupatta_color, is_custom_piece: p.is_custom_piece ? "yes" : "no",
-          available_size: (p.available_size || []).join("|"),
-          inventory: r?.type === TYPE_MTO || Number(p.inventory) >= 9999 ? "MTO" : p.inventory,
-          type: r ? TYPE_LABELS[r.type] : "", on_hand: r?.stock.tracked && !r.stock.unlimited ? r.stock.total : "",
-          shopify_product_id: p.shopify_product_id || "",
-        };
-      });
-      downloadCsv(`products-${new Date().toISOString().slice(0, 10)}.csv`, buildCsv(headers, data));
-    } catch (e) {
-      setExportError(e.message);
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const collectionOptions = (ledger?.collections || []).map((c) => ({ value: c.id, label: c.name }));
 
   return (
     <>
       <Topline title="Products"
         sub={`${formatUnits(totals.designs)} designs · ${formatUnits(totals.lxrts)} LXRTS · ${formatUnits(totals.custom)} custom pieces · ${formatUnits(totals.mto)} made to order`}>
-        <button type="button" className="sr-btn" onClick={exportCsv} disabled={exporting || !rows.length}>
-          <Icon name="download" width={1.7} />{exporting ? "Preparing…" : "Export CSV"}
+        <button type="button" className="sr-btn" onClick={() => setExporting(true)}>
+          <Icon name="download" width={1.7} />Export CSV
         </button>
         {canEditProducts && (
           <>
@@ -140,7 +233,7 @@ export default function ProductsScreen({ view, openProduct, canEditProducts, ope
         )}
       </Topline>
       <div className="sr-body">
-        {exportError && <p className="sr-error" style={{ marginBottom: 12 }}>{exportError}</p>}
+        {exportError && <p className="sr-callout is-info" style={{ marginBottom: 12 }}>{exportError}</p>}
         <div className="sr-card">
           <div className="sr-card-head">
             <h2>Catalogue</h2>
@@ -220,6 +313,10 @@ export default function ProductsScreen({ view, openProduct, canEditProducts, ope
             </div>
           )}
         </FilterDrawer>
+      )}
+      {exporting && (
+        <ExportProductsForm view={view} onClose={() => setExporting(false)}
+          onDone={(text) => { setExporting(false); setExportError(text); }} />
       )}
     </>
   );
