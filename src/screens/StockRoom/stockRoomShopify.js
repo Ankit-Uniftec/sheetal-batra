@@ -102,3 +102,50 @@ export async function readShopifyStock(productId) {
   if (!SHOPIFY_SYNC_ON) return null;
   return fetchShopifyInventory(productId);
 }
+
+/**
+ * Shopify → database: the pull InventoryDashboard.jsx (fetchAllLxrtsInventory)
+ * runs on every load. For each LXRTS design, read Shopify's per-size stock and
+ * write any size that differs into product_variants.inventory, so Shopify's
+ * count wins. It only READS Shopify — nothing is sent to the store.
+ *
+ * Runs only where sending runs (production with sync switched on), so a local
+ * or staging copy never overwrites its stock from the live store.
+ *
+ * @param products  rows with id, name, sync_enabled
+ * @param variants  product_variants rows with id, product_id, size, inventory
+ * @returns {Promise<null | { checked, updated, failed: string[], changedProductIds: string[], at }>}
+ */
+export async function pullShopifyStock(products, variants, { concurrency = 6 } = {}) {
+  if (!SHOPIFY_SYNC_ON) return null;
+  const lxrts = (products || []).filter((p) => p && p.sync_enabled === true);
+  const byProduct = {};
+  (variants || []).forEach((v) => { (byProduct[v.product_id] || (byProduct[v.product_id] = [])).push(v); });
+
+  let updated = 0;
+  const failed = [];
+  const changed = new Set();
+  let next = 0;
+
+  const worker = async () => {
+    while (next < lxrts.length) {
+      const p = lxrts[next];
+      next += 1;
+      const live = await fetchShopifyInventory(p.id);
+      if (!live) { failed.push(p.name || p.id); continue; }
+      for (const v of byProduct[p.id] || []) {
+        const qty = live[v.size];
+        if (qty === undefined || qty === null || Number(qty) === Number(v.inventory)) continue;
+        const { error } = await supabase.from("product_variants").update({ inventory: qty }).eq("id", v.id);
+        if (error) {
+          failed.push(`${p.name || p.id} (${v.size})`);
+        } else {
+          updated += 1;
+          changed.add(p.id);
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, lxrts.length) }, worker));
+  return { checked: lxrts.length, updated, failed, changedProductIds: [...changed], at: new Date().toISOString() };
+}
