@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import {
-  Topline, ProductCell, Badge, SearchField, Icon, usePaged, FormModal, Field,
+  Topline, ProductCell, Badge, SearchField, Icon, usePaged, FormModal,
 } from "./StockRoomUi";
+import { PField, FieldRow, Combo } from "./ProductFormUi";
 import { formatUnits, formatDay, sizeLabel, sortSizes, orderPrefix, TYPE_CUSTOM, TYPE_LABELS } from "./stockRoomModel";
 import { saveLocation, newRequestId } from "./stockRoomData";
 import { SizeChips, QtyChips } from "./StockScreen";
@@ -10,7 +11,7 @@ import WarehousesScreen from "./WarehousesScreen";
 const UNASSIGNED = "__unassigned__";
 const TRANSIT = "__transit__";
 
-export function LocationForm({ location, onClose, onDone }) {
+export function LocationForm({ location, existingNames = [], onClose, onDone }) {
   const [requestId] = useState(newRequestId);
   const [name, setName] = useState(location?.name || "");
   const [kind, setKind] = useState(location?.kind || "warehouse");
@@ -22,6 +23,7 @@ export function LocationForm({ location, onClose, onDone }) {
 
   const save = async (isActive) => {
     if (!name.trim()) { setError("Give the location a name."); return; }
+    if (!location && existingNames.includes(name.trim().toLowerCase())) { setError(`A location called “${name.trim()}” already exists.`); return; }
     setSubmitting(true);
     setError("");
     try {
@@ -38,34 +40,36 @@ export function LocationForm({ location, onClose, onDone }) {
     }
   };
 
+  const takenName = !location && name.trim() && existingNames.includes(name.trim().toLowerCase());
   return (
-    <FormModal title={location ? `Edit ${location.name}` : "Add a location"}
-      sub="Stores are where orders are placed; warehouses hold stock transferred from the stores."
-      onClose={onClose} onSubmit={() => save(true)} submitLabel={location ? "Save" : "Add location"}
-      submitting={submitting} error={error} width={620}>
-      <div className="sr-form-grid">
-        <Field label="Name"><input className="sr-input" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
-        <Field label="City"><input className="sr-input" value={city} onChange={(e) => setCity(e.target.value)} /></Field>
-        <Field label="Type" wide>
-          <span className="sr-choice-row">
-            {[["store", "Store — orders are placed here"], ["warehouse", "Warehouse — holds transferred stock"]].map(([v, l]) => (
-              <button key={v} type="button" className="sr-choice" aria-pressed={kind === v} onClick={() => setKind(v)}>{l}</button>
-            ))}
-          </span>
-        </Field>
-        {kind === "store" && (
-          <Field label="Order number codes" hint="The code in this store's order numbers, e.g. DLC for SB-DLC-…. Used to suggest where a sale came from.">
-            <input className="sr-input" value={prefixes} onChange={(e) => setPrefixes(e.target.value)} placeholder="DLC" />
-          </Field>
-        )}
-        <Field label="Order in lists" hint="Lower numbers are listed first.">
-          <input className="sr-input is-num" type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
-        </Field>
-      </div>
+    <FormModal title={location ? `Edit ${location.name}` : "New Location"} submitInHead
+      sub={location ? "Stores are where orders are placed; warehouses hold stock transferred from the stores." : "A store or storage location. Transfer stock in once it exists."}
+      onClose={onClose} onSubmit={() => save(true)} submitLabel={location ? "Save Location" : "Create Location"}
+      submitting={submitting} error={error} width={560}>
+      <PField label="Location Name" htmlFor="lf-name" help={takenName ? `A location called “${name.trim()}” already exists.` : null} helpTone={takenName ? "crit" : undefined}>
+        <input id="lf-name" className="sr-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mumbai" autoFocus />
+      </PField>
+      <FieldRow>
+        <PField label="Type" htmlFor="lf-kind">
+          <Combo id="lf-kind" value={kind} onChange={setKind}
+            options={[{ value: "store", label: "Store — orders are placed here" }, { value: "warehouse", label: "Warehouse — holds transferred stock" }]} />
+        </PField>
+        <PField label="City" htmlFor="lf-city">
+          <input id="lf-city" className="sr-input" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. New Delhi" />
+        </PField>
+      </FieldRow>
+      {kind === "store" && (
+        <PField label="Order Number Codes" htmlFor="lf-prefix" help="The code in this store's order numbers, e.g. DLC for SB-DLC-…. Used to suggest where a sale came from.">
+          <input id="lf-prefix" className="sr-input" value={prefixes} onChange={(e) => setPrefixes(e.target.value)} placeholder="DLC" />
+        </PField>
+      )}
+      <PField label="Order In Lists" htmlFor="lf-sort" help="Lower numbers are listed first.">
+        <input id="lf-sort" className="sr-input is-num" type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
+      </PField>
       {location && (
-        <div className="sr-callout is-warn" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <div className="sr-stock-hint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span>Closing hides this location from every list. It must hold no stock.</span>
-          <button type="button" className="sr-btn" onClick={() => save(false)} disabled={submitting}>Close location</button>
+          <button type="button" className="sr-rowbtn" onClick={() => save(false)} disabled={submitting}>Close Location</button>
         </div>
       )}
     </FormModal>

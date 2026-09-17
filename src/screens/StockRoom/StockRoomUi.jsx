@@ -398,29 +398,35 @@ export function Toast({ toast, onDone }) {
 }
 
 /** A modal with a form footer: Cancel and one primary action. */
-export function FormModal({ title, sub, onClose, onSubmit, submitLabel, submitting, error, children, width = 820, disabled = false }) {
+export function FormModal({ title, sub, onClose, onSubmit, submitLabel, submitting, error, children, width = 820, disabled = false, submitInHead = false }) {
   useEscape(onClose);
+  const submitButton = (
+    <button type="submit" className="sr-btn sr-btn-primary" disabled={submitting || disabled}>
+      {submitting ? "Saving…" : submitLabel}
+    </button>
+  );
   return (
     <div className="sr-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget && !submitting) onClose(); }}>
       <form className="sr-modal sr-form-modal" style={{ width: `min(${width}px, 100%)` }} role="dialog" aria-modal="true" aria-labelledby="sr-form-title"
         onSubmit={(e) => { e.preventDefault(); if (!submitting && !disabled) onSubmit(); }} noValidate>
-        <div className="sr-modal-head">
+        <div className={`sr-modal-head${submitInHead ? " has-submit" : ""}`}>
           <div style={{ minWidth: 0 }}>
             <h2 id="sr-form-title">{title}</h2>
             {sub && <div className="sr-modal-meta">{sub}</div>}
           </div>
+          {submitInHead && submitButton}
           <button type="button" className="sr-x" onClick={onClose} disabled={submitting} aria-label="Close"><Icon name="close" width={2} /></button>
         </div>
         <div className="sr-modal-body">
           {error && <p className="sr-error" role="alert" style={{ marginBottom: 16 }}>{error}</p>}
           {children}
         </div>
-        <div className="sr-form-foot">
-          <button type="button" className="sr-btn" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" className="sr-btn sr-btn-primary" disabled={submitting || disabled}>
-            {submitting ? "Saving…" : submitLabel}
-          </button>
-        </div>
+        {!submitInHead && (
+          <div className="sr-form-foot">
+            <button type="button" className="sr-btn" onClick={onClose} disabled={submitting}>Cancel</button>
+            {submitButton}
+          </div>
+        )}
       </form>
     </div>
   );

@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { FormModal, Field, SearchSelect, Icon, Seg } from "./StockRoomUi";
+import { FormModal, Icon } from "./StockRoomUi";
+import { PField, FieldRow, Combo, StockHint } from "./ProductFormUi";
 import {
   placeStock, transferStock, sellStock, receiveStock, adjustStock, assignSale, newRequestId,
 } from "./stockRoomData";
 import { settleShopify, SHOPIFY_SYNC_ON } from "./stockRoomShopify";
-import { formatUnits, sizeLabel, orderPrefix, formatDay, TYPE_LXRTS, TYPE_CUSTOM } from "./stockRoomModel";
+import { formatUnits, formatInr, sizeLabel, sortSizes, orderPrefix, formatDay, TYPE_LXRTS, TYPE_CUSTOM } from "./stockRoomModel";
 
 // ============================================================
 // Stock Room — one form for every stock action.
@@ -25,36 +26,38 @@ const UNASSIGNED = "";
 
 const COPY = {
   place: {
-    title: "Place stock",
+    title: "Place Stock",
     sub: "Put unassigned units into a store or warehouse. Stock totals don't change.",
-    submit: "Place stock",
+    submit: "Place Stock",
   },
   transfer: {
-    title: "Transfer stock",
-    sub: "Move units from one location to another. Stock totals don't change.",
+    title: "Transfer Stock",
+    sub: "Move any number of designs and sizes in one movement. Both legs write together.",
     submit: "Transfer",
   },
   sell: {
-    title: "Mark as sold",
-    sub: "Record units sold from a location. This lowers the stock count, the same as placing an order.",
-    submit: "Mark as sold",
+    title: "Mark As Sold",
+    sub: "Deducts from that location and records each sale in the ledger.",
+    submit: "Mark Sold",
   },
   receive: {
-    title: "Receive stock",
-    sub: "Add new units — a delivery from production or a return. This raises the stock count.",
-    submit: "Receive stock",
+    title: "Add Stock",
+    sub: "Records a receipt for each line against the chosen location. This raises the stock count.",
+    submit: "Add Stock",
   },
   adjust: {
-    title: "Recount stock",
-    sub: "Enter what was actually counted. The difference is recorded as found or missing stock.",
-    submit: "Save count",
+    title: "Adjust Stock",
+    sub: "Enter what was actually counted. Corrections always carry a reason, so the difference is explained.",
+    submit: "Record Adjustment",
   },
   assign: {
-    title: "Assign a sale to a location",
+    title: "Assign Sale",
     sub: "This sale was made in the order form or on the website. Choose the location the piece left from.",
-    submit: "Assign sale",
+    submit: "Assign Sale",
   },
 };
+
+const ADJUST_REASONS = ["Stocktake · damaged", "Stocktake · miscount", "Returned to atelier", "Found in store", "Correcting a wrong entry"];
 
 let lineKey = 0;
 const makeLine = (l = {}) => ({ key: (lineKey += 1), productId: l.productId || "", size: l.size ?? "", qty: l.qty != null ? String(l.qty) : "1", orderLine: l.orderLine });
@@ -74,6 +77,7 @@ export default function StockActionForm({ mode, initial = {}, view, onClose, onD
   const [reference, setReference] = useState(initial.reference || "");
   const [note, setNote] = useState(initial.note || "");
   const [counted, setCounted] = useState(initial.counted != null ? String(initial.counted) : "");
+  const [reason, setReason] = useState(initial.reason || "");
   const [candidateKey, setCandidateKey] = useState(initial.candidateKey || "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -203,7 +207,7 @@ export default function StockActionForm({ mode, initial = {}, view, onClose, onD
       if (!singleRow) out.push("Choose a design.");
       if (adjustNeedsSize && !adjustSizes.includes(single.size)) out.push("Choose a size.");
       if (counted === "" || !Number.isInteger(Number(counted)) || Number(counted) < 0) out.push("Enter the counted number (zero or more).");
-      if (!note.trim()) out.push("Say why the count changed.");
+      if (!reason) out.push("Choose the reason for the adjustment.");
     } else if (mode === "assign") {
       if (!locationId) out.push("Choose the location the sale left from.");
       const qty = Number(single.qty);
@@ -247,7 +251,7 @@ export default function StockActionForm({ mode, initial = {}, view, onClose, onD
         result = await receiveStock({ requestId, locationId, lines: payloadLines, reference, note, orderId: initial.orderId });
         message = `Received ${pluralUnits(totalUnits)} into ${nameOf(locationId)}.`;
       } else if (mode === "adjust") {
-        result = await adjustStock({ requestId, locationId, productId: single.productId, size: single.size, counted, note });
+        result = await adjustStock({ requestId, locationId, productId: single.productId, size: single.size, counted, note: note.trim() ? `${reason} — ${note.trim()}` : reason });
         message = result?.replaced_invalid
           ? `Corrected ${singleRow.product.name}${single.size ? ` (${sizeLabel(single.size)})` : ""} to ${formatUnits(counted)}. Check the same size in Shopify by hand.`
           : result?.unchanged
@@ -280,184 +284,238 @@ export default function StockActionForm({ mode, initial = {}, view, onClose, onD
   };
 
   // ---------- render ----------
-  // The empty choice in SearchSelect doubles as "Unassigned" where that is allowed.
-  const locationField = (label, value, onChange, { allowUnassigned = false, unassignedLabel = "Unassigned stock", hint } = {}) => (
-    <Field label={label} hint={hint}>
-      <SearchSelect
-        options={locationOptions}
-        value={value}
-        onChange={onChange}
-        placeholder={allowUnassigned ? unassignedLabel : "Choose a location"}
-        label={label}
-      />
-    </Field>
+  const locationCombo = (id, value, onChange, { allowUnassigned = false, unassignedLabel = "Unassigned stock", exclude } = {}) => (
+    <Combo id={id} value={value} onChange={onChange} placeholder="Choose a location"
+      options={[
+        ...(allowUnassigned ? [{ value: UNASSIGNED, label: unassignedLabel }] : []),
+        ...locationOptions.filter((o) => o.value !== exclude),
+      ]} />
   );
 
+  // "Held at …": what the source location holds, size by size, above the lines.
+  const hint = (() => {
+    if (mode === "adjust" || mode === "assign") return null;
+    const loc = mode === "transfer" ? fromId : mode === "place" ? UNASSIGNED : locationId;
+    if (mode === "transfer" && !fromId) return null;
+    const totals = {};
+    if (loc) {
+      Object.values(ledger.index.byLocation[loc] || {}).forEach((sizes) => Object.entries(sizes).forEach(([s, q]) => {
+        if (q > 0) totals[sizeLabel(s) || "One size"] = (totals[sizeLabel(s) || "One size"] || 0) + q;
+      }));
+    } else {
+      view.tracked.forEach((r) => {
+        const p = ledger.placementById[r.id];
+        if (!p) return;
+        if (r.stock.bySize) Object.entries(p.unassignedBySize).forEach(([s, q]) => { totals[sizeLabel(s)] = (totals[sizeLabel(s)] || 0) + q; });
+        else if (p.unassigned) totals["Custom pieces"] = (totals["Custom pieces"] || 0) + p.unassigned;
+      });
+    }
+    const chips = sortSizes(Object.keys(totals)).map((label) => ({ label, qty: totals[label] }));
+    return <StockHint title={loc ? `Held at ${nameOf(loc)}` : "Unassigned stock"} chips={chips} />;
+  })();
+
+  const LINE_LABEL = { place: "What Is Being Placed", transfer: "What Is Moving", sell: "What Sold", receive: "What Arrived" };
+  const totalValue = lines.reduce((a, l) => a + (Number(l.qty) || 0) * (view.rowsById[l.productId]?.price || 0), 0);
+
   const lineEditor = (
-    <>
-      <div className="sr-lines">
-        <div className="sr-lines-head" aria-hidden="true"><span>Design</span><span>Size</span><span style={{ textAlign: "right" }}>Units</span><span /></div>
-        {lines.map((line) => {
-          const c = lineCheck(line);
-          const row = c.row;
-          const sizes = row ? sizeOptions(row, takesFromLocation ? sourceId : null) : [];
-          return (
-            <div className="sr-line" key={line.key}>
-              <SearchSelect
-                options={productOptions}
-                value={line.productId}
-                onChange={(v) => {
-                  const r = view.rowsById[v];
-                  const first = r ? sizeOptions(r, takesFromLocation ? sourceId : null)[0]?.value ?? "" : "";
-                  updateLine(line.key, { productId: v, size: first });
-                }}
-                placeholder="Search design or SKU"
-                label="Design"
-              />
-              <select className="sr-select" value={line.size} onChange={(e) => updateLine(line.key, { size: e.target.value })}
-                disabled={!row || !sizes.length} aria-label="Size">
-                {!sizes.length && <option value="">—</option>}
-                {sizes.map((s) => <option key={s.value || "one"} value={s.value}>{s.label}</option>)}
-              </select>
-              <span>
-                <input className="sr-input is-num" type="number" min="1" step="1" inputMode="numeric" value={line.qty}
-                  onChange={(e) => updateLine(line.key, { qty: e.target.value })} aria-label="Units" />
-                {c.available != null && (
-                  <span className={`sr-line-avail${c.problem && Number(line.qty) > c.available ? " is-over" : ""}`}>
-                    {formatUnits(c.available)} available
-                  </span>
-                )}
-              </span>
-              <button type="button" className="sr-line-remove" aria-label="Remove line"
-                disabled={lines.length === 1} onClick={() => setLines((ls) => ls.filter((l) => l.key !== line.key))}>×</button>
-            </div>
-          );
-        })}
+    <div className="sr-plines">
+      <div className="sr-plines-head">
+        <span className="sr-label">{LINE_LABEL[mode]}</span>
+        <button type="button" className="sr-rowbtn" onClick={() => setLines((ls) => [...ls, makeLine({ qty: 1 })])}>+ Add line</button>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-        <button type="button" className="sr-btn" onClick={() => setLines((ls) => [...ls, makeLine({ qty: 1 })])}>+ Add another design</button>
-        <span className="sr-summary-line">{lines.length} line{lines.length === 1 ? "" : "s"} · {pluralUnits(totalUnits)}</span>
+      <table className="sr-plines-table">
+        <thead><tr><th>Design</th><th>Size</th><th className="n">Units</th><th /></tr></thead>
+        <tbody>
+          {lines.map((line) => {
+            const c = lineCheck(line);
+            const row = c.row;
+            const source = takesFromLocation ? sourceId : null;
+            const sizes = row ? sizeOptions(row, source) : [];
+            const sizeChoices = sizes.map((s) => {
+              if (mode === "receive" || !row) return { value: s.value, label: s.value ? `Size ${s.label}` : s.label };
+              const free = capacity(row, s.value, source);
+              return { value: s.value, label: `${s.value ? `Size ${s.label}` : s.label} · ${formatUnits(free)} ${source ? "free" : "unassigned"}`, disabled: free <= 0 };
+            });
+            return (
+              <tr key={line.key}>
+                <td>
+                  <Combo options={productOptions} value={line.productId} placeholder="Type a design name" ariaLabel="Design"
+                    onChange={(v) => {
+                      const r = view.rowsById[v];
+                      const first = r ? sizeOptions(r, source).find((s) => mode === "receive" || capacity(r, s.value, source) > 0)?.value ?? sizeOptions(r, source)[0]?.value ?? "" : "";
+                      updateLine(line.key, { productId: v, size: first });
+                    }} />
+                </td>
+                <td>
+                  <Combo options={sizeChoices} value={line.size} placeholder={row ? "Size" : "Choose a design first"} disabled={!row} ariaLabel="Size"
+                    onChange={(v) => updateLine(line.key, { size: v })} />
+                </td>
+                <td>
+                  <input className="sr-input is-num" type="number" min="1" step="1" inputMode="numeric" value={line.qty}
+                    onChange={(e) => updateLine(line.key, { qty: e.target.value })} aria-label="Units" />
+                  {c.available != null && (
+                    <div className={`sr-avail${c.problem && Number(line.qty) > c.available ? " is-over" : ""}`}>{formatUnits(c.available)} available</div>
+                  )}
+                </td>
+                <td>
+                  {lines.length > 1 && (
+                    <button type="button" className="sr-rowbtn" onClick={() => setLines((ls) => ls.filter((l) => l.key !== line.key))}>Remove</button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="sr-plines-foot">
+        {lines.length} line{lines.length === 1 ? "" : "s"} · {pluralUnits(totalUnits)}{totalValue ? ` · ${formatInr(totalValue)}` : ""}
       </div>
-    </>
+    </div>
+  );
+
+  const noteField = (placeholder) => (
+    <PField label="Note (Optional)" htmlFor="sa-note">
+      <input id="sa-note" className="sr-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={placeholder} />
+    </PField>
   );
 
   let body;
   if (mode === "place") {
     body = (
       <>
-        <div className="sr-form-grid">{locationField("Place into", locationId, setLocationId)}</div>
+        {hint}
+        <FieldRow>
+          <PField label="Place Into" htmlFor="sa-into">{locationCombo("sa-into", locationId, (v) => setLocationId(v))}</PField>
+          {noteField("e.g. Opening count at Delhi")}
+        </FieldRow>
         {lineEditor}
       </>
     );
   } else if (mode === "transfer") {
     body = (
       <>
-        <div className="sr-form-grid">
-          {locationField("From", fromId, (v) => { setFromId(v); setLines([makeLine()]); })}
-          {locationField("To", toId, setToId)}
-          <Field label="Delivery" wide>
-            <Seg value={inTransit ? "transit" : "now"} onChange={(v) => setInTransit(v === "transit")} label="Delivery"
+        {hint}
+        <FieldRow>
+          <PField label="From" htmlFor="sa-from">
+            {locationCombo("sa-from", fromId, (v) => { setFromId(v); if (v === toId) setToId(""); setLines([makeLine()]); })}
+          </PField>
+          <PField label="To" htmlFor="sa-to">{locationCombo("sa-to", toId, setToId, { exclude: fromId })}</PField>
+        </FieldRow>
+        <FieldRow>
+          <PField label="Delivery" htmlFor="sa-delivery"
+            help={inTransit ? "Units wait under In transit until someone receives them at the destination." : "Units land at the destination straight away."}>
+            <Combo id="sa-delivery" value={inTransit ? "transit" : "now"} onChange={(v) => setInTransit(v === "transit")}
               options={[{ value: "transit", label: "In transit — receive later" }, { value: "now", label: "Arrived now" }]} />
-          </Field>
-        </div>
-        {fromId ? lineEditor : <p className="sr-muted" style={{ marginBottom: 18 }}>Choose where the units are now to see what can be moved.</p>}
+          </PField>
+          {noteField("e.g. Courier AWB 5521")}
+        </FieldRow>
+        {fromId ? lineEditor : <p className="sr-help" style={{ marginBottom: 18 }}>Choose where the units are now to see what can be moved.</p>}
       </>
     );
   } else if (mode === "sell" || mode === "receive") {
     body = (
       <>
-        <div className="sr-form-grid">
-          {locationField(mode === "sell" ? "Sold from" : "Receive into", locationId,
-            (v) => { setLocationId(v); if (mode === "sell") setLines([makeLine()]); },
-            { allowUnassigned: true, hint: locationId ? null : "Leave empty to use unassigned stock." })}
-          <Field label="Reference" hint={mode === "sell" ? "Invoice or bill number, optional." : "Delivery note or order number, optional."}>
-            <input className="sr-input" value={reference} onChange={(e) => setReference(e.target.value)} disabled={!!initial.orderId} />
-          </Field>
-        </div>
+        {hint}
+        <FieldRow>
+          <PField label={mode === "sell" ? "Sold From" : "Into"} htmlFor="sa-loc"
+            help={locationId ? null : mode === "sell" ? "Unassigned stock is used when no location is chosen." : "Leave as unassigned stock if it isn't in a location yet."}>
+            {locationCombo("sa-loc", locationId, (v) => { setLocationId(v); if (mode === "sell") setLines([makeLine()]); }, { allowUnassigned: true })}
+          </PField>
+          <PField label="Reference (Optional)" htmlFor="sa-ref">
+            <input id="sa-ref" className="sr-input" value={reference} onChange={(e) => setReference(e.target.value)} disabled={!!initial.orderId}
+              placeholder={mode === "sell" ? "Order number or buyer" : "Stock order number"} />
+          </PField>
+        </FieldRow>
         {lineEditor}
+        {noteField(mode === "sell" ? "e.g. Sold at the Ludhiana trunk show" : "e.g. Delivery from the atelier")}
       </>
     );
   } else if (mode === "adjust") {
     const diff = adjustCurrent != null && counted !== "" ? Number(counted) - adjustCurrent : null;
+    const sizeChoices = adjustSizes.map((s) => {
+      const have = locationId ? placedAt(locationId, singleRow.id, s) : singleRow?.stock.bySize?.[s];
+      return { value: s, label: `${s ? `Size ${sizeLabel(s)}` : "One size"}${have != null && !(singleRow?.stock.invalidSizes.includes(s) && !locationId) ? ` · ${formatUnits(have)} on hand` : ""}` };
+    });
     body = (
-      <div className="sr-form-grid">
-        {locationField("Where was it counted", locationId, setLocationId,
-          { allowUnassigned: true, unassignedLabel: "The design's total (all stock)", hint: locationId ? null : "Leave empty to set the total stock count itself." })}
-        <Field label="Design">
-          <SearchSelect options={productOptions} value={single.productId} placeholder="Search design or SKU" label="Design"
-            onChange={(v) => { const r = view.rowsById[v]; updateLine(single.key, { productId: v, size: r ? (r.type === TYPE_LXRTS ? r.stock.sizes.find((s) => !r.stock.invalidSizes.includes(s)) || "" : r.stock.sizes[0] || "") : "" }); }} />
-        </Field>
+      <>
+        <PField label="Location" htmlFor="sa-loc" help={locationId ? null : "Leave on the design total to correct the stock count itself."}>
+          {locationCombo("sa-loc", locationId, setLocationId, { allowUnassigned: true, unassignedLabel: "The design's total (all stock)" })}
+        </PField>
+        <PField label="Design" htmlFor="sa-design">
+          <Combo id="sa-design" options={productOptions} value={single.productId} placeholder="Type a design name"
+            onChange={(v) => { const r = view.rowsById[v]; updateLine(single.key, { productId: v, size: r ? (r.type === TYPE_LXRTS ? r.stock.sizes.find((s) => !r.stock.invalidSizes.includes(s)) || r.stock.sizes[0] || "" : r.stock.sizes[0] || "") : "" }); }} />
+        </PField>
         {adjustNeedsSize && (
-          <Field label="Size">
-            <select className="sr-select" value={single.size} onChange={(e) => updateLine(single.key, { size: e.target.value })}>
-              {!adjustSizes.includes(single.size) && <option value={single.size}>Choose a size</option>}
-              {adjustSizes.map((s) => <option key={s || "one"} value={s}>{s ? sizeLabel(s) : "One size"}</option>)}
-            </select>
-          </Field>
+          <PField label="Size" htmlFor="sa-size">
+            <Combo id="sa-size" options={sizeChoices} value={single.size} placeholder="Choose a size" onChange={(v) => updateLine(single.key, { size: v })} />
+          </PField>
         )}
-        <Field label="Counted" hint={fixingInvalid
-          ? "The stock record holds an impossible number. What you enter replaces it; Shopify is not changed."
-          : adjustCurrent != null ? `Recorded now: ${formatUnits(adjustCurrent)}${diff ? ` · ${diff > 0 ? "+" : ""}${diff} will be recorded` : ""}` : null}>
-          <input className="sr-input is-num" type="number" min="0" step="1" inputMode="numeric" value={counted} onChange={(e) => setCounted(e.target.value)} />
-        </Field>
-        <Field label="Why the count changed" wide>
-          <textarea className="sr-textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Monthly count at Delhi — 1 piece damaged" />
-        </Field>
-      </div>
+        <PField label="Counted (Units Actually There)" htmlFor="sa-counted"
+          helpTone={fixingInvalid ? "warn" : undefined}
+          help={fixingInvalid
+            ? "The stock record holds an impossible number. What you enter replaces it; Shopify is not changed."
+            : adjustCurrent != null ? `${formatUnits(adjustCurrent)} on hand${diff ? ` · ${diff > 0 ? "+" : ""}${diff} will be recorded` : ""}.` : null}>
+          <input id="sa-counted" className="sr-input is-num" type="number" min="0" step="1" inputMode="numeric" value={counted} onChange={(e) => setCounted(e.target.value)} />
+        </PField>
+        <PField label="Reason" htmlFor="sa-reason">
+          <Combo id="sa-reason" value={reason} onChange={setReason} placeholder="Why the count changed"
+            options={ADJUST_REASONS.map((r) => ({ value: r, label: r }))} />
+        </PField>
+        {noteField("e.g. One piece damaged in the trial room")}
+      </>
     );
   } else {
     body = (
       <>
         {singleRow && (
-          <p className="sr-summary-line" style={{ marginBottom: 16 }}>
-            {singleRow.product.name}{single.size ? ` · ${sizeLabel(single.size)}` : ""} — {formatUnits(assignItem?.qty || 0)} sold unit{assignItem?.qty === 1 ? "" : "s"} waiting for a location
-          </p>
+          <div className="sr-stock-hint">
+            <span className="sr-label">Waiting for a location</span>
+            <div style={{ marginTop: 6 }}>
+              {singleRow.product.name}{single.size ? ` · ${sizeLabel(single.size)}` : ""} — {formatUnits(assignItem?.qty || 0)} sold unit{assignItem?.qty === 1 ? "" : "s"}
+            </div>
+          </div>
         )}
-        <div className="sr-form-grid">
-          {assignItem && assignItem.candidates.length > 0 && (
-            <Field label="Which order" hint="Recent orders for this design and size that have no location yet." wide>
-              <select className="sr-select" value={candidateKey} onChange={(e) => {
-                const key = e.target.value;
+        {assignItem && assignItem.candidates.length > 0 && (
+          <PField label="Which Order" htmlFor="sa-order" help="Recent orders for this design and size that have no location yet.">
+            <Combo id="sa-order" value={candidateKey} placeholder="Not linked to a specific order"
+              options={[{ value: "", label: "Not linked to a specific order" }, ...assignItem.candidates.slice(0, 30).map((c) => ({
+                value: `${c.order.id}|${c.line}`,
+                label: `${c.order.order_no} · ${formatDay(c.order.created_at)} · ${c.qty} unit${c.qty === 1 ? "" : "s"}${orderPrefix(c.order.order_no) ? ` · ${orderPrefix(c.order.order_no)}` : ""}`,
+              }))]}
+              onChange={(key) => {
                 setCandidateKey(key);
                 const c = assignItem.candidates.find((x) => `${x.order.id}|${x.line}` === key);
                 if (c) {
                   updateLine(single.key, { qty: String(Math.min(c.qty, assignItem.qty)) });
                   if (c.suggestedLocationId && assignLocationOptions.some((o) => o.value === c.suggestedLocationId)) setLocationId(c.suggestedLocationId);
                 }
-              }}>
-                <option value="">Not linked to a specific order</option>
-                {assignItem.candidates.slice(0, 30).map((c) => (
-                  <option key={`${c.order.id}|${c.line}`} value={`${c.order.id}|${c.line}`}>
-                    {c.order.order_no} · {formatDay(c.order.created_at)} · {c.qty} unit{c.qty === 1 ? "" : "s"}{orderPrefix(c.order.order_no) ? ` · ${orderPrefix(c.order.order_no)}` : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-          <Field label="Left from" hint={assignLocationOptions.length ? null : "No location holds this design and size."}>
-            <select className="sr-select" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-              <option value="">Choose a location</option>
-              {assignLocationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </Field>
-          {singleRow?.type === TYPE_CUSTOM && locationId && (
-            <Field label="Size at that location">
-              <select className="sr-select" value={single.size} onChange={(e) => updateLine(single.key, { size: e.target.value })}>
-                {Object.keys(ledger.index.byLocation[locationId]?.[singleRow.id] || {}).map((s) => <option key={s || "one"} value={s}>{s ? sizeLabel(s) : "One size"}</option>)}
-              </select>
-            </Field>
-          )}
-          <Field label="Units">
-            <input className="sr-input is-num" type="number" min="1" step="1" value={single.qty} onChange={(e) => updateLine(single.key, { qty: e.target.value })} />
-          </Field>
-        </div>
+              }} />
+          </PField>
+        )}
+        <FieldRow>
+          <PField label="Left From" htmlFor="sa-left" help={assignLocationOptions.length ? null : "No location holds this design and size."}>
+            <Combo id="sa-left" value={locationId} onChange={setLocationId} placeholder="Choose a location"
+              options={assignLocationOptions.map((o) => ({ value: o.value, label: o.label }))} />
+          </PField>
+          <PField label="Units" htmlFor="sa-units">
+            <input id="sa-units" className="sr-input is-num" type="number" min="1" step="1" value={single.qty} onChange={(e) => updateLine(single.key, { qty: e.target.value })} />
+          </PField>
+        </FieldRow>
+        {singleRow?.type === TYPE_CUSTOM && locationId && (
+          <PField label="Size At That Location" htmlFor="sa-csize">
+            <Combo id="sa-csize" value={single.size} onChange={(v) => updateLine(single.key, { size: v })}
+              options={Object.keys(ledger.index.byLocation[locationId]?.[singleRow.id] || {}).map((s) => ({ value: s, label: s ? `Size ${sizeLabel(s)}` : "One size" }))} />
+          </PField>
+        )}
+        {noteField("Optional")}
       </>
     );
   }
 
+  const narrow = mode === "adjust" || mode === "assign";
   return (
     <FormModal title={copy.title} sub={copy.sub} onClose={onClose} onSubmit={submit}
-      submitLabel={copy.submit} submitting={submitting} error={error} width={mode === "adjust" || mode === "assign" ? 680 : 860}>
+      submitLabel={copy.submit} submitting={submitting} error={error} width={narrow ? 560 : 940} submitInHead>
       {touchesShopify && (
         <p className={`sr-callout ${SHOPIFY_SYNC_ON ? "is-info" : "is-warn"}`}>
           <Icon name="alert" width={1.8} />
@@ -469,11 +527,6 @@ export default function StockActionForm({ mode, initial = {}, view, onClose, onD
         </p>
       )}
       {body}
-      {mode !== "adjust" && (
-        <Field label="Note" hint="Optional. Saved with the movement.">
-          <textarea className="sr-textarea" value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
-      )}
     </FormModal>
   );
 }

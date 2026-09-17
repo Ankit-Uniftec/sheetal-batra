@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from "react";
 import {
   Topline, SearchField, FilterButton, FilterDrawer, Facet, ActiveFilters, ProductCell, Badge, Icon, usePaged, SearchSelect,
-  Seg, FormModal, Field,
+  Seg, FormModal,
 } from "./StockRoomUi";
+import { PField, StockHint } from "./ProductFormUi";
 import { receiveTransfer, newRequestId } from "./stockRoomData";
 import { formatUnits, formatDay, sizeLabel, REASON_LABELS } from "./stockRoomModel";
 import { buildCsv, downloadCsv } from "../../components/AddProduct/csvHelpers";
@@ -237,10 +238,15 @@ export function ReceiveTransferForm({ transfer, view, onClose, onDone }) {
   };
 
   return (
-    <FormModal title="Receive transfer" sub={`${name(transfer.from)} → ${name(transfer.to)} · sent ${when(transfer.occurred_at)}`}
-      onClose={onClose} onSubmit={submit} submitLabel={`Receive ${units}`} submitting={submitting} error={error} width={640}>
-      <div className="sr-scroller" style={{ marginBottom: 18 }}>
-        <table className="sr-table">
+    <FormModal title="Receive Transfer" sub={`${name(transfer.from)} → ${name(transfer.to)} · sent ${when(transfer.occurred_at)}`}
+      onClose={onClose} onSubmit={submit} submitLabel={`Receive ${units}`} submitting={submitting} error={error} width={720} submitInHead>
+      <StockHint title={`Arriving at ${name(transfer.to)}`} chips={Object.entries(transfer.lines.reduce((acc, l) => {
+        const k = l.size ? sizeLabel(l.size) : "One size";
+        acc[k] = (acc[k] || 0) + l.qty;
+        return acc;
+      }, {})).map(([label, qty]) => ({ label, qty }))} />
+      <div className="sr-grid-scroll" style={{ marginBottom: 18 }}>
+        <table className="sr-grid-table">
           <thead><tr><th>Design</th><th>Size</th><th className="n">Units</th></tr></thead>
           <tbody>
             {transfer.lines.map((l, i) => {
@@ -256,9 +262,9 @@ export function ReceiveTransferForm({ transfer, view, onClose, onDone }) {
           </tbody>
         </table>
       </div>
-      <Field label="Note" hint="Optional. If a piece arrived damaged, receive the transfer and then recount.">
-        <textarea className="sr-textarea" value={note} onChange={(e) => setNote(e.target.value)} />
-      </Field>
+      <PField label="Note (Optional)" htmlFor="rt-note" help="If a piece arrived damaged, receive the transfer and then adjust the stock.">
+        <input id="rt-note" className="sr-input" value={note} onChange={(e) => setNote(e.target.value)} />
+      </PField>
     </FormModal>
   );
 }
