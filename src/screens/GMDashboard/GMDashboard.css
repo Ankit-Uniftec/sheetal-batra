@@ -1014,6 +1014,7 @@
 .status-badge.dispatched { background: #ede7f6; color: #4527a0 !important; }
 .status-badge.delivered { background: #f3e5f5; color: #7b1fa2 !important; }
 .status-badge.cancelled { background: #ffebee; color: #c62828 !important; }
+.status-badge.revoked { background: #efebe9; color: #6d4c41 !important; }
 .status-badge.exchange { background: #eceff1; color: #455a64 !important; }
 /* Legacy keys still referenced by older markup on this screen. */
 .status-badge.pending { background: #fff3e0; color: #e65100 !important; }

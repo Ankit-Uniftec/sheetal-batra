@@ -88,7 +88,11 @@ const getIssueInfo = (o) => {
   if (o.exchange_reason) return { type: "Exchange", color: "#1565c0", reason: o.exchange_reason };
   if (o.status?.toLowerCase() === "cancelled")
     return { type: "Cancelled", color: "#c62828", reason: o.cancellation_reason || "—" };
-  if (o.revoked_at) return { type: "Revoked", color: "#6d4c41", reason: o.revoke_reason || "—" };
+  // cancellation_reason, NOT revoke_reason: that column has never existed, so
+  // every revoke rendered "—". cancelOrder() writes the reason to
+  // cancellation_reason for a revoke exactly as it does for a cancel.
+  if (o.revoked_at || o.status?.toLowerCase() === "revoked")
+    return { type: "Revoked", color: "#6d4c41", reason: o.cancellation_reason || "—" };
   return { type: "—", color: "#999", reason: "—" };
 };
 

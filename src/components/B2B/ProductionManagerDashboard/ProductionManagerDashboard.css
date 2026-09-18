@@ -200,6 +200,7 @@
 .pm-status-dispatched { background: #ede7f6; color: #4527a0 !important; border: 1px solid #d1c4e9; }
 .pm-status-delivered { background: #f3e5f5; color: #6a1b9a !important; border: 1px solid #e1bee7; }
 .pm-status-cancelled { background: #ffebee; color: #c62828 !important; border: 1px solid #ffcdd2; }
+.pm-status-revoked { background: #efebe9; color: #6d4c41 !important; border: 1px solid #d7ccc8; }
 .pm-status-exchange { background: #eceff1; color: #455a64 !important; border: 1px solid #cfd8dc; }
 /* Retained: "ready" and "pending" are legacy keys still referenced by older
    markup on this screen. */

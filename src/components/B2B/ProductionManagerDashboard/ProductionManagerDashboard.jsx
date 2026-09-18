@@ -2951,8 +2951,8 @@ export default function ProductionManagerDashboard() {
                                                     {(componentsByOrder[order.id]?.length > 0) && (
                                                         <button className="pm-action-btn pm-journey-btn" onClick={(e) => openJourney(e, order, componentsByOrder[order.id])}>View Journey</button>
                                                     )}
-                                                    {/* A cancelled order can't be edited or re-prioritised. */}
-                                                    {statusLabel !== "Cancelled" && (
+                                                    {/* A cancelled or revoked order can't be edited or re-prioritised. */}
+                                                    {!["Cancelled", "Revoked"].includes(statusLabel) && (
                                                         <>
                                                             <button className="pm-action-btn pm-edit-btn" onClick={(e) => openEditModal(e, order)}>Edit Order</button>
                                                             <button className="pm-action-btn pm-priority-btn" onClick={(e) => openPriorityModal(e, order)}>{order.priority ? `Priority: ${order.priority}` : "Set Priority"}</button>
@@ -2961,7 +2961,7 @@ export default function ProductionManagerDashboard() {
                                                     {/* Production completion only — dispatch belongs to Packaging
                                                         (Aryadeep's flow), delivery to the SA flow. Final QC is
                                                         enforced by the RPC. */}
-                                                    {!["Completed", "Delivered", "Dispatched", "Cancelled"].includes(statusLabel) && (
+                                                    {!["Completed", "Delivered", "Dispatched", "Cancelled", "Revoked"].includes(statusLabel) && (
                                                         <button
                                                             className="pm-action-btn pm-manual-complete-btn"
                                                             disabled={actionLoading === order.id}
@@ -2977,7 +2977,7 @@ export default function ProductionManagerDashboard() {
                                                         warehouse_stage/components while orders.status still says
                                                         something else was still offering Cancel. The button must
                                                         agree with the badge the user is looking at. */}
-                                                    {!["Dispatched", "Delivered", "Cancelled"].includes(statusLabel) && (
+                                                    {!["Dispatched", "Delivered", "Cancelled", "Revoked"].includes(statusLabel) && (
                                                         <button
                                                             className="pm-action-btn pm-cancel-btn"
                                                             disabled={actionLoading === order.id}

@@ -1431,7 +1431,9 @@ export default function StoreManagerDashboard() {
                                     returned: "return_reason",
                                     refunded: "refund_reason",
                                     exchanged: "exchange_reason",
-                                    revoked: "revoked_reason",
+                                    // Not "revoked_reason" — no such column. A revoke's
+                                    // reason lands in cancellation_reason (utils/cancelOrder.js).
+                                    revoked: "cancellation_reason",
                                 }[returnsDrillType];
                                 return (
                                     <div className="sm-drilldown" style={{ marginTop: 16 }}>

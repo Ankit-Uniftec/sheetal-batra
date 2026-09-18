@@ -352,7 +352,11 @@ export function getOrderProgressStatus(order, components) {
   const s = normalizeOrderStatus(order?.status);
 
   // Terminal / outside the ladder — these are true regardless of pieces.
+  // Revoked before delivered on purpose: a revoke can land on an already-
+  // delivered order (brand-initiated, post-delivery), and the revoke is the
+  // later, more specific fact. delivered_at stays set on the row either way.
   if (s === "cancelled") return "Cancelled";
+  if (s === "revoked") return "Revoked";
   if (s === "exchange_return") return "Exchange Return";
   if (s === "delivered") return "Delivered";
   if (s === "dispatched" || order?.warehouse_stage === "dispatched") return "Dispatched";
@@ -401,6 +405,10 @@ export function getOrderProgressStatusStage(order, components) {
 
   switch (getOrderProgressStatus(order, components)) {
     case "Cancelled": return "cancelled";
+    // Belt-and-braces with the revoked_at guard above: the status dropdowns
+    // write status='revoked' without stamping revoked_at, so the label is the
+    // only signal for those rows.
+    case "Revoked": return "revoked";
     case "Exchange Return": return "exchange_return";
     case "Delivered": return "delivered";
     case "Dispatched": return "dispatched";
@@ -419,6 +427,7 @@ export function getOrderProgressStatusKey(label) {
     case "Completed": return "completed";
     case "In Production": return "inprod";
     case "Cancelled": return "cancelled";
+    case "Revoked": return "revoked";
     case "Exchange Return": return "exchange";
     default: return "received";
   }

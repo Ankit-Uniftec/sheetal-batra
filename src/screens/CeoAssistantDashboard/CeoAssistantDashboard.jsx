@@ -168,7 +168,11 @@ export default function CeoAssistantDashboard() {
         stores[store].cancelCount += 1;
         stores[store].cancelAmount += amt;
       }
-      if (o.revoked_at || o.revoke_reason) {
+      // orders.revoke_reason has never existed — the revoke reason is written to
+      // cancellation_reason like every other reason (utils/cancelOrder.js). The
+      // status check is what catches rows the admin/CEO/COO status dropdowns
+      // write, which set status without stamping revoked_at.
+      if (o.revoked_at || o.status === "revoked") {
         stores[store].revokeCount += 1;
         stores[store].revokeAmount += amt;
       }
@@ -194,7 +198,7 @@ export default function CeoAssistantDashboard() {
       if (o.return_reason || o.status === "returned") saMap[email].return += 1;
       if (o.exchange_reason || o.exchange_requested_at) saMap[email].exchange += 1;
       if (o.status === "cancelled") saMap[email].cancel += 1;
-      if (o.revoked_at || o.revoke_reason) saMap[email].revoke += 1;
+      if (o.revoked_at || o.status === "revoked") saMap[email].revoke += 1;
     });
     const values = Object.values(saMap);
     const topBy = (key) => values.slice().sort((a, b) => b[key] - a[key])[0] || { name: "—", [key]: 0 };

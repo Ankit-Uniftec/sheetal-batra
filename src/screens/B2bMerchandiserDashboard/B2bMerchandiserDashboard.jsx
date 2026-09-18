@@ -696,7 +696,7 @@ export default function B2bMerchandiserDashboard() {
         // warehouse_stage / its components while orders.status can still say
         // something earlier, and a garment that has physically shipped must not
         // offer Cancel whichever column recorded that.
-        if (["Dispatched", "Delivered", "Cancelled"].includes(getOrderProgressStatus(o, componentsByOrder[o.id]))) return false;
+        if (["Dispatched", "Delivered", "Cancelled", "Revoked"].includes(getOrderProgressStatus(o, componentsByOrder[o.id]))) return false;
         return hoursSince(o.created_at) < 24 || isB2bMerchandiserEmail(user?.email);
     };
 
