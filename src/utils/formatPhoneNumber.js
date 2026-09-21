@@ -1,14 +1,14 @@
 // Utility: format phone numbers (Indian + International)
 // Stored format in DB: "+CC<digits>" e.g. "+919876543210", "+12025551234"
 
-// All known dial codes from OtpVerification — sorted longest first so prefix
-// matching picks the most specific code (e.g. "+966" before "+9", "+971" before "+97").
-const DIAL_CODES = [
-  "+966", "+974", "+965", "+968", "+971", "+234", "+351",
-  "+91", "+44", "+61", "+49", "+33", "+39", "+34", "+31", "+86",
-  "+81", "+82", "+65", "+60", "+66", "+62", "+52", "+55", "+27", "+20",
-  "+1",
-].sort((a, b) => b.length - a.length);
+import { COUNTRY_CODES } from "./countryCodes";
+
+// Derived from the shared picker list so a country added there is understood
+// here too. Sorted longest first so prefix matching picks the most specific
+// code (e.g. "+852" before "+85", "+971" before "+97").
+const DIAL_CODES = COUNTRY_CODES.map((c) => c.code).sort(
+  (a, b) => b.length - a.length
+);
 
 // Group the local (post-country-code) digits into a readable display.
 const formatLocal = (code, local) => {

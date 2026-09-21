@@ -16,6 +16,7 @@ export const COUNTRY_CODES = [
   { code: "+81", label: "Japan", flag: "🇯🇵" },
   { code: "+82", label: "South Korea", flag: "🇰🇷" },
   { code: "+65", label: "Singapore", flag: "🇸🇬" },
+  { code: "+852", label: "Hong Kong", flag: "🇭🇰" },
   { code: "+60", label: "Malaysia", flag: "🇲🇾" },
   { code: "+66", label: "Thailand", flag: "🇹🇭" },
   { code: "+62", label: "Indonesia", flag: "🇮🇩" },
