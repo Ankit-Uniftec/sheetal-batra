@@ -12,7 +12,7 @@ import {
 // is downscaled for the web and must not end up inside generated PDFs.
 import Logo from "../images/logo-pdf.png";
 import { generateOrderBarcodeImages, generateLabelBarcodeDataUrl } from "./barcodeImageUtils";
-import { fetchOrderComponents } from "./barcodeService";
+import { ensureOrderComponents } from "./barcodeService";
 
 // Resolves the "client name" for a PDF header. B2B orders have no
 // delivery_name; the vendor's store_brand_name is the operations-facing
@@ -43,6 +43,36 @@ const garmentItems = (items) =>
   (items || [])
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => !item?.is_charge);
+
+// Barcodes for a warehouse work order — the one place all three warehouse PDF
+// paths get them, so the self-heal and the fail-fast can't drift apart.
+//
+// ensureOrderComponents, NOT a plain read. Component minting at order placement
+// is deliberately non-blocking (the order must persist even if barcodes fail),
+// so an order can reach the PDF with zero components — SB-DLC-0926-008466 did.
+// Nothing else ever repaired that gap for a retail order: ensureOrderComponents
+// was only wired into the B2B and alteration flows, so every reprint re-rendered
+// the same barcode-less page forever. It is idempotent and mints only what is
+// missing, never touching a component that has already been scanned.
+//
+// Throwing on an empty result is the point. A work order whose barcodes are
+// placeholder text cannot be scanned, so every stage transition for that garment
+// is impossible — and the page looks normal, so the floor finds out only when a
+// scanner refuses it. Better to fail here, where the operator is watching and
+// the error names the order, than to print a document that silently drops a
+// garment out of production tracking.
+const fetchWarehouseBarcodes = async (order) => {
+  const components = await ensureOrderComponents(order);
+
+  if (!components || components.length === 0) {
+    throw new Error(
+      `No barcode components exist for ${order?.order_no} and none could be created. ` +
+      `The warehouse PDF would print without scannable barcodes, so it was not generated.`
+    );
+  }
+
+  return { components, barcodeData: generateOrderBarcodeImages(order.order_no, components) };
+};
 
 // Dashboards now fetch a TRIMMED set of order columns for speed, so the order
 // object handed to a PDF function may be missing the billing / signature /
@@ -186,18 +216,9 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
     // Resolve client name once for all items in this order
     const resolvedClientName = await resolveClientNameForPdf(order);
 
-    // Generate one PDF per product
-    // Fetch components and generate barcode images
-    let components = [];
-    let barcodeData = { masterBarcode: null, componentBarcodes: [] };
-    try {
-      components = await fetchOrderComponents(order.id);
-      if (components && components.length > 0) {
-        barcodeData = generateOrderBarcodeImages(order.order_no, components);
-      }
-    } catch (err) {
-      console.warn("Barcode generation skipped:", err.message);
-    }
+    // Generate one PDF per product. Barcodes are mandatory — see
+    // fetchWarehouseBarcodes; a failure here aborts before anything uploads.
+    const { components, barcodeData } = await fetchWarehouseBarcodes(order);
 
     const garments = garmentItems(order.items || items);
 
@@ -269,7 +290,10 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
   } catch (error) {
     console.error("Warehouse PDF generation failed:", error);
     if (setLoading) setLoading(false);
-    alert("Failed to generate warehouse PDFs. Please try again.");
+    // Show the real reason. "Please try again" on a barcode failure sends staff
+    // into a retry loop that cannot succeed — the order needs its components
+    // fixed, and the message has to say so.
+    alert(error?.message || "Failed to generate warehouse PDFs. Please try again.");
     return null;
   }
 };
@@ -310,17 +334,8 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
     const item = (order.items || [])[productIndex];
     const resolvedClientName = await resolveClientNameForPdf(order);
 
-    // Fetch components and generate barcode images
-    let components = [];
-    let barcodeData = { masterBarcode: null, componentBarcodes: [] };
-    try {
-      components = await fetchOrderComponents(order.id);
-      if (components && components.length > 0) {
-        barcodeData = generateOrderBarcodeImages(order.order_no, components);
-      }
-    } catch (err) {
-      console.warn("Barcode generation skipped:", err.message);
-    }
+    // Barcodes are mandatory — see fetchWarehouseBarcodes.
+    const { components, barcodeData } = await fetchWarehouseBarcodes(order);
 
     const itemBarcodes = barcodeData.componentBarcodes.filter((cb) => {
       const comp = components.find(c => c.barcode === cb.barcode);
@@ -378,7 +393,8 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
   } catch (error) {
     console.error("Single warehouse PDF generation failed:", error);
     if (setLoading) setLoading(false);
-    alert("Failed to generate warehouse PDF. Please try again.");
+    // See downloadWarehousePdf — surface the real cause, not a blind retry.
+    alert(error?.message || "Failed to generate warehouse PDF. Please try again.");
     return null;
   }
 };
@@ -428,19 +444,31 @@ export const generateAllPdfs = async (order, setLoading = null) => {
   }
 
   // ========== FETCH COMPONENTS & GENERATE BARCODES ==========
+  // Placement already minted these (ReviewDetail step 4.5), but that step is
+  // non-blocking, so this re-mints anything it lost rather than trusting it.
+  //
+  // Unlike the on-demand paths this one cannot throw — the order row is already
+  // committed and the customer PDF may already be uploaded, so aborting here
+  // would strand a live order. Instead the warehouse PDFs are SKIPPED: no
+  // barcodes means no scannable work order, and uploading a placeholder one
+  // would park a permanently-unscannable document on the order, which the
+  // reprint paths would then happily serve forever. Leaving warehouse_urls
+  // empty makes the next reprint regenerate properly once the cause is fixed.
   let barcodeData = { masterBarcode: null, componentBarcodes: [] };
   let components = [];
+  let barcodesUsable = false;
   try {
-    components = await fetchOrderComponents(order.id);
-    if (components && components.length > 0) {
-      barcodeData = generateOrderBarcodeImages(order.order_no, components);
-    }
+    ({ components, barcodeData } = await fetchWarehouseBarcodes(orderData));
+    barcodesUsable = true;
   } catch (err) {
-    console.warn("Barcode generation skipped:", err.message);
+    console.error(
+      `❌ Warehouse PDFs SKIPPED for ${order.order_no} — no scannable barcodes:`,
+      err.message
+    );
   }
 
   // ========== WAREHOUSE PDFs ==========
-  const garments = garmentItems(items);
+  const garments = barcodesUsable ? garmentItems(items) : [];
   for (let gi = 0; gi < garments.length; gi++) {
     try {
       const { item, index } = garments[gi];

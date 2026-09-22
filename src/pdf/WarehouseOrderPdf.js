@@ -957,6 +957,20 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
     );
   }
 
+  // A work order with no component barcodes is unscannable, so the garment can
+  // never be advanced through a single production stage. The fallback page
+  // below renders placeholder BOXES that print the order number as plain text —
+  // it looks like a valid work order, which is exactly why this went unnoticed
+  // on SB-DLC-0926-008466. Callers must supply barcodes (pdfUtils'
+  // fetchWarehouseBarcodes mints any that are missing); refuse to render rather
+  // than hand the floor a document that silently drops a garment out of tracking.
+  if (SHOW_BARCODES && (!componentBarcodes || componentBarcodes.length === 0)) {
+    throw new Error(
+      `WarehouseOrderPdf: no component barcodes for ${order.order_no} (item ${itemIndex + 1}). ` +
+      `Refusing to render an unscannable work order.`
+    );
+  }
+
   const isAlteration = order.is_alteration;
   const isUrgent = order.alteration_status === "upcoming_occasion" || order.is_urgent;
   const itemDeliveryDate = order.delivery_date;
