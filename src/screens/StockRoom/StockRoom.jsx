@@ -22,6 +22,7 @@ import ProductDetail from "./ProductDetail";
 import StockActionForm from "./StockActionForm";
 import ProductEditor from "./ProductEditor";
 import ProductImport from "./ProductImport";
+import BulkStockOrderImport from "./BulkStockOrderImport";
 import "./StockRoom.css";
 
 // ============================================================
@@ -227,6 +228,7 @@ export default function StockRoom() {
   }, []);
   const openEditor = useCallback((id) => { setProductId(null); setDialog({ kind: "product", productId: id }); }, []);
   const openImport = useCallback((mode = "products") => setDialog({ kind: "import", mode }), []);
+  const openBulkOrders = useCallback(() => setDialog({ kind: "bulkOrders" }), []);
   const editLocation = useCallback((location) => setDialog({ kind: "location", location }), []);
   const openReceiveTransfer = useCallback((transfer) => { setProductId(null); setDialog({ kind: "receiveTransfer", transfer }); }, []);
 
@@ -401,7 +403,7 @@ export default function StockRoom() {
         )}
         {screen === "stockorders" && (
           <StockOrdersScreen orders={data.stockOrders} ready={data.ordersReady} view={view} openAction={openAction} canWrite={canWriteStock}
-            user={user} canStartOrders={PRODUCT_WRITES_ON} />
+            user={user} canStartOrders={PRODUCT_WRITES_ON} openBulkOrders={openBulkOrders} />
         )}
         {screen === "movements" && <MovementsScreen {...screenProps} />}
         {screen === "transfers" && <TransfersScreen key={screenOpts.nonce} {...screenProps} initialStatus={screenOpts.status} />}
@@ -427,6 +429,9 @@ export default function StockRoom() {
       )}
       {dialog?.kind === "import" && (
         <ProductImport mode={dialog.mode} view={view} onClose={() => setDialog(null)} onDone={finishDialog} />
+      )}
+      {dialog?.kind === "bulkOrders" && (
+        <BulkStockOrderImport view={view} user={user} onClose={() => setDialog(null)} onDone={finishDialog} />
       )}
       {dialog?.kind === "receiveTransfer" && (
         <ReceiveTransferForm transfer={dialog.transfer} view={view} onClose={() => setDialog(null)} onDone={finishDialog} />

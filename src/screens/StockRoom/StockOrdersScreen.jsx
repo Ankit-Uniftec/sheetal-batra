@@ -148,7 +148,7 @@ function StockOrderCard({ order, now, view, openAction, canWrite }) {
   );
 }
 
-export default function StockOrdersScreen({ orders, ready = true, view, openAction, canWrite, user, canStartOrders }) {
+export default function StockOrdersScreen({ orders, ready = true, view, openAction, canWrite, user, canStartOrders, openBulkOrders }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -245,6 +245,12 @@ export default function StockOrdersScreen({ orders, ready = true, view, openActi
           : "Loading stock orders…"}>
         <SearchField value={search} onChange={setSearch} placeholder="Order no, design or SA" label="Search stock orders" />
         <FilterButton count={activeCount} onClick={() => setDrawer(true)} />
+        {/* Bulk upload sits with the single-order button: same job, many orders.
+            It needs Stock Room write access only — the CSV carries the channel
+            and the head, so there is nothing else to choose here. */}
+        {canWrite && (
+          <button type="button" className="sr-btn" onClick={openBulkOrders}><Icon name="upload" width={2} />Bulk upload</button>
+        )}
         {canStartOrders && user?.can_place_stock_orders && (
           <button type="button" className="sr-btn sr-btn-primary" onClick={raiseStockOrder}><Icon name="plus" width={2} />Raise stock order</button>
         )}

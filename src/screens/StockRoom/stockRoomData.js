@@ -1,6 +1,7 @@
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { getOrderChannelKey } from "../../utils/barcodeService";
+import { STOCK_HEAD_OPTIONS } from "../../utils/stockProductionHead";
 
 // ============================================================
 // Stock Room — data access.
@@ -398,3 +399,44 @@ export async function setProductCollections(productId, collectionIds, currentIds
     if (error) throw new Error(`Collections not saved: ${error.message}`);
   }
 }
+
+// ============================================================
+// Bulk stock orders (see bulkStockOrders.js for the CSV rules and
+// db/stock_room/07_bulk_stock_orders.sql for the writer).
+// ============================================================
+
+/**
+ * The values a bulk file must match EXACTLY. Colours, dupatta colours and
+ * extras are not part of the stock catalogue load, so they are fetched here;
+ * designs, sizes and garment options come from the catalogue already on screen.
+ *
+ * The heads are the same list the stock-order form offers, which is also what
+ * the CHECK constraint on orders.production_head_designation allows.
+ */
+export async function loadBulkOrderOptions() {
+  const [colors, dupattaColors, extras] = await Promise.all([
+    must("colours", supabase.from("colors").select("name, hex").order("name")),
+    must("dupatta colours", supabase.from("dupatta_colors").select("name").order("name")),
+    must("extras", supabase.from("extras").select("name").order("name")),
+  ]);
+  return {
+    colors: colors.filter((c) => c.name),
+    dupattaColors: dupattaColors.map((d) => d.name).filter(Boolean),
+    extras: extras.map((e) => e.name).filter(Boolean),
+    heads: STOCK_HEAD_OPTIONS,
+  };
+}
+
+/**
+ * Raise every order in one call. The function writes each order in its own
+ * block, so a bad one fails alone; a retry with the same requestId replays the
+ * first result instead of raising everything twice.
+ *
+ * @returns {{ batch_id: string, created: object[], failed: object[] }}
+ */
+export const bulkCreateStockOrders = ({ requestId, file, orders }) =>
+  callStockFunction("stock_room_bulk_stock_orders", {
+    p_request: requestId,
+    p_file: { name: file?.name || null, hash: file?.hash || null },
+    p_orders: orders,
+  });
