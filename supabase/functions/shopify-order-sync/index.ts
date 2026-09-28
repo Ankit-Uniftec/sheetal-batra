@@ -53,7 +53,9 @@ import {
 // Manual modes:
 //   { mode: "sync-now",  sinceDays?, first? }   dashboard "Sync now" button
 //   { mode: "order",     id: "gid://..." }      re-ingest/refresh one order
-//   { mode: "refresh",   sinceMinutes?, first? } catch-up sweep on updated_at
+//   { mode: "refresh",   sinceMinutes?, first?, after? } catch-up sweep on
+//                                               updated_at; pass the response's
+//                                               nextCursor back as `after` to page
 //   { mode: "refresh-raw", limit?, dryRun? }    re-fetch orders whose STORED
 //                                               snapshot predates a query
 //                                               change, so remap-items has the
@@ -307,17 +309,24 @@ async function fetchOrders(
   first: number,
   sinceIso: string | null,
   dateField: "created_at" | "updated_at" = "created_at",
+  after: string | null = null,
 ) {
   const filter = sinceIso ? `, query: "${dateField}:>=${sinceIso}"` : "";
+  const cursor = after ? `, after: ${JSON.stringify(after)}` : "";
   const sortKey = dateField === "updated_at" ? "UPDATED_AT" : "CREATED_AT";
   const data = await shopifyGraphql(`
     query {
-      orders(first: ${first}, sortKey: ${sortKey}, reverse: true${filter}) {
+      orders(first: ${first}, sortKey: ${sortKey}, reverse: true${filter}${cursor}) {
         edges { node { ${ORDER_FIELDS} } }
+        pageInfo { hasNextPage endCursor }
       }
     }
   `);
-  return (data?.orders?.edges || []).map((e: any) => e.node);
+  const nodes = (data?.orders?.edges || []).map((e: any) => e.node);
+  // Returned so a wide manual sweep can page past `first` by passing it back
+  // as { after }. Null when the window is exhausted.
+  const pi = data?.orders?.pageInfo;
+  return { nodes, nextCursor: pi?.hasNextPage ? pi.endCursor : null };
 }
 
 /** Fetch exactly one order by GID — the webhook path. */
@@ -747,6 +756,18 @@ async function refreshExistingOrder(
   const newlyCancelled = Boolean(cancelledAt) && !alreadyCancelled;
   if (newlyCancelled) changed.push("status:cancelled");
 
+  // Order note edited in Shopify after ingest (e.g. #28961). The note is
+  // Shopify-owned text production only reads, never builds on. Diffed against
+  // the note in the STORED SNAPSHOT, not against orders.comments: the in-app
+  // Edit Order modal also writes comments, and that edit must survive every
+  // sweep until the note is actually changed again in Shopify. The shopify_raw
+  // write below then records the new note, so this fires once per edit.
+  // Same normalisation as the mapper (clean() || null).
+  const prevNote = String(existing.shopify_raw?.note ?? "").trim() || null;
+  const nextNote = orderRow.comments ?? null;
+  const noteChanged = nextNote !== prevNote;
+  if (noteChanged) changed.push("comments");
+
   if (changed.length === 0) return { ...base, outcome: "already_exists" };
 
   const { error } = await supabase
@@ -760,6 +781,7 @@ async function refreshExistingOrder(
       // Until now this column meant "first ingested" — ingestOrder returned
       // before ever writing it again. Now it means what its name says.
       shopify_synced_at: new Date().toISOString(),
+      ...(noteChanged ? { comments: nextNote } : {}),
       // Same three columns the four in-app cancel paths write
       // (OrderHistory.jsx:679, AssociateDashboard.js:933, EditOrder.jsx:246,
       // B2bMerchandiserDashboard.jsx:748), so a Shopify cancellation is
@@ -1974,6 +1996,7 @@ serve(async (req) => {
 
     // Gather the orders to process.
     let nodes: any[] = [];
+    let nextCursor: string | null = null;
     if (mode === "order") {
       if (!body?.id) throw new Error("mode 'order' requires { id }");
       const node = await fetchOrderById(String(body.id));
@@ -1984,7 +2007,7 @@ serve(async (req) => {
       // a re-touched old order push a genuinely new one off the page.
       const mins = Number(body?.sinceMinutes) || 30;
       const since = new Date(Date.now() - mins * 60_000).toISOString();
-      nodes = await fetchOrders(Math.min(Number(body?.first) || 50, 100), since, "created_at");
+      ({ nodes, nextCursor } = await fetchOrders(Math.min(Number(body?.first) || 50, 100), since, "created_at", body?.after || null));
     } else if (mode === "refresh") {
       // Orders TOUCHED in the window — updated_at, and fetchOrders sorts by
       // UPDATED_AT to match. This is the catch-up sweep the fetchOrders
@@ -1998,12 +2021,12 @@ serve(async (req) => {
       // two windows, no interference.
       const mins = Number(body?.sinceMinutes) || 1440; // 24h
       const since = new Date(Date.now() - mins * 60_000).toISOString();
-      nodes = await fetchOrders(Math.min(Number(body?.first) || 100, 100), since, "updated_at");
+      ({ nodes, nextCursor } = await fetchOrders(Math.min(Number(body?.first) || 100, 100), since, "updated_at", body?.after || null));
     } else {
       // sync-now
       const days = Number(body?.sinceDays) || 0;
       const since = days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
-      nodes = await fetchOrders(Math.min(Number(body?.first) || 25, 100), since);
+      ({ nodes, nextCursor } = await fetchOrders(Math.min(Number(body?.first) || 25, 100), since, "created_at", body?.after || null));
     }
 
     // Dry run: map only, write nothing. For verifying the mapping against real
@@ -2080,7 +2103,7 @@ serve(async (req) => {
       }
     }
 
-    return json({ success: true, mode, fetched: nodes.length, summary, results });
+    return json({ success: true, mode, fetched: nodes.length, nextCursor, summary, results });
   } catch (error) {
     // LOG the stack, not just the message. Returning the message to the caller
     // without printing anything left a 500 with no corresponding log line —
