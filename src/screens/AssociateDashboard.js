@@ -14,6 +14,7 @@ import { getSAStageLabel, getSAStageColor, getOrderStatusLabel, markShipmentDeli
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 import UpdatePaymentModal from "../components/UpdatePaymentModal";
+import { canUpdatePayment, recordPayment } from "../utils/recordPayment";
 import WalkInTab from "./WalkInTab";
 import ExhibitionPanel from "../components/ExhibitionPanel";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
@@ -877,33 +878,14 @@ export default function Dashboard() {
     setPaymentModalOrder(order);
   };
 
-  const handleUpdatePaymentConfirm = async ({ paidAt, rows }) => {
+  const handleUpdatePaymentConfirm = async (payment) => {
     const order = paymentModalOrder;
     if (!order) return;
     setPaymentModalSaving(true);
     try {
-      const collected = (rows || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
-
-      const paymentRows = rows.map((r) => ({
-        order_id: order.id,
-        kind: "balance",
-        payment_mode: r.mode,
-        amount: r.amount,
-        paid_at: paidAt,
-        recorded_by: salesperson?.email || null,
-      }));
-      const { error: payErr } = await supabase
-        .from("order_payments")
-        .insert(paymentRows);
-      if (payErr) throw payErr;
-
-      // No orders.update at all. This used to add `collected` into
-      // advance_payment, which made the customer invoice print an advance
-      // larger than the customer ever advanced. total_paid and
-      // remaining_payment are now maintained by trg_order_payments_sync_total
-      // (77_orders_total_paid.sql) off the insert above; advance_payment stays
-      // frozen at the order-time figure. Status is NOT changed — payment only.
-      const fresh = await refreshOrderRow(order.id);
+      // Ledger write lives in utils/recordPayment (shared with Order History).
+      const { collected, fresh } = await recordPayment(order, payment, salesperson?.email);
+      if (fresh) setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...fresh } : o));
       setPaymentModalOrder(null);
 
       // Quote the balance the DB computed, not one guessed here — that guess is
@@ -1311,20 +1293,6 @@ export default function Dashboard() {
   const canMarkDelivered = (order) => {
     const status = order.status?.toLowerCase();
     return status !== "delivered" && status !== "cancelled" && status !== "exchange_return" && status !== "revoked";
-  };
-
-  // "Update Payment" is for retail orders that still have an outstanding
-  // balance and aren't finished. B2B/stock orders don't collect a balance here.
-  const canUpdatePayment = (order) => {
-    if (order?.is_b2b || order?.is_stock_order) return false;
-    const status = order.status?.toLowerCase();
-    if (status === "delivered" || status === "cancelled" || status === "exchange_return" || status === "revoked") return false;
-    const orderTotal = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
-    // total_paid, not advance_payment: the latter is frozen at the order-time
-    // advance, so it would never shrink the balance and this button would never
-    // go away on a fully-paid order. Falls back for rows predating the backfill.
-    const paidSoFar = Number(order?.total_paid ?? order?.advance_payment) || 0;
-    return orderTotal - paidSoFar > 0;
   };
 
   // Get status badge style

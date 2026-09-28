@@ -18,6 +18,8 @@ import useFilterParam, { useClearFilterParams } from "../hooks/useFilterParam";
 import { usePeriodFilterParam } from "../components/PeriodFilter";
 import Paginator from "../components/Paginator";
 import EditOrderModal from "../components/EditOrderModal";
+import UpdatePaymentModal from "../components/UpdatePaymentModal";
+import { canUpdatePayment, recordPayment } from "../utils/recordPayment";
 
 // Status filter helpers — mirror getStatusText/getStatusClass normalization.
 const STATUS_FILTER_LABELS = {
@@ -216,6 +218,8 @@ export default function OrderHistory() {
 
   // Edit modal state
   const [editingOrder, setEditingOrder] = useState(null);
+  const [paymentOrder, setPaymentOrder] = useState(null);
+  const [paymentSaving, setPaymentSaving] = useState(false);
 
   // Action modal state
   const [actionModal, setActionModal] = useState(null); // { type: 'cancel'|'revoke'|'exchange'|'return'|'refund', order: order }
@@ -1125,6 +1129,33 @@ export default function OrderHistory() {
     setEditingOrder(order);
   };
 
+  // Same Update Payment as the Associate dashboard — this is the only order
+  // screen a store manager reaches, so without it they could never record a
+  // balance payment.
+  const handleUpdatePaymentConfirm = async (payment) => {
+    const order = paymentOrder;
+    if (!order) return;
+    setPaymentSaving(true);
+    try {
+      const { collected, fresh } = await recordPayment(order, payment, localStorage.getItem("sp_email"));
+      if (fresh) setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...fresh } : o));
+      setPaymentOrder(null);
+      const newRemaining = Number(fresh?.remaining_payment) || 0;
+      showPopup({
+        type: "success",
+        title: "Payment Recorded",
+        message: newRemaining > 0
+          ? `₹${formatIndianNumber(collected)} recorded. Balance now ₹${formatIndianNumber(newRemaining)}.`
+          : `₹${formatIndianNumber(collected)} recorded. Order is now fully paid.`,
+        confirmText: "OK",
+      });
+    } catch (err) {
+      showPopup({ type: "error", title: "Failed", message: "Could not record payment: " + err.message, confirmText: "OK" });
+    } finally {
+      setPaymentSaving(false);
+    }
+  };
+
   const handleBack = () => {
     sessionStorage.removeItem("oh_saEmail");
     sessionStorage.removeItem("oh_readOnly");
@@ -1224,6 +1255,15 @@ export default function OrderHistory() {
           onClose={() => setEditingOrder(null)}
           onSaved={(fresh) => setOrders(prev => prev.map(o => o.id === fresh.id ? fresh : o))}
           showPopup={showPopup}
+        />
+      )}
+
+      {paymentOrder && (
+        <UpdatePaymentModal
+          order={paymentOrder}
+          saving={paymentSaving}
+          onCancel={() => { if (!paymentSaving) setPaymentOrder(null); }}
+          onConfirm={handleUpdatePaymentConfirm}
         />
       )}
 
@@ -1656,6 +1696,7 @@ export default function OrderHistory() {
                 const hrs = getHoursSinceOrder(order.created_at);
                 const ownOrder = isOwnOrder(order);
                 const editOk = ownOrder && !readOnly && canEdit(order);
+                const paymentOk = ownOrder && !readOnly && canUpdatePayment(order);
                 const cancelOk = ownOrder && !readOnly && canCancel(order);
                 const revokeOk = ownOrder && !readOnly && canRevoke(order);
                 const exchangeOk = ownOrder && !readOnly && canExchange(order);
@@ -1810,6 +1851,12 @@ export default function OrderHistory() {
 
                     {/* Card Footer - Actions */}
                     <div className="oh-card-actions">
+                      {paymentOk && (
+                        <button className="oh-btn primary" onClick={(e) => { e.stopPropagation(); setPaymentOrder(order); }}>
+                          ₹ Update Payment
+                        </button>
+                      )}
+
                       {/* Edit Button */}
                       {editOk && (
                         <button className="oh-btn edit" onClick={(e) => openEditModal(e, order)}>
