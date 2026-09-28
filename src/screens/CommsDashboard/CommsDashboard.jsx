@@ -10,7 +10,7 @@ import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
-import { enrichComponentsWithMovements } from "../../utils/barcodeService";
+import { enrichComponentsWithMovements, getOrderProgressStatus } from "../../utils/barcodeService";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import CommsSourcingReturns from "./CommsSourcingReturns";
 import CommsReports from "./CommsReports";
@@ -22,10 +22,20 @@ import useTabParam from "../../hooks/useTabParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import DashboardHeader from "../../components/DashboardHeader";
+import EditOrderModal from "../../components/EditOrderModal";
+import CancelOrderModal from "../../components/CancelOrderModal";
 
 // Comms order cards are heavy (image, colour swatches, component chips) —
 // rendering the whole filtered list lags once orders grow. Paginate.
 const ORDERS_PER_PAGE = 10;
+
+// No time window for Comms (like the designated B2B merchandiser) — gated on
+// the DERIVED status instead, so the floor decides, not orders.status:
+// edit only while no piece has left Order Received (nothing cut yet), cancel
+// until the garment ships (same terminal set as the merchandiser's card).
+const NO_CANCEL = ["Dispatched", "Delivered", "Cancelled", "Revoked"];
+const canEditOrder = (o, comps) => o.approval_status !== "rejected" && getOrderProgressStatus(o, comps) === "Order Received";
+const canCancelOrder = (o, comps) => o.approval_status !== "rejected" && !NO_CANCEL.includes(getOrderProgressStatus(o, comps));
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
@@ -87,6 +97,8 @@ export default function CommsDashboard() {
   // comms barcode generation existed have no components and get no button.
   const [componentsByOrder, setComponentsByOrder] = useState({});
   const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [cancellingOrder, setCancellingOrder] = useState(null);
   const openJourney = (e, order) => {
     e?.stopPropagation?.();
     setJourneyOrder({ order_no: order.order_no, components: componentsByOrder[order.id] || [] });
@@ -322,6 +334,24 @@ export default function CommsDashboard() {
   return (
     <div className="comms-page">
       {PopupComponent}
+      {editingOrder && (
+        <EditOrderModal
+          order={editingOrder}
+          onClose={() => setEditingOrder(null)}
+          onSaved={(fresh) => setOrders((prev) => prev.map((o) => o.id === fresh.id ? fresh : o))}
+          showPopup={showPopup}
+          notifyCustomer={false}
+        />
+      )}
+      {cancellingOrder && (
+        <CancelOrderModal
+          order={cancellingOrder}
+          onClose={() => setCancellingOrder(null)}
+          onCancelled={(order, reason) => setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: reason } : o))}
+          showPopup={showPopup}
+          opts={{ cancelledBy: profile?.saleperson || "", email: profile?.email || "" }}
+        />
+      )}
 
       {journeyOrder && (
         <ComponentJourneyModal
@@ -770,11 +800,23 @@ export default function CommsDashboard() {
                             </div>
                           )}
 
-                          {componentsByOrder[o.id]?.length > 0 && (
+                          {(componentsByOrder[o.id]?.length > 0 || canEditOrder(o, componentsByOrder[o.id]) || canCancelOrder(o, componentsByOrder[o.id])) && (
                             <div className="comms-order-actions">
-                              <button className="comms-journey-btn" onClick={(e) => openJourney(e, o)}>
-                                View Journey
-                              </button>
+                              {componentsByOrder[o.id]?.length > 0 && (
+                                <button className="comms-journey-btn" onClick={(e) => openJourney(e, o)}>
+                                  View Journey
+                                </button>
+                              )}
+                              {canEditOrder(o, componentsByOrder[o.id]) && (
+                                <button className="comms-edit-btn" onClick={() => setEditingOrder(o)}>
+                                  Edit Order
+                                </button>
+                              )}
+                              {canCancelOrder(o, componentsByOrder[o.id]) && (
+                                <button className="comms-cancel-btn" onClick={() => setCancellingOrder(o)}>
+                                  Cancel Order
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

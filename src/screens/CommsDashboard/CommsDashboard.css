@@ -1062,3 +1062,16 @@
     padding: 18px 16px;
   }
 }
+
+.comms-edit-btn,
+.comms-cancel-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.comms-edit-btn { background: #faf6e8; color: #8B7355; border: 1px solid #d5b85a; }
+.comms-edit-btn:hover { background: #d5b85a; color: #fff; }
+.comms-cancel-btn { background: #fff; color: #c62828; border: 1px solid #c62828; }
+.comms-cancel-btn:hover { background: #c62828; color: #fff; }
