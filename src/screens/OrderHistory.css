@@ -480,6 +480,33 @@
   cursor: not-allowed;
 }
 
+/* PDF buttons. Own class on purpose: these used to borrow .ad-print-pdf-btn
+   from AssociateDashboard.css, which is a lazy chunk — anyone arriving from
+   another dashboard (store manager) never loaded it and got bare buttons. */
+.oh-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1.5px solid #d5b85a;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b7240;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.oh-pdf-btn:hover {
+  background: #fffdf5;
+}
+
+.oh-pdf-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Color Dots */
 .oh-color-dot-wrapper {
   display: inline-flex;

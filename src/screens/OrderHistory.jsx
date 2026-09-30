@@ -20,6 +20,8 @@ import Paginator from "../components/Paginator";
 import EditOrderModal from "../components/EditOrderModal";
 import UpdatePaymentModal from "../components/UpdatePaymentModal";
 import { canUpdatePayment, recordPayment } from "../utils/recordPayment";
+import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
+import { canMarkDelivered, isDirectDelivery, markOrderDelivered, confirmDelivery } from "../utils/deliverOrder";
 
 // Status filter helpers — mirror getStatusText/getStatusClass normalization.
 const STATUS_FILTER_LABELS = {
@@ -220,6 +222,8 @@ export default function OrderHistory() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const [deliveryOrder, setDeliveryOrder] = useState(null);
+  const [deliverySaving, setDeliverySaving] = useState(false);
 
   // Action modal state
   const [actionModal, setActionModal] = useState(null); // { type: 'cancel'|'revoke'|'exchange'|'return'|'refund', order: order }
@@ -1156,6 +1160,48 @@ export default function OrderHistory() {
     }
   };
 
+  // Same Mark Delivered as the Associate dashboard, for the same reason as
+  // Update Payment above — a store manager has no other order screen.
+  const handleMarkDelivered = (e, order) => {
+    e.stopPropagation();
+    if (!isDirectDelivery(order)) { setDeliveryOrder(order); return; }
+    showPopup({
+      type: "confirm",
+      title: "Mark as Delivered",
+      message: "Mark this order as delivered?",
+      confirmText: "Yes, Deliver",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setActionLoading(order.id);
+        try {
+          const patch = await markOrderDelivered(order);
+          setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o));
+          showPopup({ type: "success", title: "Order Delivered", message: "Order marked as delivered!", confirmText: "OK" });
+        } catch (err) {
+          showPopup({ type: "error", title: "Error", message: "Failed to update: " + err.message, confirmText: "OK" });
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
+  };
+
+  const handleDeliveryConfirm = async (delivery) => {
+    const order = deliveryOrder;
+    if (!order) return;
+    setDeliverySaving(true);
+    try {
+      const { patch, title, message } = await confirmDelivery(order, delivery, localStorage.getItem("sp_email"));
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o));
+      setDeliveryOrder(null);
+      showPopup({ type: "success", title, message, confirmText: "OK" });
+    } catch (err) {
+      showPopup({ type: "error", title: "Failed", message: "Could not complete delivery: " + err.message, confirmText: "OK" });
+    } finally {
+      setDeliverySaving(false);
+    }
+  };
+
   const handleBack = () => {
     sessionStorage.removeItem("oh_saEmail");
     sessionStorage.removeItem("oh_readOnly");
@@ -1264,6 +1310,15 @@ export default function OrderHistory() {
           saving={paymentSaving}
           onCancel={() => { if (!paymentSaving) setPaymentOrder(null); }}
           onConfirm={handleUpdatePaymentConfirm}
+        />
+      )}
+
+      {deliveryOrder && (
+        <DeliveryPaymentModal
+          order={deliveryOrder}
+          saving={deliverySaving}
+          onCancel={() => { if (!deliverySaving) setDeliveryOrder(null); }}
+          onConfirm={handleDeliveryConfirm}
         />
       )}
 
@@ -1697,6 +1752,9 @@ export default function OrderHistory() {
                 const ownOrder = isOwnOrder(order);
                 const editOk = ownOrder && !readOnly && canEdit(order);
                 const paymentOk = ownOrder && !readOnly && canUpdatePayment(order);
+                // Staff only: a customer viewing their own history (no
+                // fromAssociate) must not be able to close their own order.
+                const deliverOk = fromAssociate && ownOrder && !readOnly && canMarkDelivered(order);
                 const cancelOk = ownOrder && !readOnly && canCancel(order);
                 const revokeOk = ownOrder && !readOnly && canRevoke(order);
                 const exchangeOk = ownOrder && !readOnly && canExchange(order);
@@ -1734,14 +1792,14 @@ export default function OrderHistory() {
                         {order.is_gifting && <span className="oh-badge" style={{ background: '#e91e63', color: '#fff' }}>Gift</span>}
                         {editOk && <span className="oh-badge editable">Editable ({Math.floor(36 - hrs)}h)</span>}
                         <button
-                          className="ad-print-pdf-btn active"
+                          className="oh-pdf-btn"
                           onClick={(e) => handlePrintPdf(e, order)}
                           disabled={pdfLoading === order.id}
                         >
                           {pdfLoading === order.id ? "..." : "📄Customer PDF"}
                         </button>
                         <button
-                          className="ad-print-pdf-btn"
+                          className="oh-pdf-btn"
                           onClick={(e) => handlePrintWarehousePdf(e, order)}
                           disabled={warehousePdfLoading === order.id}
                         >
@@ -1854,6 +1912,12 @@ export default function OrderHistory() {
                       {paymentOk && (
                         <button className="oh-btn primary" onClick={(e) => { e.stopPropagation(); setPaymentOrder(order); }}>
                           ₹ Update Payment
+                        </button>
+                      )}
+
+                      {deliverOk && (
+                        <button className="oh-btn primary" onClick={(e) => handleMarkDelivered(e, order)} disabled={actionLoading === order.id}>
+                          {actionLoading === order.id ? "..." : "✓ Mark Delivered"}
                         </button>
                       )}
 

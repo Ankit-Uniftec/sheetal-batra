@@ -7,7 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 // open) so the eligibility rule and the ledger write never drift apart.
 // ============================================================
 
-const CLOSED_STATUSES = ["delivered", "cancelled", "exchange_return", "revoked"];
+export const CLOSED_STATUSES =["delivered", "cancelled", "exchange_return", "revoked"];
 
 /**
  * Retail orders that still owe money and aren't finished. B2B/stock orders
