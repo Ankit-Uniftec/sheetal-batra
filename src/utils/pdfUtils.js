@@ -61,6 +61,19 @@ const garmentItems = (items) =>
 // scanner refuses it. Better to fail here, where the operator is watching and
 // the error names the order, than to print a document that silently drops a
 // garment out of production tracking.
+// A stored warehouse PDF generated before the order had pieces carries no
+// barcodes, and reopening it skips fetchWarehouseBarcodes — the only thing that
+// mints them — forever (alterations made before 2026-08-12 hit this). The
+// cached-PDF shortcuts call this and regenerate when it's false.
+const hasComponents = async (orderId) => {
+  const { count, error } = await supabase
+    .from("order_components")
+    .select("id", { count: "exact", head: true })
+    .eq("order_id", orderId);
+  if (error) throw error;
+  return count > 0;
+};
+
 const fetchWarehouseBarcodes = async (order) => {
   const components = await ensureOrderComponents(order);
 
@@ -186,6 +199,10 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
     if (totalItems === 0) {
       alert("No products in this order");
       return null;
+    }
+
+    if (!forceRegenerate && (order.warehouse_urls?.length > 0 || order.warehouse_url)) {
+      if (!(await hasComponents(order.id))) forceRegenerate = true;
     }
 
     // If warehouse PDFs already exist AND not forcing regeneration, open them
@@ -319,8 +336,8 @@ export const downloadSingleWarehousePdf = async (order, productIndex, setLoading
       return null;
     }
 
-    // Check if this specific PDF exists
-    if (order.warehouse_urls && order.warehouse_urls[productIndex]) {
+    // Check if this specific PDF exists (and isn't a barcode-less pre-mint copy)
+    if (order.warehouse_urls && order.warehouse_urls[productIndex] && (await hasComponents(order.id))) {
       window.open(order.warehouse_urls[productIndex], "_blank");
       return order.warehouse_urls[productIndex];
     }
