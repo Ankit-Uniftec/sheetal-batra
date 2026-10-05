@@ -18,7 +18,6 @@ const SHOW_BARCODES = true;
 const COLORS = {
   gold: "#D4AF37",
   white: "#FFFFFF",
-  gray: "#666666",
   lightGray: "#F5F5F5",
   black: "#000000",
 };
@@ -115,7 +114,10 @@ const warehouseStyles = StyleSheet.create({
   page: {
     paddingHorizontal: 40,
     paddingVertical: 36,
-    fontFamily: "Helvetica",
+    // Bold black throughout — the client wants every value to read like the
+    // labels. Text inherits these, so only coloured exceptions set their own.
+    fontFamily: "Helvetica-Bold",
+    color: COLORS.black,
     fontSize: 10,
     backgroundColor: "#FFFFFF",
   },
@@ -150,7 +152,7 @@ const warehouseStyles = StyleSheet.create({
   },
   barcodeText: {
     fontSize: 8,
-    color: COLORS.gray,
+    color: COLORS.black,
   },
 
   titleRow: {
@@ -162,16 +164,14 @@ const warehouseStyles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontFamily: "Helvetica-Bold",
-    color: COLORS.gold,
   },
   titleAlteration: {
     fontSize: 20,
     fontFamily: "Helvetica-Bold",
-    color: COLORS.gold,
   },
   productIndicator: {
     fontSize: 11,
-    color: COLORS.gray,
+    color: COLORS.black,
     fontFamily: "Helvetica-Bold",
   },
 
@@ -187,7 +187,6 @@ const warehouseStyles = StyleSheet.create({
   alterationInfoTitle: {
     fontSize: 11,
     fontFamily: "Helvetica-Bold",
-    color: COLORS.gold,
     marginBottom: 8,
   },
   alterationInfoGrid: {
@@ -200,12 +199,12 @@ const warehouseStyles = StyleSheet.create({
   },
   alterationInfoLabel: {
     fontSize: 8,
-    color: COLORS.gray,
+    color: COLORS.black,
     marginBottom: 2,
   },
   alterationInfoValue: {
     fontSize: 10,
-    color: "#333",
+    color: COLORS.black,
   },
   alterationNotesBox: {
     backgroundColor: "#FFF",
@@ -217,12 +216,12 @@ const warehouseStyles = StyleSheet.create({
   },
   alterationNotesLabel: {
     fontSize: 8,
-    color: COLORS.gray,
+    color: COLORS.black,
     marginBottom: 4,
   },
   alterationNotesText: {
     fontSize: 9,
-    color: "#333",
+    color: COLORS.black,
     lineHeight: 1.4,
   },
 
@@ -244,7 +243,7 @@ const warehouseStyles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 9,
-    color: COLORS.gray,
+    color: COLORS.black,
     flex: 1,
   },
   infoValueHighlight: {
@@ -329,7 +328,7 @@ const warehouseStyles = StyleSheet.create({
   },
   fieldValue: {
     fontSize: 9,
-    color: COLORS.gray,
+    color: COLORS.black,
   },
   colorRow: {
     flexDirection: "row",
@@ -356,7 +355,7 @@ const warehouseStyles = StyleSheet.create({
   // Matches fieldValue, with room to wrap onto its own line.
   colorName: {
     fontSize: 9,
-    color: COLORS.gray,
+    color: COLORS.black,
     marginLeft: 6,
   },
 
@@ -370,7 +369,7 @@ const warehouseStyles = StyleSheet.create({
   },
   extraName: {
     fontSize: 9,
-    color: COLORS.gray,
+    color: COLORS.black,
     marginRight: 8,
   },
 
@@ -390,7 +389,7 @@ const warehouseStyles = StyleSheet.create({
   },
   commentsText: {
     fontSize: 9,
-    color: COLORS.gray,
+    color: COLORS.black,
   },
 
   measurementsBar: {
@@ -420,7 +419,7 @@ const warehouseStyles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Helvetica-Bold",
     marginBottom: 8,
-    color: "#333",
+    color: COLORS.black,
   },
   measurementRow: {
     flexDirection: "row",
@@ -432,11 +431,11 @@ const warehouseStyles = StyleSheet.create({
   },
   measurementLabel: {
     fontSize: 8,
-    color: COLORS.gray,
+    color: COLORS.black,
   },
   measurementValue: {
     fontSize: 8,
-    color: "#333",
+    color: COLORS.black,
   },
 
   // In-flow component barcode block — sits under the component's details, in
@@ -486,12 +485,11 @@ const warehouseStyles = StyleSheet.create({
   },
   parentOrderLabel: {
     fontSize: 9,
-    color: COLORS.gray,
+    color: COLORS.black,
   },
   parentOrderValue: {
     fontSize: 9,
     fontFamily: "Helvetica-Bold",
-    color: "#F57C00",
     marginLeft: 4,
   },
   // Gifting Order Banner
@@ -924,7 +922,7 @@ const AlterationInfoBox = ({ order }) => (
       </View>
       <View style={warehouseStyles.alterationInfoItem}>
         <Text style={warehouseStyles.alterationInfoLabel}>Priority</Text>
-        <Text style={[warehouseStyles.alterationInfoValue, order.alteration_status === "upcoming_occasion" && { color: COLORS.gold }]}>
+        <Text style={warehouseStyles.alterationInfoValue}>
           {order.alteration_status === "upcoming_occasion" ? "URGENT" : "Normal"}
         </Text>
       </View>
@@ -1012,7 +1010,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
                 <Text style={warehouseStyles.productIndicator}>
                   Product {itemIndex + 1} of {totalItems}
                 </Text>
-                <Text style={{ fontSize: 12, fontFamily: "Helvetica-Bold", color: COLORS.gold, marginTop: 2 }}>
+                <Text style={{ fontSize: 12, fontFamily: "Helvetica-Bold", marginTop: 2 }}>
                   {comp.label} ({compIdx + 1} of {componentBarcodes.length})
                 </Text>
               </View>
@@ -1069,7 +1067,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
                 fills the remaining space on the page rather than being pushed
                 whole to the next page, which would leave a large gap. */}
             <View style={warehouseStyles.componentBarcode}>
-              <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 8, color: COLORS.gold }}>
+              <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", marginBottom: 8 }}>
                 {comp.label}
               </Text>
               {comp.image ? (
