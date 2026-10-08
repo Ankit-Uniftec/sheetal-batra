@@ -15,6 +15,7 @@ import ExtrasPopup from "../components/ExtrasPopup";
 import config from "../config/config";
 import { isOrderMode } from "../utils/orderMode";
 import { STOCK_HEAD_OPTIONS, isValidStockHeadDesignation } from "../utils/stockProductionHead";
+import { chartValueSet, measurementsForSize } from "../utils/b2bSizeChart";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -951,6 +952,16 @@ export default function ProductForm() {
       clearedMeasurements[categoryKey] = newFields;
     });
     updateItem(item._id, { size: CUSTOM_SIZE, measurements: clearedMeasurements });
+  };
+
+  // Edit-mode standard size: change the size AND re-fill its chart-derived
+  // measurements, as picking the size in the add flow does.
+  const selectSizeForItem = (item, size) => {
+    const keys = [item.top, item.bottom].map((g) => g && CATEGORY_KEY_MAP[g]).filter(Boolean);
+    const chart = item.isKids ? KIDS_SIZE_CHART : SIZE_CHART_US;
+    const values = new Set([...SIZE_CHART_VALUE_SET, ...chartValueSet(KIDS_SIZE_CHART)]);
+    const fields = item.isKids ? KIDS_MEASUREMENT_FIELDS : measurementFields;
+    updateItem(item._id, { size, measurements: measurementsForSize(item.measurements, chart[size], keys, fields, values) });
   };
 
   // Update measurement for a specific item
@@ -3247,7 +3258,7 @@ export default function ProductForm() {
                                     <button
                                       key={idx}
                                       className={item.size === s ? "size-btn active" : "size-btn"}
-                                      onClick={() => updateItem(item._id, { size: s })}
+                                      onClick={() => selectSizeForItem(item, s)}
                                     >
                                       {s}
                                     </button>

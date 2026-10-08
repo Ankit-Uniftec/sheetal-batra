@@ -80,6 +80,36 @@ export function resolveSizeChart(vendorChart) {
     return merged;
 }
 
+// Re-fill an order item's measurements for a newly picked size. Used by the
+// order forms' EDIT-item size buttons, which used to change only `size` — an
+// item added as 3XL then switched to M kept 3XL numbers and the work order
+// printed "M" over them.
+//
+// For each of the item's categories (top/bottom), the fields that category
+// takes are set from the chart row — but only where the current value is empty
+// or a chart number (chartValues, see chartValueSet). A hand-typed measurement
+// survives, the same rule the Custom-size clear uses. Everything else on the
+// item's measurements (Height, other categories) is left untouched.
+export function measurementsForSize(measurements, sizeData, categoryKeys, fieldsByCategory, chartValues) {
+    const next = { ...(measurements || {}) };
+    if (!sizeData) return next;
+    categoryKeys.forEach((categoryKey) => {
+        const fields = fieldsByCategory[categoryKey] || [];
+        const row = { ...(next[categoryKey] || {}) };
+        let touched = false;
+        ["Bust", "Waist", "Hip", "Length"].forEach((f) => {
+            if (!fields.includes(f) || sizeData[f] == null) return;
+            const cur = row[f];
+            if (cur == null || cur === "" || chartValues.has(Number(cur))) {
+                row[f] = sizeData[f];
+                touched = true;
+            }
+        });
+        if (touched) next[categoryKey] = row;
+    });
+    return next;
+}
+
 // ── Standard-size lookup (used by the warehouse PDF) ──────────
 //
 // Shopify sells STANDARD SIZES, not made-to-measure: a web order carries a

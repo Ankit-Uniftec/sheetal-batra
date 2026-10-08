@@ -11,7 +11,7 @@ import { fetchAllRows } from "../../utils/fetchAllRows";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import ExtrasPopup from "../../components/ExtrasPopup";
-import { B2B_SIZE_OPTIONS, SIZE_CHART_US, resolveSizeChart, chartValueSet } from "../../utils/b2bSizeChart";
+import { B2B_SIZE_OPTIONS, SIZE_CHART_US, resolveSizeChart, chartValueSet, measurementsForSize } from "../../utils/b2bSizeChart";
 import { isB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
 
 /**
@@ -494,6 +494,16 @@ export default function B2bProductForm() {
         updateItem(item._id, { size: CUSTOM_SIZE, measurements: clearedMeasurements });
     };
 
+    // Edit-mode standard size: change the size AND re-fill its chart-derived
+    // measurements, as picking the size in the add flow does.
+    const selectSizeForItem = (item, size) => {
+        const keys = [item.top, item.bottom].map((g) => g && CATEGORY_KEY_MAP[g]).filter(Boolean);
+        const chart = item.isKids ? KIDS_SIZE_CHART : activeAdultSizeChart;
+        const values = new Set([...currentChartValueSet, ...chartValueSet(KIDS_SIZE_CHART)]);
+        const fields = item.isKids ? KIDS_MEASUREMENT_FIELDS : measurementFields;
+        updateItem(item._id, { size, measurements: measurementsForSize(item.measurements, chart[size], keys, fields, values) });
+    };
+
     const handleAddExtra = () => {
         if (!selectedExtra) return;
         if (!selectedExtraColor.name) { showPopup({ title: "Color Required", message: "Please select a color for the extra.", type: "warning" }); return; }
@@ -734,7 +744,7 @@ export default function B2bProductForm() {
                                                             <button className="add-extra-btn" style={{ background: "#d5b85a", border: "none", color: "white", borderRadius: "3px", cursor: "pointer", padding: "6px 14px", fontSize: "13px", marginTop: "8px" }} onClick={() => { setEditExtrasModalItemId(item._id); setEditExtraSelected(""); setEditExtraSelectedColor({ name: "", hex: "" }); }}>+ Add Extras</button>
                                                         </div>
                                                     </div>
-                                                    <div className="size-box edit-size-box"><span className="size-label">Size:</span><div className="sizes">{(item.isKids ? KIDS_SIZE_OPTIONS : opts.sizes).map((s, idx) => <button key={idx} className={item.size === s ? "size-btn active" : "size-btn"} onClick={() => updateItem(item._id, { size: s })}>{s}</button>)}<button className={item.size === CUSTOM_SIZE ? "size-btn active" : "size-btn"} onClick={() => selectCustomSizeForItem(item)}>{CUSTOM_SIZE}</button></div></div>
+                                                    <div className="size-box edit-size-box"><span className="size-label">Size:</span><div className="sizes">{(item.isKids ? KIDS_SIZE_OPTIONS : opts.sizes).map((s, idx) => <button key={idx} className={item.size === s ? "size-btn active" : "size-btn"} onClick={() => selectSizeForItem(item, s)}>{s}</button>)}<button className={item.size === CUSTOM_SIZE ? "size-btn active" : "size-btn"} onClick={() => selectCustomSizeForItem(item)}>{CUSTOM_SIZE}</button></div></div>
                                                     <div className="row"><div className="qty-field"><label>Qty</label><div className="qty-controls"><button onClick={() => updateItem(item._id, { quantity: Math.max(1, (item.quantity || 1) - 1) })}>−</button><span>{item.quantity || 1}</span><button onClick={() => updateItem(item._id, { quantity: (item.quantity || 1) + 1 })}>+</button></div></div><div className="field"><label>Delivery Date</label><input type="date" className="input-line" value={item.delivery_date || ""} min={new Date().toISOString().split("T")[0]} onChange={(e) => updateItem(item._id, { delivery_date: e.target.value })} /></div></div>
                                                     {/* Custom Measurements */}
                                                     <div className="measure-bar" onClick={() => setExpandedRowIds(prev => ({ ...prev, [`${item._id}_m`]: !prev[`${item._id}_m`] }))}><span>Custom Measurements</span><button className="plus-btn" type="button">{expandedRowIds[`${item._id}_m`] ? "\u2212" : "+"}</button></div>
