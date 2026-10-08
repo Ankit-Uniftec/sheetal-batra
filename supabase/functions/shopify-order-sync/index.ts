@@ -117,6 +117,45 @@ const ORDER_NO_PREFIX_FILTER = ORDER_NO_PREFIXES
 const hasShopifyPrefix = (orderNo: string) =>
   ORDER_NO_PREFIXES.some((p) => orderNo.startsWith(p));
 
+// PostgREST silently caps every response at 1000 rows. Every full-set read of
+// Shopify orders goes through this — past 1000 orders an unpaged read dropped
+// the NEWEST ones (they sort last), so backfill-cancelled never saw #29303.
+// Same contract as src/utils/fetchAllRows.js. The trailing id order keeps
+// pages stable when created_at ties.
+async function fetchAllRows(table: string, buildQuery: (q: any) => any) {
+  const PAGE_SIZE = 1000;
+  const all: any[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await buildQuery(supabase.from(table))
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    all.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) return { data: all, error: null };
+  }
+}
+
+// ─── Cancellation signal ────────────────────────────────────
+// Two ways an order is dead on Shopify. The real one is `cancelledAt`. The
+// other is a TAG: the COD-verification flow marks a refused COD order
+// "order_cancelled(OL)" and never presses Cancel, so cancelledAt stays null
+// and the order sat in the work queue as live COD (#29303). The tag carries no
+// timestamp, so cancelled_at becomes the moment we first saw it.
+// Mirrored in cancelled.test.mjs.
+const CANCEL_TAG_RE = /^order_cancelled\b/i;
+
+function shopifyCancellation(
+  cancelledAt: string | null | undefined,
+  tags: unknown,
+): { at: string; reason: string } | null {
+  if (cancelledAt) return { at: cancelledAt, reason: "Cancelled on Shopify" };
+  const tag = (Array.isArray(tags) ? tags : [])
+    .map((t) => String(t).trim())
+    .find((t) => CANCEL_TAG_RE.test(t));
+  if (tag) return { at: new Date().toISOString(), reason: `Cancelled on Shopify (tag: ${tag})` };
+  return null;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -750,10 +789,10 @@ async function refreshExistingOrder(
   // re-presents the same 24h of orders every run, so an ungated write would
   // rewrite a cancelled order 24 times a day and fire the orders audit trigger
   // on each one. First transition only.
-  const cancelledAt = node?.cancelledAt || null;
+  const cancellation = shopifyCancellation(node?.cancelledAt, nextTags);
   const alreadyCancelled =
     String(existing.status || "").trim().toLowerCase() === "cancelled";
-  const newlyCancelled = Boolean(cancelledAt) && !alreadyCancelled;
+  const newlyCancelled = Boolean(cancellation) && !alreadyCancelled;
   if (newlyCancelled) changed.push("status:cancelled");
 
   // Order note edited in Shopify after ingest (e.g. #28961). The note is
@@ -786,11 +825,11 @@ async function refreshExistingOrder(
       // (OrderHistory.jsx:679, AssociateDashboard.js:933, EditOrder.jsx:246,
       // B2bMerchandiserDashboard.jsx:748), so a Shopify cancellation is
       // indistinguishable from a hand-cancelled one to every reader downstream.
-      ...(newlyCancelled
+      ...(newlyCancelled && cancellation
         ? {
           status: "cancelled",
-          cancelled_at: cancelledAt,
-          cancellation_reason: "Cancelled on Shopify",
+          cancelled_at: cancellation.at,
+          cancellation_reason: cancellation.reason,
         }
         : {}),
     })
@@ -1150,11 +1189,10 @@ serve(async (req) => {
     //
     // Supports dryRun like every pull mode — always preview first.
     if (mode === "backfill-cancelled") {
-      const { data: rows, error } = await supabase
-        .from("orders")
-        .select("id, order_no, status, delivery_name, shopify_order_id, shopify_raw")
+      const { data: rows, error } = await fetchAllRows("orders", (q) => q
+        .select("id, order_no, status, delivery_name, shopify_order_id, shopify_tags, shopify_raw")
         .or(ORDER_NO_PREFIX_FILTER)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true }));
       if (error) throw error;
 
       // Not-yet-cancelled on OUR side. Everything below decides which of these
@@ -1209,17 +1247,20 @@ serve(async (req) => {
           }
           // Not found on Shopify: say nothing. A missing order is not evidence
           // of cancellation, and guessing here would kill a live order.
-          if (!node?.cancelledAt) continue;
-          pending.push({ ...o, _cancelledAt: node.cancelledAt });
+          const c = shopifyCancellation(node?.cancelledAt, node?.tags);
+          if (!c) continue;
+          pending.push({ ...o, _cancelledAt: c.at, _reason: c.reason });
         }
       } else {
         // Filtered in JS, not SQL: the cancelledAt lives inside a JSONB blob and
         // a .not("shopify_raw->>cancelledAt", "is", null) filter is easy to get
         // subtly wrong against a null-vs-absent key. The Shopify order set is
         // small enough that reading it and testing here is honest and cheap.
+        // Tags from the column, not the blob: refreshExistingOrder writes both
+        // together, and the column is what the dashboards read.
         for (const o of live) {
-          const at = o?.shopify_raw?.cancelledAt;
-          if (at) pending.push({ ...o, _cancelledAt: at });
+          const c = shopifyCancellation(o?.shopify_raw?.cancelledAt, o?.shopify_tags);
+          if (c) pending.push({ ...o, _cancelledAt: c.at, _reason: c.reason });
         }
       }
 
@@ -1239,6 +1280,7 @@ serve(async (req) => {
             order_no: o.order_no,
             status_now: o.status,
             cancelled_at: o._cancelledAt,
+            reason: o._reason,
           })),
           // Orders Shopify would not answer for. NOT zero-cancelled — unknown.
           // Re-run to settle them; the mode is idempotent.
@@ -1263,7 +1305,7 @@ serve(async (req) => {
           .update({
             status: "cancelled",
             cancelled_at: o._cancelledAt,
-            cancellation_reason: "Cancelled on Shopify",
+            cancellation_reason: o._reason,
           })
           .eq("id", o.id);
         if (upErr) { failures.push({ order_no: o.order_no, error: upErr.message }); continue; }
@@ -1297,12 +1339,11 @@ serve(async (req) => {
     // ingested before component minting existed. Idempotent, so it is safe to
     // re-run; it touches no Shopify API at all.
     if (mode === "backfill-components") {
-      const { data: rows, error } = await supabase
-        .from("orders")
+      const { data: rows, error } = await fetchAllRows("orders", (q) => q
         .select("id, order_no, items, web_order_status")
         .or(ORDER_NO_PREFIX_FILTER)
         .neq("web_order_status", "needs_review")
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true }));
       if (error) throw error;
 
       const out = [];
@@ -1434,14 +1475,15 @@ serve(async (req) => {
       // writes to apply one decision. Absent, it still sweeps everything.
       const onlyOrderNo = String(body?.orderNo ?? "").trim();
 
-      let q = supabase
-        .from("orders")
-        .select("id, order_no, shopify_raw, manual_line_breakdown")
-        .not("shopify_raw", "is", null);
-      q = onlyOrderNo
-        ? q.eq("order_no", onlyOrderNo)
-        : q.or(ORDER_NO_PREFIX_FILTER);
-      const { data: rows, error } = await q.order("created_at", { ascending: true });
+      const { data: rows, error } = await fetchAllRows("orders", (q) => {
+        q = q
+          .select("id, order_no, shopify_raw, manual_line_breakdown")
+          .not("shopify_raw", "is", null);
+        q = onlyOrderNo
+          ? q.eq("order_no", onlyOrderNo)
+          : q.or(ORDER_NO_PREFIX_FILTER);
+        return q.order("created_at", { ascending: true });
+      });
       if (error) throw error;
 
       const out = [];
@@ -1529,12 +1571,11 @@ serve(async (req) => {
     // write, which is the only way to see the real blast radius before
     // committing to it.
     if (mode === "redate") {
-      const { data: rows, error } = await supabase
-        .from("orders")
+      const { data: rows, error } = await fetchAllRows("orders", (q) => q
         .select("id, order_no, created_at, delivery_date, shopify_raw, status, web_order_status, web_order_issues, manual_line_breakdown")
         .or(ORDER_NO_PREFIX_FILTER)
         .not("shopify_raw", "is", null)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true }));
       if (error) throw error;
 
       // Orders past order_received have components on the floor being scanned
@@ -1699,12 +1740,13 @@ serve(async (req) => {
     // ALWAYS DRY-RUN FIRST.
     if (mode === "restate-money") {
       const onlyOrderNo = String(body?.orderNo ?? "").trim();
-      let q = supabase
-        .from("orders")
-        .select("id, order_no, grand_total, grand_total_after_discount, net_total, discount_amount, advance_payment, remaining_payment, total_paid, status, shopify_raw")
-        .not("shopify_raw", "is", null);
-      q = onlyOrderNo ? q.eq("order_no", onlyOrderNo) : q.or(ORDER_NO_PREFIX_FILTER);
-      const { data: rows, error } = await q.order("created_at", { ascending: true });
+      const { data: rows, error } = await fetchAllRows("orders", (q) => {
+        q = q
+          .select("id, order_no, grand_total, grand_total_after_discount, net_total, discount_amount, advance_payment, remaining_payment, total_paid, status, shopify_raw")
+          .not("shopify_raw", "is", null);
+        q = onlyOrderNo ? q.eq("order_no", onlyOrderNo) : q.or(ORDER_NO_PREFIX_FILTER);
+        return q.order("created_at", { ascending: true });
+      });
       if (error) throw error;
 
       const changes = [];

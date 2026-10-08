@@ -14,12 +14,20 @@
 // Run: node supabase/functions/shopify-order-sync/cancelled.test.mjs
 import assert from "node:assert/strict";
 
-// Mirrors the guard in refreshExistingOrder (index.ts).
+// Mirrors shopifyCancellation + the guard in refreshExistingOrder (index.ts).
+const CANCEL_TAG_RE = /^order_cancelled\b/i;
+const shopifyCancellation = (cancelledAt, tags) => {
+  if (cancelledAt) return { at: cancelledAt, reason: "Cancelled on Shopify" };
+  const tag = (Array.isArray(tags) ? tags : [])
+    .map((t) => String(t).trim())
+    .find((t) => CANCEL_TAG_RE.test(t));
+  if (tag) return { at: new Date().toISOString(), reason: `Cancelled on Shopify (tag: ${tag})` };
+  return null;
+};
 const isNewlyCancelled = (node, existing) => {
-  const cancelledAt = node?.cancelledAt || null;
   const alreadyCancelled =
     String(existing?.status || "").trim().toLowerCase() === "cancelled";
-  return Boolean(cancelledAt) && !alreadyCancelled;
+  return Boolean(shopifyCancellation(node?.cancelledAt, node?.tags)) && !alreadyCancelled;
 };
 
 const AT = "2026-08-26T09:15:00Z";
@@ -62,5 +70,19 @@ assert.equal(isNewlyCancelled({ cancelledAt: null }, { status: "cancelled" }), f
 // cancelled and suppress the write.
 assert.equal(isNewlyCancelled({ cancelledAt: AT }, { status: null }), true);
 assert.equal(isNewlyCancelled({ cancelledAt: AT }, {}), true);
+
+// Cancelled by TAG only (#29303): COD verification tags "order_cancelled(OL)"
+// and never presses Cancel, so cancelledAt is null.
+const TAGS_29303 = ["1st call attempted", "COD", "GoKwik", "Low Risk", "Not Converted To Prepaid", "order_cancelled(OL)"];
+assert.equal(isNewlyCancelled({ cancelledAt: null, tags: TAGS_29303 }, { status: "order_received" }), true);
+assert.equal(shopifyCancellation(null, TAGS_29303).reason, "Cancelled on Shopify (tag: order_cancelled(OL))");
+assert.equal(isNewlyCancelled({ tags: ["ORDER_CANCELLED"] }, { status: "order_received" }), true);
+assert.equal(isNewlyCancelled({ tags: ["order_cancelled(OL)"] }, { status: "cancelled" }), false);
+// Real cancelledAt wins over the tag — it carries the true timestamp.
+assert.equal(shopifyCancellation(AT, ["order_cancelled(OL)"]).at, AT);
+// Look-alikes must NOT cancel a live order.
+for (const t of ["COD", "Not Converted To Prepaid", "order_cancelled_reverted", "not order_cancelled", "cancelled"]) {
+  assert.equal(shopifyCancellation(null, [t]), null, t);
+}
 
 console.log("cancelled: ok");
