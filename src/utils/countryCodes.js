@@ -5,6 +5,7 @@ export const COUNTRY_CODES = [
   { code: "+1", label: "USA", flag: "🇺🇸" },
   { code: "+44", label: "UK", flag: "🇬🇧" },
   { code: "+61", label: "Australia", flag: "🇦🇺" },
+  { code: "+64", label: "New Zealand", flag: "🇳🇿" },
   { code: "+971", label: "UAE", flag: "🇦🇪" },
   { code: "+49", label: "Germany", flag: "🇩🇪" },
   { code: "+33", label: "France", flag: "🇫🇷" },
