@@ -401,7 +401,7 @@ export default function StockRoom() {
         )}
         {screen === "stockorders" && (
           <StockOrdersScreen orders={data.stockOrders} ready={data.ordersReady} view={view} openAction={openAction} canWrite={canWriteStock}
-            user={user} canStartOrders={PRODUCT_WRITES_ON} />
+            user={user} canStartOrders={WRITES_ON} />
         )}
         {screen === "movements" && <MovementsScreen {...screenProps} />}
         {screen === "transfers" && <TransfersScreen key={screenOpts.nonce} {...screenProps} initialStatus={screenOpts.status} />}

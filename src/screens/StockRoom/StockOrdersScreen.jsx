@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { startOrderMode } from "../../utils/orderMode";
+import { usePopup } from "../../components/Popup";
 import {
   Topline, SearchField, FilterButton, FilterDrawer, Facet, ActiveFilters, Thumb, Badge, Icon, usePaged, SearchSelect,
 } from "./StockRoomUi";
@@ -150,6 +151,7 @@ function StockOrderCard({ order, now, view, openAction, canWrite }) {
 
 export default function StockOrdersScreen({ orders, ready = true, view, openAction, canWrite, user, canStartOrders }) {
   const navigate = useNavigate();
+  const { showPopup, PopupComponent } = usePopup();
   const [search, setSearch] = useState("");
   const [drawer, setDrawer] = useState(false);
   const [status, setStatus] = useState("");
@@ -189,6 +191,17 @@ export default function StockOrdersScreen({ orders, ready = true, view, openActi
   // Same hand-off to the order form the admin and GM dashboards use; the
   // order itself is placed by the existing flow, untouched.
   const raiseStockOrder = async () => {
+    // ReviewDetail refuses an order with no salesperson store. Stop here,
+    // before a whole order is filled in, instead of at Place Order.
+    if (!String(user?.store_name || "").trim()) {
+      showPopup({
+        title: "Store Not Assigned",
+        message: "Your login has no store assigned, so a stock order cannot be placed. Please ask admin to set the store on your profile.",
+        type: "error",
+        confirmText: "Ok",
+      });
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     if (session) sessionStorage.setItem("associateSession", JSON.stringify({
       access_token: session.access_token,
@@ -295,6 +308,7 @@ export default function StockOrdersScreen({ orders, ready = true, view, openActi
           )}
         </FilterDrawer>
       )}
+      {PopupComponent}
     </>
   );
 }
