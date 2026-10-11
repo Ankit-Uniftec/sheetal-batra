@@ -47,6 +47,7 @@ import {
   isPaymentHeld,
 } from "./pay.mjs";
 import formatDate from "../../utils/formatDate";
+import { isUpdatedOrder, pinUpdatedFirst, clearedAgo } from "./updatedOrders";
 import "./ShopifyOrdersDashboard.css";
 import DashboardHeader from "../../components/DashboardHeader";
 
@@ -109,6 +110,8 @@ const ORDER_NO_PREFIX_FILTER =
 const TABS = [
   { key: "overview", label: "Overview" },
   { key: "orders", label: "Orders" },
+  // Orders that just left Needs Review, until their first scan (point 46).
+  { key: "updated", label: "Updated Orders" },
   { key: "needs-review", label: "Needs Review" },
   { key: "calendar", label: "Calendar" },
   { key: "vendors", label: "Vendor / External" },
@@ -164,6 +167,9 @@ const ORDER_LIST_COLUMNS = [
   // it. Needed on this screen because this is where it is both shown and set.
   // See db/barcode_system/v2/83_manual_line_breakdown.sql.
   "manual_line_breakdown", "manual_line_breakdown_by",
+  // When the order left Needs Review — stamped by the database trigger in
+  // db/meeting_points/r5_01_review_cleared_at.sql. Drives "Updated Orders".
+  "review_cleared_at",
 ].join(", ");
 
 // ─── Orders tab sorting ────────────────────────────────────────────────────
@@ -247,6 +253,11 @@ const statusVariant = (status) => {
 // the work queue because it could not be MAPPED (mapper blockers) or because
 // its PAYMENT is unsettled; the card says which applies. Every count, filter
 // and tab split reads this one predicate, so they can never disagree.
+//
+// KEEP IN STEP: the database has a SQL copy of this rule and of pay.mjs
+// isPaymentHeld (shopify_order_in_review, db/meeting_points/
+// r5_01_review_cleared_at.sql) that stamps review_cleared_at for "Updated
+// Orders". Change one, change the other.
 //
 // A CANCELLED order is never held, whatever its mapping or payment state: it
 // shows on the Orders tab (asked for 2026-10-11, meeting point 3 — reversing
@@ -835,6 +846,22 @@ export default function ShopifyOrdersDashboard() {
     [orders]
   );
 
+  // "Updated Orders" (point 46): left Needs Review (review_cleared_at, stamped
+  // by the database), not back in review, not cancelled, and no piece scanned
+  // yet. The first scan takes an order out — of this tab and of the pin on
+  // Orders. Most recently cleared first.
+  const isUpdated = useCallback(
+    (o) => isUpdatedOrder(o, componentsByOrder[o.id], {
+      inReview: needsReviewOrder(o),
+      cancelled: isCancelledOrder(o),
+    }),
+    [componentsByOrder]
+  );
+  const updatedOrders = useMemo(
+    () => pinUpdatedFirst(orders.filter(isUpdated), isUpdated),
+    [orders, isUpdated]
+  );
+
   const periodOrders = useMemo(
     () => orders.filter((o) => inPeriod(o.created_at)),
     [orders, inPeriod]
@@ -1032,9 +1059,12 @@ export default function ShopifyOrdersDashboard() {
     });
     // `rows` is already a fresh array from .filter, so sorting it in place is
     // safe — it never touches the `orders` state array.
-    return rows.sort(SORTERS[sortBy] || SORTERS.newest);
+    rows.sort(SORTERS[sortBy] || SORTERS.newest);
+    // Default view: orders that just left Needs Review are pinned on top until
+    // their first scan (point 46). A sort the user picked is left as chosen.
+    return sortBy === "newest" ? pinUpdatedFirst(rows, isUpdated) : rows;
   }, [readyOrders, search, searchField, matchesSearch, inOrdersPeriod, stageFilter,
-      stageKeysByOrder, sortBy, paymentFilter, codFilter]);
+      stageKeysByOrder, sortBy, paymentFilter, codFilter, isUpdated]);
 
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
   const paginated = useMemo(
@@ -1090,6 +1120,7 @@ export default function ShopifyOrdersDashboard() {
 
   const tabLabel = (tab) => {
     if (tab.key === "orders") return `${tab.label} (${readyOrders.length})`;
+    if (tab.key === "updated") return `${tab.label} (${updatedOrders.length})`;
     if (tab.key === "needs-review") return `${tab.label} (${needsReview.length})`;
     return tab.label;
   };
@@ -1266,6 +1297,11 @@ export default function ShopifyOrdersDashboard() {
             <Badge variant={statusVariant(order.status)}>
               {getOrderStatusLabel(order.status)}
             </Badge>
+            {/* Just came out of Needs Review and not scanned yet — process it
+                first (point 46). The time is when it left review. */}
+            {isUpdated(order) && (
+              <Badge variant="info">Updated · {clearedAgo(order.review_cleared_at)}</Badge>
+            )}
             {/* HOW it pays, then WHERE the payment got to — at most two
                 badges, in the floor's vocabulary rather than Shopify's. The raw
                 status is still on the order and drives the review hold; it is
@@ -1880,6 +1916,31 @@ export default function ShopifyOrdersDashboard() {
                         {paginated.map((o) => renderCard(o, "orders"))}
                       </div>
                       <Paginator page={page} totalPages={totalPages} onChange={setPage} />
+                    </>
+                  )}
+                </>
+              )}
+
+              {activeTab === "updated" && (
+                <>
+                  <h2 className="sho-section-title">Updated Orders</h2>
+                  {updatedOrders.length === 0 ? (
+                    <div className="sho-empty">
+                      No updated orders — nothing has come out of Needs Review that is still waiting for its first scan.
+                    </div>
+                  ) : (
+                    <>
+                      <p className="sho-hint">
+                        These orders were just cleared from Needs Review (fixed, or their
+                        payment confirmed). Process them first — each one leaves this list
+                        at its first scan. Newest cleared first; they are also pinned at the
+                        top of Orders.
+                      </p>
+                      {/* Arrow fn, not a bare reference: .map passes the INDEX
+                          as the second arg, which would land in `context`. */}
+                      <div className="sho-order-cards">
+                        {updatedOrders.map((o) => renderCard(o, "orders"))}
+                      </div>
                     </>
                   )}
                 </>
