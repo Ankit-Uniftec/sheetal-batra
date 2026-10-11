@@ -16,9 +16,11 @@ import useTabParam from "../../hooks/useTabParam";
 import formatDate from "../../utils/formatDate";
 import { getWarehouseDate } from "../../utils/warehouseDate";
 import {
-  getOrderStatusLabel, getOrderChannelLabel, CHANNEL_SEGMENTS,
+  getOrderStatusLabel, getOrderChannelLabel, getOrderChannelKey, CHANNEL_SEGMENTS,
   getComponentStageLabel, getStageColor,
 } from "../../utils/barcodeService";
+import { downloadCsv } from "../../utils/downloadCsv";
+import { EXPORT_HEADERS, buildPackagingExportRows } from "../../utils/packagingExport";
 import "./PackagingDashboard.css";
 import DashboardHeader from "../../components/DashboardHeader";
 
@@ -84,6 +86,7 @@ export default function PackagingDashboard() {
   const [expanded, setExpanded] = useState(null);   // order id whose details are open
   const [qcReportFor, setQcReportFor] = useState(null);
   const [journeyFor, setJourneyFor] = useState(null);   // { order_no, components } for View Journey
+  const [exporting, setExporting] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
 
   // Order-date calendar. PeriodFilter is the house standard — never hand-roll
@@ -265,6 +268,52 @@ export default function PackagingDashboard() {
     [visibleOrders, page]
   );
 
+  // "Export Excel" (meeting point 43): every order the current tab and filters
+  // show — all pages, not just this one — one row per product.
+  //
+  // The cards deliberately carry no money (see ORDER_COLUMNS), but the export
+  // was asked to include payment, balance and mode. So the money columns are
+  // read HERE, only for the exported orders and only when Export is pressed,
+  // and never reach the card state. Chunked by id so a long list cannot blow
+  // the request URL length.
+  const handleExport = async () => {
+    if (!visibleOrders.length || exporting) return;
+    setExporting(true);
+    try {
+      const MONEY_COLUMNS = "id, payment_mode, is_split_payment, total_paid, advance_payment, remaining_payment, shopify_financial_status, shopify_order_name, po_number";
+      const ids = visibleOrders.map((o) => o.id);
+      const money = {};
+      for (let i = 0; i < ids.length; i += 150) {
+        const { data, error } = await supabase.from("orders").select(MONEY_COLUMNS).in("id", ids.slice(i, i + 150));
+        if (error) throw error;
+        (data || []).forEach((m) => { money[m.id] = m; });
+      }
+      const rows = buildPackagingExportRows(
+        visibleOrders,
+        componentsByOrder,
+        money,
+        {
+          channelLabel: getOrderChannelLabel,
+          stageLabel: getComponentStageLabel,
+          warehouseDate: getWarehouseDate,
+          formatDate,
+          isShopify: (o) => getOrderChannelKey(o) === "shopify",
+        }
+      );
+      if (!rows.length) {
+        showPopup({ title: "Nothing to export", message: "No products in the orders shown.", type: "info", confirmText: "OK" });
+        return;
+      }
+      const tab = statusFilter === "all" ? "all" : statusFilter.replace(/_/g, "-");
+      downloadCsv({ filename: `packaging_${tab}_orders`, headers: EXPORT_HEADERS, rows });
+    } catch (err) {
+      console.error("Packaging export failed:", err);
+      showPopup({ title: "Export failed", message: err.message || "Could not build the export. Please try again.", type: "error", confirmText: "OK" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Any filter change invalidates the current page number.
   useEffect(() => { setPage(1); }, [search, searchField, statusFilter, channelFilter, urgencyFilter, visibleOrders.length]);
 
@@ -419,10 +468,20 @@ export default function PackagingDashboard() {
             ))}
           </div>
 
-          <p className="pkg-result-line">
-            {visibleOrders.length} order{visibleOrders.length === 1 ? "" : "s"}
-            {statusFilter === "in_production" && " · still in production — view only, not ready to pack"}
-          </p>
+          <div className="pkg-result-row">
+            <p className="pkg-result-line">
+              {visibleOrders.length} order{visibleOrders.length === 1 ? "" : "s"}
+              {statusFilter === "in_production" && " · still in production — view only, not ready to pack"}
+            </p>
+            <button
+              className="pkg-export-btn"
+              onClick={handleExport}
+              disabled={exporting || visibleOrders.length === 0}
+              title="Download every order shown (all pages), one row per product"
+            >
+              {exporting ? "Exporting…" : "Export Excel"}
+            </button>
+          </div>
 
           {pageRows.length === 0 ? (
             <p className="pkg-empty">No orders match these filters.</p>

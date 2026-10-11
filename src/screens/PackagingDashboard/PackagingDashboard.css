@@ -350,6 +350,41 @@
     color: #666;
 }
 
+/* Result count + Export Excel on one line (wraps on a phone). */
+.pkg-result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.pkg-result-row .pkg-result-line {
+    margin: 0;
+}
+
+.pkg-export-btn {
+    padding: 7px 14px;
+    background: #d5b85a;
+    border: 1px solid #d5b85a;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+}
+
+.pkg-export-btn:hover:not(:disabled) {
+    background: #c9a94e;
+}
+
+.pkg-export-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .pkg-empty {
     padding: 40px 0;
     text-align: center;
