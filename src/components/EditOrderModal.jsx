@@ -82,10 +82,24 @@ const cleanMeasurements = (measurements) => {
  * @param {function} showPopup      the caller's usePopup().showPopup
  * @param {boolean} [notifyCustomer] false skips the ORDER_EDITED WhatsApp
  *                                  (Comms orders have no paying customer)
+ * @param {boolean} [requireReason]  true shows a mandatory "Reason for edit" box;
+ *                                  the reason is written to order_edit_log and
+ *                                  carried on the ORDER_EDITED notification
+ *                                  (Comms, meeting point 9). Off by default, so
+ *                                  Store Order History is unchanged.
+ * @param {string}  [reasonSource]   order_edit_log.source, e.g. "comms"
+ * @param {string}  [editedBy]       order_edit_log.edited_by (the user's email)
+ * @param {function}[recheck]        (order) => string|null, run again at Save:
+ *                                  a message blocks the save (e.g. the caller's
+ *                                  time window ran out while the modal was open)
  */
-export default function EditOrderModal({ order, onClose, onSaved, showPopup, notifyCustomer = true }) {
+export default function EditOrderModal({
+  order, onClose, onSaved, showPopup, notifyCustomer = true,
+  requireReason = false, reasonSource = null, editedBy = null, recheck = null,
+}) {
   const [colors, setColors] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [reason, setReason] = useState("");
   const [activeCategory, setActiveCategory] = useState("Kurta/Choga/Kaftan");
   const item = order.items?.[0] || {};
   const [measurements, setMeasurements] = useState(item.measurements || {});
@@ -120,6 +134,13 @@ export default function EditOrderModal({ order, onClose, onSaved, showPopup, not
   };
 
   const handleSave = async () => {
+    const trimmedReason = reason.trim();
+    if (requireReason && !trimmedReason) return;
+    const blocked = recheck?.(order);
+    if (blocked) {
+      showPopup({ type: "error", title: "Can't edit this order", message: blocked, confirmText: "OK" });
+      return;
+    }
     setSaving(true);
     try {
       const topColorObj = colors.find(c => c.name === form.top_color) || { name: form.top_color, hex: "#888" };
@@ -162,11 +183,32 @@ export default function EditOrderModal({ order, onClose, onSaved, showPopup, not
       }).eq("id", order.id);
       if (error) throw error;
 
+      // The reason is recorded AFTER the edit lands, so a failed save never
+      // leaves a log row for an edit that did not happen. If only this insert
+      // fails, the edit stands and the user is told the reason was not stored
+      // (it still travels on the ORDER_EDITED notification below).
+      let reasonNotSaved = false;
+      if (requireReason) {
+        const { error: logErr } = await supabase.from("order_edit_log").insert({
+          order_id: order.id,
+          order_no: order.order_no,
+          reason: trimmedReason,
+          edited_by: editedBy,
+          source: reasonSource,
+        });
+        if (logErr) {
+          console.error("order_edit_log insert failed (order WAS updated):", logErr);
+          reasonNotSaved = true;
+        }
+      }
+
       // Re-read so the PDF regenerates from the saved measurements
       const { data: freshOrder } = await supabase.from("orders").select("*").eq("id", order.id).single();
       if (freshOrder) onSaved?.(freshOrder);
       onClose();
-      showPopup({ type: "success", title: "Order Updated", message: "Order has been updated successfully!", confirmText: "OK" });
+      showPopup(reasonNotSaved
+        ? { type: "warning", title: "Order Updated", message: "The order was updated, but the reason for the edit could not be saved. Please tell the admin.", confirmText: "OK" }
+        : { type: "success", title: "Order Updated", message: "Order has been updated successfully!", confirmText: "OK" });
 
       if (notifyCustomer) {
         sendWhatsApp({
@@ -181,7 +223,10 @@ export default function EditOrderModal({ order, onClose, onSaved, showPopup, not
       sendNotification(NOTIFICATION_TYPES.ORDER_EDITED, {
         orderId: order.id,
         orderNo: order.order_no,
-        metadata: { client_name: order.delivery_name },
+        metadata: {
+          client_name: order.delivery_name,
+          ...(requireReason ? { edit_reason: trimmedReason } : {}),
+        },
       }).catch(err => console.error("Edit notification error:", err));
 
       if (order.salesperson_store === "Private") {
@@ -336,10 +381,28 @@ export default function EditOrderModal({ order, onClose, onSaved, showPopup, not
               style={{ minHeight: '80px' }}
             />
           </div>
+
+          {requireReason && (
+            <div className="oh-modal-field full" style={{ marginTop: '15px' }}>
+              <label>Reason for edit *</label>
+              <textarea
+                className="oh-textarea"
+                placeholder="Why is this order being changed?"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={2}
+              />
+            </div>
+          )}
         </div>
         <div className="oh-modal-footer">
           <button className="oh-modal-btn cancel" onClick={onClose}>Cancel</button>
-          <button className="oh-modal-btn save" onClick={handleSave} disabled={saving}>
+          <button
+            className="oh-modal-btn save"
+            onClick={handleSave}
+            disabled={saving || (requireReason && !reason.trim())}
+            title={requireReason && !reason.trim() ? "Enter a reason for the edit first" : undefined}
+          >
             {saving ? "Saving..." : "Save"}
           </button>
         </div>

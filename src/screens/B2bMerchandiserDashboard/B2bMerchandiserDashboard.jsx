@@ -12,7 +12,7 @@ import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationSe
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import QcReportModal from "../../components/QcReportModal";
-import { isB2bMerchandiserEmail } from "../../utils/appEnvironment";
+import { canCancelB2bAnytime } from "../../utils/appEnvironment";
 import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel, getOrderProgressStatus } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
 import { normalizeSizeChart } from "../../utils/b2bSizeChart";
@@ -48,6 +48,10 @@ function GarmentValue({ name, color }) {
 
 // An order that has finished (or was cancelled) is done — nothing about it is
 // still approvable or actionable. Same terminal set the PM/PH dashboards use.
+// How long after placing an order a merchandiser NOT on the cancel-anytime
+// list (appEnvironment.canCancelB2bAnytime) may cancel it. Meeting point 17.
+const CANCEL_WINDOW_HOURS = 48;
+
 const TERMINAL_ORDER_STATUSES = ["completed", "delivered", "cancelled"];
 const isTerminalOrder = (order) =>
     TERMINAL_ORDER_STATUSES.includes((order?.status || "").toLowerCase());
@@ -291,9 +295,16 @@ export default function B2bMerchandiserDashboard() {
         return map;
     }, [components]);
 
-    // Only the designated B2B merchandiser gets the production journey / QC
-    // surfaces on the order card; every other merchandiser sees the card as before.
-    const canViewProduction = useMemo(() => isB2bMerchandiserEmail(user?.email), [user]);
+    // Every merchandiser gets the production journey / QC surfaces on an
+    // approved order's card (meeting points 18/25/38 — this used to be one
+    // designated login). Only role "merchandiser" can open this dashboard
+    // (checkB2bRole on mount), so there is nothing left to gate on.
+    const canViewProduction = true;
+
+    // Cancelling: Prastuti and Tanuja may cancel at any time; every other
+    // merchandiser within CANCEL_WINDOW_HOURS of the order being placed
+    // (meeting points 1/17). A reason is required either way.
+    const cancelAnytime = useMemo(() => canCancelB2bAnytime(user?.email), [user]);
 
     const uniqueMerchandisers = useMemo(() => {
         const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
@@ -687,18 +698,30 @@ export default function B2bMerchandiserDashboard() {
     // store order.
     const hoursSince = (ts) => (ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : Infinity);
 
-    // Show the card's Cancel button only when the cancel would actually be
-    // allowed — the same two rules handleConfirmCancel enforces. A button that
-    // exists only to alert "the window has expired" is worse than no button.
-    const canCancelFromCard = (o) => {
-        if (!o) return false;
-        // DERIVED status, not o.status: an order reads "Dispatched" off
-        // warehouse_stage / its components while orders.status can still say
-        // something earlier, and a garment that has physically shipped must not
-        // offer Cancel whichever column recorded that.
-        if (["Dispatched", "Delivered", "Cancelled", "Revoked"].includes(getOrderProgressStatus(o, componentsByOrder[o.id]))) return false;
-        return hoursSince(o.created_at) < 24 || isB2bMerchandiserEmail(user?.email);
+    // The ONE cancel rule, shared by the card button, the Cancel tab's banner
+    // and handleConfirmCancel, so the three can never disagree (the tab used to
+    // skip the dispatched check the card had). Returns null when the order can
+    // be cancelled, otherwise { kind, message } saying why not.
+    //
+    // DERIVED status, not o.status: an order reads "Dispatched" off
+    // warehouse_stage / its components while orders.status can still say
+    // something earlier, and a garment that has physically shipped must not be
+    // cancellable whichever column recorded that.
+    const cancelBlock = (o) => {
+        if (!o) return { kind: "none", message: "" };
+        const progress = getOrderProgressStatus(o, componentsByOrder[o.id]);
+        if (["Cancelled", "Revoked"].includes(progress) || ["cancelled", "revoked"].includes((o.status || "").toLowerCase()))
+            return { kind: "done", message: `This order is already ${progress === "Revoked" ? "revoked" : "cancelled"}${o.cancellation_reason ? ` — "${o.cancellation_reason}"` : ""}.` };
+        if (["Dispatched", "Delivered"].includes(progress))
+            return { kind: "shipped", message: `This order is already ${progress.toLowerCase()} — it can't be cancelled.` };
+        if (!cancelAnytime && hoursSince(o.created_at) >= CANCEL_WINDOW_HOURS)
+            return { kind: "window", message: `Cancellation window expired — this order was placed ${Math.floor(hoursSince(o.created_at))} hours ago (limit is ${CANCEL_WINDOW_HOURS}).` };
+        return null;
     };
+
+    // Show the card's Cancel button only when the cancel would actually be
+    // allowed. A button that exists only to say "no" is worse than no button.
+    const canCancelFromCard = (o) => !!o && !cancelBlock(o);
 
     // The Cancel Order tab already owns the reason box, the eligibility banner
     // and the confirm. Jump to it with the order preloaded instead of building
@@ -726,9 +749,13 @@ export default function B2bMerchandiserDashboard() {
             // Sequence-only terms ("246") have to hit the tail of order_no, so
             // every column is searched with a contains pattern.
             const like = `%${term.replace(/[%_,]/g, "")}%`;
+            // B2B only — the same set this dashboard lists (is_b2b = true). A
+            // merchandiser cancels the orders they can see, never a store,
+            // website or Comms order (meeting point 1 / D2, 2026-10-11).
             const { data, error } = await supabase
                 .from("orders")
                 .select("*, vendors:vendor_id ( store_brand_name, vendor_code )")
+                .eq("is_b2b", true)
                 .or([
                     `order_no.ilike.${like}`,
                     `po_number.ilike.${like}`,
@@ -749,7 +776,7 @@ export default function B2bMerchandiserDashboard() {
             );
             const matches = [...(data || []), ...byProduct];
 
-            if (!matches.length) { setCancelError(`No order found matching "${term}".`); return; }
+            if (!matches.length) { setCancelError(`No B2B order found matching "${term}".`); return; }
             if (matches.length === 1) { setCancelOrder(matches[0]); return; }
             setCancelResults(matches);
         } catch (err) {
@@ -764,8 +791,10 @@ export default function B2bMerchandiserDashboard() {
         const order = cancelOrder;
         if (!order) return;
         if (!cancelReason.trim()) { alert("Please enter a reason for cancellation."); return; }
-        // The designated B2B merchandiser can cancel past the 24h window.
-        if (hoursSince(order.created_at) >= 24 && !isB2bMerchandiserEmail(user?.email)) { alert("The 24-hour cancellation window has expired."); return; }
+        // Re-checked at confirm time, not only when the order was opened: the
+        // window can run out, or the order ship, while this screen sits open.
+        const blocked = cancelBlock(order);
+        if (blocked) { alert(blocked.message); return; }
         setCancelProcessing(true);
         try {
             // Whole cancellation (status, components, inventory, credit, notify)
@@ -1357,9 +1386,9 @@ export default function B2bMerchandiserDashboard() {
                     <div className="merch-tab-wrapper">
                         <h2 className="merch-tab-title">Cancel Order</h2>
                         <p className="merch-muted" style={{ marginTop: -4, marginBottom: 16 }}>
-                            {isB2bMerchandiserEmail(user?.email)
-                                ? "As B2B merchandiser you can cancel any order at any time — no approval needed. Search by order number, PO, client, product or merchandiser."
-                                : "Any order can be cancelled within 24 hours of being placed — no approval needed. Search by order number, PO, client, product or merchandiser."}
+                            {cancelAnytime
+                                ? "You can cancel any B2B order at any time until it is dispatched — a reason is required, no approval needed. Search by order number, PO, client, product or merchandiser."
+                                : `You can cancel a B2B order within ${CANCEL_WINDOW_HOURS} hours of it being placed, until it is dispatched — a reason is required, no approval needed. Search by order number, PO, client, product or merchandiser.`}
                         </p>
 
                         <div style={{ display: "flex", gap: 8, maxWidth: 460, marginBottom: 20 }}>
@@ -1395,12 +1424,10 @@ export default function B2bMerchandiserDashboard() {
                             const o = cancelOrder;
                             const channelLabel = getOrderChannelLabel(o);
                             const hrs = hoursSince(o.created_at);
-                            const isCancelled = (o.status || "").toLowerCase() === "cancelled";
-                            const withinWindow = hrs < 24;
-                            const hoursLeft = Math.max(0, Math.floor(24 - hrs));
-                            // Designated B2B merchandiser can cancel regardless of the window.
-                            const overrideWindow = !withinWindow && isB2bMerchandiserEmail(user?.email);
-                            const canCancel = !isCancelled && (withinWindow || overrideWindow);
+                            const hoursLeft = Math.max(0, Math.floor(CANCEL_WINDOW_HOURS - hrs));
+                            // Same rule as the card button and the confirm.
+                            const blocked = cancelBlock(o);
+                            const canCancel = !blocked;
                             return (
                                 <div className="merch-modal" style={{ maxWidth: 560, margin: 0, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" }}>
                                     <div className="merch-modal-top">
@@ -1409,21 +1436,21 @@ export default function B2bMerchandiserDashboard() {
                                     </div>
                                     <div className="merch-modal-body">
                                         {/* Eligibility banner */}
-                                        {isCancelled ? (
+                                        {blocked?.kind === "done" ? (
                                             <div style={{ padding: "10px 14px", borderRadius: 8, background: "#f5f5f5", color: "#888", fontWeight: 600, marginBottom: 14 }}>
-                                                This order is already cancelled{o.cancellation_reason ? ` — "${o.cancellation_reason}"` : ""}.
+                                                {blocked.message}
                                             </div>
-                                        ) : withinWindow ? (
+                                        ) : blocked ? (
+                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#ffebee", color: "#c62828", fontWeight: 600, marginBottom: 14 }}>
+                                                {blocked.message}
+                                            </div>
+                                        ) : cancelAnytime ? (
                                             <div style={{ padding: "10px 14px", borderRadius: 8, background: "#e8f5e9", color: "#2e7d32", fontWeight: 600, marginBottom: 14 }}>
-                                                ✓ Eligible for cancellation — about {hoursLeft} hour{hoursLeft === 1 ? "" : "s"} left in the 24-hour window.
-                                            </div>
-                                        ) : overrideWindow ? (
-                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fff8e1", color: "#b26a00", fontWeight: 600, marginBottom: 14 }}>
-                                                24-hour window expired (placed {Math.floor(hrs)} hours ago) — as B2B merchandiser you can still cancel this order.
+                                                ✓ Eligible for cancellation — you can cancel B2B orders at any time until they are dispatched.
                                             </div>
                                         ) : (
-                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#ffebee", color: "#c62828", fontWeight: 600, marginBottom: 14 }}>
-                                                Cancellation window expired — this order was placed {Math.floor(hrs)} hours ago (limit is 24).
+                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#e8f5e9", color: "#2e7d32", fontWeight: 600, marginBottom: 14 }}>
+                                                ✓ Eligible for cancellation — about {hoursLeft} hour{hoursLeft === 1 ? "" : "s"} left in the {CANCEL_WINDOW_HOURS}-hour window.
                                             </div>
                                         )}
 

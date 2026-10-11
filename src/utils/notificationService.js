@@ -331,7 +331,8 @@ const TEMPLATES = {
     }),
     [NOTIFICATION_TYPES.ORDER_EDITED]: (meta) => ({
         title: "Order Edited",
-        message: `Existing order has been edited — ${meta.order_no}`,
+        // edit_reason is sent when the editor had to give one (Comms).
+        message: `Existing order has been edited — ${meta.order_no}${meta.edit_reason ? ` · Reason: ${meta.edit_reason}` : ""}`,
         priority: "normal",
     }),
     [NOTIFICATION_TYPES.PVT_ORDER_PLACED]: (meta) => ({
