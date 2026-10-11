@@ -508,6 +508,18 @@
     padding: 4px 8px;
 }
 
+/* Current stage of a piece on an order still in production (In Production tab). */
+.pkg-piece-stage {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-family: inherit !important;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #fff !important;
+}
+
 .pkg-card-actions {
     display: flex;
     flex-wrap: wrap;

@@ -218,6 +218,12 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                                 <td>
                                   <strong>{m.vendor_name || "—"}</strong>
                                   {m.vendor_location ? <span className="cjm-vendor-loc"> · {m.vendor_location}</span> : null}
+                                  {/* Why the piece went BACK to a vendor it had already
+                                      been to — required when the trip is configured
+                                      (80_repeat_vendor_reason). Shown here so anyone
+                                      opening View Journey can read it, not only the
+                                      Vendors tab. */}
+                                  {m.repeat_reason ? <div className="cjm-repeat-reason">↩ Sent back: {m.repeat_reason}</div> : null}
                                 </td>
                                 <td>{getStagesOutsideLabel(m.stages_outside) || "—"}</td>
                                 <td>{m.exit_scan_at ? formatDate(m.exit_scan_at) : "—"}</td>

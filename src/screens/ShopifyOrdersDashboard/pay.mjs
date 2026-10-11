@@ -126,7 +126,22 @@ export const paymentLabelVariant = (label) => {
 //
 // Reads ONLY Shopify's own words. Nothing here uses the mapper's isCod
 // derivation, which treats every PENDING order as COD and over-matches.
+//
+// One exception (asked for 2026-10-11, meeting point 45): an UNCONFIRMED COD
+// order for a ready-stock piece — any line whose product name carries the word
+// LXRTS — is cleared too. Nothing is cut for those (the piece already exists),
+// so the reason for holding unconfirmed COD does not apply. The "COD" badge
+// stays, so dispatch still knows to collect. Only COD: a prepaid LXRTS order
+// whose payment is still PENDING keeps waiting for the money.
 const PARTIAL_PAID_STATES = new Set(["PARTIALLY_PAID", "AUTHORIZED"]);
+
+// Whole word, any case: "(LXRTS)" and "LXRTS - Aabish" match, "LXRTSX" does
+// not. Product names only — never shopify_tags, which carry campaign codes
+// like "SB-lxrts_delhi_mumbai_…".
+const LXRTS_NAME_RE = /\blxrts\b/i;
+
+export const hasLxrtsProduct = (order) =>
+  (order?.items || []).some((it) => LXRTS_NAME_RE.test(String(it?.product_name || "")));
 
 const PAYMENT_END_STATES = new Set([
   "REFUNDED", "VOIDED", "PARTIALLY_REFUNDED", "CANCELLED",
@@ -139,7 +154,9 @@ export const isPaymentHeld = (order) => {
   if (!s) return false;
   if (s === "PAID" || PARTIAL_PAID_STATES.has(s) || PAYMENT_END_STATES.has(s))
     return false;
-  // Everything below is money-not-settled. A confirmed COD is the one case the
-  // business treats as good to work on despite that.
+  // Everything below is money-not-settled. A confirmed COD is the case the
+  // business treats as good to work on despite that — and so is any COD order
+  // for an LXRTS (ready-stock) piece, see the note above.
+  if (isCodTagged(order) && hasLxrtsProduct(order)) return false;
   return !isCodConfirmed(order);
 };

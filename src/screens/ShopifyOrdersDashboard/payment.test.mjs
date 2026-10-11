@@ -9,7 +9,13 @@
 import assert from "node:assert/strict";
 import { paymentLabel, isPaymentHeld } from "./pay.mjs";
 
-const o = (status, tags = []) => ({ shopify_financial_status: status, shopify_tags: tags });
+const o = (status, tags = [], names = []) => ({
+  shopify_financial_status: status,
+  shopify_tags: tags,
+  items: names.map((product_name) => ({ product_name })),
+});
+const LX = "Aabish- Daisy Ivory Pearl Embroidered Kurta Set (LXRTS)";
+const MTO = "Aabish- Mint Green Tilla Embroidered Kurta Set";
 
 const badges = [
   [o("PENDING", ["COD"]), "COD"],
@@ -45,8 +51,8 @@ const holds = [
   [o("PENDING"), true],
   [o("PENDING", ["COD"]), true],
   [o("PENDING", ["SW-WhatsApp COD Confirmation & COD to pr"]), true],
-  // End states are not "waiting for money". A cancelled order is pulled into
-  // Needs Review by its own predicate in the dashboard, not by this one.
+  // End states are not "waiting for money". A cancelled order is routed by its
+  // own predicate in the dashboard (to the Orders tab), not by this one.
   [o("REFUNDED"), false],
   [o("VOIDED"), false],
   [o("PARTIALLY_REFUNDED"), false],
@@ -54,6 +60,17 @@ const holds = [
   // No status at all is a sync gap, not evidence of non-payment.
   [o(""), false],
   [o(null), false],
+  // LXRTS (ready stock) + COD clears without the confirmation call.
+  [o("PENDING", ["COD"], [LX]), false],
+  [o("PENDING", ["COD"], [MTO, LX]), false],
+  [o("PENDING", ["COD"], ["lxrts - Aabish Kurta"]), false],
+  // ...but only for COD: a prepaid LXRTS order still waits for its money.
+  [o("PENDING", [], [LX]), true],
+  // A non-LXRTS COD order is still held until confirmed.
+  [o("PENDING", ["COD"], [MTO]), true],
+  // Whole word only, and never from the tags.
+  [o("PENDING", ["COD"], ["Aabish LXRTSX Kurta"]), true],
+  [o("PENDING", ["COD", "SB-lxrts_delhi_mumbai_sale"], [MTO]), true],
 ];
 
 let bad = 0;
