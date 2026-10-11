@@ -39,14 +39,23 @@ export const isUatEnvironment = projectRef === UAT_PROJECT_REF;
 export const byEnvironment = ({ prod, uat }) => (isProdEnvironment ? prod : uat);
 
 /**
- * The B2B merchandiser (Prastuti) who owns vendor-facing production visibility.
- * Her login address differs between the two projects, hence the split.
+ * B2B merchandisers who may cancel a B2B order at ANY time (a reason is still
+ * required). Every other merchandiser has the 48-hour window.
+ *
+ * Prastuti and Tanuja, not Khushi (client decision, 2026-10-11, meeting points
+ * 1/17). Production visibility — View Journey and QC Report — is no longer
+ * tied to this list: every merchandiser has it.
+ *
+ * Login addresses differ between the two projects, hence the split.
  */
-export const B2B_MERCHANDISER_EMAIL = byEnvironment({
-  prod: "merchendiser.sheetalbatra@gmail.com",
-  uat: "merch@sheetalbatra.com",
+export const B2B_CANCEL_ANYTIME_EMAILS = byEnvironment({
+  prod: [
+    "merchendiser.sheetalbatra@gmail.com", // Prastuti Kaushik
+    "merchendiser2.sheetalbatra@gmail.com", // Tanuja Singh
+  ],
+  uat: ["merch@sheetalbatra.com"],
 });
 
-/** Case-insensitive check that `email` is that merchandiser. */
-export const isB2bMerchandiserEmail = (email) =>
-  !!email && email.trim().toLowerCase() === B2B_MERCHANDISER_EMAIL.toLowerCase();
+/** Case-insensitive check that `email` is on that list. */
+export const canCancelB2bAnytime = (email) =>
+  !!email && B2B_CANCEL_ANYTIME_EMAILS.includes(email.trim().toLowerCase());

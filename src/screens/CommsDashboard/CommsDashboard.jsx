@@ -29,13 +29,24 @@ import CancelOrderModal from "../../components/CancelOrderModal";
 // rendering the whole filtered list lags once orders grow. Paginate.
 const ORDERS_PER_PAGE = 10;
 
-// No time window for Comms (like the designated B2B merchandiser) — gated on
-// the DERIVED status instead, so the floor decides, not orders.status:
-// edit only while no piece has left Order Received (nothing cut yet), cancel
-// until the garment ships (same terminal set as the merchandiser's card).
+// Comms may edit or cancel an order only within COMMS_WINDOW_HOURS of placing
+// it (meeting point 9, 2026-10-11), and a reason is required for both. On top
+// of the window, the DERIVED status still decides, so the floor has the last
+// word, not orders.status: edit only while no piece has left Order Received
+// (nothing cut yet), cancel until the garment ships (same terminal set as the
+// merchandiser's card).
+const COMMS_WINDOW_HOURS = 48;
 const NO_CANCEL = ["Dispatched", "Delivered", "Cancelled", "Revoked"];
-const canEditOrder = (o, comps) => o.approval_status !== "rejected" && getOrderProgressStatus(o, comps) === "Order Received";
-const canCancelOrder = (o, comps) => o.approval_status !== "rejected" && !NO_CANCEL.includes(getOrderProgressStatus(o, comps));
+const hoursSince = (ts) => (ts ? (Date.now() - new Date(ts).getTime()) / 36e5 : Infinity);
+const withinCommsWindow = (o) => hoursSince(o.created_at) < COMMS_WINDOW_HOURS;
+const canEditOrder = (o, comps) => o.approval_status !== "rejected" && withinCommsWindow(o) && getOrderProgressStatus(o, comps) === "Order Received";
+const canCancelOrder = (o, comps) => o.approval_status !== "rejected" && withinCommsWindow(o) && !NO_CANCEL.includes(getOrderProgressStatus(o, comps));
+// Re-run by the modals at Save / Confirm: the window can run out while a modal
+// sits open, and a card opened at 47h59m must not still succeed at 48h05m.
+const windowExpiredMessage = (o) =>
+  withinCommsWindow(o)
+    ? null
+    : `This order was placed ${Math.floor(hoursSince(o.created_at))} hours ago — Comms can only edit or cancel within ${COMMS_WINDOW_HOURS} hours.`;
 
 /**
  * Comms Dashboard (Nazreen — Communications Executive)
@@ -341,6 +352,10 @@ export default function CommsDashboard() {
           onSaved={(fresh) => setOrders((prev) => prev.map((o) => o.id === fresh.id ? fresh : o))}
           showPopup={showPopup}
           notifyCustomer={false}
+          requireReason
+          reasonSource="comms"
+          editedBy={profile?.email || null}
+          recheck={windowExpiredMessage}
         />
       )}
       {cancellingOrder && (
@@ -350,6 +365,7 @@ export default function CommsDashboard() {
           onCancelled={(order, reason) => setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "cancelled", cancellation_reason: reason } : o))}
           showPopup={showPopup}
           opts={{ cancelledBy: profile?.saleperson || "", email: profile?.email || "" }}
+          recheck={windowExpiredMessage}
         />
       )}
 

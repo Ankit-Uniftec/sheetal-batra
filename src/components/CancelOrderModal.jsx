@@ -12,14 +12,22 @@ import "../screens/OrderHistory.css";
  * @param {function} onCancelled   (order, reason) => void — update the caller's list
  * @param {function} showPopup     the caller's usePopup().showPopup
  * @param {object}  [opts]         passed through to cancelOrder (cancelledBy, email)
+ * @param {function}[recheck]      (order) => string|null, run again at Confirm:
+ *                                 a message blocks the cancel (e.g. the caller's
+ *                                 time window ran out while the modal was open)
  */
-export default function CancelOrderModal({ order, onClose, onCancelled, showPopup, opts = {} }) {
+export default function CancelOrderModal({ order, onClose, onCancelled, showPopup, opts = {}, recheck = null }) {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleConfirm = async () => {
     const trimmed = reason.trim();
     if (!trimmed) return;
+    const blocked = recheck?.(order);
+    if (blocked) {
+      showPopup({ type: "error", title: "Can't cancel this order", message: blocked, confirmText: "OK" });
+      return;
+    }
     setSaving(true);
     try {
       const { cancelledComponents } = await cancelOrder(order, trimmed, opts);
