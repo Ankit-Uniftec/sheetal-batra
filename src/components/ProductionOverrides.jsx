@@ -20,10 +20,13 @@ import {
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
 import { getWarehouseDate } from "../utils/warehouseDate";
+import formatDate from "../utils/formatDate";
 
 const ProductionOverrides = ({ currentUserEmail }) => {
   const [searchBarcode, setSearchBarcode] = useState("");
   const [searchOrderNo, setSearchOrderNo] = useState("");
+  // Several orders matched the order search: listed for the PM to pick one.
+  const [orderMatches, setOrderMatches] = useState([]);
   const [component, setComponent] = useState(null);
   const [orderComponents, setOrderComponents] = useState([]);
   const [history, setHistory] = useState([]);
@@ -79,26 +82,74 @@ const ProductionOverrides = ({ currentUserEmail }) => {
     setLoading(false);
   };
 
-  // Search by order number
+  // Open one order: load its pieces and select the first. An order with no
+  // barcodes yet (a flagged web order, an unminted stock order) has nothing to
+  // override, so say so instead of leaving the screen silently empty.
+  const openOrder = async (order) => {
+    setOrderMatches([]);
+    const allComps = await loadOrderComponents(order.id);
+    if (allComps.length > 0) {
+      setComponent(allComps[0]);
+      await loadHistoryAndMovements(allComps[0].id);
+    } else {
+      setComponent(null);
+      setHistory([]);
+      setMovements([]);
+      setActionResult({ success: false, message: `${order.order_no} has no barcodes yet, so there is nothing to override.` });
+    }
+  };
+
+  // Search by our order number OR Shopify's (meeting point 15).
+  //
+  // Our number matches as a substring, so "000023" still finds
+  // SB-DLC-0726-000023. Shopify's is matched EXACTLY on shopify_order_name
+  // ("#28166"), typed with or without the "#".
+  //
+  // Every match is shown when there is more than one. The old search took the
+  // first substring hit (limit 1), so a short number could silently open the
+  // wrong order — on the screen where the next click forces a stage.
+  //
+  // Two plain queries merged here rather than one .or(): the typed text goes
+  // into a PostgREST filter string, where a comma or bracket would break it.
   const handleOrderSearch = async () => {
-    if (!searchOrderNo.trim()) return;
+    const raw = searchOrderNo.trim();
+    if (!raw) return;
     setLoading(true);
     setActionResult(null);
+    setOrderMatches([]);
+    setComponent(null);
+    setOrderComponents([]);
     try {
-      const { data: orders } = await supabase
-        .from("orders")
-        .select("id, order_no")
-        .ilike("order_no", `%${searchOrderNo.trim()}%`)
-        .limit(1);
+      const cols = "id, order_no, shopify_order_name, created_at";
+      const likeTerm = raw.replace(/[\\%_]/g, (m) => `\\${m}`);
+      const shopifyDigits = /^#?\d{3,7}$/.test(raw) ? raw.replace(/^#/, "") : null;
 
-      if (orders && orders.length > 0) {
-        const allComps = await loadOrderComponents(orders[0].id);
-        if (allComps.length > 0) {
-          setComponent(allComps[0]);
-          await loadHistoryAndMovements(allComps[0].id);
-        }
+      const [byOrderNo, byShopify] = await Promise.all([
+        supabase.from("orders").select(cols).ilike("order_no", `%${likeTerm}%`)
+          .order("created_at", { ascending: false }).limit(20),
+        shopifyDigits
+          ? supabase.from("orders").select(cols).eq("shopify_order_name", `#${shopifyDigits}`).limit(20)
+          : Promise.resolve({ data: [] }),
+      ]);
+      if (byOrderNo.error) throw byOrderNo.error;
+      if (byShopify.error) throw byShopify.error;
+
+      // Exact hits first (the full order number, or the Shopify number), then
+      // newest first. De-duplicated: one order can match both ways.
+      const seen = new Set();
+      const isExact = (o) =>
+        (o.order_no || "").toUpperCase() === raw.toUpperCase() ||
+        (shopifyDigits && o.shopify_order_name === `#${shopifyDigits}`);
+      const matches = [...(byShopify.data || []), ...(byOrderNo.data || [])]
+        .filter((o) => (seen.has(o.id) ? false : seen.add(o.id)))
+        .sort((a, b) => (isExact(b) - isExact(a)) || (new Date(b.created_at) - new Date(a.created_at)));
+
+      if (matches.length === 0) {
+        setActionResult({ success: false, message: `No order found for "${raw}".` });
+      } else if (matches.length === 1) {
+        await openOrder(matches[0]);
       } else {
-        setActionResult({ success: false, message: "Order not found" });
+        setOrderMatches(matches);
       }
     } catch (err) {
       setActionResult({ success: false, message: err.message });
@@ -351,14 +402,14 @@ const ProductionOverrides = ({ currentUserEmail }) => {
             </div>
           </div>
           <div className="pm-override-search-group">
-            <label>Search by Order Number</label>
+            <label>Search by Order No or Shopify No</label>
             <div className="pm-override-input-row">
               <input
                 type="text"
                 value={searchOrderNo}
                 onChange={e => setSearchOrderNo(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleOrderSearch()}
-                placeholder="e.g. 000023"
+                placeholder="e.g. 000023 or #28166"
               />
               <button onClick={handleOrderSearch} disabled={loading}>Search</button>
             </div>
@@ -367,6 +418,36 @@ const ProductionOverrides = ({ currentUserEmail }) => {
       </div>
 
       {loading && <p style={{ textAlign: "center", color: "#999", padding: 20 }}>Loading...</p>}
+
+      {/* More than one order matched: the PM picks, the screen never guesses. */}
+      {orderMatches.length > 0 && (
+        <div className="pm-override-matches">
+          <p className="pm-override-matches-title">
+            {orderMatches.length} orders match "{searchOrderNo.trim()}" — pick one
+            {orderMatches.length === 20 ? " (showing the first 20; type more of the number to narrow it)" : ""}
+          </p>
+          <div className="pm-override-matches-list">
+            {orderMatches.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className="pm-override-match"
+                disabled={loading}
+                onClick={async () => {
+                  setLoading(true);
+                  setActionResult(null);
+                  try { await openOrder(o); } catch (err) { setActionResult({ success: false, message: err.message }); }
+                  setLoading(false);
+                }}
+              >
+                <span className="pm-override-match-no">{o.order_no}</span>
+                {o.shopify_order_name && <span className="pm-override-match-shop">Shopify {o.shopify_order_name}</span>}
+                <span className="pm-override-match-date">{formatDate(o.created_at)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Action Result */}
       {actionResult && (

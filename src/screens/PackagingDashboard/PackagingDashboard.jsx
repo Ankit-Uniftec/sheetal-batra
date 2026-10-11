@@ -7,6 +7,7 @@ import { usePeriodFilterParam } from "../../components/PeriodFilter";
 import Paginator from "../../components/Paginator";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import QcReportModal from "../../components/QcReportModal";
+import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import ScanStation from "../../components/ScanStation";
 import "../../components/ScanStation.css";
 import DeliveryPerformancePanel from "../../components/DeliveryPerformancePanel";
@@ -14,7 +15,10 @@ import ProductionOverview from "../../components/ProductionOverview";
 import useTabParam from "../../hooks/useTabParam";
 import formatDate from "../../utils/formatDate";
 import { getWarehouseDate } from "../../utils/warehouseDate";
-import { getOrderStatusLabel, getOrderChannelLabel, CHANNEL_SEGMENTS } from "../../utils/barcodeService";
+import {
+  getOrderStatusLabel, getOrderChannelLabel, CHANNEL_SEGMENTS,
+  getComponentStageLabel, getStageColor,
+} from "../../utils/barcodeService";
 import "./PackagingDashboard.css";
 import DashboardHeader from "../../components/DashboardHeader";
 
@@ -48,6 +52,15 @@ const SEARCH_FIELDS = [
 // still on the production floor is not theirs to box yet.
 const DISPATCH_STATUSES = ["completed", "dispatched", "delivered"];
 
+// Orders still on the production floor (meeting point 34a: "show all orders
+// even if not marked complete by the warehouse"). Shown on their own
+// "In Production" tab so the desk can see what is coming — VIEW ONLY: the
+// cards carry no pack or dispatch action, and the Scan Station tab's database
+// rules still refuse any piece that has not cleared Final QC. Kept out of
+// "All", which stays the dispatch working set. Cancelled / revoked / returned
+// orders are not coming to this desk, so they are not listed.
+const IN_PRODUCTION_STATUSES = ["order_received", "in_production"];
+
 export default function PackagingDashboard() {
   const navigate = useNavigate();
   const { showPopup, PopupComponent } = usePopup();
@@ -70,6 +83,7 @@ export default function PackagingDashboard() {
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState(null);   // order id whose details are open
   const [qcReportFor, setQcReportFor] = useState(null);
+  const [journeyFor, setJourneyFor] = useState(null);   // { order_no, components } for View Journey
   const [showSidebar, setShowSidebar] = useState(false);
 
   // Order-date calendar. PeriodFilter is the house standard — never hand-roll
@@ -99,6 +113,9 @@ export default function PackagingDashboard() {
         // shopify_order_id cover a row whose store string doesn't name the
         // channel. Not optional just because the prefix usually wins.
         "salesperson_store", "is_private_order", "shopify_order_id",
+        // In Production tab: a B2B order counts only once the merchandiser has
+        // approved it (same rule as the PM and Warehouse dashboards).
+        "approval_status",
       ].join(", ");
 
       // fetchAllRows everywhere — all three tables grow past the silent
@@ -107,7 +124,9 @@ export default function PackagingDashboard() {
         fetchAllRows("orders", (q) =>
           q.select(ORDER_COLUMNS).order("created_at", { ascending: false })),
         fetchAllRows("order_components", (q) =>
-          q.select("id, order_id, order_no, barcode, component_type, component_label, current_stage, stage_updated_at, is_active, item_index")),
+          // Vendor, disposition and pass-count fields feed the In Production
+          // tab's stage badges and View Journey (which shows "At <vendor>").
+          q.select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, stage_updated_at, is_active, item_index, is_outside_wh, vendor_name, vendor_exit_at, disposition, disposition_reason, stage_pass_counts, re_journey_count")),
         fetchAllRows("shipments", (q) =>
           q.select("id, order_id, status, awb, courier_name, dispatched_at, delivered_at")),
       ]);
@@ -181,6 +200,17 @@ export default function PackagingDashboard() {
     [orders]
   );
 
+  // Not finished yet — the view-only In Production tab. A B2B order is only in
+  // production once the merchandiser approves it (a rejected or pending one
+  // never reaches this desk), the same rule the PM and Warehouse dashboards use.
+  const productionOrders = useMemo(
+    () => orders.filter((o) =>
+      IN_PRODUCTION_STATUSES.includes((o.status || "").toLowerCase()) &&
+      (!o.is_b2b || o.approval_status === "approved")),
+    [orders]
+  );
+  const isInProduction = (o) => IN_PRODUCTION_STATUSES.includes((o.status || "").toLowerCase());
+
   // Has this order left the building? orders.status NEVER holds 'dispatched'
   // (verified on UAT: the only values present are order_received, completed,
   // delivered, cancelled, return_store_credit, revoked, exchange_return,
@@ -209,7 +239,10 @@ export default function PackagingDashboard() {
 
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return dispatchOrders.filter((o) => {
+    // The In Production tab reads its own set; every other pill filters the
+    // dispatch working set exactly as before.
+    const base = statusFilter === "in_production" ? productionOrders : dispatchOrders;
+    return base.filter((o) => {
       if (!inPeriod(o.created_at)) return false;
 
       const status = (o.status || "").toLowerCase();
@@ -223,7 +256,7 @@ export default function PackagingDashboard() {
       if (!q) return true;
       return (o[searchField] || "").toString().toLowerCase().includes(q);
     });
-  }, [dispatchOrders, inPeriod, statusFilter, channelFilter, urgencyFilter,
+  }, [dispatchOrders, productionOrders, inPeriod, statusFilter, channelFilter, urgencyFilter,
       search, searchField, isDispatched, urgencyOf]);
 
   const totalPages = Math.max(1, Math.ceil(visibleOrders.length / PER_PAGE));
@@ -242,14 +275,16 @@ export default function PackagingDashboard() {
     ready: dispatchOrders.filter((o) => o.status === "completed" && !isDispatched(o)).length,
     dispatched: dispatchOrders.filter((o) => isDispatched(o) && o.status !== "delivered").length,
     delivered: dispatchOrders.filter((o) => o.status === "delivered").length,
-  }), [dispatchOrders, isDispatched]);
+    in_production: productionOrders.length,
+  }), [dispatchOrders, productionOrders, isDispatched]);
 
-  // Only channels actually present in the queue — an option that matches
-  // nothing is noise on a shop-floor screen.
+  // Only channels actually present in the list being looked at — an option
+  // that matches nothing is noise on a shop-floor screen.
   const channelOptions = useMemo(() => {
-    const present = new Set(dispatchOrders.map(getOrderChannelLabel));
+    const base = statusFilter === "in_production" ? productionOrders : dispatchOrders;
+    const present = new Set(base.map(getOrderChannelLabel));
     return CHANNEL_SEGMENTS.map((c) => c.label).filter((l) => present.has(l));
-  }, [dispatchOrders]);
+  }, [dispatchOrders, productionOrders, statusFilter]);
 
   // Analytics scope: the date-filtered set across ALL statuses, not just the
   // dispatch queue — on-time production is a question about every order.
@@ -280,6 +315,13 @@ export default function PackagingDashboard() {
           orderId={qcReportFor.id}
           orderNo={qcReportFor.order_no}
           onClose={() => setQcReportFor(null)}
+        />
+      )}
+      {journeyFor && (
+        <ComponentJourneyModal
+          orderNo={journeyFor.order_no}
+          components={journeyFor.components}
+          onClose={() => setJourneyFor(null)}
         />
       )}
 
@@ -365,6 +407,7 @@ export default function PackagingDashboard() {
               { key: "ready", label: "Ready to Pack" },
               { key: "dispatched", label: "Dispatched" },
               { key: "delivered", label: "Delivered" },
+              { key: "in_production", label: "In Production" },
             ].map((s) => (
               <button
                 key={s.key}
@@ -378,6 +421,7 @@ export default function PackagingDashboard() {
 
           <p className="pkg-result-line">
             {visibleOrders.length} order{visibleOrders.length === 1 ? "" : "s"}
+            {statusFilter === "in_production" && " · still in production — view only, not ready to pack"}
           </p>
 
           {pageRows.length === 0 ? (
@@ -445,11 +489,29 @@ export default function PackagingDashboard() {
                           {comps.map((c) => (
                             <span key={c.id} className="pkg-piece">
                               {c.component_label || c.component_type} · {c.barcode}
+                              {/* Where each piece is on the floor — only for an
+                                  order still in production (point 34a). */}
+                              {isInProduction(o) && (
+                                <span
+                                  className="pkg-piece-stage"
+                                  style={{ backgroundColor: c.is_outside_wh ? "#e0913f" : getStageColor(c.current_stage) }}
+                                >
+                                  {c.is_outside_wh ? `At ${c.vendor_name || "vendor"}` : getComponentStageLabel(c)}
+                                </span>
+                              )}
                             </span>
                           ))}
                         </div>
 
                         <div className="pkg-card-actions">
+                          {isInProduction(o) && comps.length > 0 && (
+                            <button
+                              className="pkg-action"
+                              onClick={() => setJourneyFor({ order_no: o.order_no, components: comps })}
+                            >
+                              View Journey
+                            </button>
+                          )}
                           <button className="pkg-action" onClick={() => setQcReportFor(o)}>
                             Final QC Report
                           </button>

@@ -1153,6 +1153,35 @@
     background: #c9a94e;
 }
 
+/* A line whose breakdown is already set: a quiet chip, not a call to action.
+   Still clickable, so a wrong answer can be changed. */
+.sho-breakdown-done {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    background: #f1f8e9;
+    border: 1px solid #c5e1a5;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 12px;
+    color: #33691e;
+    cursor: pointer;
+}
+
+.sho-breakdown-done:hover {
+    border-color: #9ccc65;
+}
+
+.sho-bd-tick {
+    font-weight: 700;
+}
+
+.sho-bd-change {
+    color: #8B7355;
+    text-decoration: underline;
+}
+
 /* ─── The breakdown modal ─── */
 .sho-bd-modal {
     text-align: left;
