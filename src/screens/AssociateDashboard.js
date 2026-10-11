@@ -14,7 +14,7 @@ import { getSAStageLabel, getSAStageColor, getOrderStatusLabel } from "../utils/
 import SearchByDropdown from "../components/SearchByDropdown";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 import UpdatePaymentModal from "../components/UpdatePaymentModal";
-import { canUpdatePayment, recordPayment } from "../utils/recordPayment";
+import { canUpdatePayment, recordPayment, paymentRecordedPopup } from "../utils/recordPayment";
 import { canMarkDelivered, isDirectDelivery, markOrderDelivered, confirmDelivery } from "../utils/deliverOrder";
 import WalkInTab from "./WalkInTab";
 import ExhibitionPanel from "../components/ExhibitionPanel";
@@ -707,22 +707,14 @@ export default function Dashboard() {
     setPaymentModalSaving(true);
     try {
       // Ledger write lives in utils/recordPayment (shared with Order History).
-      const { collected, fresh } = await recordPayment(order, payment, salesperson?.email);
+      const result = await recordPayment(order, payment, salesperson?.email);
+      const { fresh } = result;
       if (fresh) setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...fresh } : o));
       setPaymentModalOrder(null);
 
-      // Quote the balance the DB computed, not one guessed here — that guess is
-      // exactly what used to drift from the ledger.
-      const newRemaining = Number(fresh?.remaining_payment) || 0;
-
-      showPopup({
-        type: "success",
-        title: "Payment Recorded",
-        message: newRemaining > 0
-          ? `₹${formatIndianNumber(collected)} recorded. Balance now ₹${formatIndianNumber(newRemaining)}.`
-          : `₹${formatIndianNumber(collected)} recorded. Order is now fully paid.`,
-        confirmText: "OK",
-      });
+      // Shared wording (utils/recordPayment): the DB-computed balance, plus
+      // any payment proofs attached or that failed to upload.
+      showPopup({ ...paymentRecordedPopup(result), confirmText: "OK" });
     } catch (err) {
       console.error("Update payment error:", err);
       showPopup({

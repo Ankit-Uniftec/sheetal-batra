@@ -1,0 +1,157 @@
+/* Payment proof modal (meeting point 26). Sits inside OrderHistory.css's
+   .oh-modal shell, like the Cancel / Edit order modals. */
+
+.ppm-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.ppm-muted {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #888;
+}
+
+.ppm-error {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #c62828;
+}
+
+.ppm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ppm-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #eee3c2;
+  border-radius: 8px;
+  background: #fffdf5;
+  font-size: 12px;
+}
+
+.ppm-tag {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ppm-tag-advance { background: #e3f2fd; color: #1565c0; }
+.ppm-tag-balance { background: #f1f8e9; color: #33691e; }
+
+.ppm-name {
+  flex: 1;
+  min-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+}
+
+.ppm-meta {
+  color: #999;
+}
+
+.ppm-view {
+  padding: 4px 12px;
+  border: 1px solid #d5b85a;
+  border-radius: 6px;
+  background: #fff;
+  color: #8B7355;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ppm-checkpoints {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ppm-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ppm-check.active {
+  border-color: #d5b85a;
+  background: #fffdf5;
+}
+
+.ppm-file {
+  display: block;
+  width: 100%;
+  font-size: 13px;
+}
+
+/* Per-row "Attach proof" inside the Update Payment popup. */
+.dpm-proof {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -2px 0 8px;
+  font-size: 12px;
+}
+
+.dpm-proof-pick {
+  color: #8B7355;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.dpm-proof-opt {
+  color: #999;
+  text-decoration: none;
+}
+
+.dpm-proof-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #33691e;
+}
+
+.dpm-proof-remove {
+  border: none;
+  background: none;
+  color: #c62828;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dpm-proof-error {
+  flex-basis: 100%;
+  color: #c62828;
+}
+
+/* The payment a proof belongs to (attached in Update Payment). */
+.ppm-pay {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f5f0e1;
+  color: #6b5842;
+  font-size: 11px;
+}

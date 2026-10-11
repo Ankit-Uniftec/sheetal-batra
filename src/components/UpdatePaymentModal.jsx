@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
+import { PROOF_ACCEPT, isCashMode, isWebsiteOrder, validateProofFile } from "../utils/paymentProofs";
 import "./DeliveryPaymentModal.css";
+import "./PaymentProofModal.css";
 
 // Standalone "Update Payment" — record a payment against an order's balance at
 // any time (not tied to delivery). Unlike the delivery flow it does NOT touch
@@ -9,6 +11,11 @@ import "./DeliveryPaymentModal.css";
 //
 // Partial payments are allowed: the SA may collect part of the balance now and
 // the rest later (or at delivery). Over-collection is blocked.
+//
+// Each non-cash row can carry an optional proof of payment — a screenshot or
+// PDF (meeting point 26). It is handed to onConfirm as row.proofFile and
+// uploaded by utils/recordPayment after the payment is saved, linked to that
+// row. Cash rows and website (Shopify) orders get no picker.
 
 const PAYMENT_MODES = ["Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"];
 
@@ -32,6 +39,15 @@ export default function UpdatePaymentModal({ order, onCancel, onConfirm, saving 
   const [paidAt, setPaidAt] = useState(todayISO());
   const [rows, setRows] = useState([{ id: 1, mode: "Cash", amount: "" }]);
   const [error, setError] = useState("");
+  const proofAllowed = !isWebsiteOrder(order);
+
+  // Keep a picked file only if it passes the rules (type / 5 MB); otherwise
+  // show why on that row and keep nothing.
+  const pickProof = (id, file) => {
+    if (!file) return;
+    const problem = validateProofFile(file);
+    updateRow(id, problem ? { proofFile: null, proofError: problem } : { proofFile: file, proofError: "" });
+  };
 
   const totalEntered = useMemo(
     () => rows.reduce((s, r) => s + (Number(r.amount) || 0), 0),
@@ -63,7 +79,12 @@ export default function UpdatePaymentModal({ order, onCancel, onConfirm, saving 
     if (overpaying) { setError("Amount can't exceed the balance due."); return; }
     const validRows = rows
       .filter((r) => Number(r.amount) > 0)
-      .map((r) => ({ mode: r.mode, amount: Number(r.amount) }));
+      .map((r) => ({
+        mode: r.mode,
+        amount: Number(r.amount),
+        // A file picked before the row was switched to Cash is dropped here.
+        ...(proofAllowed && r.proofFile && !isCashMode(r.mode) ? { proofFile: r.proofFile } : {}),
+      }));
     if (validRows.length === 0) { setError("Enter at least one payment amount."); return; }
     onConfirm({ paidAt, rows: validRows });
   };
@@ -123,7 +144,8 @@ export default function UpdatePaymentModal({ order, onCancel, onConfirm, saving 
 
             <div className="dpm-rows">
               {rows.map((row) => (
-                <div key={row.id} className="dpm-row">
+                <React.Fragment key={row.id}>
+                <div className="dpm-row">
                   <select
                     value={row.mode}
                     onChange={(e) => updateRow(row.id, { mode: e.target.value })}
@@ -151,6 +173,35 @@ export default function UpdatePaymentModal({ order, onCancel, onConfirm, saving 
                   )}
                   {rows.length === 1 && <span className="dpm-remove-placeholder" />}
                 </div>
+                {proofAllowed && !isCashMode(row.mode) && (
+                  <div className="dpm-proof">
+                    {row.proofFile ? (
+                      <>
+                        <span className="dpm-proof-name" title={row.proofFile.name}>📎 {row.proofFile.name}</span>
+                        <button
+                          type="button"
+                          className="dpm-proof-remove"
+                          onClick={() => updateRow(row.id, { proofFile: null, proofError: "" })}
+                          disabled={saving}
+                          aria-label="Remove proof"
+                        >×</button>
+                      </>
+                    ) : (
+                      <label className="dpm-proof-pick">
+                        📎 Attach proof <span className="dpm-proof-opt">(optional · JPEG, PNG or PDF · 5 MB)</span>
+                        <input
+                          type="file"
+                          accept={PROOF_ACCEPT}
+                          hidden
+                          disabled={saving}
+                          onChange={(e) => { pickProof(row.id, e.target.files?.[0]); e.target.value = ""; }}
+                        />
+                      </label>
+                    )}
+                    {row.proofError && <span className="dpm-proof-error">{row.proofError}</span>}
+                  </div>
+                )}
+                </React.Fragment>
               ))}
             </div>
 

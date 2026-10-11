@@ -12,6 +12,7 @@ import { usePopup } from "../components/Popup";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import AlterationModal from "../components/AlterationModal";
+import PaymentProofsPanel from "../components/PaymentProofsPanel";
 
 // Size options
 const WOMEN_SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
@@ -781,6 +782,18 @@ export default function OrderDetailPage() {
                 <span>{order.payment_mode}</span>
               </div>
             </div>
+
+            {/* Payment proofs (meeting point 26) — staff only: shown in the
+                associate flow, never on a customer's own order page, because a
+                proof is usually a screenshot of someone's bank / UPI app. */}
+            {fromAssociate && (
+              <PaymentProofsPanel
+                order={order}
+                showPopup={showPopup}
+                uploadedBy={localStorage.getItem("sp_email") || user?.email || null}
+                className="odp-info-card"
+              />
+            )}
 
             {/* Client identity (name / phone / email) is deliberately NOT shown
                 here — only the logistics needed to fulfil the order. */}

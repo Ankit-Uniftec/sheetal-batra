@@ -19,7 +19,7 @@ import { usePeriodFilterParam } from "../components/PeriodFilter";
 import Paginator from "../components/Paginator";
 import EditOrderModal from "../components/EditOrderModal";
 import UpdatePaymentModal from "../components/UpdatePaymentModal";
-import { canUpdatePayment, recordPayment } from "../utils/recordPayment";
+import { canUpdatePayment, recordPayment, paymentRecordedPopup } from "../utils/recordPayment";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 import { canMarkDelivered, isDirectDelivery, markOrderDelivered, confirmDelivery } from "../utils/deliverOrder";
 
@@ -1141,18 +1141,13 @@ export default function OrderHistory() {
     if (!order) return;
     setPaymentSaving(true);
     try {
-      const { collected, fresh } = await recordPayment(order, payment, localStorage.getItem("sp_email"));
+      const result = await recordPayment(order, payment, localStorage.getItem("sp_email"));
+      const { fresh } = result;
       if (fresh) setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...fresh } : o));
       setPaymentOrder(null);
-      const newRemaining = Number(fresh?.remaining_payment) || 0;
-      showPopup({
-        type: "success",
-        title: "Payment Recorded",
-        message: newRemaining > 0
-          ? `₹${formatIndianNumber(collected)} recorded. Balance now ₹${formatIndianNumber(newRemaining)}.`
-          : `₹${formatIndianNumber(collected)} recorded. Order is now fully paid.`,
-        confirmText: "OK",
-      });
+      // Shared wording (utils/recordPayment): the DB-computed balance, plus
+      // any payment proofs attached or that failed to upload.
+      showPopup({ ...paymentRecordedPopup(result), confirmText: "OK" });
     } catch (err) {
       showPopup({ type: "error", title: "Failed", message: "Could not record payment: " + err.message, confirmText: "OK" });
     } finally {
