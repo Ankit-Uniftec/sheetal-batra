@@ -147,6 +147,9 @@ const PAYMENT_END_STATES = new Set([
   "REFUNDED", "VOIDED", "PARTIALLY_REFUNDED", "CANCELLED",
 ]);
 
+// KEEP IN STEP: shopify_payment_held() in db/meeting_points/
+// r5_01_review_cleared_at.sql is a SQL copy of this rule; the database uses it
+// to stamp review_cleared_at ("Updated Orders", point 46). Change both together.
 export const isPaymentHeld = (order) => {
   const s = String(order?.shopify_financial_status || "").toUpperCase();
   // No status at all: nothing to judge. Don't invent a hold — a missing value
