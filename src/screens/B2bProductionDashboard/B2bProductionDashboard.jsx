@@ -16,6 +16,7 @@ import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import StageRequestModal from "../../components/StageRequestModal";
 import { usePopup } from "../../components/Popup";
+import { isAllLxrtsOrder, isLxrtsLine } from "../../utils/lxrtsProduct.mjs";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
@@ -223,10 +224,15 @@ export default function B2bProductionDashboard() {
                 // only status that must still hide the order is an explicit
                 // rejection.
                 const approvedOrders = ordersResult.data.filter(o =>
+                    // An order whose EVERY product is LXRTS (ready stock) has
+                    // nothing to produce, so it is kept off this production
+                    // screen (meeting point 44). Mixed orders stay; their LXRTS
+                    // pieces are tagged on the card.
+                    !isAllLxrtsOrder(o) && (
                     o.approval_status === "approved" ||
                     (o.is_comms && !o.approval_status) ||
                     (isAssignedToHead(o, B2B_HEAD_DESIGNATION) &&
-                     o.approval_status !== "rejected")
+                     o.approval_status !== "rejected"))
                 );
                 setOrders(approvedOrders);
                 const vendorIds = [...new Set(approvedOrders.map(o => o.vendor_id).filter(Boolean))];
@@ -1079,6 +1085,10 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
                             <div className="prod-comp-info">
                                 <span className="prod-comp-barcode">{comp.barcode}</span>
                                 <span className="prod-comp-label">{comp.component_label || comp.component_type}</span>
+                                {/* Mixed order: a piece of an LXRTS (ready-stock) product (point 44). */}
+                                {isLxrtsLine(order.items?.[comp.item_index ?? 0]) && (
+                                    <span className="prod-comp-lxrts">LXRTS — ready stock, don't produce</span>
+                                )}
                             </div>
                             <ComponentStageBadge comp={comp} />
                         </div>
