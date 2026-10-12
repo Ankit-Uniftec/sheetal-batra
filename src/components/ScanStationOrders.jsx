@@ -16,6 +16,7 @@ import ComponentStageBadge from "./ComponentStageBadge";
 import ComponentJourneyModal from "./ComponentJourneyModal";
 import QcReportModal from "./QcReportModal";
 import StageRequestModal from "./StageRequestModal";
+import { fetchAllLxrtsOrderIds } from "../utils/lxrtsOrders";
 import Paginator from "./Paginator";
 import { usePeriodFilter } from "./PeriodFilter";
 import "./ScanStationOrders.css";
@@ -123,9 +124,19 @@ export default function ScanStationOrders({ allowStageRequest = true }) {
         let cancelled = false;
         (async () => {
             setLoading(true);
-            const { data, error } = await fetchAllRows("orders", (q) =>
-                q.select(ORDER_COLUMNS).order("created_at", { ascending: false })
-            );
+            // Orders whose every product is LXRTS (ready stock) are kept off this
+            // production list (meeting point 44). Fetched alongside, as one
+            // small query, so the main list stays as light as before; if it
+            // fails the list still loads, just unfiltered.
+            const [{ data, error }, lxrtsIds] = await Promise.all([
+                fetchAllRows("orders", (q) =>
+                    q.select(ORDER_COLUMNS).order("created_at", { ascending: false })
+                ),
+                fetchAllLxrtsOrderIds().catch((err) => {
+                    console.error("LXRTS order lookup failed (list shown unfiltered):", err);
+                    return new Set();
+                }),
+            ]);
             if (cancelled) return;
             if (error) {
                 console.error("Failed to load orders:", error);
@@ -138,6 +149,7 @@ export default function ScanStationOrders({ allowStageRequest = true }) {
                 // (matching WarehouseDashboard's filter).
                 const visible = (data || []).filter((o) => {
                     if (o.is_private_order) return false;
+                    if (lxrtsIds.has(o.id)) return false;
                     if (o.is_b2b) return o.approval_status === "approved";
                     return true;
                 });

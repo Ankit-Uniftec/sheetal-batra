@@ -161,6 +161,8 @@
 .prod-comp-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; overflow: hidden; }
 .prod-comp-barcode { font-family: "Courier New", monospace; font-size: 12px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prod-comp-label { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Mixed order: piece of an LXRTS (ready-stock) product — not produced (point 44). */
+.prod-comp-lxrts { font-size: 10px; font-weight: 600; color: #33691e; background: #f1f8e9; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
 
 .prod-ocard-actions { display: flex; gap: 10px; padding: 12px 20px; border-top: 1px solid #f0ead0; }
 

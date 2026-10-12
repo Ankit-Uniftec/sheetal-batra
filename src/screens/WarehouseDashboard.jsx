@@ -12,6 +12,7 @@ import "../components/ScanStation.css";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
 import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
+import { isAllLxrtsOrder, isLxrtsLine } from "../utils/lxrtsProduct.mjs";
 import { isAssignedToHead } from "../utils/stockProductionHead";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import StageRequestModal from "../components/StageRequestModal";
@@ -354,6 +355,14 @@ const WarehouseDashboard = () => {
         if (o.is_private_order) return false;
         // Comms orders DO run the warehouse pipeline now (they get barcodes and
         // scan through all stages since 2026-07-10), so they are visible here.
+        // An order whose EVERY product is LXRTS (ready stock) is hidden from
+        // every warehouse account (meeting point 44): the pieces already exist
+        // and are sold directly, so there is nothing to produce. A mixed order
+        // stays — its other products still have to be made — and its LXRTS lines
+        // are tagged on the card. Filtering here covers every tab, count and
+        // calendar on this screen; the Shopify dashboard, the Production Manager
+        // and every sales / management screen still show these orders.
+        if (isAllLxrtsOrder(o)) return false;
         // B2B orders only visible after merchandiser approval
         if (o.is_b2b) return o.approval_status === "approved";
         return true;
@@ -1641,6 +1650,14 @@ const WarehouseDashboard = () => {
                               <p><strong className="wd-label">PO Number:</strong> {order.po_number}</p>
                             )}
                             <p><strong className="wd-label">Product Name:</strong> {firstItem.product_name}</p>
+                            {/* Only MIXED orders reach this screen with LXRTS products
+                                (all-LXRTS orders are filtered out) — say so up front. */}
+                            {(order.items || []).some(isLxrtsLine) && (
+                              <p className="wd-lxrts-note">
+                                Includes LXRTS (ready-stock) product{(order.items || []).filter(isLxrtsLine).length > 1 ? "s" : ""}:{" "}
+                                {(order.items || []).filter(isLxrtsLine).map((it) => it.product_name).join(", ")} — don't produce; their pieces are tagged below.
+                              </p>
+                            )}
 
                             {/* Client & SA Name — responsive row. For exhibition orders the SA is
                                 always stored as "Exhibition"; the actual person is on sb_representative_name. */}
@@ -1723,6 +1740,14 @@ const WarehouseDashboard = () => {
                                                 now live in the View Journey modal. */}
                                             {comp.re_journey_count > 0 && (
                                               <span className="wd-comp-rework-tag">Rework {comp.re_journey_count}</span>
+                                            )}
+                                            {/* Mixed order: this piece belongs to an LXRTS
+                                                (ready-stock) product — it already exists, so it
+                                                is not produced (meeting point 44). */}
+                                            {isLxrtsLine(order.items?.[comp.item_index ?? 0]) && (
+                                              <span className="wd-comp-lxrts-tag" title={order.items?.[comp.item_index ?? 0]?.product_name}>
+                                                LXRTS — ready stock, don't produce
+                                              </span>
                                             )}
                                             <ComponentStageBadge comp={comp} />
                                           </div>

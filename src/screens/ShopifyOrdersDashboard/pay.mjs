@@ -1,10 +1,13 @@
 // Shopify payment state: the COD tags, the one-word badge, and the payment
 // hold that decides whether an order is cleared for the work queue.
 //
-// A plain .mjs with no React and no imports so node can run it directly — the
+// A plain .mjs with no React (its only import is another plain .mjs) so node can
+// run it directly — the
 // dashboard imports it as ./pay.mjs (fully specified, which webpack needs for
 // .mjs) and payment.test.mjs runs the SAME code, not a copy of it:
 //   node src/screens/ShopifyOrdersDashboard/payment.test.mjs
+
+import { hasLxrtsProduct } from "../../utils/lxrtsProduct.mjs";
 
 // ─── Shopify payment state ─────────────────────────────────────────────────
 
@@ -135,13 +138,9 @@ export const paymentLabelVariant = (label) => {
 // whose payment is still PENDING keeps waiting for the money.
 const PARTIAL_PAID_STATES = new Set(["PARTIALLY_PAID", "AUTHORIZED"]);
 
-// Whole word, any case: "(LXRTS)" and "LXRTS - Aabish" match, "LXRTSX" does
-// not. Product names only — never shopify_tags, which carry campaign codes
-// like "SB-lxrts_delhi_mumbai_…".
-const LXRTS_NAME_RE = /\blxrts\b/i;
-
-export const hasLxrtsProduct = (order) =>
-  (order?.items || []).some((it) => LXRTS_NAME_RE.test(String(it?.product_name || "")));
+// The LXRTS rule lives in utils/lxrtsProduct.mjs (also used by the Warehouse
+// dashboard, point 44). Re-exported so existing imports keep working.
+export { hasLxrtsProduct };
 
 const PAYMENT_END_STATES = new Set([
   "REFUNDED", "VOIDED", "PARTIALLY_REFUNDED", "CANCELLED",

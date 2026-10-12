@@ -2871,6 +2871,25 @@
   border-radius: 10px;
 }
 
+/* Mixed order: piece of an LXRTS (ready-stock) product — not produced (point 44). */
+.wd-comp-lxrts-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: #33691e;
+  background: #f1f8e9;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.wd-lxrts-note {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #f1f8e9;
+  color: #33691e;
+  font-size: 12px;
+}
+
 .wd-order-status-badge {
   text-align: center;
   padding: 8px 16px;
