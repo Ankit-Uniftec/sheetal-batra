@@ -6,7 +6,7 @@ import { parseCsv, buildCsv, downloadCsv } from "../../components/AddProduct/csv
 import {
   BULK_COLUMNS, ERROR_COLUMNS, SUMMARY_COLUMNS, REFERENCE_COLUMNS,
   validateBulkFile, toRpcOrders, errorRows, summaryRows, referenceRows, templateRows,
-  sizesForProduct, MAX_UNITS_PER_ORDER, MAX_ORDERS_PER_FILE, MAX_LINES_PER_FILE,
+  sizesForProduct, guideRows, MAX_UNITS_PER_ORDER, MAX_ORDERS_PER_FILE, MAX_LINES_PER_FILE,
 } from "./bulkStockOrders";
 
 // ============================================================
@@ -89,16 +89,23 @@ export default function BulkStockOrderImport({ view, user, onClose, onDone }) {
     }
   };
 
+  // The template carries its own instructions: a sample row, then a guide block
+  // listing exactly which values each checked column accepts. Those lines are
+  // ignored on upload, so the file can be filled in and sent back as it is.
   const downloadTemplate = () => {
     const first = (ctx?.rows || [])[0];
     const sizes = first ? sizesForProduct(first) : [];
-    downloadCsv("bulk-stock-orders-template.csv", buildCsv(BULK_COLUMNS, templateRows({
-      sku: first?.product?.sku_id,
-      size: sizes[0] || "",
-      color: ctx?.colors?.[0]?.name,
-      head: ctx?.heads?.[0]?.name,
-      date: ctx?.today,
-    })));
+    const rows = [
+      ...templateRows({
+        sku: first?.product?.sku_id,
+        size: sizes[0] || "",
+        color: ctx?.colors?.[0]?.name,
+        head: ctx?.heads?.[0]?.name,
+        date: ctx?.today,
+      }),
+      ...guideRows(ctx),
+    ];
+    downloadCsv("bulk-stock-orders-template.csv", buildCsv(BULK_COLUMNS, rows));
   };
 
   const downloadReference = () =>

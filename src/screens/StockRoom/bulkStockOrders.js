@@ -118,7 +118,7 @@ export const parseExtras = (cell) => {
  *   failures  [{ row, raw, error }] one per failed source row
  */
 export function validateBulkFile(parsed, ctx) {
-  const { headers = [], data = [] } = parsed || {};
+  const { headers = [], data: allRows = [] } = parsed || {};
   const fileErrors = [];
 
   const missing = ["channel", "quantity", "color", "delivery_date"].filter((h) => !headers.includes(h));
@@ -126,6 +126,15 @@ export function validateBulkFile(parsed, ctx) {
     fileErrors.push(`The file is missing the ${missing.join(", ")} column${missing.length > 1 ? "s" : ""}. Download the template to see the expected columns.`);
     return { orders: [], failures: [], fileErrors, counts: empty() };
   }
+
+  // The template ends with a guide block listing the accepted values. Those
+  // lines start with "#", so the file can be filled in and uploaded exactly as
+  // downloaded, guide and all. Their position is kept, so a row number in an
+  // error always matches the row number in the person's spreadsheet.
+  const data = allRows
+    .map((raw, i) => ({ raw, sourceRow: i + 2 }))   // +1 header, +1 for 1-based rows
+    .filter(({ raw }) => !isGuideRow(raw));
+
   if (!data.length) {
     fileErrors.push("The file has no rows.");
     return { orders: [], failures: [], fileErrors, counts: empty() };
@@ -143,8 +152,7 @@ export function validateBulkFile(parsed, ctx) {
   // ---- group rows into orders, keeping the file's own order ----
   const groups = [];
   const byRef = new Map();
-  data.forEach((raw, i) => {
-    const sourceRow = i + 2;                     // +1 header, +1 for 1-based rows
+  data.forEach(({ raw, sourceRow }) => {
     const ref = clean(raw.order_ref);
     let group;
     if (ref === "") {
@@ -470,6 +478,76 @@ export function summaryRows(created, orders, meta = {}) {
     });
   });
   return out;
+}
+
+// ---------------- the guide block in the template ----------------
+
+// A guide line is marked in the first column so the parser can skip it. The
+// template can then be filled in and uploaded exactly as downloaded.
+export const GUIDE_MARK = "#";
+export const isGuideRow = (raw) => String(raw?.channel ?? "").trim().startsWith(GUIDE_MARK);
+
+// Long lists (every SKU, every colour) would bury the file, so they are cut off
+// with a pointer to the reference list, which holds all of them.
+const LIST_LIMIT = 12;
+const listOf = (values, { limit = LIST_LIMIT } = {}) => {
+  const all = [...new Set((values || []).map((v) => String(v).trim()).filter(Boolean))];
+  if (!all.length) return "(none set up yet)";
+  const shown = all.slice(0, limit).join(" | ");
+  return all.length > limit ? `${shown} | …and ${all.length - limit} more (see the reference list)` : shown;
+};
+
+/**
+ * The guide rows that close the template: what each column means and, for the
+ * columns checked against the system, exactly which values are accepted.
+ *
+ * Nothing in the import is guessed, so this is the list people work from. It is
+ * built from the same catalogue the validation uses, so it cannot go stale.
+ */
+export function guideRows(ctx = {}) {
+  const products = (ctx.rows || []).map((r) => r.product).filter(Boolean);
+  const sizes = (ctx.rows || []).flatMap((r) => sizesForProduct(r));
+  const tops = products.flatMap((p) => asList(p.top_options));
+  const bottoms = products.flatMap((p) => asList(p.bottom_options));
+
+  const lines = [
+    "HOW TO FILL THIS IN — these lines are ignored when you upload, so leave them in place.",
+    "",
+    "One row is one line of an order. Rows sharing an order_ref become ONE order with several lines.",
+    "Leave order_ref blank and that row is an order on its own. Repeated rows are never merged.",
+    `An order may hold up to ${MAX_UNITS_PER_ORDER} units across its lines. A file may hold up to ${MAX_LINES_PER_FILE} lines and ${MAX_ORDERS_PER_FILE} orders.`,
+    "Values are matched EXACTLY (spaces at the ends are trimmed, upper/lower case does not matter).",
+    "Nothing is corrected for you: a value that does not match fails its whole order.",
+    "",
+    "MUST MATCH A SYSTEM VALUE",
+    `channel — required, one of: ${CHANNELS.map((c) => c.value).join(" | ")}`,
+    `production_head — optional, one of: ${listOf((ctx.heads || []).map((h) => h.name))}. Leave blank to let the channel decide.`,
+    `sku_id — required (or design). Accepted: ${listOf(products.map((p) => p.sku_id))}`,
+    `design — only when sku_id is blank. Must be one design's exact name: ${listOf(products.map((p) => p.name))}`,
+    `size — must be one of that design's own sizes. In use across the catalogue: ${listOf(sizes)}`,
+    `color — required on every line. Accepted: ${listOf((ctx.colors || []).map((c) => c.name))}`,
+    `top — optional, must be a top of that design. In use: ${listOf(tops)}`,
+    `bottom — optional, must be a bottom of that design. In use: ${listOf(bottoms)}`,
+    `dupatta_color — required when includes_dupatta is yes. Accepted: ${listOf(ctx.dupattaColors)}`,
+    `extras — optional, written as Name:Colour and separated by ; — e.g. Potli:Gold; Belt:Ivory. Accepted names: ${listOf(ctx.extras)}`,
+    "",
+    "FIXED VALUES",
+    "order_flag — Normal or Urgent (blank means Normal)",
+    "urgent_reason — required when order_flag is Urgent",
+    "includes_dupatta — yes or no (blank means no)",
+    "category — Women or Kids (blank means Women)",
+    "",
+    "FREE TEXT AND NUMBERS",
+    "order_ref — your own label for grouping rows into one order. Not stored.",
+    `quantity — a whole number of 1 or more, within the ${MAX_UNITS_PER_ORDER}-unit order total`,
+    "delivery_date — required on every line, written as YYYY-MM-DD, today or later. Never filled in for you.",
+    "comments, delivery_notes — notes for the whole order; must match on every row of that order",
+    "notes — a note for this line only",
+    "",
+    "The reference list download holds every accepted value in full, one per row.",
+  ];
+
+  return lines.map((text) => ({ channel: text ? `${GUIDE_MARK} ${text}` : GUIDE_MARK }));
 }
 
 /** The template: headings plus one filled row, so the shape is obvious. */

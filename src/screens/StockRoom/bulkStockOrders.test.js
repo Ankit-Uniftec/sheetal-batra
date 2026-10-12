@@ -1,5 +1,6 @@
 import {
-  validateBulkFile, toRpcOrders, errorRows, summaryRows, parseExtras, hintFor, MAX_UNITS_PER_ORDER,
+  validateBulkFile, toRpcOrders, errorRows, summaryRows, parseExtras, hintFor, guideRows, isGuideRow,
+  MAX_UNITS_PER_ORDER,
 } from "./bulkStockOrders";
 
 // A small catalogue: one made-to-order design with sizes and options, one
@@ -252,6 +253,47 @@ describe("the file it sends and the files it gives back", () => {
     expect(rows[1].source_row).toBe(3);
     expect(rows[0].pieces).toBe(2);
     expect(rows[0].batch_id).toBe("b-1");
+  });
+});
+
+describe("the guide block in the template", () => {
+  it("lists the accepted values for every column checked against the system", () => {
+    const text = guideRows(ctx).map((r) => r.channel).join("\n");
+    expect(text).toMatch(/channel — required, one of: retail \| b2b/);
+    expect(text).toMatch(/Khushnuma Khan/);           // heads
+    expect(text).toMatch(/SB-2201/);                  // skus
+    expect(text).toMatch(/Ivory/);                    // colours
+    expect(text).toMatch(/Midnight Blue/);            // dupatta colours
+    expect(text).toMatch(/Potli/);                    // extras
+    expect(text).toMatch(/Kurta/);                    // tops
+    expect(text).toMatch(/Sharara/);                  // bottoms
+    expect(text).toMatch(/order_flag — Normal or Urgent/);
+    expect(text).toMatch(/includes_dupatta — yes or no/);
+  });
+
+  it("marks every guide line so the parser skips it", () => {
+    expect(guideRows(ctx).every((r) => isGuideRow(r))).toBe(true);
+    expect(isGuideRow({ channel: "retail" })).toBe(false);
+  });
+
+  it("shortens a long list and points at the reference list", () => {
+    const many = { ...ctx, colors: Array.from({ length: 40 }, (_, i) => ({ name: `Colour ${i}` })) };
+    const line = guideRows(many).map((r) => r.channel).find((t) => t.includes("color —"));
+    expect(line).toMatch(/…and 28 more \(see the reference list\)/);
+  });
+
+  it("ignores the guide when the template is filled in and uploaded as it is", () => {
+    const filled = [row({ order_ref: "A1" }), ...guideRows(ctx)];
+    const { orders, failures, counts } = run(filled);
+    expect(failures).toEqual([]);
+    expect(orders).toHaveLength(1);
+    expect(counts.rows).toBe(1);                      // guide lines are not rows of work
+  });
+
+  it("keeps row numbers matching the spreadsheet even with guide lines above", () => {
+    // A guide line sitting at row 2 must not shift the real row's number.
+    const { failures } = run([...guideRows(ctx).slice(0, 1), row({ size: "Small" })]);
+    expect(failures[0].row).toBe(3);
   });
 });
 
