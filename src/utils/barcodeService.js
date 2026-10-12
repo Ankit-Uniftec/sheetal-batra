@@ -801,10 +801,14 @@ export function buildStagePassMap(transitions) {
 export function describeTransition(t, movements, passMap) {
   const isExit = t.transition_type === "security_exit";
   const isEntry = t.transition_type === "security_entry";
-  const external = isExit || isEntry;
+  // Release 6: the SB WH Delhi (2) guard's two scans on a trip there.
+  const isF2Arrival = t.transition_type === "f2_arrival";
+  const isF2Departure = t.transition_type === "f2_departure";
+  const external = isExit || isEntry || isF2Arrival || isF2Departure;
 
   let stageForTrip = null;
-  if (external && Array.isArray(movements)) {
+  let toWh2 = false;
+  if ((isExit || isEntry) && Array.isArray(movements)) {
     const field = isExit ? "exit_scan_at" : "entry_scan_at";
     const scanTime = new Date(t.scanned_at).getTime();
     const mov = movements
@@ -813,6 +817,7 @@ export function describeTransition(t, movements, passMap) {
       .filter((x) => x.diff < 120000)
       .sort((a, b) => a.diff - b.diff)[0]?.m;
     stageForTrip = mov ? getStagesOutsideLabel(mov.stages_outside) : null;
+    toWh2 = !!mov && (mov.is_factory2 || /^sb wh delhi \(2\)$/i.test(String(mov.vendor_name || "").trim()));
   }
 
   // Cloth Issue is single-scan, so a piece waiting for re-issued cloth and one
@@ -837,11 +842,16 @@ export function describeTransition(t, movements, passMap) {
   const pass = passMap instanceof Map ? passMap.get(t.id) : undefined;
   const passTag = pass ? ` (${pass})` : "";
 
-  const headline = isExit
-    ? `Sent to Vendor${stageForTrip ? ` (${stageForTrip})` : ""}${passTag}`
-    : isEntry
-      ? `Returned to Warehouse${stageForTrip ? ` (${stageForTrip})` : ""}${passTag}`
-      : `${t.from_stage ? `${fromLabel} → ` : ""}${toLabel}${passTag}`;
+  const trip = stageForTrip ? ` (${stageForTrip})` : "";
+  const headline = isF2Arrival
+    ? `Arrived at SB WH Delhi (2)${passTag}`
+    : isF2Departure
+      ? `Left SB WH Delhi (2)${passTag}`
+      : isExit
+        ? `${toWh2 ? "Sent to SB WH Delhi (2)" : "Sent to Vendor"}${trip}${passTag}`
+        : isEntry
+          ? `${toWh2 ? "Back at SB WH Delhi (1)" : "Returned to Warehouse"}${trip}${passTag}`
+          : `${t.from_stage ? `${fromLabel} → ` : ""}${toLabel}${passTag}`;
 
   return {
     kind: external ? "external" : "internal",
@@ -927,6 +937,7 @@ export async function securityGuardScan({
   vendorName = null,
   vendorLocation = null,
   notes = null,
+  force = false, // PM Forced Vendor Return only: skips the SB WH Delhi (2) return check (r6_01)
 }) {
   const { data, error } = await supabase.rpc("security_guard_scan", {
     p_barcode: barcode,
@@ -935,6 +946,9 @@ export async function securityGuardScan({
     p_vendor_name: vendorName,
     p_vendor_location: vendorLocation,
     p_notes: notes,
+    // Sent only when set, so a guard's scan matches the function's signature
+    // whether or not Release 6's SQL (which adds p_force) has been run.
+    ...(force ? { p_force: true } : {}),
   });
 
   if (error) throw error;

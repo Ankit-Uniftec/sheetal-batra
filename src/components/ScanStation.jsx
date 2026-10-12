@@ -33,6 +33,8 @@ import {
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
 import StageRequestModal from "./StageRequestModal";
+import FactoryBadge from "./FactoryBadge";
+import { WH2, fetchMyFactory, fetchOpenFactory2Trip, gateLeg, gateTransitionType } from "../utils/factory2";
 import { fetchQcRecords } from "../utils/qcHistory";
 
 // Pieces that are out of the normal production flow. Used to keep them out of
@@ -282,6 +284,15 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
         vendorLocation: "",
     });
 
+    // This login's warehouse (Release 6): an SB WH Delhi (2) guard's gate
+    // scans are "Arrived" / "Left SB WH Delhi (2)" (utils/factory2).
+    const [myFactory, setMyFactory] = useState(null);
+    useEffect(() => {
+        let alive = true;
+        fetchMyFactory(currentUserEmail).then((f) => { if (alive) setMyFactory(f); });
+        return () => { alive = false; };
+    }, [currentUserEmail]);
+
     // Approved vendors — for the Security Gate exit vendor dropdown.
     const [approvedVendors, setApprovedVendors] = useState([]);
     useEffect(() => {
@@ -418,13 +429,17 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
             // Security gate has its own flow
             if (selectedStation === "security_gate") {
                 const component = await fetchComponentByBarcode(barcode);
-                const scanType = component.is_outside_wh ? "entry" : "exit";
+                // An SB WH Delhi (2) guard on a piece that is on its way there /
+                // is there: Arrived or Left (Release 6). Everyone else: as before.
+                const trip = myFactory === WH2 && component.is_outside_wh
+                    ? await fetchOpenFactory2Trip(component.id) : null;
+                const { scanType, leg } = gateLeg({ isOutside: component.is_outside_wh, myFactory, trip });
 
                 // 30-minute duplicate-scan guard: block a repeat exit (or entry)
                 // within 30 min of the last one for this component, so an
                 // accidental double-scan at the gate doesn't record twice.
                 {
-                    const txnType = scanType === "exit" ? "security_exit" : "security_entry";
+                    const txnType = gateTransitionType({ scanType, leg });
                     const { data: lastScan } = await supabase
                         .from("stage_transitions")
                         .select("scanned_at")
@@ -452,13 +467,14 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                 // the Production Head approved — the guard does not choose. Read
                 // that configured movement so the popup shows it read-only.
                 let movement = null;
-                if (scanType === "exit") {
+                if (scanType === "exit" && !leg) {
                     movement = await getConfiguredMovement(component.id);
                 }
                 setSecurityPopup({
                     isOpen: true,
                     barcode,
                     scanType,
+                    leg,      // "f2_arrival" / "f2_departure" for the SB WH Delhi (2) guard, else null
                     movement, // PH-approved { vendor_name, vendor_location, return_date } or null
                     vendorName: movement?.vendor_name || component.vendor_name || "",
                     vendorLocation: movement?.vendor_location || component.vendor_location || "",
@@ -896,7 +912,7 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
             await new Promise((r) => setTimeout(r, SCAN_DEBOUNCE_MS - elapsed));
         }
         setIsProcessing(false);
-    }, [selectedStation, isProcessing, currentUserEmail, packagingPopup]);
+    }, [selectedStation, isProcessing, currentUserEmail, packagingPopup, myFactory]);
 
     const { resetBuffer } = useBarcodeScanner({
         onScan: (barcode) => {
@@ -1090,7 +1106,7 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
         // Exit requires a Production-Head-configured movement. The guard cannot
         // pick the vendor — it's taken from that approved record (server-side
         // too). Block exit if no movement is configured.
-        if (securityPopup.scanType === "exit" && !securityPopup.movement) {
+        if (securityPopup.scanType === "exit" && !securityPopup.leg && !securityPopup.movement) {
             showPopup({ title: "Not configured", message: "The Production Head must configure the external movement (vendor + return date) before this component can be sent out.", type: "warning", confirmText: "OK" });
             return;
         }
@@ -1111,7 +1127,9 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
             if (result.success) {
                 setScanResult({
                     success: true,
-                    message: securityPopup.scanType === "exit"
+                    message: securityPopup.leg
+                        ? result.message
+                        : securityPopup.scanType === "exit"
                         ? `Sent to vendor: ${securityPopup.vendorName}`
                         : `Returned from vendor — now at ${getStageLabel(result.new_stage)}`,
                     data: result,
@@ -1736,7 +1754,7 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                                                     <ScanKindTag kind={d.kind} />
                                                 </p>
                                                 <p className="wd-timeline-meta">
-                                                    {t.scanned_by} {'\u2022'} {new Date(t.scanned_at).toLocaleString()}
+                                                    {t.scanned_by}<FactoryBadge factory={t.factory} /> {'\u2022'} {new Date(t.scanned_at).toLocaleString()}
                                                     {d.showType && ` (${t.transition_type})`}
                                                 </p>
                                                 {t.notes && <p className="wd-timeline-notes">{t.notes}</p>}
@@ -1876,11 +1894,19 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                     <div className="wd-modal" onClick={e => e.stopPropagation()}>
                         <button className="wd-modal-close" onClick={() => setSecurityPopup(prev => ({ ...prev, isOpen: false }))}>{'\u2715'}</button>
                         <h3 className="wd-modal-title">
-                            Security Gate {'\u2014'} {securityPopup.scanType === "exit" ? "Exit" : "Entry"}
+                            {securityPopup.leg
+                                ? `${WH2} Gate \u2014 ${securityPopup.leg === "f2_arrival" ? "Arrived" : "Leaving"}`
+                                : <>Security Gate {'\u2014'} {securityPopup.scanType === "exit" ? "Exit" : "Entry"}</>}
                         </h3>
                         <p className="wd-mono" style={{ fontSize: 18, textAlign: "center", marginBottom: 20 }}>{securityPopup.barcode}</p>
 
-                        {securityPopup.scanType === "exit" ? (
+                        {securityPopup.leg ? (
+                            <p style={{ textAlign: "center", color: "#4caf50", fontSize: 16, marginBottom: 20 }}>
+                                {securityPopup.leg === "f2_arrival"
+                                    ? `Arrived at ${WH2} from SB WH Delhi (1)`
+                                    : `Leaving ${WH2} for SB WH Delhi (1)`}
+                            </p>
+                        ) : securityPopup.scanType === "exit" ? (
                             securityPopup.movement ? (
                                 // Vendor + return date are LOCKED to what the Production
                                 // Head approved — the guard confirms, doesn't choose.
@@ -1917,9 +1943,12 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                         <button
                             className="wd-qc-submit-btn"
                             onClick={handleSecuritySubmit}
-                            disabled={isProcessing || (securityPopup.scanType === "exit" && !securityPopup.movement)}
+                            disabled={isProcessing || (securityPopup.scanType === "exit" && !securityPopup.leg && !securityPopup.movement)}
                         >
-                            {isProcessing ? "Processing..." : securityPopup.scanType === "exit" ? "Confirm Exit" : "Confirm Entry"}
+                            {isProcessing ? "Processing..."
+                                : securityPopup.leg === "f2_arrival" ? "Confirm Arrival"
+                                : securityPopup.leg === "f2_departure" ? "Confirm Leaving"
+                                : securityPopup.scanType === "exit" ? "Confirm Exit" : "Confirm Entry"}
                         </button>
                     </div>
                 </div>

@@ -12,6 +12,7 @@ import {
   fetchMovementHistory,
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
+import FactoryBadge from "./FactoryBadge";
 import "./ComponentJourneyModal.css";
 
 /**
@@ -257,7 +258,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                                   <ScanKindTag kind={d.kind} />
                                 </p>
                                 <p className="cjm-timeline-meta">
-                                  {t.scanned_by} {'•'} {new Date(t.scanned_at).toLocaleString("en-GB")}
+                                  {t.scanned_by}<FactoryBadge factory={t.factory} /> {'•'} {new Date(t.scanned_at).toLocaleString("en-GB")}
                                   {d.showType && ` (${t.transition_type})`}
                                 </p>
                                 {t.notes && <p className="cjm-timeline-notes">{t.notes}</p>}
