@@ -10,6 +10,7 @@ import formatDate from "../utils/formatDate";
 import { SearchableSelect } from "../components/SearchableSelect";
 import Popup from "../components/Popup";
 import SplitPaymentModal from "../components/SplitPaymentModal";
+import { STORE_ADDRESSES } from "../utils/shippingAddress";
 
 const countryOptions = [
   { label: "India", value: "India" },
@@ -1272,7 +1273,7 @@ export default function OrderDetails() {
             <div className="row3">
               <div className="field full-width-field">
                 <label>Store Address:</label>
-                <span>S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048</span>
+                <span>{STORE_ADDRESSES["Delhi Store"]}</span>
               </div>
             </div>
             <div className="row3">
@@ -1299,7 +1300,7 @@ export default function OrderDetails() {
             <div className="row3">
               <div className="field full-width-field">
                 <label>Store Address:</label>
-                <span>S.C.O no. 22, Sun View Plaza Ludhiana, Punjab 142027</span>
+                <span>{STORE_ADDRESSES["Ludhiana Store"]}</span>
               </div>
             </div>
             <div className="row3">

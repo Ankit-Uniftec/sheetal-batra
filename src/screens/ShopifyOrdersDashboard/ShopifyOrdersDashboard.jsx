@@ -49,6 +49,9 @@ import {
 } from "./pay.mjs";
 import formatDate from "../../utils/formatDate";
 import { isUpdatedOrder, pinUpdatedFirst, clearedAgo } from "./updatedOrders";
+import useShipmentsByOrder from "../../hooks/useShipmentsByOrder";
+import { dispatchSummary } from "../../utils/shipmentStatus";
+import DispatchBadge from "../../components/DispatchBadge";
 import "./ShopifyOrdersDashboard.css";
 import DashboardHeader from "../../components/DashboardHeader";
 
@@ -475,6 +478,8 @@ export default function ShopifyOrdersDashboard() {
   const [profile, setProfile] = useState(null);
   const [orders, setOrders] = useState([]);
   const [componentsByOrder, setComponentsByOrder] = useState({});
+  // Dispatched badge (meeting point 34): what the packaging desk has sent.
+  const shipmentsByOrder = useShipmentsByOrder();
   const [journeyOrder, setJourneyOrder] = useState(null);
   // Order being sent to the PM as a skip / advance request (meeting point 5).
   const [requestOrder, setRequestOrder] = useState(null);
@@ -1316,6 +1321,8 @@ export default function ShopifyOrdersDashboard() {
             {paymentFlagged && (
               <Badge variant="warning">Awaiting Payment</Badge>
             )}
+            {/* Sent by the packaging desk (meeting point 34). */}
+            <DispatchBadge summary={dispatchSummary(shipmentsByOrder[order.id], components.length)} />
             {mappingFlagged && <Badge variant="warning">Needs Review</Badge>}
             {/* No work order for a cancelled garment — printing one is the
                 exact mistake this whole change exists to stop. The status badge

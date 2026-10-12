@@ -10,6 +10,7 @@ import {
 } from "@react-pdf/renderer";
 import { styles, COLORS } from "./pdfStyles";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
+import { STORE_ADDRESSES } from "../utils/shippingAddress";
 
 // Register Noto Sans font for Rupee symbol support
 Font.register({
@@ -487,10 +488,10 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
     }
 
     if (order.mode_of_delivery === "Delhi Store") {
-      return "S-208, Greater Kailash II, Basement, New Delhi, Delhi 110048";
+      return STORE_ADDRESSES["Delhi Store"];
     }
     if (order.mode_of_delivery === "Ludhiana Store") {
-      return "S.C.O no. 22, Sun View Plaza Ludhiana, Punjab 142027";
+      return STORE_ADDRESSES["Ludhiana Store"];
     }
     return "—";
   };

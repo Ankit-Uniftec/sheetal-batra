@@ -13,6 +13,9 @@ import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
 import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
 import { isAllLxrtsOrder, isLxrtsLine } from "../utils/lxrtsProduct.mjs";
+import useShipmentsByOrder from "../hooks/useShipmentsByOrder";
+import { dispatchSummary } from "../utils/shipmentStatus";
+import DispatchBadge from "../components/DispatchBadge";
 import { isAssignedToHead } from "../utils/stockProductionHead";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import StageRequestModal from "../components/StageRequestModal";
@@ -186,6 +189,8 @@ const WarehouseDashboard = () => {
 
   // Component tracking per order
   const [orderComponentsMap, setOrderComponentsMap] = useState({});
+  // Dispatched badge (meeting point 34): what the packaging desk has sent.
+  const shipmentsByOrder = useShipmentsByOrder();
   const [componentLoadingMap, setComponentLoadingMap] = useState({});
   // QC report modal: the order whose QC report is open. The shared
   // QcReportModal loads the qc_records itself.
@@ -1535,6 +1540,8 @@ const WarehouseDashboard = () => {
                                 #{order.alteration_number}
                               </span>
                             )}
+
+                            <DispatchBadge summary={dispatchSummary(shipmentsByOrder[order.id], (orderComponentsMap[order.id] || []).length)} />
                           </div>
 
                           <div className="wd-order-actions">

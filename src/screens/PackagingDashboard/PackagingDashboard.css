@@ -642,3 +642,137 @@
     }
     .pkg-status-tab { flex-shrink: 0; }
 }
+
+/* ---- Meeting point 34: references, payment, address, products, calendar ---- */
+.pkg-ref {
+    font-size: 11px;
+    font-weight: 600;
+    color: #5d4a1a !important;
+    background: #fff;
+    border: 1px solid #e4dac6;
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+
+.pkg-pay,
+.pkg-store-tag,
+.pkg-addr-missing,
+.pkg-piece-packed {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.pkg-pay-success { background: #e8f5e9; color: #1b5e20 !important; }
+.pkg-pay-info    { background: #e3f2fd; color: #0d47a1 !important; }
+.pkg-pay-warning { background: #fff8e1; color: #8d6e00 !important; }
+.pkg-pay-danger  { background: #fdecea; color: #b71c1c !important; }
+.pkg-pay-neutral { background: #f0f0f0; color: #555 !important; }
+.pkg-store-tag   { background: rgba(213, 184, 90, 0.18); color: #5d4a1a !important; }
+.pkg-addr-missing { background: #fdecea; color: #b71c1c !important; }
+
+.pkg-missing { color: #b71c1c !important; font-weight: 600; }
+.pkg-muted { color: #888 !important; font-weight: 400; }
+.pkg-balance-due { color: #b71c1c !important; font-weight: 600; }
+
+.pkg-products { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.pkg-product-name { margin: 0; font-size: 13px; font-weight: 600; color: #333 !important; }
+.pkg-product .pkg-pieces { margin-top: 6px; }
+.pkg-piece-packed {
+    margin-left: 6px;
+    background: #1b5e20;
+    color: #fff !important;
+    font-family: inherit !important;
+    font-size: 10.5px;
+}
+
+.pkg-view-toggle { display: inline-flex; border: 1px solid #e0d5c5; border-radius: 8px; overflow: hidden; }
+.pkg-view-toggle button {
+    height: 40px;
+    padding: 0 14px;
+    border: 0;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+}
+.pkg-view-toggle button.active { background: #d5b85a; color: #fff; }
+
+.pkg-day-chip {
+    margin-left: 8px;
+    padding: 2px 10px;
+    border: 1px solid #d5b85a;
+    border-radius: 12px;
+    background: rgba(213, 184, 90, 0.12);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.pkg-cal {
+    background: #FFFFFFB0;
+    border: 1px solid #e4dac6;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 14px;
+}
+.pkg-cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+.pkg-cal-head button {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #e0d5c5;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 18px;
+    cursor: pointer;
+}
+.pkg-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.pkg-cal-wd { text-align: center; font-size: 11px; color: #888; padding: 2px 0; }
+.pkg-cal-cell {
+    min-height: 54px;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px;
+}
+.pkg-cal-cell.empty { border: 0; background: transparent; }
+.pkg-cal-cell:disabled { cursor: default; color: #bbb; }
+.pkg-cal-cell.has { cursor: pointer; border-color: #d5b85a; }
+.pkg-cal-cell.has:hover { background: rgba(213, 184, 90, 0.1); }
+.pkg-cal-cell.today { box-shadow: inset 0 0 0 2px #d5b85a; }
+.pkg-cal-cell.selected { background: #d5b85a; color: #fff; }
+.pkg-cal-day { font-size: 12px; }
+.pkg-cal-count {
+    min-width: 22px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #2e7d32;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+.pkg-cal-cell.late .pkg-cal-count { background: #c62828; }
+
+@media (max-width: 600px) {
+    .pkg-cal-cell { min-height: 42px; }
+    .pkg-cal-day { font-size: 11px; }
+}
+
+.pkg-action-override { border-color: #c62828 !important; color: #c62828 !important; }
+.pkg-log { overflow-x: auto; background: #FFFFFFB0; border: 1px solid #e4dac6; border-radius: 10px; }
+.pkg-log table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pkg-log th, .pkg-log td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+.pkg-log th { background: rgba(213, 184, 90, 0.12); font-weight: 600; white-space: nowrap; }
+.pkg-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important; }
