@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
+import FactoryBadge from "./FactoryBadge";
 import {
   fetchComponentByBarcode,
   fetchOrderComponents,
@@ -227,6 +228,8 @@ const ProductionOverrides = ({ currentUserEmail }) => {
           scanType: "entry",
           scannedBy: currentUserEmail,
           notes: `PM override — no gate entry scan. ${overrideReason.trim()}`,
+          // Release 6: also bypasses "not completed at SB WH Delhi (2)".
+          force: true,
         });
 
         if (result.success) {
@@ -612,7 +615,7 @@ const ProductionOverrides = ({ currentUserEmail }) => {
                         <ScanKindTag kind={d.kind} />
                       </p>
                       <p className="pm-timeline-meta">
-                        {t.scanned_by} {"\u2022"} {new Date(t.scanned_at).toLocaleString()}
+                        {t.scanned_by}<FactoryBadge factory={t.factory} /> {"\u2022"} {new Date(t.scanned_at).toLocaleString()}
                         {d.showType && <span className="pm-timeline-type"> ({t.transition_type})</span>}
                       </p>
                       {t.notes && <p className="pm-timeline-notes">{t.notes}</p>}
