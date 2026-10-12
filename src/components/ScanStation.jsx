@@ -146,6 +146,13 @@ const buildFriendlyScanError = (rawMsg, toStage) => {
     if (/disposed\. scan it at cloth issue/i.test(rawMsg)) {
         return rawMsg;
     }
+    // Final QC is the last production stage (meeting point 37,
+    // db/meeting_points/r8_01_final_qc_lock.sql): a piece past it can't go back
+    // to an earlier stage without a QC Re-journey. The RPC's wording already says
+    // exactly that — the "next station" phrasing below would contradict it.
+    if (/final qc is already passed/i.test(rawMsg)) {
+        return rawMsg;
+    }
     // toStage (optional): the stage the worker was TRYING to scan into. Lets us
     // tell the two very different "cannot move" cases apart.
     const fromStage = extractCurrentStageFromError(rawMsg);
