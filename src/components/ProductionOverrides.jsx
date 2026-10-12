@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import {
-  advanceComponentStage,
   fetchComponentByBarcode,
   fetchOrderComponents,
   fetchTransitionHistory,
@@ -21,6 +20,8 @@ import {
 import ScanKindTag from "./ScanKindTag";
 import { getWarehouseDate } from "../utils/warehouseDate";
 import formatDate from "../utils/formatDate";
+import { applyStageOverride, OVERRIDE_KINDS } from "../utils/stageOverride";
+import StageRequestsPanel from "./StageRequestsPanel";
 
 const ProductionOverrides = ({ currentUserEmail }) => {
   const [searchBarcode, setSearchBarcode] = useState("");
@@ -184,80 +185,27 @@ const ProductionOverrides = ({ currentUserEmail }) => {
     setActionResult(null);
 
     try {
-      if (overrideType === "manual_advance") {
+      if (overrideType === "manual_advance" || overrideType === "skip_stage") {
         if (!targetStage) {
-          setActionResult({ success: false, message: "Select a target stage" });
+          setActionResult({ success: false, message: overrideType === "skip_stage" ? "Select which stage to skip to" : "Select a target stage" });
           setIsSubmitting(false);
           return;
         }
 
-        // Advance the component
-        const result = await advanceComponentStage(
-          component.barcode,
+        // Shared with approving a floor request (utils/stageOverride) — the
+        // override itself plus its stage_overrides log.
+        const result = await applyStageOverride({
+          component,
+          kind: overrideType,
           targetStage,
-          currentUserEmail,
-          "Production Head Override",
-          overrideReason,
-          "manual_override"
-        );
+          reason: overrideReason,
+          by: currentUserEmail,
+        });
 
         if (result.success) {
-          // Log the override
-          await recordOverride({
-            componentId: component.id,
-            orderId: component.order_id,
-            orderNo: component.order_no,
-            barcode: component.barcode,
-            overrideType: "manual_advance",
-            fromStage: component.current_stage,
-            toStage: targetStage,
-            reason: overrideReason,
-            overriddenBy: currentUserEmail,
-          });
-
-          setActionResult({ success: true, message: `Manually advanced to ${getStageLabel(targetStage)}` });
+          setActionResult({ success: true, message: `${OVERRIDE_KINDS[overrideType].doneLabel} ${getStageLabel(targetStage)}` });
 
           // Refresh component
-          const updated = await fetchComponentByBarcode(component.barcode);
-          const [enriched] = await enrichComponentsWithMovements([updated]);
-          setComponent(enriched || updated);
-          await loadHistoryAndMovements(updated.id);
-          await loadOrderComponents(updated.order_id);
-        } else {
-          setActionResult({ success: false, message: result.message });
-        }
-
-      } else if (overrideType === "skip_stage") {
-        if (!targetStage) {
-          setActionResult({ success: false, message: "Select which stage to skip to" });
-          setIsSubmitting(false);
-          return;
-        }
-
-        const result = await advanceComponentStage(
-          component.barcode,
-          targetStage,
-          currentUserEmail,
-          "Production Head Override",
-          "Skip: " + overrideReason,
-          "manual_override"
-        );
-
-        if (result.success) {
-          await recordOverride({
-            componentId: component.id,
-            orderId: component.order_id,
-            orderNo: component.order_no,
-            barcode: component.barcode,
-            overrideType: "skip_stage",
-            fromStage: component.current_stage,
-            toStage: targetStage,
-            reason: overrideReason,
-            overriddenBy: currentUserEmail,
-          });
-
-          setActionResult({ success: true, message: `Skipped to ${getStageLabel(targetStage)}` });
-
           const updated = await fetchComponentByBarcode(component.barcode);
           const [enriched] = await enrichComponentsWithMovements([updated]);
           setComponent(enriched || updated);
@@ -383,6 +331,14 @@ const ProductionOverrides = ({ currentUserEmail }) => {
   return (
     <div className="pm-override-section">
       <h2 className="pm-tab-title">Scan & Overrides</h2>
+
+      {/* Skip / advance requests from production heads (meeting point 5) —
+          here in Overrides, as asked, rather than a menu item of its own.
+          An approval moves pieces, so whatever order is open below reloads. */}
+      <StageRequestsPanel
+        currentUserEmail={currentUserEmail}
+        onApplied={() => { if (component?.order_id) loadOrderComponents(component.order_id).catch(() => {}); }}
+      />
 
       {/* Search Section */}
       <div className="pm-override-search">

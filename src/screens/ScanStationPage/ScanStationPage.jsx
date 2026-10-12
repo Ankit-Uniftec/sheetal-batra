@@ -5,6 +5,7 @@ import ScanStation from "../../components/ScanStation";
 import "../../components/ScanStation.css";
 import QcHistoryPanel from "../../components/QcHistoryPanel";
 import ScanStationOrders from "../../components/ScanStationOrders";
+import { canRequestStageChange } from "../../utils/stageRequests";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import "./ScanStationPage.css";
 import useTabParam from "../../hooks/useTabParam";
@@ -138,9 +139,10 @@ export default function ScanStationPage() {
             <ScanStation
               currentUserEmail={currentUserEmail}
               allowedStations={assignedStations}
+              allowStageRequest={canRequestStageChange(assignedStations)}
             />
           )}
-          {activeTab === "orders" && <ScanStationOrders />}
+          {activeTab === "orders" && <ScanStationOrders allowStageRequest={canRequestStageChange(assignedStations)} />}
           {activeTab === "qc_history" && canDoQc && (
             <div className="ssp-qc-history">
               <h2 className="ssp-section-title">My QC History</h2>

@@ -63,6 +63,10 @@ export const NOTIFICATION_TYPES = {
 
     ORDER_EDITED: "order_edited",
 
+    // Floor asks the PM to skip / advance pieces (meeting point 5)
+    STAGE_REQUEST_RAISED: "stage_request_raised",
+    STAGE_REQUEST_DECIDED: "stage_request_decided",
+
     PVT_ORDER_PLACED: "pvt_order_placed",
     PVT_ORDER_EDITED: "pvt_order_edited",
     PVT_DELIVERY_TODAY: "pvt_delivery_today",
@@ -189,6 +193,11 @@ const RECIPIENT_MAP = {
     [NOTIFICATION_TYPES.PVT_ORDER_EDITED]: [
         { designation: "Private SA", channel: "in_app" },
     ],
+    [NOTIFICATION_TYPES.STAGE_REQUEST_RAISED]: [
+        { designation: "Production Manager", channel: "in_app" },
+    ],
+    // Decided: sent to the requester only (extraRecipients, by email).
+    [NOTIFICATION_TYPES.STAGE_REQUEST_DECIDED]: [],
 };
 
 // ==========================================
@@ -333,6 +342,18 @@ const TEMPLATES = {
         title: "Order Edited",
         // edit_reason is sent when the editor had to give one (Comms).
         message: `Existing order has been edited — ${meta.order_no}${meta.edit_reason ? ` · Reason: ${meta.edit_reason}` : ""}`,
+        priority: "normal",
+    }),
+    [NOTIFICATION_TYPES.STAGE_REQUEST_RAISED]: (meta) => ({
+        title: "Skip / Advance Requested",
+        message: `${meta.requested_by || "The floor"} asks to ${meta.request_type === "skip" ? "skip" : "advance"} ${meta.piece_count} piece${meta.piece_count === 1 ? "" : "s"} of ${meta.order_no} to ${meta.target_label} — Overrides → Requests`,
+        priority: "normal",
+    }),
+    [NOTIFICATION_TYPES.STAGE_REQUEST_DECIDED]: (meta) => ({
+        title: meta.decision === "approved" ? "Request Approved" : "Request Rejected",
+        message: meta.decision === "approved"
+            ? `Your ${meta.request_type} request for ${meta.order_no} was approved — ${meta.applied_count} of ${meta.piece_count} piece${meta.piece_count === 1 ? "" : "s"} moved to ${meta.target_label}.`
+            : `Your ${meta.request_type} request for ${meta.order_no} was rejected${meta.decision_note ? `: ${meta.decision_note}` : "."}`,
         priority: "normal",
     }),
     [NOTIFICATION_TYPES.PVT_ORDER_PLACED]: (meta) => ({

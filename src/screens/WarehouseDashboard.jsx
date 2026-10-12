@@ -14,6 +14,7 @@ import "../components/ProductionHeadVendors.css";
 import { getStageGroupKey, STAGE_GROUPS, enrichComponentsWithMovements, scopeOrdersToDesignation, getChannelKeyForDesignation, getOrderChannelKey, classifyComponentForStageCard } from "../utils/barcodeService";
 import { isAssignedToHead } from "../utils/stockProductionHead";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
+import StageRequestModal from "../components/StageRequestModal";
 import ComponentStageBadge from "../components/ComponentStageBadge";
 import QcReportModal from "../components/QcReportModal";
 import QcHistoryPanel from "../components/QcHistoryPanel";
@@ -196,6 +197,7 @@ const WarehouseDashboard = () => {
   const [reJourneysLoading, setReJourneysLoading] = useState(false);
   // Order whose full component journey is being viewed (shared modal).
   const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+  const [requestOrder, setRequestOrder] = useState(null); // order being sent as a skip/advance request
   const [completePicker, setCompletePicker] = useState(null); // { order, productIdxs }
 
   // QC Fail Popup state
@@ -1146,6 +1148,16 @@ const WarehouseDashboard = () => {
           onClose={() => setJourneyOrder(null)}
         />
       )}
+      {/* Skip / advance request to the Production Manager (meeting point 5). */}
+      {requestOrder && (
+        <StageRequestModal
+          order={requestOrder}
+          components={orderComponentsMap[requestOrder.id] || []}
+          onClose={() => setRequestOrder(null)}
+          showPopup={showPopup}
+          requestedBy={currentUserEmail}
+        />
+      )}
 
       {/* HEADER */}
       <DashboardHeader
@@ -1745,6 +1757,15 @@ const WarehouseDashboard = () => {
                                     View Journey
                                   </button>
                                 )}
+                                {/* Ask the PM to skip / advance pieces (meeting point 5) */}
+                                {(orderComponentsMap[order.id] || []).length > 0 && (
+                                  <button
+                                    className="wd-vendor-btn"
+                                    onClick={() => setRequestOrder(order)}
+                                  >
+                                    Request Skip / Advance
+                                  </button>
+                                )}
                                 {/* View the QC report (QC 1 + Final QC results) for this order */}
                                 <button
                                   className="wd-qc-report-btn"
@@ -1901,6 +1922,7 @@ const WarehouseDashboard = () => {
             <ScanStation
               currentUserEmail={currentUserEmail}
               allowedStations={assignedStations}
+              allowStageRequest
             />
           )}
           {activeTab === "vendors" && isWarehouseProdHead && (

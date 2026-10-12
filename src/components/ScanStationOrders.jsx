@@ -15,6 +15,7 @@ import {
 import ComponentStageBadge from "./ComponentStageBadge";
 import ComponentJourneyModal from "./ComponentJourneyModal";
 import QcReportModal from "./QcReportModal";
+import StageRequestModal from "./StageRequestModal";
 import Paginator from "./Paginator";
 import { usePeriodFilter } from "./PeriodFilter";
 import "./ScanStationOrders.css";
@@ -30,7 +31,9 @@ import "./ScanStationOrders.css";
 //
 // This is the same lookup, READ-ONLY: no edit, re-prioritise, mark-complete or
 // override actions. A scanning worker must not inherit Production Manager
-// powers, so the card carries exactly two buttons — View Journey and QC Report.
+// powers, so the card carries View Journey and QC Report — plus "Request Skip /
+// Advance" (meeting point 5), which only ASKS the Production Manager; the PM
+// still decides, so it gives the floor no override power of its own.
 //
 // Both modals fetch their own data (ComponentJourneyModal pulls transitions +
 // vendor movements per component; QcReportModal pulls qc_records by order), so
@@ -78,7 +81,11 @@ const ORDER_COLUMNS =
 const COMPONENT_COLUMNS =
     "id, order_id, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_active, qc_status, is_delayed, re_journey_count, stage_pass_counts, is_outside_wh, vendor_name, vendor_location, vendor_exit_at";
 
-export default function ScanStationOrders() {
+/**
+ * @param {boolean} [allowStageRequest=true]  show "Request Skip / Advance" —
+ *   off for users whose only stations are the security gate / packaging.
+ */
+export default function ScanStationOrders({ allowStageRequest = true }) {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState("");
@@ -108,6 +115,7 @@ export default function ScanStationOrders() {
 
     // Journey / QC report modals.
     const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
+    const [requestOrder, setRequestOrder] = useState(null);  // order being sent as a skip/advance request
     const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
 
     // ---------- load orders (once) ----------
@@ -414,6 +422,11 @@ export default function ScanStationOrders() {
                                 <button className="sso-btn sso-qc-btn" onClick={() => openQcReport(order)}>
                                     QC Report
                                 </button>
+                                {allowStageRequest && (comps || []).length > 0 && (
+                                    <button className="sso-btn sso-journey-btn" onClick={() => setRequestOrder(order)}>
+                                        Request Skip / Advance
+                                    </button>
+                                )}
                             </div>
                         </div>
                     );
@@ -435,6 +448,14 @@ export default function ScanStationOrders() {
                     onClose={() => setJourneyOrder(null)}
                 />,
                 document.body
+            )}
+            {/* Portals itself to <body>; fetches the order's product names. */}
+            {requestOrder && (
+                <StageRequestModal
+                    order={{ id: requestOrder.id, order_no: requestOrder.order_no }}
+                    components={orderComponentsMap[requestOrder.id] || []}
+                    onClose={() => setRequestOrder(null)}
+                />
             )}
             {qcReportOrder && createPortal(
                 <QcReportModal

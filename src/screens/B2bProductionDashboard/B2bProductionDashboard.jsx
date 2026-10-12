@@ -14,6 +14,8 @@ import ProductionHeadVendors from "../../components/ProductionHeadVendors";
 import "../../components/ProductionHeadVendors.css";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import StageRequestModal from "../../components/StageRequestModal";
+import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
@@ -68,6 +70,9 @@ export default function B2bProductionDashboard() {
     // Order whose full component journey is open (shared ComponentJourneyModal).
     const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
     const openJourney = (order, comps) => setJourneyOrder({ order_no: order.order_no, components: comps || [] });
+    // Skip / advance request to the Production Manager (meeting point 5).
+    const [requestOrder, setRequestOrder] = useState(null);
+    const { showPopup, PopupComponent } = usePopup();
     const [vendorMap, setVendorMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [showSidebar, setShowSidebar] = useState(false);
@@ -741,7 +746,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>{"\u2728"} No orders pending production!</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 <Paginator page={queuePage} totalPages={Math.ceil(filteredQueue.length / ORDERS_PER_PAGE)} onChange={setQueuePage} />
                             </div>
                         )}
@@ -766,7 +771,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>No orders in production</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 <Paginator page={inprodPage} totalPages={Math.ceil(filteredInprod.length / ORDERS_PER_PAGE)} onChange={setInprodPage} />
                             </div>
                         )}
@@ -800,7 +805,7 @@ export default function B2bProductionDashboard() {
                         ) : (
                             <div className="prod-list-scroll">
                                 {paginatedDispatch.map(order => (
-                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder}
+                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder}
                                         getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
                                 ))}
                                 <Paginator page={dispatchPage} totalPages={Math.ceil(dispatchList.length / ORDERS_PER_PAGE)} onChange={setDispatchPage} />
@@ -851,7 +856,7 @@ export default function B2bProductionDashboard() {
                         <div className="prod-list-scroll">
                             {filteredOrders.length === 0 && <p className="prod-muted">No orders match your filters.</p>}
                             {paginatedOrders.map(order => {
-                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
+                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
                             })}
                             <Paginator page={currentPage} totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onChange={setCurrentPage} />
                         </div>
@@ -969,6 +974,16 @@ export default function B2bProductionDashboard() {
                 )}
             </div>
 
+            {PopupComponent}
+            {requestOrder && (
+                <StageRequestModal
+                    order={requestOrder}
+                    components={componentsByOrder[requestOrder.id] || []}
+                    onClose={() => setRequestOrder(null)}
+                    showPopup={showPopup}
+                    requestedBy={profile?.email || user?.email || ""}
+                />
+            )}
             {/* ===== COMPONENT JOURNEY MODAL (shared) ===== */}
             {journeyOrder && (
                 <ComponentJourneyModal
@@ -1015,7 +1030,7 @@ export default function B2bProductionDashboard() {
 }
 
 // ==================== ORDER CARD COMPONENT ====================
-function OrderCard({ order, vendorMap, components = [], onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete }) {
+function OrderCard({ order, vendorMap, components = [], onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete, onRequest }) {
     const item = order.items?.[0] || {};
     const imgSrc = item.image_url || "/placeholder.png";
     // Internal stock: no vendor, no PO, no order type — hide those rows entirely.
@@ -1073,6 +1088,10 @@ function OrderCard({ order, vendorMap, components = [], onView, getStageStatusCl
             <div className="prod-ocard-actions" onClick={(e) => e.stopPropagation()}>
                 {onJourney && components.length > 0 && (
                     <button className="prod-btn-journey" onClick={() => onJourney(order, components)}>View Journey</button>
+                )}
+                {/* Ask the PM to skip / advance pieces (meeting point 5) */}
+                {onRequest && components.length > 0 && (
+                    <button className="prod-btn-journey" onClick={() => onRequest(order)}>Request Skip / Advance</button>
                 )}
                 <button className="prod-btn-detail" onClick={() => onView(order.id)}>View Details</button>
                 {/* Production Head: force-complete bypassing the flow. */}
