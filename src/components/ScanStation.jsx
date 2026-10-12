@@ -32,6 +32,7 @@ import {
     getConfiguredMovement,
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
+import StageRequestModal from "./StageRequestModal";
 import { fetchQcRecords } from "../utils/qcHistory";
 
 // Pieces that are out of the normal production flow. Used to keep them out of
@@ -188,6 +189,11 @@ const buildFriendlyScanError = (rawMsg, toStage) => {
  *
  * @param {object} props
  * @param {string} props.currentUserEmail
+ * @param {boolean} [props.allowStageRequest]
+ *   Show "Ask PM to move this piece" under a scan result (meeting point 5), so
+ *   a worker who hits a stage problem can request a skip / advance for the
+ *   piece in hand. On for the scan-station page and the Warehouse dashboard;
+ *   off for Packaging, which doesn't move production stages.
  * @param {string[]} [props.allowedStations]
  *   Optional list of station `value`s this user is permitted to scan at.
  *   - If omitted/empty → all SCAN_STATIONS visible (legacy / admin use).
@@ -197,7 +203,7 @@ const buildFriendlyScanError = (rawMsg, toStage) => {
  *     the worker can switch between them via the existing "Change Station"
  *     button.
  */
-const ScanStation = ({ currentUserEmail, allowedStations }) => {
+const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = false }) => {
     const { showPopup, PopupComponent } = usePopup();
 
     // Resolve the visible station list.
@@ -227,6 +233,23 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     // accidental double-tap can't immediately scan-out a stage it just
     // scanned-in. Tracks { barcode, ts } of the last accepted scan.
     const lastScanRef = useRef({ barcode: null, ts: 0 });
+    const attemptedBarcodeRef = useRef(null);
+    // Skip / advance request for the scanned piece (meeting point 5).
+    const [requestFor, setRequestFor] = useState(null); // { order, preselectIds }
+    const [requestLoading, setRequestLoading] = useState(false);
+    const openStageRequest = async () => {
+        const code = scanResult?.data?.barcode || attemptedBarcodeRef.current;
+        if (!code) return;
+        setRequestLoading(true);
+        try {
+            const comp = await fetchComponentByBarcode(String(code).trim().toUpperCase());
+            setRequestFor({ order: { id: comp.order_id, order_no: comp.order_no }, preselectIds: [comp.id] });
+        } catch (err) {
+            showPopup({ type: "error", title: "Piece not found", message: "Couldn't find this barcode. Check it and scan again.", confirmText: "OK" });
+        } finally {
+            setRequestLoading(false);
+        }
+    };
     const SCAN_DEBOUNCE_MS = 1000;
 
     // Component detail view
@@ -335,6 +358,9 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
     // ============================================================
     const handleScan = useCallback(async (barcode) => {
         if (isProcessing) return;
+        // The piece this scan was about — used by "Ask PM to move this piece"
+        // when the result itself doesn't carry the barcode.
+        attemptedBarcodeRef.current = barcode;
         if (!selectedStation) {
             setScanResult({
                 success: false,
@@ -1502,7 +1528,28 @@ const ScanStation = ({ currentUserEmail, allowedStations }) => {
                                     View Details
                                 </button>
                             )}
+                            {/* Ask the Production Manager to skip / advance this
+                                piece (meeting point 5) — the piece is preselected. */}
+                            {allowStageRequest && scanResult.error !== "NO_STATION" &&
+                                (scanResult.data?.barcode || attemptedBarcodeRef.current) && (
+                                <button
+                                    className="wd-scan-detail-btn"
+                                    onClick={openStageRequest}
+                                    disabled={requestLoading}
+                                >
+                                    {requestLoading ? "…" : "Ask PM to move this piece"}
+                                </button>
+                            )}
                         </div>
+                    )}
+                    {requestFor && (
+                        <StageRequestModal
+                            order={requestFor.order}
+                            preselectIds={requestFor.preselectIds}
+                            onClose={() => setRequestFor(null)}
+                            showPopup={showPopup}
+                            requestedBy={currentUserEmail}
+                        />
                     )}
 
                     {/* Waiting for scan indicator */}

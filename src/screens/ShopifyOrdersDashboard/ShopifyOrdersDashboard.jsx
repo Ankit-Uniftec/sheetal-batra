@@ -13,6 +13,7 @@ import Badge from "../../components/Badge";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import StageRequestModal from "../../components/StageRequestModal";
 import ProductionOverview from "../../components/ProductionOverview";
 import StageCountCards from "../../components/StageCountCards";
 import ProductionHeadVendors from "../../components/ProductionHeadVendors";
@@ -475,6 +476,8 @@ export default function ShopifyOrdersDashboard() {
   const [orders, setOrders] = useState([]);
   const [componentsByOrder, setComponentsByOrder] = useState({});
   const [journeyOrder, setJourneyOrder] = useState(null);
+  // Order being sent to the PM as a skip / advance request (meeting point 5).
+  const [requestOrder, setRequestOrder] = useState(null);
   // "<orderId>:<itemIndex>" while a manual breakdown is being applied.
   const [savingBreakdown, setSavingBreakdown] = useState(null);
   // The line whose breakdown is being chosen: { order, idx, item } or null.
@@ -1464,6 +1467,13 @@ export default function ShopifyOrdersDashboard() {
               >
                 View Journey
               </button>
+              {/* Ask the PM to skip / advance pieces (meeting point 5) */}
+              <button
+                className="sho-ghost-btn"
+                onClick={(e) => { e.stopPropagation(); setRequestOrder(order); }}
+              >
+                Request Skip / Advance
+              </button>
               {/* QC 1 + Final QC results for this order. Always offered, even
                   before any QC has happened — the modal says so, and "has this
                   been checked yet?" is itself the question being asked. */}
@@ -1612,6 +1622,16 @@ export default function ShopifyOrdersDashboard() {
           orderNo={journeyOrder.order_no}
           components={journeyOrder.components}
           onClose={() => setJourneyOrder(null)}
+        />
+      )}
+      {/* Skip / advance request to the Production Manager (meeting point 5). */}
+      {requestOrder && (
+        <StageRequestModal
+          order={requestOrder}
+          components={componentsByOrder[requestOrder.id] || []}
+          onClose={() => setRequestOrder(null)}
+          showPopup={showPopup}
+          requestedBy={user?.email || ""}
         />
       )}
 
