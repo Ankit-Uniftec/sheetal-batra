@@ -175,6 +175,12 @@ const EXT = { "image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf" 
  * Upload one proof: the file first, then its row. If the row cannot be written
  * the file is left in the bucket but nothing points at it (no delete rule
  * exists, by design), and the error is thrown so the user retries.
+ *
+ * The row is NOT read back after the insert: reading proofs is staff-only,
+ * and an advance proof is also written by the CUSTOMER's session at the moment
+ * the order is placed (r12_02 lets the order's owner add an advance proof in
+ * its first hour) — a read-back would be refused and fail the upload. No
+ * caller uses the row; the stored path is returned instead.
  */
 export async function uploadPaymentProof({ order, checkpoint, file, uploadedBy, paymentId = null, paymentMode = null, amount = null }) {
   const problem = validateProofFile(file);
@@ -189,7 +195,7 @@ export async function uploadPaymentProof({ order, checkpoint, file, uploadedBy, 
     .upload(path, file, { contentType: file.type, upsert: false });
   if (upErr) throw upErr;
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("payment_proofs")
     .insert({
       order_id: order.id,
@@ -204,9 +210,7 @@ export async function uploadPaymentProof({ order, checkpoint, file, uploadedBy, 
       // Which payment it proves, e.g. "UPI ₹5,000" (Release 12, r12_01 SQL).
       payment_mode: paymentMode,
       amount: amount == null ? null : Number(amount),
-    })
-    .select()
-    .single();
+    });
   if (error) throw error;
-  return data;
+  return { file_path: path };
 }

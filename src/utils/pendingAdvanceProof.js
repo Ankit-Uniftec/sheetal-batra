@@ -10,6 +10,12 @@ import { uploadPaymentProof } from "./paymentProofs";
 // sessionStorage, so a page refresh or a resumed draft simply starts with no
 // file (the review screen offers the picker again).
 //
+// It is uploaded by ReviewDetail straight after the order is inserted — under
+// the customer's session, which r12_02 allows for an advance proof on their
+// own order within its first hour — so closing the app afterwards loses
+// nothing. Anything not attached here is added later from Update Payment or
+// the order page.
+//
 // Keyed by the advance part ("UPI|5000", see advanceProofParts), so a file
 // picked for a part that no longer exists (mode or amount changed) is ignored.
 // ============================================================

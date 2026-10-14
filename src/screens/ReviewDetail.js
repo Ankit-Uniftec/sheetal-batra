@@ -14,6 +14,7 @@ import { isOrderMode, clearOrderMode } from "../utils/orderMode";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import AdvanceProofPicker from "../components/AdvanceProofPicker";
+import { uploadPendingAdvanceProofs } from "../utils/pendingAdvanceProof";
 import { advanceProofParts } from "../utils/paymentProofs";
 
 // Auto Signature Logo URL
@@ -156,11 +157,9 @@ export default function ReviewDetail() {
   const isStockOrder = order?.is_stock_order === true || isOrderMode("stock");
 
   // Advance proof picked on the payment screen (or here) — one per non-cash
-  // part of the advance (Release 12). It is NOT uploaded on this screen: the
-  // browser is signed in as the CUSTOMER here (OTP), and proofs accept staff
-  // uploads only. OrderPlaced uploads it right after the SA's session is
-  // restored. A plain call, not a hook: cheap, and must not sit behind any
-  // early return.
+  // part of the advance (Release 12). Uploaded straight after the order is
+  // inserted (below). A plain call, not a hook: cheap, and must not sit behind
+  // any early return.
   const advanceParts = advanceProofParts(order ? { ...order, is_stock_order: isStockOrder } : null);
 
   const totalAmount = Number(order?.grand_total) || 0;
@@ -626,6 +625,14 @@ export default function ReviewDetail() {
       // Non-blocking — order is already placed, components can be created later
     }
 
+    // 4.6 ADVANCE PROOF (Release 12) — as soon as the order exists (the file
+    //     is stored under its id), so closing the app later loses nothing.
+    //     Runs as the customer's session; r12_02 lets the order's owner add an
+    //     advance proof in its first hour. Never blocks: a failure is shown on
+    //     the order-placed screen and the SA adds it from Update Payment.
+    const advanceProof = await uploadPendingAdvanceProofs(
+      insertedOrder, advanceParts, normalizedOrder.salesperson_email || null);
+
     // Delete draft if this was from a draft order
     if (draftId) {
       try {
@@ -908,7 +915,7 @@ export default function ReviewDetail() {
     clearOrderMode();
 
     navigate("/order-placed", {
-      state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
+      state: { order: { ...insertedOrder, items: insertedOrder.items || [] }, advanceProof },
       replace: true,
     });
     } finally {
