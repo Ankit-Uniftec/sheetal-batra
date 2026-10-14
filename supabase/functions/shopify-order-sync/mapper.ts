@@ -289,6 +289,14 @@ export function isAccessoryProduct(product: any): boolean {
   return tags.some((t) => ACCESSORY_TAG_RE.test(clean(t).replace(/\s+/g, " ")));
 }
 
+/**
+ * A potli named on its own. A garment word anywhere ("Kurta Set with Potli")
+ * means an outfit, which must keep flagging rather than lose its pieces.
+ */
+export const isPotliName = (name: string): boolean =>
+  /\bpotli\b/i.test(name) &&
+  !/\b(kurta|choga|kalidaar|anarkali|suit|set|sharara|gharara|garara|lehenga|salwar|palazzo|pant|churidar|blouse|jacket|skirt|dupatta|odhni)\b/i.test(name);
+
 /** The Heavy/Light qualifier, so the distinction isn't lost. "" when plain. */
 const dupattaQualifier = (variant: any): string => {
   const style = opt(variant, "Style");
@@ -358,6 +366,13 @@ function mapLineItem(
   // "which pieces does this make?" question below is the wrong question to ask.
   const isCharge = isNonShippedCharge(node);
 
+  // A potli (bag) is not a garment: one EX piece named after the product.
+  // Read off the NAME, unlike everything else here, because the potli products
+  // carry no styles and their Shopify catalogue cannot be edited. Only ever
+  // consulted when both styles are empty, so a curated metafield always wins.
+  const isPotli = !isCharge && !isPresent(top) && !isPresent(bottom) &&
+    isPotliName(clean(node?.title) || clean(product?.title));
+
   // Both missing → we cannot derive the pieces. The fallback in
   // generateOrderComponents would mint ONE "top" component named after the
   // product, which for a two-piece garment puts it into production with one
@@ -372,7 +387,7 @@ function mapLineItem(
   // sent the order to review, where a human cleared the block by typing
   // placeholder styles — which is what put "Top"/"Bottom" breakdowns on #27567
   // and queued six phantom barcodes.
-  if (!isCharge && !isAccessory && !isPresent(top) && !isPresent(bottom)) {
+  if (!isCharge && !isAccessory && !isPotli && !isPresent(top) && !isPresent(bottom)) {
     blockers.push({
       code: "PRODUCT_STYLE_MISSING",
       detail: `No top_style/bottom_style on "${clean(node?.title)}" (${clean(product?.id)})`,
@@ -386,7 +401,7 @@ function mapLineItem(
   // A charge is exempt: it has no product to read a tag from BY DESIGN, which
   // is the same condition isDupattaUnknown tests for. Asking a human whether a
   // ₹17,500 sleeves alteration includes a dupatta has no meaningful answer.
-  if (!isCharge && isDupattaUnknown(variant, product)) {
+  if (!isCharge && !isPotli && isDupattaUnknown(variant, product)) {
     blockers.push({
       code: "DUPATTA_UNKNOWN",
       detail: `Line item "${clean(node?.title)}" has no Shopify product (manual/custom line) — no Style option or tag to read a dupatta from; confirm before production`,
@@ -400,7 +415,7 @@ function mapLineItem(
   // An accessory IS a dupatta/odhni rather than an outfit that includes one, so
   // it carries the piece by definition — that single DUP component is the whole
   // order. For everything else the tag/Style resolution decides.
-  const includesDupatta = isAccessory || resolveDupatta(variant, product);
+  const includesDupatta = !isPotli && (isAccessory || resolveDupatta(variant, product));
 
   // Per-unit price. discountedUnitPriceSet reflects line discounts; fall back
   // to the original when absent.
@@ -441,7 +456,7 @@ function mapLineItem(
     top: isPresent(top) ? top : "",
     bottom: isPresent(bottom) ? bottom : "",
     includes_dupatta: includesDupatta,
-    extras: [],
+    extras: isPotli ? [{ name: clean(node?.title) || "Potli" }] : [],
 
     // Shopify carries ONE colour per variant ("Blush Pink"), while the app
     // models a colour per component. The whole garment is that colour, so

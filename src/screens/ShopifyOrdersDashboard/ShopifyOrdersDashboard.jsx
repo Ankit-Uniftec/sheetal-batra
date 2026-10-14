@@ -355,12 +355,20 @@ const issueDetailText = (issue) => {
 // So this offers the answer here, where the person is already looking at the
 // product name, the notes and the customer. See 83_manual_line_breakdown.sql.
 
-// Deliberately narrow: only offered when the line has NO Shopify product at
-// all. A line that HAS a product but is missing its metafields is a fixable
-// catalogue problem, and must be fixed in Shopify so every future order of the
-// same product is right — overriding it here would paper over that, one order
-// at a time.
+// Offered for a line with NO Shopify product, and also for a product line the
+// mapper flagged PRODUCT_STYLE_MISSING. That second case is a catalogue gap
+// (e.g. "Potli mustard" has no top/bottom style) which the team cannot always
+// fix in Shopify; without this the order would stay in Needs Review forever.
+// A line keeps the control once answered, so the blocker clearing does not
+// hide the "Change" chip.
 const isManualLine = (item) => !item?.shopify_product_id;
+const canSetBreakdown = (order, item, idx) =>
+  isManualLine(item) ||
+  !!breakdownForItem(order, idx) ||
+  (order?.web_order_issues || []).some(
+    (i) => i.code === "PRODUCT_STYLE_MISSING" &&
+      String(i.detail || "").includes(`"${item?.product_name}"`),
+  );
 
 // What a person can choose. These map onto the three fields
 // generateOrderComponents already consumes (top / bottom / includes_dupatta),
@@ -440,6 +448,9 @@ const BREAKDOWN_SUGGESTIONS = [
     key: "top_bottom",
     re: /\b(kurta|choga|kalidaar|anarkali|blouse|top)\b[\s\S]*\b(salwar|palazzo|pant|churidar|sharara|gharara|garara|skirt|bottom)\b/i,
   },
+
+  // A bag is not a garment: one EX piece named after the product.
+  { key: "extras_only", re: /\b(potli|bag|clutch|pouch)\b/i },
 ];
 
 /**
@@ -1528,12 +1539,13 @@ export default function ShopifyOrdersDashboard() {
             a full-size "Change garment breakdown" button read as open work, so
             an order whose remaining hold was the payment, or a different line,
             looked as if the sorted lines still needed doing. */}
-        {onReviewTab && (order.items || []).some(isManualLine) && (() => {
-          const manualCount = (order.items || []).filter(isManualLine).length;
-          const lines = (order.items || [])
+        {onReviewTab && (() => {
+          const editable = (order.items || [])
             .map((item, idx) => ({ item, idx, choice: matchChoice(breakdownForItem(order, idx)) }))
-            .filter(({ item }) => isManualLine(item))
-            .sort((a, b) => Number(!!a.choice) - Number(!!b.choice));
+            .filter(({ item, idx }) => canSetBreakdown(order, item, idx));
+          if (editable.length === 0) return null;
+          const manualCount = editable.length;
+          const lines = editable.sort((a, b) => Number(!!a.choice) - Number(!!b.choice));
           return (
             <div className="sho-breakdown-bar">
               {lines.map(({ item, idx, choice }) => {
@@ -1593,8 +1605,10 @@ export default function ShopifyOrdersDashboard() {
             <div className="sho-bd-modal">
               <p className="sho-bd-name">“{item.product_name}”</p>
               <p className="sho-bd-why">
-                Typed into a Shopify draft order, so there is no product to read
-                the pieces from. Your choice decides the barcodes.
+                {isManualLine(item)
+                  ? "Typed into a Shopify draft order, so there is no product to read the pieces from."
+                  : "This Shopify product has no top/bottom style set, so the pieces cannot be read from it."}
+                {" "}Your choice decides the barcodes.
                 {suggested ? " The likely answer is highlighted." : ""}
               </p>
               <div className="sho-bd-choices">

@@ -1305,7 +1305,21 @@ export function buildOrderComponents(order) {
   return components;
 }
 
+// A web order in Needs Review has a breakdown nobody trusts yet; minting from
+// it guesses (the product-name TOP fallback put a TOP barcode on a potli,
+// SB-SHOPIFY-1026-010023). The sync edge function already refuses; this is
+// the same rule for the app's paths (Warehouse PDF on a review card).
+const assertMintable = (order) => {
+  if (order?.web_order_status === "needs_review") {
+    throw new Error(
+      `${order.order_no} is in Needs Review, so its barcodes cannot be created yet. ` +
+      `Resolve the issues listed on the order first.`
+    );
+  }
+};
+
 export async function generateOrderComponents(order) {
+  assertMintable(order);
   const { data, error } = await supabase
     .from("order_components")
     .insert(buildOrderComponents(order))
@@ -1345,6 +1359,7 @@ export async function ensureOrderComponents(order) {
   const have = new Set(existing.map((c) => c.barcode));
   const missing = buildOrderComponents(order).filter((c) => !have.has(c.barcode));
   if (missing.length === 0) return existing;
+  assertMintable(order);
 
   const { data: inserted, error: insertError } = await supabase
     .from("order_components")
