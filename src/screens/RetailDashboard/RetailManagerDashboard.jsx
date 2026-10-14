@@ -20,7 +20,7 @@ import { isOrderStillRunning } from "../../utils/productionMetrics";
 import { getWarehouseDate, getWarehouseDateObj } from "../../utils/warehouseDate";
 import { poolsForUser } from "../../utils/stockVisibility";
 import { itemFinalAmount } from "../../utils/itemNetAmount";
-import { getOrderChannelLabel, getStageLabel, PRODUCTION_STAGES } from "../../utils/barcodeService";
+import { getOrderChannelLabel, getOrderChannelKey, getStageLabel, PRODUCTION_STAGES } from "../../utils/barcodeService";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import DashboardHeader from "../../components/DashboardHeader";
@@ -136,6 +136,11 @@ const GrowthIndicator = ({ value }) => {
     );
 };
 
+// Rupee figures: whole rupees. Totals are sums of stored amounts that can carry
+// paise and binary-float noise — formatted raw, Total Revenue read
+// "₹1,09,16,821.900000002". Every ₹ figure on this dashboard goes through here.
+const money = (v) => formatIndianNumber(Math.round(Number(v) || 0));
+
 export default function RetailManagerDashboard() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
@@ -216,7 +221,14 @@ export default function RetailManagerDashboard() {
                 fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
                 supabase.from("vendors").select("id, store_brand_name, vendor_code, location"),
             ]);
-            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
+            // No website (Shopify) order reaches this dashboard at all — not in
+            // any tab, total, chart, comparison or the Production pieces
+            // (client decision 2026-10-14: the Retail Manager sees no Shopify
+            // data). Dropped HERE, once, so no tab can miss it. Uses the app's
+            // standard channel check (SB-SHOPIFY- / legacy SB-SHOP- order number,
+            // or a Shopify order id). The database applies the same rule to this
+            // login (db/meeting_points/r13_01).
+            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms && getOrderChannelKey(o) !== "shopify"));
             if (vendorsRes.data) setVendors(vendorsRes.data);
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
@@ -460,7 +472,7 @@ export default function RetailManagerDashboard() {
         const b2bTotal = periodRevenue(b2bPeriodOrders);
 
         // Everything in the period that is NOT one of the three cards above:
-        // Private, Exhibition, Shopify, the stock pools, and any order whose
+        // Private, Exhibition, the stock pools, and any order whose
         // channel can't be resolved. The "Total" card used to be delhi+ludhiana+
         // b2b, so these rows silently vanished and the total never matched the
         // Store Analytics tab. Surfaced rather than dropped.
@@ -973,14 +985,14 @@ export default function RetailManagerDashboard() {
                             </div>
 
                             {/* KPIs — computed over analyticsOrders, which is EVERY
-                                channel (B2B, Private, Exhibition, Shopify, stock), not
+                                channel (B2B, Private, Exhibition, stock), not
                                 just the two retail stores. Titled accordingly: it read
                                 "Retail Performance" while showing company-wide numbers. */}
                             <h3 className="rm-subsection-title">Overall Performance {"—"} all channels</h3>
                             <div className="rm-stats-grid overview-grid">
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Total Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dashboardStats.totalRevenue)}</span>
+                                    <span className="stat-value">{"\u20B9"}{money(dashboardStats.totalRevenue)}</span>
                                     {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
                                 </div>
                                 <div className="rm-stat-card overview-card">
@@ -1034,7 +1046,7 @@ export default function RetailManagerDashboard() {
                                                     </Pie>
                                                     <Tooltip formatter={(value, name) => {
                                                         const pct = totalChartRevenue > 0 ? ((Number(value) / totalChartRevenue) * 100).toFixed(1) : "0.0";
-                                                        return [`₹${formatIndianNumber(Math.round(Number(value)))} (${pct}%)`, name];
+                                                        return [`₹${money(Math.round(Number(value)))} (${pct}%)`, name];
                                                     }} />
                                                     <Legend verticalAlign="bottom" height={36} />
                                                 </PieChart>
@@ -1080,7 +1092,7 @@ export default function RetailManagerDashboard() {
                                                 return (
                                                     <div className="rm-chart-tooltip">
                                                         <p className="rm-chart-tooltip-label">{label}</p>
-                                                        <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{formatIndianNumber(payload[0].value)}</p>
+                                                        <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{money(payload[0].value)}</p>
                                                         <p className="rm-chart-tooltip-row">Qty sold: {item?.count || 0}</p>
                                                     </div>
                                                 );
@@ -1109,7 +1121,7 @@ export default function RetailManagerDashboard() {
                                                 return (
                                                     <div className="rm-chart-tooltip">
                                                         <p className="rm-chart-tooltip-label"><span className="rm-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>{label}</p>
-                                                        <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{formatIndianNumber(payload[0].value)}</p>
+                                                        <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{money(payload[0].value)}</p>
                                                     </div>
                                                 );
                                             }} />
@@ -1169,8 +1181,8 @@ export default function RetailManagerDashboard() {
                                                             <td>{i + 1}</td>
                                                             <td className="rm-product-cell">{c.name}</td>
                                                             <td>{c.orders}</td>
-                                                            <td>{"₹"}{formatIndianNumber(Math.round(c.sales))}</td>
-                                                            <td>{"₹"}{formatIndianNumber(c.aov)}</td>
+                                                            <td>{"₹"}{money(Math.round(c.sales))}</td>
+                                                            <td>{"₹"}{money(c.aov)}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1194,32 +1206,32 @@ export default function RetailManagerDashboard() {
                             <div className="rm-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Delhi Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.delhiTotal)}</span>
+                                    <span className="stat-value">{"\u20B9"}{money(dayWiseData.delhiTotal)}</span>
                                     <span className="stat-sub">{dayWiseData.delhiOrders} orders</span>
                                 </div>
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Ludhiana Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.ludhianaTotal)}</span>
+                                    <span className="stat-value">{"\u20B9"}{money(dayWiseData.ludhianaTotal)}</span>
                                     <span className="stat-sub">{dayWiseData.ludhianaOrders} orders</span>
                                 </div>
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">B2B Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.b2bTotal)}</span>
+                                    <span className="stat-value">{"\u20B9"}{money(dayWiseData.b2bTotal)}</span>
                                     <span className="stat-sub">{dayWiseData.b2bOrders} orders</span>
                                 </div>
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Combined Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{formatIndianNumber(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.b2bTotal + dayWiseData.otherTotal)}</span>
+                                    <span className="stat-value">{"\u20B9"}{money(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.b2bTotal + dayWiseData.otherTotal)}</span>
                                     <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders + dayWiseData.b2bOrders + dayWiseData.otherCount} orders</span>
                                 </div>
                             </div>
 
-                            {/* Everything not on a card above (Private, Exhibition, Shopify,
+                            {/* Everything not on a card above (Private, Exhibition,
                                 stock, unresolved channel). Shown only when non-zero so the
                                 Combined figure is always explainable. */}
                             {dayWiseData.otherCount > 0 && (
                                 <p className="rm-daywise-note">
-                                    Combined also includes {"₹"}{formatIndianNumber(dayWiseData.otherTotal)} from {dayWiseData.otherCount} order{dayWiseData.otherCount === 1 ? "" : "s"} in other channels (Private, Exhibition, Shopify, stock), which have no card above.
+                                    Combined also includes {"₹"}{money(dayWiseData.otherTotal)} from {dayWiseData.otherCount} order{dayWiseData.otherCount === 1 ? "" : "s"} in other channels (Private, Exhibition, stock), which have no card above.
                                 </p>
                             )}
 
@@ -1239,7 +1251,7 @@ export default function RetailManagerDashboard() {
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#eee" />
                                         <XAxis type="number" tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
                                         <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12, fill: '#444' }} axisLine={false} tickLine={false} />
-                                        <Tooltip formatter={(v) => [`\u20B9${formatIndianNumber(v)}`, "AOV"]} />
+                                        <Tooltip formatter={(v) => [`\u20B9${money(v)}`, "AOV"]} />
                                         <Bar dataKey="aov" radius={[0, 6, 6, 0]} barSize={26}>
                                             <Cell fill="#d5b85a" />
                                             <Cell fill="#8B7355" />
@@ -1267,7 +1279,7 @@ export default function RetailManagerDashboard() {
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <YAxis tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name]} />
+                                                <Tooltip formatter={(v, name) => [`\u20B9${money(v)}`, name]} />
                                                 <Legend />
                                                 <Bar dataKey="delhi" name="Delhi" fill="#d5b85a" radius={[4, 4, 0, 0]} />
                                                 <Bar dataKey="ludhiana" name="Ludhiana" fill="#8B7355" radius={[4, 4, 0, 0]} />
@@ -1288,7 +1300,7 @@ export default function RetailManagerDashboard() {
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <YAxis tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name]} />
+                                                <Tooltip formatter={(v, name) => [`\u20B9${money(v)}`, name]} />
                                                 <Legend />
                                                 <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#d5b85a" fill="rgba(213,184,90,0.15)" strokeWidth={2} />
                                                 <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
@@ -1308,7 +1320,7 @@ export default function RetailManagerDashboard() {
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <YAxis tickFormatter={(v) => `\u20B9${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`\u20B9${formatIndianNumber(v)}`, name]} />
+                                                <Tooltip formatter={(v, name) => [`\u20B9${money(v)}`, name]} />
                                                 <Legend />
                                                 <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#8B7355" fill="rgba(139,115,85,0.15)" strokeWidth={2} />
                                                 <Line type="monotone" dataKey="aov" name="AOV" stroke="#C9A94E" strokeWidth={2} dot={false} />
@@ -1328,7 +1340,7 @@ export default function RetailManagerDashboard() {
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`₹${formatIndianNumber(v)}`, name]} />
+                                                <Tooltip formatter={(v, name) => [`₹${money(v)}`, name]} />
                                                 <Legend />
                                                 <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#C9A94E" fill="rgba(201,169,78,0.15)" strokeWidth={2} />
                                                 <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
@@ -1365,7 +1377,7 @@ export default function RetailManagerDashboard() {
                                                     return (
                                                         <div className="rm-chart-tooltip">
                                                             <p className="rm-chart-tooltip-label">{label}</p>
-                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{formatIndianNumber(payload[0].value)}</p>
+                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{money(payload[0].value)}</p>
                                                             <p className="rm-chart-tooltip-row">Qty: {item?.count || 0}</p>
                                                         </div>
                                                     );
@@ -1395,7 +1407,7 @@ export default function RetailManagerDashboard() {
                                                     return (
                                                         <div className="rm-chart-tooltip">
                                                             <p className="rm-chart-tooltip-label">{label}</p>
-                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{formatIndianNumber(payload[0].value)}</p>
+                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{money(payload[0].value)}</p>
                                                         </div>
                                                     );
                                                 }} />
@@ -1423,7 +1435,7 @@ export default function RetailManagerDashboard() {
                                                     return (
                                                         <div className="rm-chart-tooltip">
                                                             <p className="rm-chart-tooltip-label"><span className="rm-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>{label}</p>
-                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{formatIndianNumber(payload[0].value)}</p>
+                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{money(payload[0].value)}</p>
                                                         </div>
                                                     );
                                                 }} />
@@ -1449,7 +1461,7 @@ export default function RetailManagerDashboard() {
                                                     return (
                                                         <div className="rm-chart-tooltip">
                                                             <p className="rm-chart-tooltip-label"><span className="rm-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>{label}</p>
-                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{formatIndianNumber(payload[0].value)}</p>
+                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{money(payload[0].value)}</p>
                                                         </div>
                                                     );
                                                 }} />
@@ -1476,7 +1488,7 @@ export default function RetailManagerDashboard() {
                                                     return (
                                                         <div className="rm-chart-tooltip">
                                                             <p className="rm-chart-tooltip-label">{label}</p>
-                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{formatIndianNumber(payload[0].value)}</p>
+                                                            <p className="rm-chart-tooltip-row">Sales: {"\u20B9"}{money(payload[0].value)}</p>
                                                             <p className="rm-chart-tooltip-row">Orders: {item?.count || 0}</p>
                                                         </div>
                                                     );
@@ -1503,7 +1515,7 @@ export default function RetailManagerDashboard() {
                                                         <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                                                     ))}
                                                 </Pie>
-                                                <Tooltip formatter={(v) => [`\u20B9${formatIndianNumber(v)}`, "Sales"]} />
+                                                <Tooltip formatter={(v) => [`\u20B9${money(v)}`, "Sales"]} />
                                                 <Legend verticalAlign="bottom" height={36} />
                                             </PieChart>
                                         </ResponsiveContainer>
@@ -1666,7 +1678,7 @@ export default function RetailManagerDashboard() {
                                                             {isUrgent && <span className="rm-urgent-badge">URGENT</span>}
                                                         </td>
                                                         <td className="rm-product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                        <td>{"\u20B9"}{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
+                                                        <td>{"\u20B9"}{money(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                         <td>
                                                             <span className={`rm-payment-badge ${getPaymentStatus(order)}`}>
                                                                 {getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}
