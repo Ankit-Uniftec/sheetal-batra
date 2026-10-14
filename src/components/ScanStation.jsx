@@ -14,6 +14,7 @@ import {
     fetchOrderComponents,
     fetchComponentByBarcode,
     resolveFullBarcode,
+    resolveBarcodeAlias,
     fetchTransitionHistory,
     fetchMovementHistory,
     enrichComponentsWithMovements,
@@ -228,6 +229,9 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
 
     // Scan state
     const [scanResult, setScanResult] = useState(null); // { success, data, error }
+    // An old label that now means a converted piece (Release 11) — shown above
+    // the result so the worker knows to reprint it.
+    const [aliasNotice, setAliasNotice] = useState(null);
     const [scanHistory, setScanHistory] = useState([]);
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -409,6 +413,7 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
 
         setIsProcessing(true);
         setScanResult(null);
+        setAliasNotice(null);
         // Hold the processing/loading state for a brief minimum so every scan
         // visibly registers (worker sees a ~1s loading) and double-taps don't
         // race through.
@@ -423,6 +428,24 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
             // resolveFullBarcode returns the input unchanged if it's already
             // full or can't be resolved unambiguously.
             barcode = await resolveFullBarcode(barcode);
+
+            // An OLD label (meeting point 8, Release 11): the garment breakdown
+            // was corrected after this tag was printed. Converted → carry on
+            // with the piece it now means; retired → stop, nothing to scan.
+            const alias = await resolveBarcodeAlias(barcode);
+            if (alias?.status === "retired") {
+                setScanResult({
+                    success: false,
+                    error: "BARCODE_RETIRED",
+                    message: `${barcode} is no longer used — the garment breakdown of ${alias.order_no || "this order"} was changed${alias.created_at ? ` on ${new Date(alias.created_at).toLocaleDateString("en-GB")}` : ""} and this piece is not made any more. Discard this label.`,
+                });
+                setIsProcessing(false);
+                return;
+            }
+            if (alias?.status === "converted" && alias.current_barcode && alias.current_barcode !== barcode) {
+                setAliasNotice(`Old label ${barcode} → now ${alias.current_barcode}${alias.current_label ? ` (${alias.current_label})` : ""}. Reprint this label when convenient.`);
+                barcode = alias.current_barcode;
+            }
 
             const station = SCAN_STATIONS.find(s => s.value === selectedStation);
 
@@ -1507,6 +1530,13 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                                 ✕
                             </button>
                         </form>
+                    )}
+
+                    {/* Old label → converted piece (Release 11) */}
+                    {aliasNotice && (
+                        <div style={{ margin: "0 0 10px", padding: "8px 12px", borderRadius: 8, background: "#fff8e1", border: "1px solid #ffe082", color: "#8d6e00", fontSize: 13 }}>
+                            ⚠ {aliasNotice}
+                        </div>
                     )}
 
                     {/* Scan Result Display */}

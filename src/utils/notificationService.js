@@ -67,6 +67,10 @@ export const NOTIFICATION_TYPES = {
     STAGE_REQUEST_RAISED: "stage_request_raised",
     STAGE_REQUEST_DECIDED: "stage_request_decided",
 
+    // Shopify desk corrected a garment breakdown after production started
+    // (meeting point 8): pieces taken off the floor / converted.
+    BREAKDOWN_CHANGED: "breakdown_changed",
+
     PVT_ORDER_PLACED: "pvt_order_placed",
     PVT_ORDER_EDITED: "pvt_order_edited",
     PVT_DELIVERY_TODAY: "pvt_delivery_today",
@@ -198,6 +202,10 @@ const RECIPIENT_MAP = {
     ],
     // Decided: sent to the requester only (extraRecipients, by email).
     [NOTIFICATION_TYPES.STAGE_REQUEST_DECIDED]: [],
+    // + the order's production head (extraRecipients, resolved per order).
+    [NOTIFICATION_TYPES.BREAKDOWN_CHANGED]: [
+        { designation: "Production Manager", channel: "in_app" },
+    ],
 };
 
 // ==========================================
@@ -355,6 +363,14 @@ const TEMPLATES = {
             ? `Your ${meta.request_type} request for ${meta.order_no} was approved — ${meta.applied_count} of ${meta.piece_count} piece${meta.piece_count === 1 ? "" : "s"} moved to ${meta.target_label}.`
             : `Your ${meta.request_type} request for ${meta.order_no} was rejected${meta.decision_note ? `: ${meta.decision_note}` : "."}`,
         priority: "normal",
+    }),
+    [NOTIFICATION_TYPES.BREAKDOWN_CHANGED]: (meta) => ({
+        title: "Garment Breakdown Changed",
+        message: `${meta.order_no} · ${meta.product_name || "a line"} is now "${meta.to_label}". `
+            + (meta.retired ? `Taken off the floor: ${meta.retired}. ` : "")
+            + (meta.converted ? `Relabelled: ${meta.converted} (old labels still scan). ` : "")
+            + `Reason: ${meta.reason} — ${meta.changed_by || "Shopify desk"}`,
+        priority: meta.retired ? "urgent" : "normal",
     }),
     [NOTIFICATION_TYPES.PVT_ORDER_PLACED]: (meta) => ({
         title: "New Private Order Placed",
