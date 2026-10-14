@@ -57,3 +57,43 @@ test("cash check ignores case and spaces", () => {
   expect(isCashMode("UPI")).toBe(false);
   expect(isCashMode(null)).toBe(false);
 });
+
+// ---- Release 12: advance proofs -------------------------------------------
+import { advanceProofParts, matchAdvanceProofs, proofPaymentLabel } from "./paymentProofs";
+
+test("advance parts: one non-cash mode → the whole advance; cash / COD → none", () => {
+  expect(advanceProofParts({ order_no: "SB-DLC-1", advance_payment: 5000, payment_mode: "UPI" }))
+    .toEqual([{ key: "UPI|5000", mode: "UPI", amount: 5000 }]);
+  expect(advanceProofParts({ order_no: "SB-DLC-1", advance_payment: 5000, payment_mode: "Cash" })).toEqual([]);
+  expect(advanceProofParts({ order_no: "SB-DLC-1", advance_payment: 5000, payment_mode: "COD" })).toEqual([]);
+});
+
+test("advance parts: split → one per non-cash part", () => {
+  const order = {
+    order_no: "SB-DLC-1", advance_payment: 7000, is_split_payment: true,
+    payment_mode: JSON.stringify([{ mode: "UPI", amount: 5000 }, { mode: "Cash", amount: 2000 }, { mode: "Credit Card", amount: 0 }]),
+  };
+  expect(advanceProofParts(order).map((p) => p.key)).toEqual(["UPI|5000"]);
+});
+
+test("advance parts: none for website, stock, cancelled or a zero advance", () => {
+  expect(advanceProofParts({ order_no: "SB-SHOPIFY-0926-1", advance_payment: 5000, payment_mode: "UPI" })).toEqual([]);
+  expect(advanceProofParts({ order_no: "SB-STOCK-1", is_stock_order: true, advance_payment: 5000, payment_mode: "UPI" })).toEqual([]);
+  expect(advanceProofParts({ order_no: "SB-DLC-1", status: "cancelled", advance_payment: 5000, payment_mode: "UPI" })).toEqual([]);
+  expect(advanceProofParts({ order_no: "SB-DLC-1", advance_payment: 0, payment_mode: "UPI" })).toEqual([]);
+});
+
+test("matching proofs to parts: by mode + amount; old unlabeled proofs go to a lone part", () => {
+  const parts = [{ key: "UPI|5000", mode: "UPI", amount: 5000 }, { key: "Credit Card|2000", mode: "Credit Card", amount: 2000 }];
+  const proofs = [
+    { id: 1, checkpoint: "advance", payment_mode: "UPI", amount: 5000 },
+    { id: 2, checkpoint: "advance", payment_mode: null, amount: null },
+    { id: 3, checkpoint: "balance", payment_mode: "UPI", amount: 5000 },
+  ];
+  const m = matchAdvanceProofs(parts, proofs);
+  expect(m.parts.map((p) => p.proofs.map((x) => x.id))).toEqual([[1], []]);
+  expect(m.unlabeled.map((x) => x.id)).toEqual([2]);
+  expect(matchAdvanceProofs([parts[1]], proofs).parts[0].proofs.map((x) => x.id)).toEqual([2]);
+  expect(proofPaymentLabel({ payment_mode: "UPI", amount: 5000 })).toBe("UPI ₹5,000");
+  expect(proofPaymentLabel({})).toBeNull();
+});

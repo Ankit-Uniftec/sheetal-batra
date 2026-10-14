@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { advanceProofParts } from "../../utils/paymentProofs";
+import { getPendingAdvanceProofs, uploadPendingAdvanceProofs, clearPendingAdvanceProofs } from "../../utils/pendingAdvanceProof";
 import { supabase } from "../../lib/supabaseClient";
 import Logo from "../../images/logo.png";
 import { usePopup } from "../../components/Popup";
@@ -10,6 +12,10 @@ export default function OrderPlaced() {
   const location = useLocation();
   const { showPopup, PopupComponent } = usePopup();
   const order = location.state?.order;
+  // Advance proof picked while placing (Release 12). Uploaded below, once the
+  // SA's own session is back — the customer's session cannot write proofs.
+  const advanceParts = advanceProofParts(order);
+  const pendingProofs = Object.keys(getPendingAdvanceProofs()).length > 0 && advanceParts.length > 0;
   const [restoring, setRestoring] = useState(false);
 
   const handleBackToDashboard = async () => {
@@ -53,6 +59,23 @@ export default function OrderPlaced() {
           sessionStorage.setItem("requireVerification", "true");
           sessionStorage.removeItem("associateSession");
           sessionStorage.removeItem("returnToAssociate");
+
+          // The SA is signed in again → now the advance proof can be saved.
+          // Never blocks the way back: a failure is reported, and the SA adds
+          // it from Update Payment.
+          if (pendingProofs) {
+            const res = await uploadPendingAdvanceProofs(order, advanceParts, restoredEmail || null);
+            if (res.failed.length) {
+              showPopup({
+                title: "Advance proof not saved",
+                message: `The order is placed, but ${res.failed.join(", ")} could not be uploaded. Add it from Update Payment on the order.`,
+                type: "warning",
+                confirmText: "OK",
+                onConfirm: () => navigate(returnDashboard, { replace: true }),
+              });
+              return;
+            }
+          }
           navigate(returnDashboard, { replace: true });
           return;
         }
@@ -68,7 +91,9 @@ export default function OrderPlaced() {
         console.warn("No associateSession found in sessionStorage — cannot restore SA session.");
       }
 
-      // Fallback: clean up everything, sign out, and tell the user clearly
+      // Fallback: clean up everything, sign out, and tell the user clearly.
+      // A held advance proof cannot be saved without the SA's session.
+      clearPendingAdvanceProofs();
       clearOrderFlowKeys();
       try { await supabase.auth.signOut(); } catch (_) { /* ignore */ }
 
@@ -168,6 +193,11 @@ export default function OrderPlaced() {
         </div>
 
         {/* Back to Dashboard Button */}
+        {pendingProofs && (
+          <p style={{ margin: "0 0 10px", fontSize: 13, color: "#8B7355" }}>
+            📎 The advance payment proof is saved when you return to the dashboard.
+          </p>
+        )}
         <button className="op-btn op-btn-primary" onClick={handleBackToDashboard} disabled={restoring}>
           {restoring ? "Restoring..." : "Return to Dashboard"}
         </button>

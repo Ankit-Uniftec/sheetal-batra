@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import formatDate from "../utils/formatDate";
 import formatIndianNumber from "../utils/formatIndianNumber";
-import { canAttachPaymentProof, isCashMode, isWebsiteOrder, listPaymentProofs, proofSignedUrl } from "../utils/paymentProofs";
+import { canAttachPaymentProof, isCashMode, isWebsiteOrder, listPaymentProofs, proofPaymentLabel, proofSignedUrl } from "../utils/paymentProofs";
 import PaymentProofModal from "./PaymentProofModal";
 import "./PaymentProofModal.css";
 
@@ -53,7 +53,9 @@ export default function PaymentProofsPanel({ order, showPopup, uploadedBy, class
   const canAdd = canAttachPaymentProof(order, laterNonCash);
   const paymentLabel = (p) => {
     const pay = paymentsById[p.payment_id];
-    return pay ? `${pay.payment_mode} ₹${formatIndianNumber(pay.amount)}${pay.paid_at ? ` · ${formatDate(pay.paid_at)}` : ""}` : null;
+    // A linked payment row first; otherwise the mode + amount stored with the
+    // proof itself (advance proofs, Release 12).
+    return pay ? `${pay.payment_mode} ₹${formatIndianNumber(pay.amount)}${pay.paid_at ? ` · ${formatDate(pay.paid_at)}` : ""}` : proofPaymentLabel(p);
   };
 
   const openProof = async (p) => {

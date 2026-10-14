@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import { PROOF_ACCEPT, isCashMode, isWebsiteOrder, validateProofFile } from "../utils/paymentProofs";
+import AdvanceProofSection from "./AdvanceProofSection";
 import "./DeliveryPaymentModal.css";
 import "./PaymentProofModal.css";
 
@@ -16,6 +17,10 @@ import "./PaymentProofModal.css";
 // PDF (meeting point 26). It is handed to onConfirm as row.proofFile and
 // uploaded by utils/recordPayment after the payment is saved, linked to that
 // row. Cash rows and website (Shopify) orders get no picker.
+//
+// The ADVANCE taken at order time has its own "Advance proof" section
+// (AdvanceProofSection, Release 12): it uploads on its own, without recording
+// a payment, and shows even when the order is fully paid.
 
 const PAYMENT_MODES = ["Cash", "UPI", "Credit Card", "Debit Card", "Bank Transfer"];
 
@@ -117,6 +122,8 @@ export default function UpdatePaymentModal({ order, onCancel, onConfirm, saving 
             <span>₹{formatIndianNumber(balanceDue)}</span>
           </div>
         </div>
+
+        <AdvanceProofSection order={order} disabled={saving} />
 
         {balanceDue <= 0 ? (
           <p className="dpm-nothing">This order is fully paid — nothing to collect.</p>

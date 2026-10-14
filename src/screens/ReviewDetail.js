@@ -13,6 +13,8 @@ import { usePopup } from "../components/Popup";
 import { isOrderMode, clearOrderMode } from "../utils/orderMode";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
+import AdvanceProofPicker from "../components/AdvanceProofPicker";
+import { advanceProofParts } from "../utils/paymentProofs";
 
 // Auto Signature Logo URL
 const AUTO_SIGNATURE_URL = "https://qlqvchcvuwjnfranqcmx.supabase.co/storage/v1/object/public/signature/logo.png";
@@ -152,6 +154,14 @@ export default function ReviewDetail() {
   // skip Private-SA verification, force the order_no to the STOCK prefix
   // (via p_store: 'Internal' in the RPC), and skip WhatsApp.
   const isStockOrder = order?.is_stock_order === true || isOrderMode("stock");
+
+  // Advance proof picked on the payment screen (or here) — one per non-cash
+  // part of the advance (Release 12). It is NOT uploaded on this screen: the
+  // browser is signed in as the CUSTOMER here (OTP), and proofs accept staff
+  // uploads only. OrderPlaced uploads it right after the SA's session is
+  // restored. A plain call, not a hook: cheap, and must not sit behind any
+  // early return.
+  const advanceParts = advanceProofParts(order ? { ...order, is_stock_order: isStockOrder } : null);
 
   const totalAmount = Number(order?.grand_total) || 0;
   const advancePayment = Number(order?.advance_payment) || 0;
@@ -1241,6 +1251,7 @@ export default function ReviewDetail() {
             <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
             <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
           </div>
+          <AdvanceProofPicker parts={advanceParts} />
         </div>
 
         {/* ─── Other Details (Exhibition orders only) ──────────────
