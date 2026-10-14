@@ -13,6 +13,9 @@ import { usePopup } from "../components/Popup";
 import { isOrderMode, clearOrderMode } from "../utils/orderMode";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
+import AdvanceProofPicker from "../components/AdvanceProofPicker";
+import { uploadPendingAdvanceProofs } from "../utils/pendingAdvanceProof";
+import { advanceProofParts } from "../utils/paymentProofs";
 
 // Auto Signature Logo URL
 const AUTO_SIGNATURE_URL = "https://qlqvchcvuwjnfranqcmx.supabase.co/storage/v1/object/public/signature/logo.png";
@@ -152,6 +155,12 @@ export default function ReviewDetail() {
   // skip Private-SA verification, force the order_no to the STOCK prefix
   // (via p_store: 'Internal' in the RPC), and skip WhatsApp.
   const isStockOrder = order?.is_stock_order === true || isOrderMode("stock");
+
+  // Advance proof picked on the payment screen (or here) — one per non-cash
+  // part of the advance (Release 12). Uploaded straight after the order is
+  // inserted (below). A plain call, not a hook: cheap, and must not sit behind
+  // any early return.
+  const advanceParts = advanceProofParts(order ? { ...order, is_stock_order: isStockOrder } : null);
 
   const totalAmount = Number(order?.grand_total) || 0;
   const advancePayment = Number(order?.advance_payment) || 0;
@@ -616,6 +625,14 @@ export default function ReviewDetail() {
       // Non-blocking — order is already placed, components can be created later
     }
 
+    // 4.6 ADVANCE PROOF (Release 12) — as soon as the order exists (the file
+    //     is stored under its id), so closing the app later loses nothing.
+    //     Runs as the customer's session; r12_02 lets the order's owner add an
+    //     advance proof in its first hour. Never blocks: a failure is shown on
+    //     the order-placed screen and the SA adds it from Update Payment.
+    const advanceProof = await uploadPendingAdvanceProofs(
+      insertedOrder, advanceParts, normalizedOrder.salesperson_email || null);
+
     // Delete draft if this was from a draft order
     if (draftId) {
       try {
@@ -898,7 +915,7 @@ export default function ReviewDetail() {
     clearOrderMode();
 
     navigate("/order-placed", {
-      state: { order: { ...insertedOrder, items: insertedOrder.items || [] } },
+      state: { order: { ...insertedOrder, items: insertedOrder.items || [] }, advanceProof },
       replace: true,
     });
     } finally {
@@ -1241,6 +1258,7 @@ export default function ReviewDetail() {
             <div className="field"><label>Advance Payment:</label><span>₹{formatIndianNumber(advancePayment)}</span></div>
             <div className="field"><label>Balance:</label><span>₹{formatIndianNumber(pricing.remaining)}</span></div>
           </div>
+          <AdvanceProofPicker parts={advanceParts} />
         </div>
 
         {/* ─── Other Details (Exhibition orders only) ──────────────

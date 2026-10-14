@@ -10,6 +10,9 @@ export default function OrderPlaced() {
   const location = useLocation();
   const { showPopup, PopupComponent } = usePopup();
   const order = location.state?.order;
+  // Advance proof outcome (Release 12) — uploaded by ReviewDetail right after
+  // the order was inserted. { saved, failed[] } or undefined when none picked.
+  const advanceProof = location.state?.advanceProof;
   const [restoring, setRestoring] = useState(false);
 
   const handleBackToDashboard = async () => {
@@ -168,6 +171,16 @@ export default function OrderPlaced() {
         </div>
 
         {/* Back to Dashboard Button */}
+        {advanceProof?.saved > 0 && !advanceProof.failed?.length && (
+          <p style={{ margin: "0 0 10px", fontSize: 13, color: "#2e7d32" }}>
+            📎 Advance payment proof saved.
+          </p>
+        )}
+        {advanceProof?.failed?.length > 0 && (
+          <p style={{ margin: "0 0 10px", fontSize: 13, color: "#c62828" }}>
+            ⚠ Advance proof not saved: {advanceProof.failed.join(", ")}. Add it later from Update Payment or the order page.
+          </p>
+        )}
         <button className="op-btn op-btn-primary" onClick={handleBackToDashboard} disabled={restoring}>
           {restoring ? "Restoring..." : "Return to Dashboard"}
         </button>

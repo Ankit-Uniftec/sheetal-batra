@@ -446,6 +446,9 @@ export default function Dashboard() {
           // advance_payment = order-time advance (what the invoice prints).
           // total_paid = everything received; use it for any balance figure.
           "advance_payment", "total_paid", "remaining_payment",
+          // How the advance was paid — the Update Payment popup's "Advance
+          // proof" offers one upload per non-cash part (Release 12).
+          "payment_mode", "is_split_payment",
           "total_quantity", "is_stock_order", "is_alteration", "alteration_location",
           "is_rework", "warehouse_stage", "user_id",
           "delivery_name", "delivery_email", "delivery_phone",

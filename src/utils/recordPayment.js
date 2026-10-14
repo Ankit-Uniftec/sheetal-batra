@@ -98,6 +98,8 @@ async function uploadRowProofs(order, rows, inserted, uploadedBy) {
                 file: r.proofFile,
                 uploadedBy,
                 paymentId: match != null ? inserted[match].id : null,
+                paymentMode: r.mode,
+                amount: r.amount,
             });
             proofsSaved++;
         } catch (err) {

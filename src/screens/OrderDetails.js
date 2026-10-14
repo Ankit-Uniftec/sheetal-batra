@@ -11,6 +11,9 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import Popup from "../components/Popup";
 import SplitPaymentModal from "../components/SplitPaymentModal";
 import { STORE_ADDRESSES } from "../utils/shippingAddress";
+import AdvanceProofPicker from "../components/AdvanceProofPicker";
+import { advanceProofParts } from "../utils/paymentProofs";
+import { isOrderMode } from "../utils/orderMode";
 
 const countryOptions = [
   { label: "India", value: "India" },
@@ -131,6 +134,14 @@ export default function OrderDetails() {
   const [deliveryPincode, setDeliveryPincode] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [paymentMode, setPaymentMode] = useState("UPI");
+  // The non-cash parts of the advance being taken — each can carry a proof,
+  // held until Place Order (Release 12, components/AdvanceProofPicker).
+  const advanceParts = useMemo(() => advanceProofParts({
+    advance_payment: advancePayment,
+    payment_mode: isSplitPayment ? JSON.stringify(splitPayments) : paymentMode,
+    is_split_payment: isSplitPayment,
+    is_stock_order: isOrderMode("stock"),
+  }), [advancePayment, paymentMode, isSplitPayment, splitPayments]);
 
   // Gifting recipient details
   const [giftRecipientName, setGiftRecipientName] = useState("");
@@ -1930,6 +1941,8 @@ export default function OrderDetails() {
               </span>
             </div>
           </div>
+
+          <AdvanceProofPicker parts={advanceParts} />
 
           {(pricing.codCharge > 0 || pricing.shippingCharge > 0) && (
             <div className="row3">
