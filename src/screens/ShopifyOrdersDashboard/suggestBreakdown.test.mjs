@@ -9,10 +9,10 @@
 //
 // Run:
 //   node src/screens/ShopifyOrdersDashboard/suggestBreakdown.test.mjs
-// (extract BREAKDOWN_SUGGESTIONS + suggestBreakdown into ./suggest.mjs first —
-//  they live in the dashboard file, which imports React and cannot run in node)
+// (suggestBreakdown lives in ./breakdown.mjs, a plain module node can run)
+//
 import assert from "node:assert/strict";
-import { suggestBreakdown } from "./suggest.mjs";
+import { suggestBreakdown } from "./breakdown.mjs";
 const cases = [
   // The three REAL names from the live orders.
   ["LIghter Dupatta", "dupatta_only"],

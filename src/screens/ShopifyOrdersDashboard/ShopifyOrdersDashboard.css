@@ -1263,3 +1263,35 @@
 @media (max-width: 520px) {
     .sho-bd-choices { grid-template-columns: 1fr; }
 }
+
+/* ---- Breakdown Changes screen (meeting point 8, Release 11) ---- */
+.sho-bdc { display: flex; flex-direction: column; gap: 16px; }
+.sho-bdc-card {
+  background: #FFFFFFB0;
+  border: 1px solid #e4dac6;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.sho-bdc-card h3 { margin: 0 0 6px; font-size: 16px; }
+.sho-bdc-search { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.sho-bdc-search input { flex: 1; min-width: 200px; height: 40px; padding: 0 12px; border: 1px solid #e0d5c5; border-radius: 8px; }
+.sho-bdc-search button,
+.sho-bdc-line-head button,
+.sho-bdc-filters button {
+  height: 36px; padding: 0 14px; border: 0; border-radius: 8px;
+  background: #d5b85a; color: #fff; cursor: pointer; font-size: 13px;
+}
+.sho-bdc-search button:disabled, .sho-bdc-filters button:disabled { opacity: 0.5; cursor: default; }
+.sho-bdc-error { color: #c62828; font-size: 13px; }
+.sho-bdc-order p { margin: 6px 0; }
+.sho-bdc-line { border-top: 1px solid #eee; padding: 8px 0; }
+.sho-bdc-line-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sho-bdc-line ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sho-bdc-log-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sho-bdc-filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.sho-bdc-filters input[type="date"] { height: 32px; border: 1px solid #e0d5c5; border-radius: 6px; padding: 0 6px; }
+.sho-bdc-table { overflow-x: auto; margin-top: 10px; }
+.sho-bdc-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sho-bdc-table th, .sho-bdc-table td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid #eee; }
+.sho-bdc-table th { background: rgba(213, 184, 90, 0.12); white-space: nowrap; }
+.sho-bdc-started { color: #c62828; font-size: 11px; font-weight: 600; }

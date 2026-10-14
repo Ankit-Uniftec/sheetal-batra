@@ -802,6 +802,8 @@ export function describeTransition(t, movements, passMap) {
   const isExit = t.transition_type === "security_exit";
   const isEntry = t.transition_type === "security_entry";
   // Release 6: the SB WH Delhi (2) guard's two scans on a trip there.
+  // Release 11: a garment-breakdown correction on this piece.
+  const isBreakdown = t.transition_type === "breakdown_change" || t.transition_type === "breakdown_retired";
   const isF2Arrival = t.transition_type === "f2_arrival";
   const isF2Departure = t.transition_type === "f2_departure";
   const external = isExit || isEntry || isF2Arrival || isF2Departure;
@@ -843,7 +845,9 @@ export function describeTransition(t, movements, passMap) {
   const passTag = pass ? ` (${pass})` : "";
 
   const trip = stageForTrip ? ` (${stageForTrip})` : "";
-  const headline = isF2Arrival
+  const headline = isBreakdown
+    ? (t.transition_type === "breakdown_retired" ? "Taken off the floor — breakdown changed" : `Breakdown changed — now ${t.barcode}`)
+    : isF2Arrival
     ? `Arrived at SB WH Delhi (2)${passTag}`
     : isF2Departure
       ? `Left SB WH Delhi (2)${passTag}`
@@ -859,7 +863,7 @@ export function describeTransition(t, movements, passMap) {
     pass,
     tagLabel: external ? "External / Vendor" : "Internal Scan",
     // only show the raw type suffix for non-scan internal rows (e.g. manual_override)
-    showType: !external && t.transition_type && t.transition_type !== "scan",
+    showType: !external && !isBreakdown && t.transition_type && t.transition_type !== "scan",
   };
 }
 
@@ -1125,9 +1129,53 @@ export async function fetchComponentByBarcode(barcode) {
     }
   }
 
+  // An old label (Release 11): the piece it now means, or a plain "retired".
+  const alias = await resolveBarcodeAlias(barcode);
+  if (alias?.status === "converted" && alias.current_barcode && alias.current_barcode !== barcode) {
+    return fetchComponentByBarcode(alias.current_barcode);
+  }
+  if (alias?.status === "retired") {
+    const e = new Error(`Barcode "${barcode}" is no longer used — the garment breakdown was changed and this piece is not made any more. Discard this label.`);
+    e.code = "BARCODE_RETIRED";
+    throw e;
+  }
+
   const e = new Error(`Barcode "${barcode}" was not found. Check the tag and scan again.`);
   e.code = "BARCODE_NOT_FOUND";
   throw e;
+}
+
+// ============================================================
+// 7b. OLD LABELS (meeting point 8, Release 11)
+// ============================================================
+// When a wrong garment breakdown is corrected, a piece can be CONVERTED (Top →
+// Extra: same piece, new barcode) or RETIRED. Labels already printed still
+// carry the old barcode, so barcode_aliases (db r11_01) maps old → piece.
+//
+// Returns null when the barcode is a live piece of its own (a barcode that was
+// re-created always wins over its old link) or is unknown; otherwise
+//   { status: "converted", current_barcode, ... }  scan the converted piece
+//   { status: "retired", reason, created_at, ... } the piece is no longer made
+// Any read error → null, i.e. scanning behaves exactly as before.
+export async function resolveBarcodeAlias(barcode) {
+  const raw = (barcode || "").trim();
+  if (!raw) return null;
+  const { data: live } = await supabase
+    .from("order_components").select("id").eq("barcode", raw).is("cancelled_at", null).limit(1);
+  if (live?.length) return null;
+  const { data: alias, error } = await supabase
+    .from("barcode_aliases")
+    .select("old_barcode, status, component_id, new_barcode, order_no, reason, created_at")
+    .eq("old_barcode", raw)
+    .maybeSingle();
+  if (error || !alias) return null;
+  if (alias.status === "converted" && alias.component_id) {
+    // Follow the piece, not the stored text: it may have been converted again.
+    const { data: c } = await supabase
+      .from("order_components").select("barcode, component_label").eq("id", alias.component_id).maybeSingle();
+    return { ...alias, current_barcode: c?.barcode || alias.new_barcode, current_label: c?.component_label || "" };
+  }
+  return alias;
 }
 
 // ============================================================
