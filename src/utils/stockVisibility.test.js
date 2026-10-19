@@ -31,11 +31,11 @@ describe("poolsForUser", () => {
     expect(p).not.toContain("consignment");
   });
 
-  test("group 3 — retail manager adds B2B stock + consignment, still no Shopify", () => {
+  test("group 3 — retail manager: same as store managers, no B2B/consignment/Shopify", () => {
     const p = poolsForUser({ role: "retail_manager" });
-    expect(sorted(p)).toEqual(
-      sorted(["delhi", "ludhiana", "factory", "retail_stock", "b2b_stock", "consignment"])
-    );
+    expect(sorted(p)).toEqual(sorted(["delhi", "ludhiana", "factory", "retail_stock"]));
+    expect(p).not.toContain("b2b_stock");
+    expect(p).not.toContain("consignment");
     expect(p).not.toContain("shopify_stock");
   });
 
