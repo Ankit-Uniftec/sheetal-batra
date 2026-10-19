@@ -10,6 +10,7 @@ import {
     recordQcResult,
     securityGuardScan,
     verifyPackagingComponents,
+    releaseF2ForDispatch,
     createShipment,
     fetchOrderComponents,
     fetchComponentByBarcode,
@@ -456,7 +457,13 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                 // is there: Arrived or Left (Release 6). Everyone else: as before.
                 const trip = myFactory === WH2 && component.is_outside_wh
                     ? await fetchOpenFactory2Trip(component.id) : null;
-                const { scanType, leg } = gateLeg({ isOutside: component.is_outside_wh, myFactory, trip });
+                const gate = gateLeg({ isOutside: component.is_outside_wh, myFactory, trip });
+                const { scanType } = gate;
+                let { leg } = gate;
+                // Release 14: the Production Head set up a vendor trip while the
+                // piece is AT SB WH Delhi (2) → this Exit sends it to that vendor
+                // (an ordinary vendor exit, shown with the trip), not "back to WH 1".
+                if (leg === "f2_departure" && (await getConfiguredMovement(component.id))) leg = null;
 
                 // 30-minute duplicate-scan guard: block a repeat exit (or entry)
                 // within 30 min of the last one for this component, so an
@@ -1264,6 +1271,20 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                 manual_tick: ["Packaging verified via checkbox", "Dispatched (checkbox)"],
             };
 
+            // Pieces still "away" (Release 14): a piece AT SB WH Delhi (2) is
+            // dispatched from there only — an SB WH Delhi (2) login first closes
+            // its trip there (release_f2_for_dispatch, all-or-nothing); anyone
+            // else is stopped before anything moves.
+            const away = (packagingPopup.allComponents || [])
+                .filter((c) => packagingPopup.scannedBarcodes.includes(c.barcode) && c.is_outside_wh);
+            if (away.length) {
+                if (myFactory !== WH2) {
+                    throw new Error(`${away.map((c) => c.barcode).join(", ")} ${away.length === 1 ? "is" : "are"} at ${away[0].vendor_name || "a vendor"}, not here. Dispatch from there, or bring ${away.length === 1 ? "it" : "them"} back through the gate first. Nothing was dispatched.`);
+                }
+                const rel = await releaseF2ForDispatch(away.map((c) => c.barcode), currentUserEmail);
+                if (!rel?.success) throw new Error(rel?.message || "Could not release the pieces at SB WH Delhi (2). Nothing was dispatched.");
+            }
+
             const result = await verifyPackagingComponents(
                 packagingPopup.orderId,
                 packagingPopup.scannedBarcodes,
@@ -1275,11 +1296,16 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                 // and on to dispatched. Once every active component is dispatched,
                 // the sync_order_warehouse_stage trigger auto-completes the order
                 // (SA sees "Order Ready & Dispatched"). V2 Stage 10.
+                // Every step is CHECKED (Release 14): a refused step used to be
+                // ignored — the box was still recorded and "dispatched" shown
+                // while the piece never moved. Now a refusal stops here, before
+                // the box, and names the piece.
+                const refused = [];
                 for (const barcode of packagingPopup.scannedBarcodes) {
                     const kind = confirmKind(barcode);
                     const [verifyNote, dispatchNote] = NOTES[kind];
                     // Step into Packaging & Dispatch (records the packaging step)
-                    await advanceComponentStage(
+                    const step1 = await advanceComponentStage(
                         barcode,
                         "packaging_dispatch",
                         currentUserEmail,
@@ -1287,8 +1313,9 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                         verifyNote,
                         kind
                     );
+                    if (step1?.success === false) { refused.push(`${barcode}: ${step1.message || step1.error}`); continue; }
                     // Then dispatch it (completes the journey)
-                    await advanceComponentStage(
+                    const step2 = await advanceComponentStage(
                         barcode,
                         "dispatched",
                         currentUserEmail,
@@ -1296,6 +1323,10 @@ const ScanStation = ({ currentUserEmail, allowedStations, allowStageRequest = fa
                         dispatchNote,
                         kind
                     );
+                    if (step2?.success === false) refused.push(`${barcode}: ${step2.message || step2.error}`);
+                }
+                if (refused.length) {
+                    throw new Error(`Not dispatched — ${refused.join("; ")}. No box was recorded; fix this and scan again.`);
                 }
 
                 // Record the BOX. What was just scanned into it is what the customer

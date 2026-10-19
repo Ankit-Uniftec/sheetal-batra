@@ -806,7 +806,8 @@ export function describeTransition(t, movements, passMap) {
   const isBreakdown = t.transition_type === "breakdown_change" || t.transition_type === "breakdown_retired";
   const isF2Arrival = t.transition_type === "f2_arrival";
   const isF2Departure = t.transition_type === "f2_departure";
-  const external = isExit || isEntry || isF2Arrival || isF2Departure;
+  const isF2Release = t.transition_type === "f2_dispatch_release";
+  const external = isExit || isEntry || isF2Arrival || isF2Departure || isF2Release;
 
   let stageForTrip = null;
   let toWh2 = false;
@@ -849,6 +850,8 @@ export function describeTransition(t, movements, passMap) {
     ? (t.transition_type === "breakdown_retired" ? "Taken off the floor — breakdown changed" : `Breakdown changed — now ${t.barcode}`)
     : isF2Arrival
     ? `Arrived at SB WH Delhi (2)${passTag}`
+    : isF2Release
+      ? `Dispatched directly from SB WH Delhi (2)${passTag}`
     : isF2Departure
       ? `Left SB WH Delhi (2)${passTag}`
       : isExit
@@ -974,6 +977,18 @@ export async function verifyPackagingComponents(orderId, scannedBarcodes, itemIn
     p_item_index: itemIndex,
   });
 
+  if (error) throw error;
+  return data;
+}
+
+// Dispatch directly from SB WH Delhi (2) (Release 14, db r14_01): closes the
+// pieces' trip there so the normal packaging steps can run. Only an SB WH
+// Delhi (2) login may call it; all-or-nothing.
+export async function releaseF2ForDispatch(barcodes, by) {
+  const { data, error } = await supabase.rpc("release_f2_for_dispatch", {
+    p_barcodes: barcodes,
+    p_by: by,
+  });
   if (error) throw error;
   return data;
 }
