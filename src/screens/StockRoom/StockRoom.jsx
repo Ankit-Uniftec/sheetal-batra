@@ -23,6 +23,7 @@ import StockActionForm from "./StockActionForm";
 import ProductEditor from "./ProductEditor";
 import ProductImport from "./ProductImport";
 import BulkStockOrderImport from "./BulkStockOrderImport";
+import HalfMadeTab from "../InventoryDashboard/HalfMadeTab";
 import "./StockRoom.css";
 
 // ============================================================
@@ -52,6 +53,8 @@ const NAV = [
     { id: "stockorders", label: "Stock orders", icon: "orders", tag: (v, d) => (d.ordersReady ? v.openStockOrders.length : null), alert: true },
     { id: "movements", label: "Movements", icon: "movements", needsLedger: true },
     { id: "transfers", label: "Transfers", icon: "transfer", needsLedger: true },
+    // Pieces production moved out of an order (Release 15). Inventory login only.
+    { id: "halfmade", label: "Half Made", icon: "stock", roles: ["inventory"] },
   ] },
   { group: "Catalogue", items: [
     { id: "products", label: "Products", icon: "products", tag: (v) => formatUnits(v.totals.designs) },
@@ -207,8 +210,9 @@ export default function StockRoom() {
   const canWriteStock = WRITES_ON && ledgerInstalled;
   const canEditProducts = PRODUCT_WRITES_ON;
 
+  const allowed = (i) => (!i.needsLedger || ledgerInstalled) && (!i.roles || i.roles.includes(user?.role));
   const screen = SCREENS.includes(requested)
-    && !(NAV.flatMap((g) => g.items).find((i) => i.id === requested)?.needsLedger && !ledgerInstalled)
+    && allowed(NAV.flatMap((g) => g.items).find((i) => i.id === requested) || {})
     ? requested : "overview";
 
   const go = useCallback((id, opts = {}) => {
@@ -264,7 +268,7 @@ export default function StockRoom() {
     navigate("/login", { replace: true });
   };
 
-  const visibleNav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.needsLedger || ledgerInstalled) }));
+  const visibleNav = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) }));
 
   // Alert-style tags (red) only appear when there is something to act on.
   const navItem = (item, withTag) => {
@@ -407,6 +411,7 @@ export default function StockRoom() {
         )}
         {screen === "movements" && <MovementsScreen {...screenProps} />}
         {screen === "transfers" && <TransfersScreen key={screenOpts.nonce} {...screenProps} initialStatus={screenOpts.status} />}
+        {screen === "halfmade" && <div className="sr-body"><HalfMadeTab /></div>}
         {screen === "products" && <ProductsScreen {...screenProps} />}
         {screen === "integrity" && <IntegrityScreen {...screenProps} onShopifyRetried={finishDialog} />}
       </main>

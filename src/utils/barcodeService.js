@@ -804,6 +804,8 @@ export function describeTransition(t, movements, passMap) {
   // Release 6: the SB WH Delhi (2) guard's two scans on a trip there.
   // Release 11: a garment-breakdown correction on this piece.
   const isBreakdown = t.transition_type === "breakdown_change" || t.transition_type === "breakdown_retired";
+  // Release 15: Half Made Inventory.
+  const isHalfMade = t.transition_type === "half_made" || t.transition_type === "half_made_used";
   const isF2Arrival = t.transition_type === "f2_arrival";
   const isF2Departure = t.transition_type === "f2_departure";
   const isF2Release = t.transition_type === "f2_dispatch_release";
@@ -846,7 +848,9 @@ export function describeTransition(t, movements, passMap) {
   const passTag = pass ? ` (${pass})` : "";
 
   const trip = stageForTrip ? ` (${stageForTrip})` : "";
-  const headline = isBreakdown
+  const headline = isHalfMade
+    ? (t.transition_type === "half_made" ? "Moved to Half Made Inventory" : `Continues from a Half Made piece — at ${toLabel}`)
+    : isBreakdown
     ? (t.transition_type === "breakdown_retired" ? "Taken off the floor — breakdown changed" : `Breakdown changed — now ${t.barcode}`)
     : isF2Arrival
     ? `Arrived at SB WH Delhi (2)${passTag}`
@@ -866,7 +870,7 @@ export function describeTransition(t, movements, passMap) {
     pass,
     tagLabel: external ? "External / Vendor" : "Internal Scan",
     // only show the raw type suffix for non-scan internal rows (e.g. manual_override)
-    showType: !external && !isBreakdown && t.transition_type && t.transition_type !== "scan",
+    showType: !external && !isBreakdown && !isHalfMade && t.transition_type && t.transition_type !== "scan",
   };
 }
 

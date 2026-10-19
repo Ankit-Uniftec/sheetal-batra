@@ -1,0 +1,50 @@
+/* Half Made Inventory tab (Release 15) */
+.hm-tab { display: flex; flex-direction: column; gap: 12px; }
+.hm-head h2 { margin: 0; font-size: 20px; }
+.hm-hint { margin: 4px 0 0; color: #777; font-size: 13px; }
+.hm-muted { color: #888; font-size: 11px; }
+.hm-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #666; }
+.hm-error { color: #c62828; font-size: 13px; }
+
+.hm-status { display: flex; gap: 8px; flex-wrap: wrap; }
+.hm-status button {
+  padding: 7px 14px; border: 1px solid #d4d4d4; border-radius: 18px; background: #fff;
+  font-size: 13px; cursor: pointer;
+}
+.hm-status button span { margin-left: 4px; padding: 1px 7px; border-radius: 10px; background: #f0ece2; font-size: 11px; }
+.hm-status button.active { background: #d5b85a; border-color: #d5b85a; color: #fff; }
+.hm-status button.active span { background: rgba(255, 255, 255, 0.3); }
+
+.hm-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.hm-filters input, .hm-filters select { height: 38px; padding: 0 10px; border: 1px solid #e0d5c5; border-radius: 8px; font-size: 13px; background: #fff; }
+.hm-filters input { flex: 1; min-width: 200px; }
+.hm-filters button { height: 38px; padding: 0 14px; border: 0; border-radius: 8px; background: #d5b85a; color: #fff; cursor: pointer; }
+.hm-filters button:disabled { opacity: 0.5; cursor: default; }
+
+.hm-table { overflow-x: auto; background: #FFFFFFB0; border: 1px solid #e4dac6; border-radius: 10px; }
+.hm-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.hm-table th, .hm-table td { padding: 9px 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+.hm-table th { background: rgba(213, 184, 90, 0.12); white-space: nowrap; }
+.hm-table tbody tr { cursor: pointer; }
+.hm-table tbody tr:hover { background: #faf6ec; }
+
+.hm-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.hm-available { background: #e8f5e9; color: #1b5e20; }
+.hm-used { background: #e3f2fd; color: #0d47a1; }
+.hm-written_off { background: #f0f0f0; color: #666; }
+
+.hm-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.35); display: flex; justify-content: flex-end; }
+.hm-detail { width: min(560px, 100%); height: 100%; overflow-y: auto; background: #fff; padding: 16px 18px; box-shadow: -4px 0 18px rgba(0, 0, 0, 0.15); }
+.hm-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.hm-detail-head h3 { margin: 0; font-size: 16px; }
+.hm-detail-head button { border: 0; background: none; font-size: 18px; cursor: pointer; }
+.hm-detail h4 { margin: 14px 0 6px; font-size: 14px; }
+.hm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; font-size: 13px; }
+.hm-grid label { display: block; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; }
+.hm-list { margin: 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.hm-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.hm-photos img { width: 96px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid #eee; }
+.hm-writeoff { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.hm-writeoff input { flex: 1; min-width: 200px; height: 36px; padding: 0 10px; border: 1px solid #e0d5c5; border-radius: 8px; }
+.hm-writeoff button { height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: #c62828; color: #fff; cursor: pointer; }
+.hm-writeoff button:disabled { opacity: 0.5; cursor: default; }
