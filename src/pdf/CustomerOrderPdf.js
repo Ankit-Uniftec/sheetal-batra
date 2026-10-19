@@ -448,7 +448,13 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
   const advancePayment = Number(order.advance_payment) || 0;
   const collectorsCode = Number(order.collectors_code) || 0;
   const storeCreditUsed = Number(order.store_credit_used) || 0;
-  const netTotal = grandTotal - discountAmount - collectorsCode;
+  // International shipping charge (store orders; Release 18). It is part of
+  // what the customer owes (it is already in orders.net_total), so it belongs
+  // in the pending amount. Website (Shopify) orders keep their shipping outside
+  // net_total and are paid online — left exactly as before.
+  const isWebsiteOrder = /^SB-SHOP/i.test(String(order.order_no || ""));
+  const shippingCharge = isWebsiteOrder ? 0 : (Number(order.shipping_charge) || 0);
+  const netTotal = grandTotal - discountAmount - collectorsCode + shippingCharge;
   const remaining = netTotal - advancePayment - storeCreditUsed;
 
   // GST Calculation (reverse calculation - grandTotal includes GST)
@@ -664,6 +670,9 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
             )}
             {collectorsCode > 0 && (
               <PaymentRow label="Collectors Code:" value={collectorsCode} prefix="-" />
+            )}
+            {shippingCharge > 0 && (
+              <PaymentRow label="Shipping Charges:" value={shippingCharge} prefix="+" />
             )}
             {storeCreditUsed > 0 && (
               <PaymentRow label="Store Credit Applied:" value={storeCreditUsed} prefix="-" />
