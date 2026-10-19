@@ -25,6 +25,10 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import DashboardHeader from "../../components/DashboardHeader";
 
+// Channels this dashboard never shows, dropped once at load (Release 13:
+// Shopify; Release 17: B2B and B2B internal stock).
+const HIDDEN_CHANNELS = new Set(["shopify", "b2b", "b2b_stock"]);
+
 const COMPARISON_OPTIONS = [
     { value: "none", label: "No comparison" },
     { value: "previous_period", label: "Previous period" },
@@ -145,7 +149,6 @@ export default function RetailManagerDashboard() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
-    const [vendors, setVendors] = useState([]);
     // Production tab (view-only) — lazy-loaded, see the effect below.
     const [components, setComponents] = useState([]);
     const [componentsLoaded, setComponentsLoaded] = useState(false);
@@ -156,7 +159,7 @@ export default function RetailManagerDashboard() {
     const [activeTab, setActiveTab] = useTabParam("store_analytics");
     const [showSidebar, setShowSidebar] = useState(false);
 
-    // Timeline — shared PeriodFilter (store analytics + day-wise + b2b tabs);
+    // Timeline — shared PeriodFilter (store analytics + day-wise tabs);
     // comparison stays local.
     const { inPeriod, range: periodRangeValue, props: periodProps } = usePeriodFilter("month", { variant: "pills" });
     const [comparison, setComparison] = useState("none");
@@ -217,10 +220,7 @@ export default function RetailManagerDashboard() {
         try {
             // products_live was fetched here (a full paged scan of every SKU) and
             // then never read — the Stock tab gets its own data from StockPanel.
-            const [ordersRes, vendorsRes] = await Promise.all([
-                fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                supabase.from("vendors").select("id, store_brand_name, vendor_code, location"),
-            ]);
+            const ordersRes = await fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false }));
             // No website (Shopify) order reaches this dashboard at all — not in
             // any tab, total, chart, comparison or the Production pieces
             // (client decision 2026-10-14: the Retail Manager sees no Shopify
@@ -228,8 +228,10 @@ export default function RetailManagerDashboard() {
             // standard channel check (SB-SHOPIFY- / legacy SB-SHOP- order number,
             // or a Shopify order id). The database applies the same rule to this
             // login (db/meeting_points/r13_01).
-            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms && getOrderChannelKey(o) !== "shopify"));
-            if (vendorsRes.data) setVendors(vendorsRes.data);
+            // Release 17 (client decision 2026-10-19): no B2B either — B2B
+            // orders and B2B internal stock (SB-B2B- / SB-B2BSTOCK-) are
+            // dropped by the same rule (HIDDEN_CHANNELS).
+            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms && !HIDDEN_CHANNELS.has(getOrderChannelKey(o))));
         } catch (err) { console.error("Error fetching data:", err); }
         finally { setLoading(false); }
     };
@@ -276,23 +278,10 @@ export default function RetailManagerDashboard() {
     // channel — such orders report under the channel they were placed in).
     const getOrderChannel = (order) => getOrderChannelLabel(order);
 
-    // ★ CORE FILTER: exclude B2B from everything
-    const retailOrders = useMemo(() => {
-        return orders.filter(o => getOrderChannel(o) !== "B2B");
-    }, [orders]);
-
-    // B2B-only slice — the exact inverse of retailOrders. Used only for the
-    // B2B-specific customers/status block (Top 10 customers, order-status counts).
-    const b2bOrders = useMemo(() => {
-        return orders.filter(o => getOrderChannel(o) === "B2B");
-    }, [orders]);
-
-    // Everything the manager's ANALYTICS cover: retail stores + B2B as a
-    // first-class channel, but NOT website/LXRTS (its own reporting). Comms is
-    // already excluded upstream at fetch time (!o.is_comms). B2B surfaces via
-    // getOrderChannel(o) === "B2B", so any chart grouped by channel/store shows
-    // a B2B slice automatically.
-    const analyticsOrders = useMemo(() => orders, [orders]);
+    // B2B, Shopify and Comms are dropped at load, so every tab works on the
+    // same set: the two stores plus Private, Exhibition and retail stock.
+    const retailOrders = orders;
+    const analyticsOrders = orders;
 
     const getOrderSalesperson = (order) => order.salesperson || null;
 
@@ -338,7 +327,7 @@ export default function RetailManagerDashboard() {
     const calcGrowth = (cur, prev) => { if (prev === 0) return cur > 0 ? 100 : 0; return ((cur - prev) / prev) * 100; };
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 1: STORE ANALYTICS (retail stores + B2B as a channel)
+    // TAB 1: STORE ANALYTICS
     // ═══════════════════════════════════════════════════════════
     const dashboardStats = useMemo(() => {
         const compRange = comparisonPeriodRange(periodRangeValue, comparison);
@@ -362,7 +351,7 @@ export default function RetailManagerDashboard() {
         const totalItems = cur.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-        // Channel breakdown — B2B shows up as its own slice (getOrderChannel → "B2B")
+        // Channel breakdown
         const channelMap = {};
         cur.forEach(o => {
             const ch = getOrderChannel(o);
@@ -420,14 +409,13 @@ export default function RetailManagerDashboard() {
     }, [analyticsOrders, inPeriod, periodRangeValue, comparison]);
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 2: DAY-WISE SALES (Delhi, Ludhiana & B2B)
+    // TAB 2: DAY-WISE SALES (Delhi & Ludhiana)
     // ═══════════════════════════════════════════════════════════
     const dayWiseData = useMemo(() => {
         // isRevenueOrder was missing here entirely: cancelled, returned and
         // refunded orders were counted as sales on this tab while the Store
         // Analytics tab excluded them, so the same period showed two totals.
         const storeOrders = retailOrders.filter(o => inPeriod(o.created_at) && !isLxrtsOrder(o) && isSaleOrder(o));
-        const b2bPeriodOrders = b2bOrders.filter(o => inPeriod(o.created_at) && isSaleOrder(o));
 
         // Split by store via the ORDER-NUMBER PREFIX, not salesperson_store.
         // The prefix is the authoritative channel signal (barcodeService.js:243);
@@ -453,25 +441,22 @@ export default function RetailManagerDashboard() {
 
         const delhiDaily = buildDailyBuckets(delhiOrders);
         const ludhianaDaily = buildDailyBuckets(ludhianaOrders);
-        const b2bDaily = buildDailyBuckets(b2bPeriodOrders);
 
-        // Combined daily (merge by date) — Delhi, Ludhiana, B2B as 3 series
+        // Combined daily (merge by date) — Delhi and Ludhiana
         const combinedMap = {};
         const touchBucket = (o, field) => {
             const key = dayKey(o.created_at);
-            if (!combinedMap[key]) combinedMap[key] = { date: dayLabel(o.created_at), fullDate: key, delhi: 0, ludhiana: 0, b2b: 0 };
+            if (!combinedMap[key]) combinedMap[key] = { date: dayLabel(o.created_at), fullDate: key, delhi: 0, ludhiana: 0 };
             combinedMap[key][field] += orderNetRevenue(o);
         };
         delhiOrders.forEach(o => touchBucket(o, "delhi"));
         ludhianaOrders.forEach(o => touchBucket(o, "ludhiana"));
-        b2bPeriodOrders.forEach(o => touchBucket(o, "b2b"));
         const combinedDaily = Object.values(combinedMap).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
         const delhiTotal = periodRevenue(delhiOrders);
         const ludhianaTotal = periodRevenue(ludhianaOrders);
-        const b2bTotal = periodRevenue(b2bPeriodOrders);
 
-        // Everything in the period that is NOT one of the three cards above:
+        // Everything in the period that is NOT one of the store cards above:
         // Private, Exhibition, the stock pools, and any order whose
         // channel can't be resolved. The "Total" card used to be delhi+ludhiana+
         // b2b, so these rows silently vanished and the total never matched the
@@ -483,20 +468,18 @@ export default function RetailManagerDashboard() {
         const otherTotal = periodRevenue(otherOrders);
 
         return {
-            delhiDaily, ludhianaDaily, b2bDaily, combinedDaily,
-            delhiTotal, ludhianaTotal, b2bTotal,
+            delhiDaily, ludhianaDaily, combinedDaily,
+            delhiTotal, ludhianaTotal,
             otherTotal, otherCount: otherOrders.length,
             delhiOrders: delhiOrders.length,
             ludhianaOrders: ludhianaOrders.length,
-            b2bOrders: b2bPeriodOrders.length,
             delhiAov: delhiOrders.length > 0 ? Math.round(delhiTotal / delhiOrders.length) : 0,
             ludhianaAov: ludhianaOrders.length > 0 ? Math.round(ludhianaTotal / ludhianaOrders.length) : 0,
-            b2bAov: b2bPeriodOrders.length > 0 ? Math.round(b2bTotal / b2bPeriodOrders.length) : 0,
         };
-    }, [retailOrders, b2bOrders, inPeriod]);
+    }, [retailOrders, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 3: PRODUCT ANALYTICS (retail stores + B2B as a channel)
+    // TAB 3: PRODUCT ANALYTICS
     // ═══════════════════════════════════════════════════════════
     const productAnalytics = useMemo(() => {
         // isSaleOrder, not isRevenueOrder: the salesperson and store blocks below
@@ -570,64 +553,12 @@ export default function RetailManagerDashboard() {
     }, [analyticsOrders, inAnalyticsPeriod, knownStoreNames]);
 
     // ═══════════════════════════════════════════════════════════
-    // B2B-SPECIFIC block on Store Analytics — only the two things B2B has that
-    // retail doesn't: order-status counts + Top 10 customers. B2B's revenue/
-    // orders/AOV are already folded into the main KPIs & channel breakdown, so
-    // they're deliberately NOT repeated here. Shares the page's timeline filter.
-    // ═══════════════════════════════════════════════════════════
-    const b2bAnalytics = useMemo(() => {
-        // Real B2B orders only: a B2BSTOCK movement is an internal transfer and
-        // an alteration is rework, so neither belongs in these counts. Cancelled
-        // and returned orders DO belong — the fourth card counts them — so this
-        // set deliberately keeps them and only the money set drops them.
-        const periodOrders = b2bOrders.filter(o =>
-            inPeriod(o.created_at) && !o.is_stock_order && !o.is_alteration);
-        const revenueOrders = periodOrders.filter(isRevenueOrder);
-
-        const newCount = periodOrders.length;
-        // Pending = placed but not yet in a terminal state. The old list matched
-        // "ready" and "dispatched", which are not order-status values in this
-        // schema, so those two contributed nothing and the count under-reported.
-        // Derive it as the remainder instead of guessing at status spellings.
-        const isFulfilled = (o) => ["delivered", "completed"].includes((o.status || "").toLowerCase());
-        const isCancelledOrReturned = (o) =>
-            ["cancelled", "returned", "revoked"].includes((o.status || "").toLowerCase()) ||
-            o.return_reason ||
-            (Array.isArray(o.returned_items) && o.returned_items.length > 0);
-
-        const fulfilledCount = periodOrders.filter(isFulfilled).length;
-        const cancelledReturnedCount = periodOrders.filter(isCancelledOrReturned).length;
-        const pendingCount = periodOrders.filter(o => !isFulfilled(o) && !isCancelledOrReturned(o)).length;
-
-        // Top 10 B2B customers/accounts by sales.
-        // Keyed on vendor_id FIRST — the B2B merchandiser dashboard keys on it
-        // too, and delivery_name is free text, so one account spelled two ways
-        // ("Aza", "AZA Fashions") used to split into two rows and neither
-        // reflected the account's real volume.
-        const clientSales = {};
-        revenueOrders.forEach(o => {
-            const vendor = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
-            const key = vendor?.id || (o.delivery_name || "").trim().toLowerCase() || "unknown";
-            const name = vendor?.store_brand_name || o.delivery_name || "Unknown";
-            if (!clientSales[key]) clientSales[key] = { name, sales: 0, orders: 0 };
-            clientSales[key].sales += orderNetRevenue(o);
-            clientSales[key].orders += 1;
-        });
-        const top10Clients = Object.values(clientSales)
-            .map(c => ({ ...c, aov: c.orders > 0 ? Math.round(c.sales / c.orders) : 0 }))
-            .sort((a, b) => b.sales - a.sales)
-            .slice(0, 10);
-
-        return { newCount, pendingCount, fulfilledCount, cancelledReturnedCount, top10Clients };
-    }, [b2bOrders, vendors, inPeriod]);
-
-    // ═══════════════════════════════════════════════════════════
     // TAB: PRODUCTION (VIEW-ONLY)
     // The retail manager needs to answer "where are the orders my stores are
     // still waiting on?". Read-only by design: no stage overrides, no vendor
     // moves, no status edits — those stay with Production.
     //
-    // Scope is retailOrders (Delhi + Ludhiana + the other non-B2B channels),
+    // Scope is retailOrders (Delhi + Ludhiana + Private / Exhibition / stock),
     // the same slice the rest of this dashboard treats as "retail".
     // ═══════════════════════════════════════════════════════════
 
@@ -687,7 +618,7 @@ export default function RetailManagerDashboard() {
     useEffect(() => { setProdPage(1); }, [prodStageFilter, prodSearch]);
 
     // ═══════════════════════════════════════════════════════════
-    // TAB 4: ORDERS (B2B included by default)
+    // TAB 4: ORDERS
     // ═══════════════════════════════════════════════════════════
     const salespersons = useMemo(() => {
         const spSet = new Set();
@@ -698,8 +629,7 @@ export default function RetailManagerDashboard() {
         return Array.from(spSet).sort();
     }, [retailOrders, knownStoreNames]);
 
-    // Non-LXRTS orders in the orders tab — B2B included by default (Store filter
-    // below can isolate it, same as Delhi/Ludhiana), only website/LXRTS is excluded.
+    // Non-LXRTS orders in the orders tab (B2B and Shopify never reach here).
     // "Unfulfilled" means still owed to the customer. Excluding only
     // completed/delivered/cancelled left returned, revoked and refunded orders
     // sitting in the queue as if they were outstanding work.
@@ -741,11 +671,7 @@ export default function RetailManagerDashboard() {
         if (filters.payment.length > 0 && !filters.payment.includes(getPaymentStatus(order))) return false;
         if (filters.priority.length > 0 && !filters.priority.includes(getPriority(order))) return false;
         if (filters.orderType.length > 0 && !filters.orderType.includes(getOrderType(order))) return false;
-        // "B2B" isn't a literal salesperson_store value — match it via the
-        // same channel classifier the rest of the dashboard uses.
-        if (filters.store.length > 0 && !filters.store.some(
-            s => s === "B2B" ? getOrderChannel(order) === "B2B" : order.salesperson_store === s
-        )) return false;
+        if (filters.store.length > 0 && !filters.store.includes(order.salesperson_store)) return false;
         if (filters.salesperson && getOrderSalesperson(order) !== filters.salesperson) return false;
         return true;
     };
@@ -862,9 +788,8 @@ export default function RetailManagerDashboard() {
                 <main className="rm-content">
 
                     {/* ═══════════ TAB: STOCK ═══════════ */}
-                    {/* Both stores + factory + the retail and B2B pools, plus
-                        consignment — the retail manager runs the retail side of
-                        the B2B relationship too. Mounted only when open. */}
+                    {/* Both stores + factory + the retail pool (no B2B or
+                        consignment since Release 17). Mounted only when open. */}
                     {activeTab === "stock" && (
                         <div className="rm-analytics-tab">
                             <div className="rm-tab-header">
@@ -985,7 +910,7 @@ export default function RetailManagerDashboard() {
                             </div>
 
                             {/* KPIs — computed over analyticsOrders, which is EVERY
-                                channel (B2B, Private, Exhibition, stock), not
+                                channel shown here (Private, Exhibition, stock), not
                                 just the two retail stores. Titled accordingly: it read
                                 "Retail Performance" while showing company-wide numbers. */}
                             <h3 className="rm-subsection-title">Overall Performance {"—"} all channels</h3>
@@ -1135,62 +1060,6 @@ export default function RetailManagerDashboard() {
                                 ) : <div className="rm-no-chart-data">No data available</div>}
                             </div>
 
-                            {/* ═══ B2B CUSTOMERS & ORDERS — the two things B2B has that retail doesn't.
-                                 B2B revenue/orders/AOV already live in the main KPIs & channel breakdown above. ═══ */}
-                            <h3 className="rm-subsection-title" style={{ marginTop: 28 }}>B2B Customers & Orders</h3>
-                            <div className="rm-stats-grid overview-grid b2b-kpi-grid">
-                                <div className="rm-stat-card overview-card">
-                                    <span className="stat-label">New</span>
-                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.newCount)}</span>
-                                    <span className="stat-sub">Placed in selected period</span>
-                                </div>
-                                <div className="rm-stat-card overview-card">
-                                    <span className="stat-label">Pending</span>
-                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.pendingCount)}</span>
-                                    <span className="stat-sub">In production / not yet delivered</span>
-                                </div>
-                                <div className="rm-stat-card overview-card">
-                                    <span className="stat-label">Fulfilled</span>
-                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.fulfilledCount)}</span>
-                                    <span className="stat-sub">Delivered or completed</span>
-                                </div>
-                                <div className="rm-stat-card overview-card">
-                                    <span className="stat-label">Cancelled / Returned</span>
-                                    <span className="stat-value">{formatIndianNumber(b2bAnalytics.cancelledReturnedCount)}</span>
-                                </div>
-                            </div>
-
-                            <div className="rm-chart-card">
-                                <h3 className="rm-chart-title">Top 10 B2B Customers / Accounts</h3>
-                                {b2bAnalytics.top10Clients.length > 0 ? (
-                                    <div className="rm-table-wrapper">
-                                        <div className="rm-table-container">
-                                            <table className="rm-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Rank</th>
-                                                        <th>Customer / Account</th>
-                                                        <th>Orders</th>
-                                                        <th>Sales</th>
-                                                        <th>Avg Order Value</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {b2bAnalytics.top10Clients.map((c, i) => (
-                                                        <tr key={c.name}>
-                                                            <td>{i + 1}</td>
-                                                            <td className="rm-product-cell">{c.name}</td>
-                                                            <td>{c.orders}</td>
-                                                            <td>{"₹"}{money(Math.round(c.sales))}</td>
-                                                            <td>{"₹"}{money(c.aov)}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                ) : <div className="rm-no-chart-data">No B2B sales in this period</div>}
-                            </div>
                         </div>
                     )}
 
@@ -1203,7 +1072,7 @@ export default function RetailManagerDashboard() {
                             </div>
 
                             {/* Store summary cards */}
-                            <div className="rm-stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                            <div className="rm-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Delhi Revenue</span>
                                     <span className="stat-value">{"\u20B9"}{money(dayWiseData.delhiTotal)}</span>
@@ -1215,14 +1084,9 @@ export default function RetailManagerDashboard() {
                                     <span className="stat-sub">{dayWiseData.ludhianaOrders} orders</span>
                                 </div>
                                 <div className="rm-stat-card overview-card">
-                                    <span className="stat-label">B2B Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{money(dayWiseData.b2bTotal)}</span>
-                                    <span className="stat-sub">{dayWiseData.b2bOrders} orders</span>
-                                </div>
-                                <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Combined Revenue</span>
-                                    <span className="stat-value">{"\u20B9"}{money(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.b2bTotal + dayWiseData.otherTotal)}</span>
-                                    <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders + dayWiseData.b2bOrders + dayWiseData.otherCount} orders</span>
+                                    <span className="stat-value">{"\u20B9"}{money(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.otherTotal)}</span>
+                                    <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders + dayWiseData.otherCount} orders</span>
                                 </div>
                             </div>
 
@@ -1235,7 +1099,7 @@ export default function RetailManagerDashboard() {
                                 </p>
                             )}
 
-                            {/* AOV comparison \u2014 Delhi vs Ludhiana vs B2B, side by side */}
+                            {/* AOV comparison \u2014 Delhi vs Ludhiana, side by side */}
                             <div className="rm-chart-card" style={{ marginBottom: 20 }}>
                                 <h3 className="rm-chart-title">Average Order Value {"\u2014"} by Store</h3>
                                 <ResponsiveContainer width="100%" height={180}>
@@ -1243,7 +1107,6 @@ export default function RetailManagerDashboard() {
                                         data={[
                                             { name: "Delhi", aov: dayWiseData.delhiAov },
                                             { name: "Ludhiana", aov: dayWiseData.ludhianaAov },
-                                            { name: "B2B", aov: dayWiseData.b2bAov },
                                         ]}
                                         layout="vertical"
                                         margin={{ top: 5, right: 40, left: 5, bottom: 5 }}
@@ -1255,7 +1118,6 @@ export default function RetailManagerDashboard() {
                                         <Bar dataKey="aov" radius={[0, 6, 6, 0]} barSize={26}>
                                             <Cell fill="#d5b85a" />
                                             <Cell fill="#8B7355" />
-                                            <Cell fill="#C9A94E" />
                                         </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -1266,13 +1128,12 @@ export default function RetailManagerDashboard() {
                                 <button className={`rm-store-btn ${dayWiseStore === "all" ? "active" : ""}`} onClick={() => setDayWiseStore("all")}>Both Stores</button>
                                 <button className={`rm-store-btn ${dayWiseStore === "delhi" ? "active" : ""}`} onClick={() => setDayWiseStore("delhi")}>Delhi</button>
                                 <button className={`rm-store-btn ${dayWiseStore === "ludhiana" ? "active" : ""}`} onClick={() => setDayWiseStore("ludhiana")}>Ludhiana</button>
-                                <button className={`rm-store-btn ${dayWiseStore === "b2b" ? "active" : ""}`} onClick={() => setDayWiseStore("b2b")}>B2B</button>
                             </div>
 
                             {/* Combined chart */}
                             {dayWiseStore === "all" && (
                                 <div className="rm-chart-card" style={{ marginBottom: 20 }}>
-                                    <h3 className="rm-chart-title">Daily Revenue {"\u2014"} Delhi vs Ludhiana vs B2B</h3>
+                                    <h3 className="rm-chart-title">Daily Revenue {"\u2014"} Delhi vs Ludhiana</h3>
                                     {dayWiseData.combinedDaily.length > 1 ? (
                                         <ResponsiveContainer width="100%" height={350}>
                                             <BarChart data={dayWiseData.combinedDaily} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
@@ -1283,7 +1144,6 @@ export default function RetailManagerDashboard() {
                                                 <Legend />
                                                 <Bar dataKey="delhi" name="Delhi" fill="#d5b85a" radius={[4, 4, 0, 0]} />
                                                 <Bar dataKey="ludhiana" name="Ludhiana" fill="#8B7355" radius={[4, 4, 0, 0]} />
-                                                <Bar dataKey="b2b" name="B2B" fill="#C9A94E" radius={[4, 4, 0, 0]} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     ) : <div className="rm-no-chart-data">Select a wider date range to see trends</div>}
@@ -1330,25 +1190,6 @@ export default function RetailManagerDashboard() {
                                 </div>
                             )}
 
-                            {/* B2B chart */}
-                            {dayWiseStore === "b2b" && (
-                                <div className="rm-chart-card" style={{ marginBottom: 20 }}>
-                                    <h3 className="rm-chart-title">Daily Revenue {"—"} B2B</h3>
-                                    {dayWiseData.b2bDaily.length > 1 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <AreaChart data={dayWiseData.b2bDaily} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip formatter={(v, name) => [`₹${money(v)}`, name]} />
-                                                <Legend />
-                                                <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#C9A94E" fill="rgba(201,169,78,0.15)" strokeWidth={2} />
-                                                <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="rm-no-chart-data">Not enough data for B2B</div>}
-                                </div>
-                            )}
                         </div>
                     )}
 
@@ -1620,7 +1461,7 @@ export default function RetailManagerDashboard() {
                                     {openDropdown === "store" && (
                                         <div className="rm-dropdown-panel">
                                             <div className="rm-dropdown-title">Store</div>
-                                            {["Delhi Store", "Ludhiana Store", "B2B"].map(opt => (
+                                            {["Delhi Store", "Ludhiana Store"].map(opt => (
                                                 <label key={opt} className="rm-checkbox-label">
                                                     <input type="checkbox" checked={filters.store.includes(opt)} onChange={() => toggleFilter("store", opt)} />
                                                     <span>{opt}</span>
@@ -1689,7 +1530,7 @@ export default function RetailManagerDashboard() {
                                                                 {(order.status === "pending" || order.status === "order_received" || !order.status) ? "Order Received" : (order.status.charAt(0).toUpperCase() + order.status.slice(1).replace("_", " "))}
                                                             </span>
                                                         </td>
-                                                        <td>{getOrderChannel(order) === "B2B" ? "B2B" : (order.salesperson_store || "-")}</td>
+                                                        <td>{order.salesperson_store || "-"}</td>
                                                         <td>{getOrderSalesperson(order) || "-"}</td>
                                                         <td>{formatDate(order.created_at)}</td>
                                                     </tr>

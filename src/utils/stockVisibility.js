@@ -126,15 +126,9 @@ export const POOLS_BY_ROLE = {
   //    from. No B2B and no Shopify: neither is their business.
   store_manager: ["delhi", "ludhiana", "factory", "retail_stock"],
 
-  // 3. Retail manager — the store manager's view plus the B2B side.
-  retail_manager: [
-    "delhi",
-    "ludhiana",
-    "factory",
-    "retail_stock",
-    "b2b_stock",
-    "consignment",
-  ],
+  // 3. Retail manager — the store manager's view. No B2B stock or consignment
+  //    since Release 17 (client decision 2026-10-19: no B2B on that dashboard).
+  retail_manager: ["delhi", "ludhiana", "factory", "retail_stock"],
 
   // 4. Production Manager — produces for every channel, so every stock pool,
   //    but has no reason to see the shop floors' own counts.
