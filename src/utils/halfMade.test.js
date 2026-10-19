@@ -28,3 +28,26 @@ test("roles and photo rules", () => {
   expect(validatePhoto({ type: "image/png", size: 6 * 1048576 })).toMatch(/5 MB/);
   expect(validatePhoto({ type: "image/jpeg", size: 1000 })).toBeNull();
 });
+
+// ---- Release 16: exact matches (same rule as hm_item_key / hm_row_key) ----
+import { itemMatchKey, halfMadeMatchKey, exactHalfMadeMatches } from "./halfMade";
+
+test("exact match = same type, product, size and colour (case, punctuation and brackets ignored)", () => {
+  const item = { product_name: "Mohsina - Orange Choga (LXRTS)", size: "L", top_color: { name: "Orange" } };
+  // The same example the SQL check in r16_01 uses.
+  expect(itemMatchKey("top", item)).toBe(halfMadeMatchKey({ component_type: "top", product_name: "mohsina orange choga", size: " l ", colors: "Orange" }));
+  const pieces = [
+    { id: 1, status: "available", component_type: "top", product_name: "Mohsina Orange Choga", size: "L", colors: "orange" },
+    { id: 2, status: "available", component_type: "top", product_name: "Mohsina Orange Choga", size: "XL", colors: "Orange" },
+    { id: 3, status: "available", component_type: "bottom", product_name: "Mohsina Orange Choga", size: "L", colors: "Orange" },
+    { id: 4, status: "used", component_type: "top", product_name: "Mohsina Orange Choga", size: "L", colors: "Orange" },
+    { id: 5, status: "available", component_type: "top", product_name: "Mohsina Orange Choga", size: "L", colors: "Pink" },
+  ];
+  expect(exactHalfMadeMatches("top", item, pieces).map((p) => p.id)).toEqual([1]);
+});
+
+test("two colours must both match, in order", () => {
+  const item = { product_name: "Aabish Set", size: "M", top_color: "Pink", bottom_color: { name: "Gold" } };
+  expect(itemMatchKey("top", item)).toBe(halfMadeMatchKey({ component_type: "top", product_name: "Aabish Set", size: "M", colors: "Pink / Gold" }));
+  expect(itemMatchKey("top", item)).not.toBe(halfMadeMatchKey({ component_type: "top", product_name: "Aabish Set", size: "M", colors: "Pink" }));
+});

@@ -67,6 +67,10 @@ export const NOTIFICATION_TYPES = {
     STAGE_REQUEST_RAISED: "stage_request_raised",
     STAGE_REQUEST_DECIDED: "stage_request_decided",
 
+    // A new order's piece matches an available Half Made piece (Release 16).
+    // Written by the database trigger (db/meeting_points/r16_01), not the app.
+    HALF_MADE_MATCH: "half_made_match",
+
     // Shopify desk corrected a garment breakdown after production started
     // (meeting point 8): pieces taken off the floor / converted.
     BREAKDOWN_CHANGED: "breakdown_changed",

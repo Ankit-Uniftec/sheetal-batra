@@ -40,6 +40,8 @@ import { computeChannelBreakdown, computeStatusStats, computeProductionMetrics, 
 import downloadCsv from "../../../utils/downloadCsv";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import DashboardHeader from "../../../components/DashboardHeader";
+import useHalfMadeSuggestions from "../../../hooks/useHalfMadeSuggestions";
+import { HalfMadeBadge, HalfMadeBanner } from "../../../components/HalfMadeSuggestion";
 
 const PM_CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B"];
 
@@ -299,6 +301,8 @@ export default function ProductionManagerDashboard() {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [orders, setOrders] = useState([]);
+    // Half Made suggestions (Release 16).
+    const halfMade = useHalfMadeSuggestions(orders);
     // Maps vendor.id → vendor row. Used to resolve a B2B order's "client name"
     // (B2B orders have no delivery_name; the vendor's store_brand_name is the
     // analogue). Populated alongside orders so we don't fetch on every render.
@@ -2837,6 +2841,7 @@ export default function ProductionManagerDashboard() {
                                 )}
 
                                 <div style={{ fontSize: 13, color: "#888", marginBottom: 10 }}>Showing {filteredOrders.length} orders</div>
+                                <HalfMadeBanner byOrder={halfMade.byOrder} orders={orders} by={halfMade.me.email} onUsed={halfMade.reload} />
 
                                 <div className="pm-order-list-scroll">
                                     {filteredOrders.length === 0 && <p className="pm-muted" style={{ textAlign: "center", padding: 40 }}>No orders found.</p>}
@@ -2866,6 +2871,7 @@ export default function ProductionManagerDashboard() {
                                                     </div>
                                                     <div className="pm-oheader-actions">
                                                         <span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span>
+                                                        <HalfMadeBadge order={order} suggestions={halfMade.byOrder[order.id]} by={halfMade.me.email} onUsed={halfMade.reload} />
                                                         {/* ORDER status — the shared ladder, never a component stage.
                                                             This used to render the warehouse_stage badge ("Cloth Issued"),
                                                             which answers "where is one piece", not "where is the order":

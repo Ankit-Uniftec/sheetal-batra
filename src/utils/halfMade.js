@@ -14,7 +14,8 @@ import { fetchAllRows } from "./fetchAllRows";
 
 // Who may move / use a piece (decision 2026-10-19: everyone in production).
 // Mirrors is_production_user() in r15_01 — the database is the real gate.
-export const PRODUCTION_ROLES = ["production_manager", "warehouse", "production", "scan_station"];
+// Release 16: the Shopify Orders desk counts too (website production).
+export const PRODUCTION_ROLES = ["production_manager", "warehouse", "production", "scan_station", "shopify_orders"];
 export const HALF_MADE_REASONS = ["Order cancelled", "Damaged", "Other"];
 export const PHOTO_BUCKET = "half-made-photos";
 export const PHOTO_TYPES = ["image/jpeg", "image/png"];
@@ -137,3 +138,26 @@ export function rankHalfMadeFor(target, item, pieces) {
     })
     .sort((a, b) => b.score - a.score || String(b.piece.moved_at).localeCompare(String(a.piece.moved_at)));
 }
+
+// ---- Exact matches: the order-card suggestion (Release 16) -----------------
+// Decision 2026-10-19 (option A): a half-made piece is SUGGESTED only when the
+// piece type, product name, size AND colour(s) are the same — compared the way
+// the database compares them (hm_norm / hm_item_key / hm_row_key in
+// db/meeting_points/r16_01), so the card badge and the notification agree.
+const colorsKeyOfItem = (item) =>
+  [colorName(item?.top_color), colorName(item?.bottom_color)].map(norm).filter(Boolean).join("/");
+const colorsKeyOfText = (text) => String(text || "").split("/").map(norm).filter(Boolean).join("/");
+
+/** The match key of an order line for a piece type. */
+export const itemMatchKey = (type, item) =>
+  [String(type || "").toLowerCase(), norm(item?.product_name), norm(item?.size || item?.size_label), colorsKeyOfItem(item)].join("|");
+
+/** The match key of a half-made piece. */
+export const halfMadeMatchKey = (hm) =>
+  [String(hm?.component_type || "").toLowerCase(), norm(hm?.product_name), norm(hm?.size), colorsKeyOfText(hm?.colors)].join("|");
+
+/** Available half-made pieces that exactly match this piece type + order line. */
+export const exactHalfMadeMatches = (type, item, pieces) => {
+  const key = itemMatchKey(type, item);
+  return (pieces || []).filter((p) => p.status === "available" && halfMadeMatchKey(p) === key);
+};

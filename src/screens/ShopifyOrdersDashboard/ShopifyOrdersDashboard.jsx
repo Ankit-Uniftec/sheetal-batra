@@ -55,6 +55,8 @@ import BreakdownChangesScreen from "./BreakdownChangesScreen";
 import useShipmentsByOrder from "../../hooks/useShipmentsByOrder";
 import { dispatchSummary } from "../../utils/shipmentStatus";
 import DispatchBadge from "../../components/DispatchBadge";
+import useHalfMadeSuggestions from "../../hooks/useHalfMadeSuggestions";
+import { HalfMadeBadge, HalfMadeBanner } from "../../components/HalfMadeSuggestion";
 import "./ShopifyOrdersDashboard.css";
 import DashboardHeader from "../../components/DashboardHeader";
 
@@ -362,6 +364,8 @@ export default function ShopifyOrdersDashboard() {
   const [componentsByOrder, setComponentsByOrder] = useState({});
   // Dispatched badge (meeting point 34): what the packaging desk has sent.
   const shipmentsByOrder = useShipmentsByOrder();
+  // Half Made suggestions (Release 16).
+  const halfMade = useHalfMadeSuggestions(orders);
   const [journeyOrder, setJourneyOrder] = useState(null);
   // Order being sent to the PM as a skip / advance request (meeting point 5).
   const [requestOrder, setRequestOrder] = useState(null);
@@ -1208,6 +1212,7 @@ export default function ShopifyOrdersDashboard() {
             )}
             {/* Sent by the packaging desk (meeting point 34). */}
             <DispatchBadge summary={dispatchSummary(shipmentsByOrder[order.id], components.length)} />
+            <HalfMadeBadge order={order} suggestions={halfMade.byOrder[order.id]} by={halfMade.me.email} onUsed={halfMade.reload} />
             {mappingFlagged && <Badge variant="warning">Needs Review</Badge>}
             {/* No work order for a cancelled garment — printing one is the
                 exact mistake this whole change exists to stop. The status badge
@@ -1843,6 +1848,7 @@ export default function ShopifyOrdersDashboard() {
                     <>
                       {/* Arrow fn, not a bare reference: .map passes the INDEX
                           as the second arg, which would land in `context`. */}
+                      <HalfMadeBanner byOrder={halfMade.byOrder} orders={orders} by={halfMade.me.email} onUsed={halfMade.reload} />
                       <div className="sho-order-cards">
                         {paginated.map((o) => renderCard(o, "orders"))}
                       </div>
@@ -1869,6 +1875,7 @@ export default function ShopifyOrdersDashboard() {
                       </p>
                       {/* Arrow fn, not a bare reference: .map passes the INDEX
                           as the second arg, which would land in `context`. */}
+                      <HalfMadeBanner byOrder={halfMade.byOrder} orders={updatedOrders} by={halfMade.me.email} onUsed={halfMade.reload} />
                       <div className="sho-order-cards">
                         {updatedOrders.map((o) => renderCard(o, "updated"))}
                       </div>
