@@ -101,6 +101,16 @@ export default function OrderDetails() {
   const [flatDiscountAmount, setFlatDiscountAmount] = useState(0);
   const [flatDiscountCode, setFlatDiscountCode] = useState("");
 
+  // SBFREESHIP (Release 18) — waives the international shipping charge. Not a
+  // discount: it does not count toward the 2-code limit, so it clubs with any
+  // discount codes. A reason is mandatory. The waiver is NOT part of the order
+  // payload (orders gets shipping_charge = 0 as before); its log row is written
+  // after the order is saved and can never block placement.
+  const [shippingWaived, setShippingWaived] = useState(false);
+  const [shippingWaiverReason, setShippingWaiverReason] = useState("");
+  const [waiverModal, setWaiverModal] = useState(false);
+  const [waiverReasonInput, setWaiverReasonInput] = useState("");
+
   // Store Credit
   const [storeCreditApplied, setStoreCreditApplied] = useState(false);
   const [availableStoreCredit, setAvailableStoreCredit] = useState(0);
@@ -151,6 +161,7 @@ export default function OrderDetails() {
   // is now applied at delivery time only (src/utils/deliveryCharge.js).
   const SHIPPING_CHARGE_AMOUNT = 2500;
   const SHIPPING_THRESHOLD = 30000;
+  const SHIPPING_WAIVER_CODE = "SBFREESHIP";
 
   // Hardcoded flat-discount codes. minSpend is checked against the bare
   // product subtotal (totalAmount minus extras) — same base the % codes use.
@@ -261,7 +272,10 @@ export default function OrderDetails() {
     let netPayable = Math.max(0, totalAmount - discountAmount);
     let currentShippingCharge = 0;
 
-    if (order.mode_of_delivery === "Home Delivery" && deliveryCountry !== "India" && totalAmount < SHIPPING_THRESHOLD) {
+    // The threshold is on the order total BEFORE discount, so a discount never
+    // changes the charge. SBFREESHIP sets it to 0.
+    const shippingApplies = order.mode_of_delivery === "Home Delivery" && deliveryCountry !== "India" && totalAmount < SHIPPING_THRESHOLD;
+    if (shippingApplies && !shippingWaived) {
       netPayable += SHIPPING_CHARGE_AMOUNT;
       currentShippingCharge = SHIPPING_CHARGE_AMOUNT;
     }
@@ -312,6 +326,8 @@ export default function OrderDetails() {
       netAfterStoreCredit,
       remaining,
       shippingCharge: currentShippingCharge,
+      shippingApplies,
+      shippingWaived: shippingApplies && shippingWaived,
       regularDiscount: (Number(discountPercent) || 0) + (Number(discountPercent2) || 0),
       birthdayDiscount: Number(birthdayDiscount) || 0,
       minAdvanceAmount,
@@ -335,6 +351,7 @@ export default function OrderDetails() {
     paymentMode,
     deliveryCountry,
     order.mode_of_delivery,
+    shippingWaived,
     discountApplied,
     discountApplied2,
     birthdayApplied,
@@ -501,6 +518,8 @@ export default function OrderDetails() {
         if (data.appliedCode2) setAppliedCode2(data.appliedCode2);
         if (data.flatDiscountAmount !== undefined) setFlatDiscountAmount(Number(data.flatDiscountAmount) || 0);
         if (data.flatDiscountCode) setFlatDiscountCode(data.flatDiscountCode);
+        if (data.shippingWaived !== undefined) setShippingWaived(!!data.shippingWaived);
+        if (data.shippingWaiverReason) setShippingWaiverReason(data.shippingWaiverReason);
         if (data.paymentMode) setPaymentMode(data.paymentMode);
         if (data.storeCreditApplied !== undefined) setStoreCreditApplied(data.storeCreditApplied);
 
@@ -549,6 +568,8 @@ export default function OrderDetails() {
       appliedCode2,
       flatDiscountAmount,
       flatDiscountCode,
+      shippingWaived,
+      shippingWaiverReason,
       paymentMode,
       billingSame,
       billingAddress,
@@ -585,6 +606,8 @@ export default function OrderDetails() {
     appliedCode2,
     flatDiscountAmount,
     flatDiscountCode,
+    shippingWaived,
+    shippingWaiverReason,
     paymentMode,
     billingSame,
     billingAddress,
@@ -703,7 +726,10 @@ export default function OrderDetails() {
       gift_recipient_contact: order.is_gifting ? giftRecipientContact || null : null,
     };
 
-    navigate("/orderDetail", { state: { orderPayload: payload, draftId } });
+    const shippingWaiver = pricing.shippingWaived
+      ? { code: SHIPPING_WAIVER_CODE, amount: SHIPPING_CHARGE_AMOUNT, reason: shippingWaiverReason }
+      : null;
+    navigate("/orderDetail", { state: { orderPayload: payload, draftId, shippingWaiver } });
   };
 
   // CONTINUE TO NEXT SCREEN
@@ -771,6 +797,26 @@ export default function OrderDetails() {
         message: "Please enter a valid collector code.",
         type: "warning",
       });
+      return;
+    }
+
+    // SBFREESHIP — shipping waiver. Checked first and kept out of the
+    // 2-code count: it is not a discount and clubs with any of them.
+    if (code === SHIPPING_WAIVER_CODE) {
+      if (!pricing.shippingApplies) {
+        showPopup({
+          title: "No Shipping Charge",
+          message: "This order has no shipping charge to waive (it applies only to Home Delivery outside India below ₹30,000).",
+          type: "warning",
+        });
+        return;
+      }
+      if (shippingWaived) {
+        showPopup({ title: "Already Applied", message: `${code} is already applied to this order.`, type: "warning" });
+        return;
+      }
+      setWaiverReasonInput("");
+      setWaiverModal(true);
       return;
     }
 
@@ -1135,6 +1181,35 @@ export default function OrderDetails() {
   const removeFlatDiscount = () => {
     setFlatDiscountAmount(0);
     setFlatDiscountCode("");
+  };
+
+  const removeShippingWaiver = () => {
+    setShippingWaived(false);
+    setShippingWaiverReason("");
+  };
+
+  const confirmShippingWaiver = () => {
+    const reason = waiverReasonInput.trim();
+    setWaiverModal(false);
+    if (!reason) {
+      setTimeout(() => {
+        showPopup({
+          title: "Reason Required",
+          message: `${SHIPPING_WAIVER_CODE} was not applied — a reason is required to waive the shipping charge.`,
+          type: "warning",
+        });
+      }, 0);
+      return;
+    }
+    setShippingWaived(true);
+    setShippingWaiverReason(reason);
+    setTimeout(() => {
+      showPopup({
+        title: "Shipping Waived ✅",
+        message: `${SHIPPING_WAIVER_CODE} applied — the ₹${formatIndianNumber(SHIPPING_CHARGE_AMOUNT)} shipping charge is waived.`,
+        type: "success",
+      });
+    }, 0);
   };
 
   const handleLogout = async () => {
@@ -1604,7 +1679,7 @@ export default function OrderDetails() {
           )} */}
 
           {/* Applied Discounts Display */}
-          {(discountApplied || discountApplied2 || birthdayApplied || storeCreditApplied) && (
+          {(discountApplied || discountApplied2 || birthdayApplied || storeCreditApplied || flatDiscountAmount > 0 || pricing.shippingWaived) && (
             <div
               className="applied-discounts"
               style={{
@@ -1730,6 +1805,34 @@ export default function OrderDetails() {
                   <span>🛍️ {flatDiscountCode} (₹{formatIndianNumber(flatDiscountAmount)} off)</span>
                   <button
                     onClick={removeFlatDiscount}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "#666",
+                    }}
+                  >×</button>
+                </div>
+              )}
+              {pricing.shippingWaived && (
+                <div
+                  className="discount-tag shipping-waiver"
+                  title={`Reason: ${shippingWaiverReason}`}
+                  style={{
+                    background: "#e3f2fd",
+                    color: "#1565c0",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>🚚 {SHIPPING_WAIVER_CODE} (shipping waived)</span>
+                  <button
+                    onClick={removeShippingWaiver}
                     style={{
                       background: "none",
                       border: "none",
@@ -1877,6 +1980,25 @@ export default function OrderDetails() {
             </div>
           )}
 
+          {pricing.shippingApplies && (
+            <div className="row3">
+              <div className="field">
+                <label>Shipping Charges:</label>
+                {pricing.shippingWaived ? (
+                  <span style={{ color: "#1565c0" }}>
+                    <s>₹{formatIndianNumber(SHIPPING_CHARGE_AMOUNT)}</s> Waived ({SHIPPING_WAIVER_CODE})
+                  </span>
+                ) : (
+                  <span>+ ₹{formatIndianNumber(pricing.shippingCharge)}</span>
+                )}
+              </div>
+              <div className="field">
+                <label>Net Payable:</label>
+                <span>₹{formatIndianNumber(pricing.netPayable)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Store Credit Applied Row */}
           {storeCreditApplied && pricing.storeCreditUsed > 0 && (
             <div className="row3">
@@ -1944,20 +2066,12 @@ export default function OrderDetails() {
 
           <AdvanceProofPicker parts={advanceParts} />
 
-          {(pricing.codCharge > 0 || pricing.shippingCharge > 0) && (
+          {pricing.codCharge > 0 && (
             <div className="row3">
-              {pricing.codCharge > 0 && (
-                <div className="field">
-                  <label>Cash Charge:</label>
-                  <span>₹{formatIndianNumber(pricing.codCharge)}</span>
-                </div>
-              )}
-              {pricing.shippingCharge > 0 && (
-                <div className="field">
-                  <label>Shipping Charge:</label>
-                  <span>₹{formatIndianNumber(pricing.shippingCharge)}</span>
-                </div>
-              )}
+              <div className="field">
+                <label>Cash Charge:</label>
+                <span>₹{formatIndianNumber(pricing.codCharge)}</span>
+              </div>
             </div>
           )}
         </div>
@@ -1981,6 +2095,38 @@ export default function OrderDetails() {
         cancelText={popup.cancelText}
         showCancel={popup.type === "confirm"}
       />
+
+      {/* SBFREESHIP reason — mandatory (Release 18). */}
+      <Popup
+        isOpen={waiverModal}
+        onClose={() => setWaiverModal(false)}
+        title={`Waive Shipping Charge (${SHIPPING_WAIVER_CODE})`}
+        message={`The ₹${formatIndianNumber(SHIPPING_CHARGE_AMOUNT)} international shipping charge will be removed from this order. Reason (required):`}
+        type="info"
+        showCancel={true}
+        confirmText="Waive"
+        cancelText="Cancel"
+        onConfirm={confirmShippingWaiver}
+        onCancel={() => setWaiverModal(false)}
+      >
+        <input
+          type="text"
+          autoFocus
+          maxLength={200}
+          value={waiverReasonInput}
+          onChange={(e) => setWaiverReasonInput(e.target.value)}
+          placeholder="e.g. Approved by store manager for a repeat client"
+          style={{
+            width: "100%",
+            padding: "10px 14px",
+            border: "1px solid #d5b85a",
+            borderRadius: "8px",
+            fontSize: "14px",
+            outline: "none",
+            marginTop: "4px",
+          }}
+        />
+      </Popup>
 
       {/* Collector code input modal — replaces the native browser prompt. */}
       <Popup
@@ -2013,7 +2159,7 @@ export default function OrderDetails() {
               setTimeout(() => applyCollectorCode(value), 0);
             }
           }}
-          placeholder="e.g. SBBIRTHDAY, SHOPMORE28K"
+          placeholder="e.g. SBBIRTHDAY, SHOPMORE28K, SBFREESHIP"
           style={{
             width: "100%",
             padding: "10px 14px",

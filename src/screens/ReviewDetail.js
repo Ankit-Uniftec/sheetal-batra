@@ -15,6 +15,7 @@ import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationServi
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import AdvanceProofPicker from "../components/AdvanceProofPicker";
 import { uploadPendingAdvanceProofs } from "../utils/pendingAdvanceProof";
+import { logShippingWaiver } from "../utils/shippingWaiver";
 import { advanceProofParts } from "../utils/paymentProofs";
 
 // Auto Signature Logo URL
@@ -109,6 +110,10 @@ export default function ReviewDetail() {
   const { user } = useAuth();
   const order = location.state?.orderPayload;
   const draftId = location.state?.draftId;
+  // SBFREESHIP (Release 18): { code, amount, reason } when the SA waived the
+  // shipping charge. Deliberately NOT in the order payload — logged after the
+  // order is saved, never blocking.
+  const shippingWaiver = location.state?.shippingWaiver || null;
 
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Placing order...");
@@ -167,6 +172,7 @@ export default function ReviewDetail() {
   const discountPercent = Number(order?.discount_percent) || 0;
   const discountAmount = Number(order?.discount_amount) || 0;
   const netPayable = Number(order?.net_total) || 0;
+  const shippingCharge = Number(order?.shipping_charge) || 0;
   const remaining = Number(order?.remaining_payment) || 0;
   const storeCreditUsed = Number(order?.store_credit_used) || 0;
   // const loyaltyPointsRedeemed = Number(order?.loyalty_points_redeemed) || 0;
@@ -632,6 +638,11 @@ export default function ReviewDetail() {
     //     the order-placed screen and the SA adds it from Update Payment.
     const advanceProof = await uploadPendingAdvanceProofs(
       insertedOrder, advanceParts, normalizedOrder.salesperson_email || null);
+
+    // 4.7 SBFREESHIP log (Release 18) — never throws, never blocks.
+    if (shippingWaiver) {
+      await logShippingWaiver(insertedOrder, shippingWaiver, normalizedOrder.salesperson_email || null);
+    }
 
     // Delete draft if this was from a draft order
     if (draftId) {
@@ -1230,6 +1241,21 @@ export default function ReviewDetail() {
             <div className="field"><label>Total Amount:</label><span>₹{formatIndianNumber(totalAmount)}</span></div>
             <div className="field"><label>Collector Code:</label><span>- ₹{formatIndianNumber(pricing.discountAmount)}</span></div>
           </div>
+
+          {(shippingCharge > 0 || shippingWaiver) && (
+            <div className="row3">
+              <div className="field">
+                <label>Shipping Charges:</label>
+                {shippingWaiver ? (
+                  <span style={{ color: "#1565c0" }}>
+                    <s>₹{formatIndianNumber(shippingWaiver.amount)}</s> Waived ({shippingWaiver.code})
+                  </span>
+                ) : (
+                  <span>+ ₹{formatIndianNumber(shippingCharge)}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Store Credit Row */}
           {pricing.storeCreditUsed > 0 && (
