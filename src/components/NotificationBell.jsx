@@ -48,6 +48,7 @@ const TYPE_ICONS = {
     delay_2_day: "🚨",
     production_stage_delay: "🏭",
     vendor_return_overdue: "🛑",
+    half_made_match: "♻️",    // Release 16 — written by the order_components trigger (r16_01)
 };
 
 /**

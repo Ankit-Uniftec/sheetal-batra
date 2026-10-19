@@ -16,6 +16,8 @@ import { isAllLxrtsOrder, isLxrtsLine } from "../utils/lxrtsProduct.mjs";
 import useShipmentsByOrder from "../hooks/useShipmentsByOrder";
 import { dispatchSummary } from "../utils/shipmentStatus";
 import DispatchBadge from "../components/DispatchBadge";
+import useHalfMadeSuggestions from "../hooks/useHalfMadeSuggestions";
+import { HalfMadeBadge, HalfMadeBanner } from "../components/HalfMadeSuggestion";
 import { isAssignedToHead } from "../utils/stockProductionHead";
 import ComponentJourneyModal from "../components/ComponentJourneyModal";
 import StageRequestModal from "../components/StageRequestModal";
@@ -191,6 +193,9 @@ const WarehouseDashboard = () => {
   const [orderComponentsMap, setOrderComponentsMap] = useState({});
   // Dispatched badge (meeting point 34): what the packaging desk has sent.
   const shipmentsByOrder = useShipmentsByOrder();
+  // Half Made suggestions (Release 16): orders with a not-started piece that
+  // has an exact half-made match.
+  const halfMade = useHalfMadeSuggestions(orders);
   const [componentLoadingMap, setComponentLoadingMap] = useState({});
   // QC report modal: the order whose QC report is open. The shared
   // QcReportModal loads the qc_records itself.
@@ -1490,6 +1495,8 @@ const WarehouseDashboard = () => {
                 </div>
               )}
 
+              <HalfMadeBanner byOrder={halfMade.byOrder} orders={orders} by={halfMade.me.email} onUsed={halfMade.reload} />
+
               {/* Orders List - OLD DESIGN */}
               <div className="wd-orders-scroll-container">
                 {loading ? (
@@ -1542,6 +1549,7 @@ const WarehouseDashboard = () => {
                             )}
 
                             <DispatchBadge summary={dispatchSummary(shipmentsByOrder[order.id], (orderComponentsMap[order.id] || []).length)} />
+                            <HalfMadeBadge order={order} suggestions={halfMade.byOrder[order.id]} by={halfMade.me.email} onUsed={halfMade.reload} />
                           </div>
 
                           <div className="wd-order-actions">

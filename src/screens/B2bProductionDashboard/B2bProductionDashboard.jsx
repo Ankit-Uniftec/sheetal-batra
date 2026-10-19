@@ -20,6 +20,8 @@ import { isAllLxrtsOrder, isLxrtsLine } from "../../utils/lxrtsProduct.mjs";
 import useShipmentsByOrder from "../../hooks/useShipmentsByOrder";
 import { dispatchSummary } from "../../utils/shipmentStatus";
 import DispatchBadge from "../../components/DispatchBadge";
+import useHalfMadeSuggestions from "../../hooks/useHalfMadeSuggestions";
+import { HalfMadeBadge, HalfMadeBanner } from "../../components/HalfMadeSuggestion";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
@@ -343,6 +345,8 @@ export default function B2bProductionDashboard() {
     // sorted by item then a stable TOP -> BTM -> DUP -> EXTRA order.
     // Dispatched badge (meeting point 34): what the packaging desk has sent.
     const shipmentsByOrder = useShipmentsByOrder();
+    // Half Made suggestions (Release 16).
+    const halfMade = useHalfMadeSuggestions(orders);
     const componentsByOrder = useMemo(() => {
         const TYPE_ORDER = { top: 0, bottom: 1, dupatta: 2, extra: 3 };
         const map = {};
@@ -743,6 +747,7 @@ export default function B2bProductionDashboard() {
                 {activeTab === "queue" && (
                     <div className="prod-tab-wrapper">
                         <h2 className="prod-tab-title">Production Queue ({pendingProduction.length})</h2>
+                        <HalfMadeBanner byOrder={halfMade.byOrder} orders={orders} by={halfMade.me.email} onUsed={halfMade.reload} />
                         <div className="prod-filters-row">
                             <input type="text" placeholder="Search order #, PO, vendor..." value={queueSearch} onChange={(e) => { setQueueSearch(e.target.value); setQueuePage(1); }} className="prod-search-input" />
                             <select value={queueType} onChange={(e) => { setQueueType(e.target.value); setQueuePage(1); }} className="prod-filter-select">
@@ -757,7 +762,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>{"\u2728"} No orders pending production!</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 <Paginator page={queuePage} totalPages={Math.ceil(filteredQueue.length / ORDERS_PER_PAGE)} onChange={setQueuePage} />
                             </div>
                         )}
@@ -782,7 +787,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>No orders in production</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 <Paginator page={inprodPage} totalPages={Math.ceil(filteredInprod.length / ORDERS_PER_PAGE)} onChange={setInprodPage} />
                             </div>
                         )}
@@ -816,7 +821,7 @@ export default function B2bProductionDashboard() {
                         ) : (
                             <div className="prod-list-scroll">
                                 {paginatedDispatch.map(order => (
-                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder}
+                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder}
                                         getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
                                 ))}
                                 <Paginator page={dispatchPage} totalPages={Math.ceil(dispatchList.length / ORDERS_PER_PAGE)} onChange={setDispatchPage} />
@@ -867,7 +872,7 @@ export default function B2bProductionDashboard() {
                         <div className="prod-list-scroll">
                             {filteredOrders.length === 0 && <p className="prod-muted">No orders match your filters.</p>}
                             {paginatedOrders.map(order => {
-                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
+                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
                             })}
                             <Paginator page={currentPage} totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onChange={setCurrentPage} />
                         </div>
@@ -1041,7 +1046,7 @@ export default function B2bProductionDashboard() {
 }
 
 // ==================== ORDER CARD COMPONENT ====================
-function OrderCard({ order, vendorMap, components = [], shipments, onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete, onRequest }) {
+function OrderCard({ order, vendorMap, components = [], shipments, halfMade, onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete, onRequest }) {
     const item = order.items?.[0] || {};
     const imgSrc = item.image_url || "/placeholder.png";
     // Internal stock: no vendor, no PO, no order type — hide those rows entirely.
@@ -1063,6 +1068,7 @@ function OrderCard({ order, vendorMap, components = [], shipments, onView, getSt
                         : order.b2b_order_type && (<div className={`prod-order-type-badge ${order.b2b_order_type === "Buyout" ? "prod-type-buyout" : "prod-type-consignment"}`}>{order.b2b_order_type}</div>)}
                     {order.order_flag === "Urgent" && (<div className="prod-urgent-badge">{"\u26A0"} Urgent</div>)}
                     <DispatchBadge summary={dispatchSummary(shipments, components.length)} />
+                    {halfMade && <HalfMadeBadge order={order} suggestions={halfMade.byOrder[order.id]} by={halfMade.me.email} onUsed={halfMade.reload} />}
                     <button className="prod-pdf-btn" onClick={(e) => onWarehousePdf(e, order)} disabled={pdfLoading === order.id}>
                         {pdfLoading === order.id ? "..." : "\uD83D\uDCC4 Warehouse PDF"}
                     </button>
