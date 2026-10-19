@@ -16,6 +16,7 @@ import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import { poolsForUser } from "../../utils/stockVisibility";
 import DashboardHeader from "../../components/DashboardHeader";
+import HalfMadeTab from "./HalfMadeTab";
 
 const ITEMS_PER_PAGE = 15;
 
@@ -773,6 +774,7 @@ export default function InventoryDashboard() {
             <a className={`inv-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
             <a className={`inv-menu-item ${activeTab === "warehouses" ? "active" : ""}`} onClick={() => { setActiveTab("warehouses"); setShowSidebar(false); }}>Warehouses</a>
             <a className={`inv-menu-item ${activeTab === "exchanges" ? "active" : ""}`} onClick={() => { setActiveTab("exchanges"); setShowSidebar(false); }}>Stock Exchange</a>
+            <a className={`inv-menu-item ${activeTab === "halfMade" ? "active" : ""}`} onClick={() => { setActiveTab("halfMade"); setShowSidebar(false); }}>Half Made</a>
             <a className={`inv-menu-item ${activeTab === "addProduct" ? "active" : ""}`} onClick={() => { setActiveTab("addProduct"); setShowSidebar(false); }}>Add Product</a>
             {/* <a className="inv-menu-item inv-menu-logout" onClick={handleLogout}>Log Out</a> */}
           </nav>
@@ -1335,6 +1337,7 @@ export default function InventoryDashboard() {
 
         {activeTab === "warehouses" && <WarehouseTab />}
         {activeTab === "exchanges" && <StockExchangeTab />}
+        {activeTab === "halfMade" && <HalfMadeTab />}
         {activeTab === "addProduct" && (
           <AddProduct
             onProductAdded={(saved) => {

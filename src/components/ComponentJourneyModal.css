@@ -121,3 +121,16 @@
   }
   .cjm-tab { width: auto; flex-shrink: 0; }
 }
+
+/* Half Made Inventory actions (Release 15) */
+.cjm-hm-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; }
+.cjm-hm-btn {
+  padding: 5px 12px;
+  border: 1px solid #8B7355;
+  border-radius: 6px;
+  background: #fff;
+  color: #8B7355;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cjm-hm-btn:hover { background: #f5f0e1; }

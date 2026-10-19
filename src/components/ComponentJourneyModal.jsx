@@ -13,6 +13,9 @@ import {
 } from "../utils/barcodeService";
 import ScanKindTag from "./ScanKindTag";
 import FactoryBadge from "./FactoryBadge";
+import { MoveToHalfMadeModal, UseHalfMadeModal } from "./HalfMadeModals";
+import { supabase } from "../lib/supabaseClient";
+import { fetchMyRole, isProductionRole } from "../utils/halfMade";
 import "./ComponentJourneyModal.css";
 
 /**
@@ -76,14 +79,29 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
   const [journeyData, setJourneyData] = useState([]); // [{ component, transitions, movements }]
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+  // Half Made Inventory (Release 15): production logins can move a piece out
+  // to it, or let a not-started piece continue from a half-made one.
+  const [me, setMe] = useState({ email: null, role: null });
+  const [halfMade, setHalfMade] = useState(null);   // { mode: "move" | "use", component }
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => { fetchMyRole().then(setMe).catch(() => {}); }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
+        // After a Half Made action the caller's rows are stale — re-read them
+        // (only then; the first load uses what the caller passed).
+        let rows = components;
+        if (reloadKey > 0 && components.length) {
+          const { data: fresh } = await supabase.from("order_components").select("*")
+            .in("id", components.map((c) => c.id));
+          const byId = Object.fromEntries((fresh || []).map((f) => [f.id, f]));
+          rows = components.map((c) => ({ ...c, ...(byId[c.id] || {}) }));
+        }
         const data = await Promise.all(
-          components.map(async (component) => {
+          rows.map(async (component) => {
             let transitions = [];
             let movements = [];
             try {
@@ -97,7 +115,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
         );
         if (cancelled) return;
         setJourneyData(data);
-        setSelectedId(data[0]?.component?.id || null);
+        setSelectedId((prev) => (prev && data.some((d) => d.component.id === prev) ? prev : data[0]?.component?.id || null));
       } catch (err) {
         console.error("Failed to load journey:", err);
         if (!cancelled) setJourneyData([]);
@@ -105,7 +123,16 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [components]);
+  }, [components, reloadKey]);
+
+  // The caller's component rows may be stale (and miss fields): read the piece
+  // fresh before acting on it, and reflect the result after.
+  const openHalfMade = async (mode, comp) => {
+    const { data } = await supabase.from("order_components")
+      .select("id, order_id, order_no, barcode, component_type, component_label, item_index, current_stage, is_active, is_outside_wh, cancelled_at")
+      .eq("id", comp.id).maybeSingle();
+    if (data) setHalfMade({ mode, component: data });
+  };
 
   const selected = journeyData.find((d) => d.component.id === selectedId) || journeyData[0];
 
@@ -118,6 +145,15 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
   );
 
   return (
+    <>
+    {halfMade?.mode === "move" && (
+      <MoveToHalfMadeModal component={halfMade.component} orderNo={orderNo} by={me.email}
+        onClose={() => setHalfMade(null)} onDone={() => setReloadKey((k) => k + 1)} />
+    )}
+    {halfMade?.mode === "use" && (
+      <UseHalfMadeModal component={halfMade.component} orderNo={orderNo} by={me.email}
+        onClose={() => setHalfMade(null)} onDone={() => setReloadKey((k) => k + 1)} />
+    )}
     <div className="cjm-overlay" onClick={onClose}>
       <div className="cjm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="cjm-head">
@@ -182,6 +218,20 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         </span>
                       )}
                     </div>
+
+                    {/* Half Made Inventory (Release 15) — production only. */}
+                    {isProductionRole(me.role) && !c.cancelled_at && c.current_stage !== "dispatched" && (
+                      <div className="cjm-hm-actions">
+                        <button type="button" className="cjm-hm-btn" onClick={() => openHalfMade("move", c)}>
+                          Move to Half Made
+                        </button>
+                        {c.current_stage === "order_received" && !c.is_active && (
+                          <button type="button" className="cjm-hm-btn" onClick={() => openHalfMade("use", c)}>
+                            Use Half Made piece
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {/* Disposed / scrapped: show the stage it was removed at and why */}
                     {(c.current_stage === "disposed" || c.current_stage === "scrapped") && (
@@ -276,6 +326,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
         )}
       </div>
     </div>
+    </>
   );
 };
 
