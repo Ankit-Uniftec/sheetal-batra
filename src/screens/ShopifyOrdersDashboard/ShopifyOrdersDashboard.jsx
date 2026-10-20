@@ -392,11 +392,20 @@ export default function ShopifyOrdersDashboard() {
     [allOrders, usaById]
   );
   // US orders that look like an order the India store already has: the same
-  // Shopify order number AND the same customer name. (The US store was seeded
-  // with copies of India orders.) Shown as a warning on the US card only —
-  // nothing is skipped or changed. { [usOrderId]: indiaOrderNo }
+  // Shopify order number AND the same customer name AND exactly the same
+  // products (name, size, quantity — every line, in any order). (The US store
+  // was seeded with copies of India orders.) All three must match, so two
+  // different orders that merely share a number and a common name are not
+  // flagged. Shown as a warning on the US card only — nothing is skipped or
+  // changed. { [usOrderId]: indiaOrderNo }
   const indiaTwinById = useMemo(() => {
-    const key = (o) => `${(o.shopify_order_name || "").trim()}|${(o.delivery_name || "").trim().toLowerCase()}`;
+    const norm = (v) => String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    const products = (o) => (Array.isArray(o.items) ? o.items : [])
+      .filter((i) => !i?.is_charge)
+      .map((i) => `${norm(i?.product_name)}~${norm(i?.size)}~${Number(i?.quantity) || 1}`)
+      .sort()
+      .join("||");
+    const key = (o) => `${(o.shopify_order_name || "").trim()}|${norm(o.delivery_name)}|${products(o)}`;
     const india = new Map();
     for (const o of allOrders) {
       if (!usaById[o.id] && o.shopify_order_name) india.set(key(o), o.order_no);
@@ -1237,7 +1246,7 @@ export default function ShopifyOrdersDashboard() {
         {indiaTwinById[order.id] && (
           <div className="sho-usa-twin" onClick={(e) => e.stopPropagation()}>
             ⚠ A similar order already exists in the India store: <b>{indiaTwinById[order.id]}</b>
-            {" "}(same Shopify no. {order.shopify_order_name} and client). Check before producing it twice.
+            {" "}(same Shopify no. {order.shopify_order_name}, client and products). Check before producing it twice.
           </div>
         )}
         <div className="sho-order-header">
