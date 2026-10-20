@@ -391,6 +391,22 @@ export default function ShopifyOrdersDashboard() {
     () => allOrders.filter((o) => usaById[o.id]).length,
     [allOrders, usaById]
   );
+  // US orders that look like an order the India store already has: the same
+  // Shopify order number AND the same customer name. (The US store was seeded
+  // with copies of India orders.) Shown as a warning on the US card only —
+  // nothing is skipped or changed. { [usOrderId]: indiaOrderNo }
+  const indiaTwinById = useMemo(() => {
+    const key = (o) => `${(o.shopify_order_name || "").trim()}|${(o.delivery_name || "").trim().toLowerCase()}`;
+    const india = new Map();
+    for (const o of allOrders) {
+      if (!usaById[o.id] && o.shopify_order_name) india.set(key(o), o.order_no);
+    }
+    const out = {};
+    for (const o of allOrders) {
+      if (usaById[o.id] && o.shopify_order_name && india.has(key(o))) out[o.id] = india.get(key(o));
+    }
+    return out;
+  }, [allOrders, usaById]);
   // Dispatched badge (meeting point 34): what the packaging desk has sent.
   const shipmentsByOrder = useShipmentsByOrder();
   // Half Made suggestions (Release 16).
@@ -1218,6 +1234,12 @@ export default function ShopifyOrdersDashboard() {
         onClick={linkToReview ? () => goToReview(order) : undefined}
         title={linkToReview ? "Open in Needs Review" : undefined}
       >
+        {indiaTwinById[order.id] && (
+          <div className="sho-usa-twin" onClick={(e) => e.stopPropagation()}>
+            ⚠ A similar order already exists in the India store: <b>{indiaTwinById[order.id]}</b>
+            {" "}(same Shopify no. {order.shopify_order_name} and client). Check before producing it twice.
+          </div>
+        )}
         <div className="sho-order-header">
           <div className="sho-header-info">
             <div className="sho-header-item">

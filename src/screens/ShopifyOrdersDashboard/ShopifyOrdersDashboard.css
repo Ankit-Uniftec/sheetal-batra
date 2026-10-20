@@ -1340,3 +1340,12 @@
     font-weight: 400;
     color: #1565c0;
 }
+.sho-usa-twin {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border: 1px solid #ffb74d;
+    border-radius: 8px;
+    background: #fff3e0;
+    color: #e65100;
+    font-size: 13px;
+}
