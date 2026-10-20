@@ -936,6 +936,38 @@ async function refreshExistingOrder(
  * webhook and the reconcile poll, both keyed on CREATED_AT. A freshness sweep
  * has no business minting anything.
  */
+// ─── Duplicate guard (USA) ──────────────────────────────────
+// The US store was seeded on 2026-10-07 with COPIES of orders that had already
+// come in through the India store (same Shopify number, same customer, a new
+// Shopify id). Saving those again would put the same garments on the floor
+// twice. An order is treated as a copy when an INDIA order (shopify_store is
+// null) has the same Shopify order number AND the same customer — matching
+// email, phone (last 10 digits) or name. Copies are skipped and reported.
+const digits10 = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(-10);
+const lower = (v: unknown) => String(v ?? "").trim().toLowerCase();
+
+async function findIndiaDuplicate(
+  orderRow: Record<string, unknown>,
+): Promise<{ id: string; order_no: string } | null> {
+  const name = String(orderRow.shopify_order_name || "");
+  if (!name) return null;
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, order_no, delivery_email, delivery_phone, delivery_name")
+    .eq("shopify_order_name", name)
+    .is("shopify_store", null);
+  // If the check itself fails, refuse to write rather than risk a duplicate.
+  if (error) throw new Error(`duplicate check failed: ${error.message}`);
+  const email = lower(orderRow.delivery_email);
+  const phone = digits10(orderRow.delivery_phone);
+  const person = lower(orderRow.delivery_name);
+  const hit = (data || []).find((o: any) =>
+    (email && lower(o.delivery_email) === email) ||
+    (phone.length === 10 && digits10(o.delivery_phone) === phone) ||
+    (person && lower(o.delivery_name) === person));
+  return hit ? { id: hit.id, order_no: hit.order_no } : null;
+}
+
 async function ingestOrder(
   node: any,
   colorMap?: Map<string, string>,
@@ -970,6 +1002,17 @@ async function ingestOrder(
   }
 
   const { orderRow, blockers } = mapShopifyOrder(node, colorMap);
+
+  // USA: never create a copy of an order India already brought in.
+  const dup = await findIndiaDuplicate(orderRow);
+  if (dup) {
+    return {
+      gid,
+      outcome: "skipped_india_duplicate",
+      reason: "ALREADY_IN_SYSTEM_FROM_INDIA_STORE",
+      order_no: dup.order_no,
+    };
+  }
 
   // ── Customer
   // USA: delivery_phone is kept exactly as Shopify gives it; the profile is
@@ -1288,10 +1331,18 @@ serve(async (req) => {
     // Dry run: map only, write nothing. For verifying the mapping against real
     // orders before letting anything touch the database.
     if (dryRun) {
-      const preview = nodes.map((n) => {
+      const preview = [];
+      for (const n of nodes) {
         const { orderRow, items, blockers } = mapShopifyOrder(n, colorMap);
-        return {
+        const dup = await findIndiaDuplicate(orderRow);
+        const { data: known } = await supabase
+          .from("orders").select("order_no").eq("shopify_order_id", String(n?.id || "")).maybeSingle();
+        preview.push({
           shopify_name: n?.name,
+          // What a real run would do with this order.
+          would: known?.order_no
+            ? `refresh existing ${known.order_no}`
+            : dup ? `SKIP — already in system as ${dup.order_no} (India store)` : "create",
           shopify_order_id: orderRow.shopify_order_id,
           shopify_fulfillment_status: n?.displayFulfillmentStatus || null,
           created_at_common_clock: orderRow.created_at,
@@ -1323,9 +1374,16 @@ serve(async (req) => {
             quantity: i.quantity,
             price: i.price,
           })),
-        };
-      });
-      return json({ success: true, mode, dryRun: true, count: preview.length, preview });
+        });
+      }
+      // Headline counts first, so the answer is readable without the detail.
+      const summary = preview.reduce((acc: Record<string, number>, p: any) => {
+        const k = p.would.startsWith("SKIP") ? "skip_india_duplicate"
+          : p.would.startsWith("refresh") ? "refresh_existing" : "create";
+        acc[k] = (acc[k] || 0) + 1;
+        return acc;
+      }, {});
+      return json({ success: true, mode, dryRun: true, count: preview.length, summary, nextCursor, preview });
     }
 
     // A refresh sweep must never CREATE an order -- its updated_at window is
