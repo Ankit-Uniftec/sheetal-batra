@@ -1295,3 +1295,48 @@
 .sho-bdc-table th, .sho-bdc-table td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid #eee; }
 .sho-bdc-table th { background: rgba(213, 184, 90, 0.12); white-space: nowrap; }
 .sho-bdc-started { color: #c62828; font-size: 11px; font-weight: 600; }
+
+/* Store switch + USA badge (Release 19) */
+.sho-store-switch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 16px;
+}
+.sho-store-switch-label {
+    font-size: 13px;
+    color: #666;
+}
+.sho-store-btn {
+    padding: 6px 14px;
+    border: 1px solid #d5b85a;
+    border-radius: 16px;
+    background: #FFFFFFB0;
+    color: #8B7355;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+}
+.sho-store-btn.active {
+    background: #d5b85a;
+    color: #fff;
+}
+.sho-usa-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border: 1px solid #90caf9;
+    border-radius: 10px;
+    background: #e3f2fd;
+    color: #1565c0;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.sho-usa-time {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: #1565c0;
+}

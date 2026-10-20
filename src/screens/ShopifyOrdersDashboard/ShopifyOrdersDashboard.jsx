@@ -353,6 +353,21 @@ const issueDetailText = (issue) => {
 
 // Garment-breakdown choices live in ./breakdown.mjs (shared, Release 11).
 
+/**
+ * A US order's placement time exactly as the US store recorded it, e.g.
+ * "US: 19 Oct 2026, 9:30 PM (America/New_York)". Read from the stored local
+ * wall-clock (shopify_created_at_local) — never converted to India time.
+ */
+function formatUsaPlaced({ local, tz }) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local || "");
+  if (!m) return "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const h24 = Number(m[4]);
+  const h12 = h24 % 12 || 12;
+  const ampm = h24 < 12 ? "AM" : "PM";
+  return `US: ${Number(m[3])} ${months[Number(m[2]) - 1]} ${m[1]}, ${h12}:${m[5]} ${ampm}${tz ? ` (${tz})` : ""}`;
+}
+
 export default function ShopifyOrdersDashboard() {
   const navigate = useNavigate();
   const { showPopup, PopupComponent } = usePopup();
@@ -360,8 +375,22 @@ export default function ShopifyOrdersDashboard() {
   const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [orders, setOrders] = useState([]);
+  const [allOrders, setAllOrders] = useState([]);
   const [componentsByOrder, setComponentsByOrder] = useState({});
+  // Shopify USA (Release 19): { [orderId]: { local, tz } } for US orders, read
+  // by a SEPARATE optional query so the main list never depends on it, and the
+  // All / India / USA switch (kept in the URL like the tab).
+  const [usaById, setUsaById] = useState({});
+  const [storeFilter, setStoreFilter] = useTabParam("all", "store");
+  const orders = useMemo(() => {
+    if (storeFilter === "usa") return allOrders.filter((o) => usaById[o.id]);
+    if (storeFilter === "india") return allOrders.filter((o) => !usaById[o.id]);
+    return allOrders;
+  }, [allOrders, usaById, storeFilter]);
+  const usaCount = useMemo(
+    () => allOrders.filter((o) => usaById[o.id]).length,
+    [allOrders, usaById]
+  );
   // Dispatched badge (meeting point 34): what the packaging desk has sent.
   const shipmentsByOrder = useShipmentsByOrder();
   // Half Made suggestions (Release 16).
@@ -474,8 +503,25 @@ export default function ShopifyOrdersDashboard() {
           .order("created_at", { ascending: false })
       );
       if (error) throw error;
-      setOrders(data || []);
+      setAllOrders(data || []);
       setLoadError(null);
+
+      // Which of them came from the USA store. Optional by design: if this
+      // fails (e.g. before the columns exist) every order simply counts as
+      // India and the dashboard works exactly as before.
+      try {
+        const { data: usa, error: usaErr } = await fetchAllRows("orders", (q) =>
+          q.select("id, shopify_created_at_local, shopify_timezone")
+            .eq("shopify_store", "usa")
+        );
+        if (usaErr) throw usaErr;
+        setUsaById(Object.fromEntries((usa || []).map((u) => [
+          u.id, { local: u.shopify_created_at_local, tz: u.shopify_timezone },
+        ])));
+      } catch (usaLoadErr) {
+        console.warn("USA store marker not loaded (treated as India):", usaLoadErr?.message || usaLoadErr);
+        setUsaById({});
+      }
 
       // Components for those orders — the scannable pieces, one barcode each.
       // Chunked .in() because a single huge id list can silently 400 on URL
@@ -549,9 +595,33 @@ export default function ShopifyOrdersDashboard() {
       if (!result?.success) throw new Error(result?.error || "Sync failed");
       const parts = Object.entries(result.summary || {})
         .map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`);
+      // USA store (Release 19) — best-effort: India's result stands whatever
+      // happens here.
+      let usaLine = "";
+      try {
+        const usaRes = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-order-sync-usa`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: config.SUPABASE_KEY,
+            Authorization: `Bearer ${config.SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ mode: "sync-now", first: 25 }),
+        });
+        const usaResult = await usaRes.json().catch(() => null);
+        if (usaResult?.success) {
+          const usaParts = Object.entries(usaResult.summary || {})
+            .map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`);
+          usaLine = `\nUSA: ${usaParts.length ? usaParts.join(", ") : "no new orders"}.`;
+        } else {
+          usaLine = "\nUSA store: not synced.";
+        }
+      } catch {
+        usaLine = "\nUSA store: not reachable.";
+      }
       showPopup({
         title: "Sync complete",
-        message: parts.length ? parts.join(", ") : "No new orders.",
+        message: `${parts.length ? parts.join(", ") : "No new orders."}${usaLine}`,
         type: "success",
       });
       await loadOrders();
@@ -799,10 +869,14 @@ export default function ShopifyOrdersDashboard() {
   // today on an old order shows under "Today", which is what the floor means by
   // the question. `allComponents` is kept whole so order-level lookups still see
   // pieces scanned outside the window.
-  const allComponents = useMemo(
-    () => Object.values(componentsByOrder).flat(),
-    [componentsByOrder]
-  );
+  const allComponents = useMemo(() => {
+    // With a store selected, only that store's orders' pieces.
+    if (storeFilter === "all") return Object.values(componentsByOrder).flat();
+    const visible = new Set(orders.map((o) => o.id));
+    return Object.entries(componentsByOrder)
+      .filter(([orderId]) => visible.has(orderId))
+      .flatMap(([, comps]) => comps);
+  }, [componentsByOrder, orders, storeFilter]);
   const productionComponents = useMemo(
     () => allComponents.filter((c) => inPeriod(c.stage_updated_at || c.created_at)),
     [allComponents, inPeriod]
@@ -1155,7 +1229,10 @@ export default function ShopifyOrdersDashboard() {
                 on the warehouse PDF. */}
             <div className="sho-header-item">
               <span className="sho-header-label">SHOPIFY ORDER NO:</span>
-              <span className="sho-header-value">{order.shopify_order_name || "—"}</span>
+              <span className="sho-header-value">
+                {order.shopify_order_name || "—"}
+                {usaById[order.id] && <span className="sho-usa-badge" title="Shopify USA store">🇺🇸 USA</span>}
+              </span>
             </div>
             {/* Client name. Shown so the floor can identify whose garment this
                 is — a deliberate change from this screen's original no-identity
@@ -1166,7 +1243,12 @@ export default function ShopifyOrdersDashboard() {
             </div>
             <div className="sho-header-item">
               <span className="sho-header-label">ORDER DATE:</span>
-              <span className="sho-header-value">{formatDate(order.created_at) || "—"}</span>
+              <span className="sho-header-value">
+                {formatDate(order.created_at) || "—"}
+                {usaById[order.id]?.local && (
+                  <span className="sho-usa-time">{formatUsaPlaced(usaById[order.id])}</span>
+                )}
+              </span>
             </div>
             <div className="sho-header-item">
               {/* DISPATCH, not delivery: the value is getWarehouseDate() —
@@ -1617,6 +1699,25 @@ export default function ShopifyOrdersDashboard() {
             </div>
           ) : (
             <>
+              {/* Store switch (Release 19) — filters every tab below. */}
+              <div className="sho-store-switch" role="group" aria-label="Shopify store">
+                <span className="sho-store-switch-label">Store:</span>
+                {[
+                  { key: "all", label: "All" },
+                  { key: "india", label: "India" },
+                  { key: "usa", label: `🇺🇸 USA (${usaCount})` },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    className={`sho-store-btn ${storeFilter === opt.key ? "active" : ""}`}
+                    onClick={() => setStoreFilter(opt.key)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
               {/* ═══ OVERVIEW ══════════════════════════════════════════════
                   Order counts first, then production: how many orders came in,
                   then where their physical pieces actually are. One period
