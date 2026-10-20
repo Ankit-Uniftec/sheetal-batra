@@ -1209,7 +1209,12 @@ serve(async (req) => {
           await logSync({ shopify_order_id: gid, mode: `webhook:${topic}`, outcome: "failed", error: "order not found on re-fetch" });
           return json({ success: true, note: "order not found" });
         }
-        const result = await ingestOrder(node, colorMap);
+        // USA: only orders/create may CREATE an order. The store holds old
+        // orders migrated from the India store; editing or archiving one fires
+        // orders/updated, which must refresh a known order, never import it.
+        // A genuinely new order missed by orders/create is still picked up by
+        // the 5-minute reconcile poll.
+        const result = await ingestOrder(node, colorMap, topic !== "orders/create");
         await logSync({
           shopify_order_id: gid,
           mode: `webhook:${topic}`,
