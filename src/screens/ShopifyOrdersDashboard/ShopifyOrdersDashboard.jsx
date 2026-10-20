@@ -391,28 +391,37 @@ export default function ShopifyOrdersDashboard() {
     () => allOrders.filter((o) => usaById[o.id]).length,
     [allOrders, usaById]
   );
-  // US orders that look like an order the India store already has: the same
-  // Shopify order number AND the same customer name AND exactly the same
-  // products (name, size, quantity — every line, in any order). (The US store
-  // was seeded with copies of India orders.) All three must match, so two
-  // different orders that merely share a number and a common name are not
-  // flagged. Shown as a warning on the US card only — nothing is skipped or
-  // changed. { [usOrderId]: indiaOrderNo }
+  // US orders that look like an order the India store already has (the US
+  // store was seeded with copies of India orders). Flagged when ALL of:
+  //   1. the same Shopify order number,
+  //   2. the same client name,
+  //   3. the products overlap fully one way: every product (name + size) of
+  //      the smaller order is in the other. Loose on purpose — a copy whose
+  //      India original was edited later (lines added / removed) still shows.
+  // Shown as a warning on the US card only — nothing is skipped or changed.
+  // { [usOrderId]: indiaOrderNo }
   const indiaTwinById = useMemo(() => {
     const norm = (v) => String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-    const products = (o) => (Array.isArray(o.items) ? o.items : [])
-      .filter((i) => !i?.is_charge)
-      .map((i) => `${norm(i?.product_name)}~${norm(i?.size)}~${Number(i?.quantity) || 1}`)
-      .sort()
-      .join("||");
-    const key = (o) => `${(o.shopify_order_name || "").trim()}|${norm(o.delivery_name)}|${products(o)}`;
-    const india = new Map();
+    const productSet = (o) => new Set((Array.isArray(o.items) ? o.items : [])
+      .filter((i) => !i?.is_charge && i?.product_name)
+      .map((i) => `${norm(i.product_name)}~${norm(i.size)}`));
+    const within = (a, b) => [...a].every((p) => b.has(p));
+    const head = (o) => `${(o.shopify_order_name || "").trim()}|${norm(o.delivery_name)}`;
+    const india = new Map(); // head -> [{ order_no, products }]
     for (const o of allOrders) {
-      if (!usaById[o.id] && o.shopify_order_name) india.set(key(o), o.order_no);
+      if (usaById[o.id] || !o.shopify_order_name) continue;
+      const list = india.get(head(o)) || [];
+      list.push({ order_no: o.order_no, products: productSet(o) });
+      india.set(head(o), list);
     }
     const out = {};
     for (const o of allOrders) {
-      if (usaById[o.id] && o.shopify_order_name && india.has(key(o))) out[o.id] = india.get(key(o));
+      if (!usaById[o.id] || !o.shopify_order_name) continue;
+      const mine = productSet(o);
+      if (mine.size === 0) continue;
+      const hit = (india.get(head(o)) || []).find(({ products }) =>
+        products.size > 0 && (within(mine, products) || within(products, mine)));
+      if (hit) out[o.id] = hit.order_no;
     }
     return out;
   }, [allOrders, usaById]);
