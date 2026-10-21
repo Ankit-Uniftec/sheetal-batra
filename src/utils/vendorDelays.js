@@ -102,6 +102,8 @@ export function buildDelayTrips(movements = [], orderById = {}, now = Date.now()
             deadline,
             missedDeadline: daysLate > 0 && Number.isFinite(deadline) && endAt > deadline,
             penaltyId: null,
+            createdBy: m.created_by || "",
+            isRepeat: !!m.isRepeat,
         });
     }
     return out;

@@ -24,6 +24,10 @@ const money = (v) => `₹${formatIndianNumber(Math.round(Number(v) || 0))}`;
 const heatColor = (p) => (p >= 50 ? "#f8c4c4" : p >= 35 ? "#fbd9b4" : p >= 20 ? "#fdf0c2" : "#d8f0d8");
 const STATUS_LABEL = { pending: "Pending", settled: "Settled", waived: "Waived" };
 const DRAWER_PAGE = 30;
+const EMPTY_FILTERS = {
+    dateBasis: "sent", channel: "", vendor: "", piece: "", work: "", status: "", minDays: "",
+    head: "", penalty: "", missedOnly: false, repeatOnly: false, q: "",
+};
 
 /**
  * Vendor Delays (Release 20) — Production Manager only.
@@ -39,9 +43,10 @@ const DRAWER_PAGE = 30;
  */
 export default function VendorDelaysTab({ movements = [], loading, orders = [], onOrderClick, canPenalise }) {
     const [view, setView] = useState("analytics"); // analytics | penalties
-    const [channel, setChannel] = useState("");
-    const [vendorFilter, setVendorFilter] = useState("");
-    const [pieceFilter, setPieceFilter] = useState("");
+    // Filters. The period applies to the date chosen in `dateBasis`; every
+    // other filter narrows the trips behind every card, chart and insight.
+    const [f, setF] = useState(EMPTY_FILTERS);
+    const setFilter = (k, v) => setF((p) => ({ ...p, [k]: v }));
     const { range, inPeriod, props: periodProps } = usePeriodFilter("30d", { variant: "pills" });
 
     // ── Penalties (tolerant: before r20_01 the tables do not exist)
@@ -70,18 +75,52 @@ export default function VendorDelaysTab({ movements = [], loading, orders = [], 
         () => attachPenalties(buildDelayTrips(movements, orderById), pen.trips),
         [movements, orderById, pen.trips]
     );
-    const channels = useMemo(() => [...new Set(allTrips.map((t) => t.channel))].filter(Boolean).sort(), [allTrips]);
-    const vendorNames = useMemo(() => [...new Set(allTrips.map((t) => t.vendor))].sort(), [allTrips]);
-    const scoped = useMemo(() => allTrips.filter((t) =>
-        (!channel || t.channel === channel) &&
-        (!vendorFilter || t.vendor === vendorFilter) &&
-        (!pieceFilter || t.piece === pieceFilter)), [allTrips, channel, vendorFilter, pieceFilter]);
+    const options = useMemo(() => {
+        const uniq = (fn) => [...new Set(allTrips.map(fn))].filter((x) => x && x !== "—").sort();
+        return {
+            channels: uniq((t) => t.channel),
+            vendors: uniq((t) => t.vendor),
+            works: uniq((t) => t.work),
+            heads: uniq((t) => t.createdBy),
+        };
+    }, [allTrips]);
+    const scoped = useMemo(() => {
+        const q = f.q.trim().toLowerCase();
+        const minDays = Number(f.minDays) || 0;
+        return allTrips.filter((t) =>
+            (!f.channel || t.channel === f.channel) &&
+            (!f.vendor || t.vendor === f.vendor) &&
+            (!f.piece || t.piece === f.piece) &&
+            (!f.work || t.work === f.work) &&
+            (!f.head || t.createdBy === f.head) &&
+            (!f.status ||
+                (f.status === "late" && t.isLate) ||
+                (f.status === "ontime" && !t.isLate && !t.isOut) ||
+                (f.status === "overdue" && t.isOut && t.isLate) ||
+                (f.status === "out" && t.isOut) ||
+                (f.status === "returned" && !t.isOut)) &&
+            (!minDays || t.daysLate >= minDays) &&
+            (!f.penalty || (f.penalty === "yes" ? !!t.penaltyId : !t.penaltyId)) &&
+            (!f.missedOnly || t.missedDeadline) &&
+            (!f.repeatOnly || t.isRepeat) &&
+            (!q || `${t.orderNo} ${t.barcode} ${t.product} ${t.client}`.toLowerCase().includes(q)));
+    }, [allTrips, f]);
     const iso = (ms) => new Date(ms).toISOString();
-    const trips = useMemo(() => scoped.filter((t) => inPeriod(iso(t.sentAt))), [scoped, inPeriod]);
+    // The date the period applies to. A trip without that date (e.g. not yet
+    // returned) falls outside any bounded range.
+    const basisMs = useCallback(
+        (t) => (f.dateBasis === "due" ? t.due : f.dateBasis === "returned" ? t.returnedAt : t.sentAt),
+        [f.dateBasis]
+    );
+    const trips = useMemo(
+        () => scoped.filter((t) => { const ms = basisMs(t); return ms == null ? !range : inPeriod(iso(ms)); }),
+        [scoped, inPeriod, basisMs, range]
+    );
+    const activeFilters = Object.entries(f).filter(([k, v]) => k !== "dateBasis" && v !== "" && v !== false).length;
     const prevRange = range ? comparisonPeriodRange(range, "previous_period") : null;
     const prevTrips = useMemo(
-        () => (prevRange ? scoped.filter((t) => inRange(prevRange, iso(t.sentAt))) : null),
-        [scoped, prevRange?.start?.getTime(), prevRange?.end?.getTime()] // eslint-disable-line react-hooks/exhaustive-deps
+        () => (prevRange ? scoped.filter((t) => { const ms = basisMs(t); return ms != null && inRange(prevRange, iso(ms)); }) : null),
+        [scoped, basisMs, prevRange?.start?.getTime(), prevRange?.end?.getTime()] // eslint-disable-line react-hooks/exhaustive-deps
     );
 
     const summary = useMemo(() => delaySummary(trips), [trips]);
@@ -131,21 +170,74 @@ export default function VendorDelaysTab({ movements = [], loading, orders = [], 
                 <PenaltiesLedger pen={pen} canPenalise={canPenalise} onChanged={loadPenalties} allTrips={allTrips} onOpenTrips={open} />
             ) : (
                 <>
+                    <div className="vd-period">
+                        <div className="vd-period-head">
+                            <span className="vd-filter-label">Date range applies to</span>
+                            <select value={f.dateBasis} onChange={(e) => setFilter("dateBasis", e.target.value)}>
+                                <option value="sent">Date sent to vendor</option>
+                                <option value="due">Promised return date</option>
+                                <option value="returned">Date returned</option>
+                            </select>
+                        </div>
+                        <PeriodFilter {...periodProps} variant="pills" label="" />
+                    </div>
                     <div className="vd-filters">
-                        <PeriodFilter {...periodProps} label="Trips sent out:" />
-                        <select value={channel} onChange={(e) => setChannel(e.target.value)}>
-                            <option value="">All channels</option>
-                            {channels.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)}>
+                        <input className="vd-search" type="search" value={f.q} onChange={(e) => setFilter("q", e.target.value)}
+                            placeholder="Search order no, barcode, product, client" />
+                        <select value={f.vendor} onChange={(e) => setFilter("vendor", e.target.value)}>
                             <option value="">All vendors</option>
-                            {vendorNames.map((v) => <option key={v} value={v}>{v}</option>)}
+                            {options.vendors.map((v) => <option key={v} value={v}>{v}</option>)}
                         </select>
-                        <select value={pieceFilter} onChange={(e) => setPieceFilter(e.target.value)}>
+                        <select value={f.channel} onChange={(e) => setFilter("channel", e.target.value)}>
+                            <option value="">All channels</option>
+                            {options.channels.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select value={f.piece} onChange={(e) => setFilter("piece", e.target.value)}>
                             <option value="">All pieces</option>
                             {Object.entries(PIECE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
+                        <select value={f.work} onChange={(e) => setFilter("work", e.target.value)}>
+                            <option value="">All work</option>
+                            {options.works.map((w) => <option key={w} value={w}>{w}</option>)}
+                        </select>
+                        <select value={f.status} onChange={(e) => setFilter("status", e.target.value)}>
+                            <option value="">All trips</option>
+                            <option value="late">Late (returned or overdue)</option>
+                            <option value="ontime">Returned on time</option>
+                            <option value="overdue">Overdue now</option>
+                            <option value="out">Still at vendor</option>
+                            <option value="returned">Returned</option>
+                        </select>
+                        <select value={f.minDays} onChange={(e) => setFilter("minDays", e.target.value)}>
+                            <option value="">Any days late</option>
+                            <option value="1">1+ days late</option>
+                            <option value="2">2+ days late</option>
+                            <option value="4">4+ days late</option>
+                            <option value="8">8+ days late</option>
+                        </select>
+                        <select value={f.head} onChange={(e) => setFilter("head", e.target.value)}>
+                            <option value="">Set up by: anyone</option>
+                            {options.heads.map((h) => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                        {pen.available && (
+                            <select value={f.penalty} onChange={(e) => setFilter("penalty", e.target.value)}>
+                                <option value="">Penalty: any</option>
+                                <option value="yes">Penalised</option>
+                                <option value="no">Not penalised</option>
+                            </select>
+                        )}
+                        <label className="vd-check"><input type="checkbox" checked={f.missedOnly} onChange={(e) => setFilter("missedOnly", e.target.checked)} /> Missed order deadline</label>
+                        <label className="vd-check"><input type="checkbox" checked={f.repeatOnly} onChange={(e) => setFilter("repeatOnly", e.target.checked)} /> Repeat trips (sent back)</label>
+                        {activeFilters > 0 && (
+                            <button type="button" className="vd-mini ghost" onClick={() => setF((p) => ({ ...EMPTY_FILTERS, dateBasis: p.dateBasis }))}>
+                                Reset filters ({activeFilters})
+                            </button>
+                        )}
                     </div>
+                    <p className="vd-caption vd-count">
+                        Showing <b>{formatIndianNumber(trips.length)}</b> trips · {formatIndianNumber(new Set(trips.map((t) => t.orderId)).size)} orders
+                        {range ? ` · ${fmtDate(range.start.getTime())} – ${fmtDate(range.end.getTime())}` : " · all time"}
+                    </p>
                     <p className="vd-caption">
                         A trip is late when the piece came back (or, still out, is now) after the end of its promised return day. If a piece was sent out after its return date had already passed, the vendor is judged from the send date plus the planned turnaround.
                         Our own SB WH Delhi (2) is not counted. Click any number, bar, cell or insight to see the order cards behind it.

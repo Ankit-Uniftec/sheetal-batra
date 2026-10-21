@@ -94,3 +94,10 @@
   .vd-trip-body { grid-template-columns: 1fr; }
   .vd-drawer { padding: 12px; }
 }
+.vd-period { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #FFFFFFB0; border: 1px solid #e3e3e3; border-radius: 12px; }
+.vd-period-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vd-period-head select { padding: 6px 10px; border: 1px solid #d4d4d4; border-radius: 8px; background: #fff; font-size: 13px; font-family: inherit; }
+.vd-filter-label { font-size: 13px; color: #666; }
+.vd-search { min-width: 240px; flex: 1 1 240px; padding: 7px 10px; border: 1px solid #d4d4d4; border-radius: 8px; font-size: 13px; font-family: inherit; }
+.vd-check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #555; white-space: nowrap; }
+.vd-count { color: #555; }
