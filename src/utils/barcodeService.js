@@ -1703,7 +1703,7 @@ export async function enrichComponentsWithMovements(components) {
 export async function fetchAllMovements() {
   // Paged past Supabase's 1000-row cap — full movements table grows without bound.
   const { data, error } = await fetchAllRows("external_movements", (q) => q
-    .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, repeat_reason, component_id, order_components ( barcode, order_no, component_type, order_id )")
+    .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, repeat_reason, component_id, order_components ( barcode, order_no, component_type, order_id, item_index )")
     .order("created_at", { ascending: false }));
   if (error) { console.error("fetchAllMovements failed:", error); return []; }
 
@@ -1712,6 +1712,8 @@ export async function fetchAllMovements() {
     barcode: m.order_components?.barcode || null,
     order_no: m.order_components?.order_no || null,
     component_type: m.order_components?.component_type || null,
+    // Which order item the piece belongs to — Vendor Delays reads the product name.
+    item_index: m.order_components?.item_index ?? null,
     order_id: m.order_components?.order_id || m.order_id || null,
   }));
 

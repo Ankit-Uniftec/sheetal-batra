@@ -19,6 +19,7 @@ import { cancelOrder } from "../../../utils/cancelOrder";
 import ReJourneyPanel from "../../../components/ReJourneyPanel";
 import { fetchReJourneys } from "../../../utils/reJourneys";
 import ExternalVendorsPanel from "../../../components/ExternalVendorsPanel";
+import VendorDelaysTab from "../../../components/VendorDelays/VendorDelaysTab";
 import { fetchExternalMovements, repeatVendorCounts } from "../../../utils/externalMovements";
 // The PM works to the WAREHOUSE deadline (T-2), the same date the warehouse
 // dashboard and the warehouse PDF show — not the customer's delivery date.
@@ -575,7 +576,7 @@ export default function ProductionManagerDashboard() {
     // sub-tab opens, and on Overview (the Vendor Rework card needs the counts).
     // Still lazy — never fetched on the other dozen tabs.
     useEffect(() => {
-        const needed = activeTab === "overview" || (activeTab === "vendors" && subTab === "external");
+        const needed = activeTab === "overview" || activeTab === "vendor_delays" || (activeTab === "vendors" && subTab === "external");
         if (!needed) return;
         let cancelled = false;
         (async () => {
@@ -2413,6 +2414,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "overrides" ? "active" : ""}`} onClick={() => { setActiveTab("overrides"); setShowSidebar(false); }}>Scan & Overrides</a>
                             <a className={`pm-menu-item ${activeTab === "override_log" ? "active" : ""}`} onClick={() => { setActiveTab("override_log"); setShowSidebar(false); }}>Override Log</a>
                             <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setSubTab("directory"); setExtRepeatOnly(false); setShowSidebar(false); }}>Vendors</a>
+                            <a className={`pm-menu-item ${activeTab === "vendor_delays" ? "active" : ""}`} onClick={() => { setActiveTab("vendor_delays"); setShowSidebar(false); }}>Vendor Delays</a>
                             <a className={`pm-menu-item ${activeTab === "replacements" ? "active" : ""}`} onClick={() => { setActiveTab("replacements"); setShowSidebar(false); }}>Replacement Approvals</a>
                             <a className={`pm-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
@@ -4536,6 +4538,18 @@ export default function ProductionManagerDashboard() {
                                 ) : (
                                     <VendorRequest currentUserEmail={currentUserEmail} />
                                 )}
+                            </div>
+                        )}
+                        {/* Vendor delays + penalties (Release 20). */}
+                        {activeTab === "vendor_delays" && (
+                            <div className="pm-orders-tab">
+                                <VendorDelaysTab
+                                    movements={extMovements}
+                                    loading={extMovementsLoading}
+                                    orders={orders}
+                                    onOrderClick={goToOrder}
+                                    canPenalise={(profile?.role || "").toLowerCase() === "production_manager"}
+                                />
                             </div>
                         )}
                         {activeTab === "replacements" && (
