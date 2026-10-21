@@ -15,6 +15,8 @@ import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
 import VendorApprovals from "../../components/VendorApprovals";
 import FactoryPause from "../../components/FactoryPause";
+import VendorDelaysTab from "../../components/VendorDelays/VendorDelaysTab";
+import { fetchExternalMovements } from "../../utils/externalMovements";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
@@ -90,6 +92,9 @@ export default function COODashboard() {
     // Core state
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
+    // Vendor Delays (Release 20) — view-only for the COO; loaded when opened.
+    const [vendorTrips, setVendorTrips] = useState([]);
+    const [vendorTripsLoading, setVendorTripsLoading] = useState(false);
     // Real production signals — qc_records (QC outcomes) and order_components
     // (rework state). See fetchAllData for why the orders.* equivalents are dead.
     const [qcRecords, setQcRecords] = useState([]);
@@ -717,6 +722,25 @@ export default function COODashboard() {
 
     // Resets
     useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy, ordersPeriodRange]);
+
+    // Vendor trips for the Vendor Delays tab — fetched only when it opens.
+    useEffect(() => {
+        if (activeTab !== "vendor_delays") return;
+        let cancelled = false;
+        (async () => {
+            setVendorTripsLoading(true);
+            const rows = await fetchExternalMovements();
+            if (!cancelled) { setVendorTrips(rows); setVendorTripsLoading(false); }
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab]);
+
+    // From a Vendor Delays order card to the order's own page. Not Order
+    // Tracking: that list leaves out website (Shopify) orders, and many
+    // delayed pieces belong to them. Back returns to Vendor Delays.
+    const openOrderFromDelays = (orderId) => {
+        if (orderId) navigate(`/order/${orderId}`);
+    };
     useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
     useEffect(() => {
         if (activeTab === "inventory") {
@@ -754,6 +778,7 @@ export default function COODashboard() {
                         <button className={`admin-nav-item ${activeTab === "financial" ? "active" : ""}`} onClick={() => { setActiveTab("financial"); setShowSidebar(false); }}>Financial</button>
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order Tracking</button>
+                        <button className={`admin-nav-item ${activeTab === "vendor_delays" ? "active" : ""}`} onClick={() => { setActiveTab("vendor_delays"); setShowSidebar(false); }}>Vendor Delays</button>
                         <button className={`admin-nav-item ${activeTab === "vendor_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("vendor_approvals"); setShowSidebar(false); }}>Vendor Approvals</button>
                         <button className={`admin-nav-item ${activeTab === "factory_pause" ? "active" : ""}`} onClick={() => { setActiveTab("factory_pause"); setShowSidebar(false); }}>Factory Pause</button>
                     </nav>
@@ -1064,6 +1089,20 @@ export default function COODashboard() {
                                 })}</tbody>
                             </table></div></div>
                             <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
+                        </div>
+                    )}
+
+                    {activeTab === "vendor_delays" && (
+                        <div className="admin-orders-tab">
+                            <h2 className="admin-section-title">Vendor Delays</h2>
+                            {/* The COO has full penalty rights, like the Production Manager (r20_03). */}
+                            <VendorDelaysTab
+                                movements={vendorTrips}
+                                loading={vendorTripsLoading}
+                                orders={orders}
+                                onOrderClick={openOrderFromDelays}
+                                canPenalise
+                            />
                         </div>
                     )}
 
