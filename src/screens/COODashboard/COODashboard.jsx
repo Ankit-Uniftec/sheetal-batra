@@ -1095,13 +1095,13 @@ export default function COODashboard() {
                     {activeTab === "vendor_delays" && (
                         <div className="admin-orders-tab">
                             <h2 className="admin-section-title">Vendor Delays</h2>
-                            {/* View-only: penalties are added / settled by the Production Manager. */}
+                            {/* The COO has full penalty rights, like the Production Manager (r20_03). */}
                             <VendorDelaysTab
                                 movements={vendorTrips}
                                 loading={vendorTripsLoading}
                                 orders={orders}
                                 onOrderClick={openOrderFromDelays}
-                                canPenalise={false}
+                                canPenalise
                             />
                         </div>
                     )}
