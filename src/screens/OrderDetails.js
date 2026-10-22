@@ -107,6 +107,10 @@ export default function OrderDetails() {
   // payload (orders gets shipping_charge = 0 as before); its log row is written
   // after the order is saved and can never block placement.
   const [shippingWaived, setShippingWaived] = useState(false);
+  // One-time zero-advance code (db/meeting_points/zero_advance_code.sql).
+  // Lets this order go through with ₹0 advance; NOT a discount. Validated by
+  // check_advance_waiver, marked used after the order is saved.
+  const [advanceWaiverCode, setAdvanceWaiverCode] = useState("");
   const [shippingWaiverReason, setShippingWaiverReason] = useState("");
   const [waiverModal, setWaiverModal] = useState(false);
   const [waiverReasonInput, setWaiverReasonInput] = useState("");
@@ -229,10 +233,11 @@ export default function OrderDetails() {
 
   // Allow any advance amount (don't force minimum)
   const sanitizedAdvance = useMemo(() => {
+    if (advanceWaiverCode) return 0; // zero-advance code: advance is always ₹0
     const amount = parseFloat(advancePayment);
     if (isNaN(amount) || amount < 0) return 0;
     return amount; // Don't cap here - let pricing.netAfterStoreCredit handle it
-  }, [advancePayment]);
+  }, [advancePayment, advanceWaiverCode]);
 
   const remainingAmount = useMemo(
     () => Math.max(0, totalAmount - sanitizedAdvance),
@@ -310,7 +315,7 @@ export default function OrderDetails() {
     // Calculate min advance: on netAfterStoreCredit if store credit applied, 
     // on netPayable if discount applied, otherwise on totalAmount
     const minAdvanceBase = storeCreditApplied ? netAfterStoreCredit : (hasDiscount ? netPayable : totalAmount);
-    const minAdvanceAmount = minAdvanceBase * minAdvancePercent;
+    const minAdvanceAmount = advanceWaiverCode ? 0 : minAdvanceBase * minAdvancePercent;
 
     const remaining = Math.max(0, netAfterStoreCredit - sanitizedAdvance);
 
@@ -352,6 +357,7 @@ export default function OrderDetails() {
     deliveryCountry,
     order.mode_of_delivery,
     shippingWaived,
+    advanceWaiverCode,
     discountApplied,
     discountApplied2,
     birthdayApplied,
@@ -520,6 +526,7 @@ export default function OrderDetails() {
         if (data.flatDiscountCode) setFlatDiscountCode(data.flatDiscountCode);
         if (data.shippingWaived !== undefined) setShippingWaived(!!data.shippingWaived);
         if (data.shippingWaiverReason) setShippingWaiverReason(data.shippingWaiverReason);
+        if (data.advanceWaiverCode) setAdvanceWaiverCode(data.advanceWaiverCode);
         if (data.paymentMode) setPaymentMode(data.paymentMode);
         if (data.storeCreditApplied !== undefined) setStoreCreditApplied(data.storeCreditApplied);
 
@@ -570,6 +577,7 @@ export default function OrderDetails() {
       flatDiscountCode,
       shippingWaived,
       shippingWaiverReason,
+      advanceWaiverCode,
       paymentMode,
       billingSame,
       billingAddress,
@@ -608,6 +616,7 @@ export default function OrderDetails() {
     flatDiscountCode,
     shippingWaived,
     shippingWaiverReason,
+    advanceWaiverCode,
     paymentMode,
     billingSame,
     billingAddress,
@@ -729,7 +738,7 @@ export default function OrderDetails() {
     const shippingWaiver = pricing.shippingWaived
       ? { code: SHIPPING_WAIVER_CODE, amount: SHIPPING_CHARGE_AMOUNT, reason: shippingWaiverReason }
       : null;
-    navigate("/orderDetail", { state: { orderPayload: payload, draftId, shippingWaiver } });
+    navigate("/orderDetail", { state: { orderPayload: payload, draftId, shippingWaiver, advanceWaiverCode: advanceWaiverCode || null } });
   };
 
   // CONTINUE TO NEXT SCREEN
@@ -818,6 +827,27 @@ export default function OrderDetails() {
       setWaiverReasonInput("");
       setWaiverModal(true);
       return;
+    }
+
+    // One-time zero-advance code. Checked with the database (any failure,
+    // e.g. before its SQL exists, simply falls through to the usual codes).
+    // Not a discount and not counted toward the 2-code limit.
+    if (!SHOPMORE_CODES[code]) {
+      try {
+        const { data: isWaiver, error: waiverErr } = await supabase.rpc("check_advance_waiver", { p_code: code });
+        if (!waiverErr && isWaiver === true) {
+          if (advanceWaiverCode) {
+            showPopup({ title: "Already Applied", message: "This code is already applied to this order.", type: "warning" });
+            return;
+          }
+          setAdvanceWaiverCode(code);
+          setIsSplitPayment(false);
+          setSplitPayments([]);
+          setAdvancePayment(0);
+          showPopup({ title: "Code Applied ✅", message: "Advance for this order is ₹0.", type: "success" });
+          return;
+        }
+      } catch { /* not a zero-advance code — continue */ }
     }
 
     // Count currently applied codes (regular % + birthday % + COD waiver + flat).
@@ -1181,6 +1211,11 @@ export default function OrderDetails() {
   const removeFlatDiscount = () => {
     setFlatDiscountAmount(0);
     setFlatDiscountCode("");
+  };
+
+  const removeAdvanceWaiver = () => {
+    setAdvanceWaiverCode("");
+    setAdvancePayment("");
   };
 
   const removeShippingWaiver = () => {
@@ -1679,7 +1714,7 @@ export default function OrderDetails() {
           )} */}
 
           {/* Applied Discounts Display */}
-          {(discountApplied || discountApplied2 || birthdayApplied || storeCreditApplied || flatDiscountAmount > 0 || pricing.shippingWaived) && (
+          {(discountApplied || discountApplied2 || birthdayApplied || storeCreditApplied || flatDiscountAmount > 0 || pricing.shippingWaived || !!advanceWaiverCode) && (
             <div
               className="applied-discounts"
               style={{
@@ -1815,6 +1850,27 @@ export default function OrderDetails() {
                   >×</button>
                 </div>
               )}
+              {advanceWaiverCode && (
+                <div
+                  className="discount-tag advance-waiver"
+                  style={{
+                    background: "#e8f5e9",
+                    color: "#2e7d32",
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  <span>✓ Code applied</span>
+                  <button
+                    onClick={removeAdvanceWaiver}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: "16px", color: "#666" }}
+                  >×</button>
+                </div>
+              )}
               {pricing.shippingWaived && (
                 <div
                   className="discount-tag shipping-waiver"
@@ -1947,8 +2003,8 @@ export default function OrderDetails() {
             <div className="field flex-wrap">
               <label>
                 Min. Advance
-                {isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 50%)</span>}
-                {!isCustomOrder && <span style={{ color: "#2e7d32", marginLeft: 4 }}>(Standard - 25%)</span>}
+                {!advanceWaiverCode && isCustomOrder && <span style={{ color: "#e65100", marginLeft: 4 }}>(Custom - 50%)</span>}
+                {!advanceWaiverCode && !isCustomOrder && <span style={{ color: "#2e7d32", marginLeft: 4 }}>(Standard - 25%)</span>}
               </label>
               <span>₹{formatIndianNumber(pricing.minAdvanceAmount)}</span>
             </div>
@@ -2041,8 +2097,9 @@ export default function OrderDetails() {
               <input
                 className="input-line"
                 type="number"
-                value={advancePayment}
+                value={advanceWaiverCode ? 0 : advancePayment}
                 onChange={(e) => {
+                  if (advanceWaiverCode) return;
                   const val = parseFloat(e.target.value) || 0;
                   const maxAmount = pricing.netAfterStoreCredit || pricing.netPayable || totalAmount;
                   if (val > maxAmount) {
@@ -2052,8 +2109,8 @@ export default function OrderDetails() {
                   }
                 }}
                 max={storeCreditApplied ? pricing.netAfterStoreCredit : totalAmount}
-                disabled={isSplitPayment}
-                style={isSplitPayment ? { background: "#f5f5f5" } : {}}
+                disabled={isSplitPayment || !!advanceWaiverCode}
+                style={isSplitPayment || advanceWaiverCode ? { background: "#f5f5f5" } : {}}
               />
             </div>
             <div className="field">

@@ -446,6 +446,9 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
   const grandTotal = Number(order.grand_total) || 0;
   const discountAmount = Number(order.discount_amount) || 0;
   const advancePayment = Number(order.advance_payment) || 0;
+  // A store order placed with ₹0 advance (one-time zero-advance code) shows
+  // "Advance: ₹0" rather than hiding the line.
+  const showZeroAdvance = advancePayment === 0 && /^SB-(DLC|LDHC)-/i.test(String(order.order_no || ""));
   const collectorsCode = Number(order.collectors_code) || 0;
   const storeCreditUsed = Number(order.store_credit_used) || 0;
   // International shipping charge (store orders; Release 18). It is part of
@@ -653,7 +656,7 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
                 )}
               </View>
             )}
-            {advancePayment > 0 && (
+            {(advancePayment > 0 || showZeroAdvance) && (
               <Field label="Advance Amount Paid:" value={formatINR(advancePayment)} />
             )}
           </View>
@@ -677,7 +680,7 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
             {storeCreditUsed > 0 && (
               <PaymentRow label="Store Credit Applied:" value={storeCreditUsed} prefix="-" />
             )}
-            {advancePayment > 0 && (
+            {(advancePayment > 0 || showZeroAdvance) && (
               <PaymentRow label="Total Advance Paid:" value={advancePayment} prefix="-" />
             )}
             <PaymentRow
