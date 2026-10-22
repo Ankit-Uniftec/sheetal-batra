@@ -8,6 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import Paginator from "../../components/Paginator";
 import useFilterParam from "../../hooks/useFilterParam";
+import { startNewB2bOrder } from "../../utils/b2bStockOrder";
 
 const ORDERS_PER_PAGE = 6;
 
@@ -109,7 +110,8 @@ export default function B2bVendorOrders() {
     };
 
     const handleNewOrder = () => {
-        // Pre-select this vendor for new order
+        // A NEW order: drop any unfinished order / edit first, then pre-select this vendor.
+        startNewB2bOrder();
         sessionStorage.setItem("b2bVendorData", JSON.stringify({
             selectedVendorId: vendorId,
             vendor: vendor,

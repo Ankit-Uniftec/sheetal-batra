@@ -11,7 +11,7 @@ import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam } from "../../components/PeriodFilter";
-import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
+import { isB2bStockOrderRow, startNewB2bOrder, clearB2bOrderFlow, beginB2bEdit } from "../../utils/b2bStockOrder";
 import DashboardHeader from "../../components/DashboardHeader";
 
 export default function B2bExecutiveDashboard() {
@@ -179,7 +179,9 @@ export default function B2bExecutiveDashboard() {
         navigate("/login");
     };
 
-    const handleNewOrder = () => navigate("/b2b-vendor-selection");
+    const handleNewOrder = () => { startNewB2bOrder(); navigate("/b2b-vendor-selection"); };
+    // Back on the dashboard = no order is being entered or edited (see clearB2bOrderFlow).
+    useEffect(() => { clearB2bOrderFlow(); }, []);
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
 
     const handleDownloadPdf = async (e, order) => {
@@ -215,7 +217,7 @@ export default function B2bExecutiveDashboard() {
                 vendorFull = data;
             }
 
-            sessionStorage.setItem("b2bEditingOrderId", order.id);
+            beginB2bEdit(order.id);
 
             sessionStorage.setItem("b2bVendorData", JSON.stringify({
                 selectedVendorId: order.vendor_id,

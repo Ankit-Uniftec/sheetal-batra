@@ -7,6 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
+import { isEditingB2bOrder } from "../../utils/b2bStockOrder";
 
 const SESSION_KEY = "b2bVendorData";
 
@@ -64,6 +65,9 @@ export default function B2bVendorSelection() {
     const [userRole, setUserRole] = useState(null);
 
     const [poNumber, setPoNumber] = useState("");
+    // Editing an existing order: its PO number is fixed. A different PO is a
+    // different order and must be created as a new order.
+    const [editingOrder] = useState(() => isEditingB2bOrder());
     const [merchandiser, setMerchandiser] = useState("");
     const [orderType, setOrderType] = useState("");
     const [discountPercent, setDiscountPercent] = useState(0);
@@ -311,7 +315,8 @@ export default function B2bVendorSelection() {
                                 <h4 className="product-title" style={{ marginTop: 30 }}>Order Details</h4>
 
                                 <div className="row">
-                                    <div className="field"><label>PO Number *</label><input type="text" className="input-line" placeholder="Enter Purchase Order Number" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} /></div>
+                                    <div className="field"><label>PO Number *</label><input type="text" className="input-line" placeholder="Enter Purchase Order Number" value={poNumber} onChange={(e) => { if (!editingOrder) setPoNumber(e.target.value); }} readOnly={editingOrder} disabled={editingOrder} title={editingOrder ? "The PO number can't be changed on an existing order" : undefined} />
+                                        {editingOrder && <small style={{ color: "#8a6d3b", fontSize: 12 }}>The PO number can't be changed while editing. For a different PO, create a new order.</small>}</div>
                                     <div className="field"><label>Merchandiser *</label><SearchableSelect options={merchandisers} value={merchandiser} onChange={setMerchandiser} placeholder="Select Merchandiser" /></div>
                                 </div>
 

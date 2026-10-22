@@ -55,6 +55,37 @@ export function startB2bStockOrder() {
   sessionStorage.setItem(B2B_STOCK_FLAG, "true");
 }
 
+// The session key that turns the B2B order flow into an EDIT of an existing
+// order. While it is set, the review screen UPDATES that order instead of
+// creating a new one.
+export const B2B_EDIT_KEY = "b2bEditingOrderId";
+
+/**
+ * Forget any in-progress B2B order or edit (all flow keys + the stock flag).
+ *
+ * WHY: the edit key used to be cleared ONLY after a successful save. An edit
+ * that was opened and then abandoned left it behind, and the next NEW order
+ * raised in that browser tab silently overwrote the old order (its PO,
+ * client and products replaced). Call this whenever a new order starts and
+ * whenever a B2B dashboard opens.
+ */
+export function clearB2bOrderFlow() {
+  B2B_FLOW_SESSION_KEYS.forEach((k) => sessionStorage.removeItem(k));
+  sessionStorage.removeItem(B2B_STOCK_FLAG);
+}
+
+/** Start a NEW normal B2B order: nothing from an earlier order or edit carries over. */
+export const startNewB2bOrder = clearB2bOrderFlow;
+
+/** Start editing one order: clears leftovers first, then remembers only this order. */
+export function beginB2bEdit(orderId) {
+  clearB2bOrderFlow();
+  sessionStorage.setItem(B2B_EDIT_KEY, orderId);
+}
+
+/** Is the B2B flow currently editing an existing order? */
+export const isEditingB2bOrder = () => !!sessionStorage.getItem(B2B_EDIT_KEY);
+
 /**
  * Clear the flag. Call after a successful insert and on logout, so the next
  * order raised in this session doesn't silently inherit stock behaviour (the

@@ -237,6 +237,10 @@ export default function B2bReviewOrder() {
 
             if (editingOrderId) {
                 // ===== EDIT MODE: UPDATE existing order =====
+                // The PO number of an existing order never changes: a different
+                // PO is a different order (create a new one). Not sent at all,
+                // so the stored PO stays exactly as it was.
+                delete orderPayload.po_number;
                 // autoApprove (not isMerchandiser) so that if stock orders ever
                 // become editable they don't fall into the re-approval branch.
                 if (autoApprove) {
