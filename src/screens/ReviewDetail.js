@@ -114,6 +114,8 @@ export default function ReviewDetail() {
   // shipping charge. Deliberately NOT in the order payload — logged after the
   // order is saved, never blocking.
   const shippingWaiver = location.state?.shippingWaiver || null;
+  // One-time zero-advance code used on the form (marked used after the save).
+  const advanceWaiverCode = location.state?.advanceWaiverCode || null;
 
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Placing order...");
@@ -638,6 +640,19 @@ export default function ReviewDetail() {
     //     the order-placed screen and the SA adds it from Update Payment.
     const advanceProof = await uploadPendingAdvanceProofs(
       insertedOrder, advanceParts, normalizedOrder.salesperson_email || null);
+
+    // 4.65 One-time zero-advance code: mark it used for this order. Never
+    //      blocks — the order is already saved.
+    if (advanceWaiverCode) {
+      try {
+        const { data: used, error: useErr } = await supabase.rpc("use_advance_waiver", {
+          p_code: advanceWaiverCode, p_order_id: insertedOrder.id,
+        });
+        if (useErr || !used?.success) console.error("Zero-advance code not marked used:", useErr || used);
+      } catch (e) {
+        console.error("Zero-advance code not marked used:", e);
+      }
+    }
 
     // 4.7 SBFREESHIP log (Release 18) — never throws, never blocks.
     if (shippingWaiver) {
