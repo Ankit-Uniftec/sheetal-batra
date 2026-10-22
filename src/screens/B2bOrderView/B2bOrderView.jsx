@@ -7,7 +7,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { getWarehouseDate } from "../../utils/warehouseDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
-import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
+import { isB2bStockOrderRow, beginB2bEdit } from "../../utils/b2bStockOrder";
 
 function ColorDotDisplay({ colorObject }) {
     if (!colorObject) return null;
@@ -132,8 +132,8 @@ export default function B2bOrderView() {
     const handleEdit = () => {
         if (!order || !vendor) return;
 
-        // Store editing order ID
-        sessionStorage.setItem("b2bEditingOrderId", order.id);
+        // Start editing THIS order (clears any leftover order / edit first).
+        beginB2bEdit(order.id);
 
         // Populate vendor session data
         const vendorSessionData = {

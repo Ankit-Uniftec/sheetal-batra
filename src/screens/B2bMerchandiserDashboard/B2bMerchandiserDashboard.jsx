@@ -22,7 +22,7 @@ import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange } from "../../components/PeriodFilter";
-import { startB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
+import { startB2bStockOrder, clearB2bStockOrder, startNewB2bOrder, clearB2bOrderFlow } from "../../utils/b2bStockOrder";
 import WarehouseTab from "../../components/stock/WarehouseTab";
 import StockExchangeTab from "../../components/stock/StockExchangeTab";
 import StockPanel from "../../components/stock/StockPanel";
@@ -234,6 +234,10 @@ export default function B2bMerchandiserDashboard() {
     }, []);
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
+    // Back on the dashboard = no order is being entered or edited. Forget any
+    // unfinished one, so a later NEW order can never overwrite an old order
+    // whose edit was opened and abandoned.
+    useEffect(() => { clearB2bOrderFlow(); }, []);
 
     // ==================== PERIOD FILTER ====================
     const { control: periodControl, inPeriod } = usePeriodFilter("all", { variant: "pills" });
@@ -1715,7 +1719,7 @@ export default function B2bMerchandiserDashboard() {
                 )}
             </div>
 
-            <button className="merch-add-btn" onClick={() => navigate("/b2b-vendor-selection")}>+</button>
+            <button className="merch-add-btn" onClick={() => { startNewB2bOrder(); navigate("/b2b-vendor-selection"); }}>+</button>
 
             {/* ===== PRODUCTION JOURNEY / QC REPORT (shared modals) ===== */}
             {journeyOrder && (
