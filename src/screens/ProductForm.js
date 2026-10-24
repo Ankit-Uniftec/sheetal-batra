@@ -676,6 +676,9 @@ export default function ProductForm() {
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
+  // Men: for now a label only — men's pieces use the women's sizes, chart and
+  // measurements (no kids discount). Men's own sizes/chart come later.
+  const [isMenProduct, setIsMenProduct] = useState(false);
   const [isGiftingOrder, setIsGiftingOrder] = useState(false); // Gifting order toggle
   // Custom Piece mode — independent of Gifting (a customer can gift a custom piece).
   // When ON, the product list filters to `is_custom_piece = true`, Women/Kids
@@ -1168,6 +1171,7 @@ export default function ProductForm() {
 
         // Kids Product
         if (draftData.isKidsProduct !== undefined) setIsKidsProduct(draftData.isKidsProduct);
+        setIsMenProduct(draftData.isMenProduct === true);
 
         // Gifting Order
         if (draftData.isGiftingOrder !== undefined) setIsGiftingOrder(draftData.isGiftingOrder);
@@ -1257,6 +1261,7 @@ export default function ProductForm() {
 
         // Kids Product
         if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
+        setIsMenProduct(data.isMenProduct === true);
 
         // Gifting Order
         if (data.isGiftingOrder !== undefined) setIsGiftingOrder(data.isGiftingOrder);
@@ -1309,6 +1314,7 @@ export default function ProductForm() {
       comments,
       attachments,
       isKidsProduct,
+      isMenProduct,
       isGiftingOrder,
       urgentReason,
       otherUrgentReason,
@@ -1351,6 +1357,7 @@ export default function ProductForm() {
     comments,
     attachments,
     isKidsProduct,
+    isMenProduct,
     isGiftingOrder,
     urgentReason,
     otherUrgentReason,
@@ -1510,6 +1517,7 @@ export default function ProductForm() {
       if (isKidsProduct) {
         setIsKidsProduct(false);
       }
+      setIsMenProduct(false);
 
       try {
         // Fetch latest inventory from Shopify and update our database
@@ -1662,6 +1670,7 @@ export default function ProductForm() {
     if ((syncEnabled || selectedProduct.is_custom_piece === true) && isKidsProduct) {
       setIsKidsProduct(false);
     }
+    if (syncEnabled || selectedProduct.is_custom_piece === true) setIsMenProduct(false);
 
     // Pre-fill the dupatta toggle from the product. Staff can still override
     // before adding to the cart (e.g. a customer who declines the dupatta).
@@ -2097,7 +2106,7 @@ export default function ProductForm() {
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: comments, // Initialize notes as empty for new products
       isKids: isKidsProduct,
-      category: isKidsProduct ? "Kids" : "Women", // Store category string
+      category: isKidsProduct ? "Kids" : isMenProduct ? "Men" : "Women", // Store category string
       is_gifting: isGiftingOrder,
       // Custom piece flag — item-level so a mixed cart (custom + non-custom)
       // can be represented honestly. Driven by the form's toggle, falls back
@@ -2479,6 +2488,7 @@ export default function ProductForm() {
         comments,
         attachments,
         isKidsProduct,
+        isMenProduct,
         isGiftingOrder,
         urgentReason,
         otherUrgentReason,
@@ -2671,7 +2681,7 @@ export default function ProductForm() {
         // `category` and `is_custom_piece` were missing here while the manual
         // "Add Product" path set both — an auto-added item rendered with no
         // category on the PDFs and lost its custom-piece flag.
-        category: isKidsProduct ? "Kids" : "Women",
+        category: isKidsProduct ? "Kids" : isMenProduct ? "Men" : "Women",
         is_custom_piece: isCustomPieceMode || selectedProduct.is_custom_piece === true,
         is_gifting: isGiftingOrder,
         order_type: getOrderType(),
@@ -2933,15 +2943,19 @@ export default function ProductForm() {
             {/* Category Dropdowns Row */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
 
-              {/* Category Dropdown - Women/Kids */}
+              {/* Category Dropdown - Women/Men/Kids */}
               <div className="category-dropdown-container">
                 <select
                   className="category-select"
-                  value={isKidsProduct ? "kids" : "women"}
-                  onChange={(e) => setIsKidsProduct(e.target.value === "kids")}
+                  value={isKidsProduct ? "kids" : isMenProduct ? "men" : "women"}
+                  onChange={(e) => {
+                    setIsKidsProduct(e.target.value === "kids");
+                    setIsMenProduct(e.target.value === "men");
+                  }}
                   disabled={isSyncProduct || isCustomPieceMode}
                 >
                   <option value="women">Women</option>
+                  <option value="men">Men</option>
                   <option value="kids">Kids</option>
                 </select>
                 {isSyncProduct && <span className="sync-badge">LXRTS</span>}

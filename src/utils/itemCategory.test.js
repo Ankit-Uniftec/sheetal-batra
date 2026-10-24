@@ -33,6 +33,7 @@ test("isKidsItem and size lists", () => {
   expect(KIDS_SIZE_OPTIONS).toHaveLength(15);
 });
 
-test("Men is not yet choosable on order forms", () => {
-  expect(ORDER_CATEGORIES).toEqual(["Women", "Kids"]);
+test("Men is choosable and uses the women's sizes for now", () => {
+  expect(ORDER_CATEGORIES).toEqual(["Women", "Men", "Kids"]);
+  expect(sizeOptionsFor("Men")).toBe(WOMEN_SIZE_OPTIONS);
 });
