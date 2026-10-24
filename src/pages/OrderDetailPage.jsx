@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { getItemCategory } from "../utils/itemCategory";
 import "./OrderDetailPage.css";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -13,14 +14,6 @@ import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationServi
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import AlterationModal from "../components/AlterationModal";
 import PaymentProofsPanel from "../components/PaymentProofsPanel";
-
-// Size options
-const WOMEN_SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
-const KIDS_SIZE_OPTIONS = [
-  "1-2 yrs", "2-3 yrs", "3-4 yrs", "4-5 yrs", "5-6 yrs",
-  "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
-  "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
-];
 
 // Time calculation helpers
 const getHoursSinceDelivery = (deliveredAt) => {
@@ -610,7 +603,7 @@ export default function OrderDetailPage() {
                         </div>
                         <div className="odp-product-field">
                           <label>Category:</label>
-                          <span>{item.category || (item.isKids ? "Kids" : "Women")}</span>
+                          <span>{getItemCategory(item)}</span>
                         </div>
                         <div className="odp-product-field">
                           <label>Price:</label>

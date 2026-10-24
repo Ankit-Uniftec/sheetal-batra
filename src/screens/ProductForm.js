@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { getItemCategory, KIDS_SIZE_OPTIONS } from "../utils/itemCategory";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
@@ -234,24 +235,6 @@ export function SearchableSelect({
     </div>
   );
 }
-
-const KIDS_SIZE_OPTIONS = [
-  "1-2 yrs",
-  "2-3 yrs",
-  "3-4 yrs",
-  "4-5 yrs",
-  "5-6 yrs",
-  "6-7 yrs",
-  "7-8 yrs",
-  "8-9 yrs",
-  "9-10 yrs",
-  "10-11 yrs",
-  "11-12 yrs",
-  "12-13 yrs",
-  "13-14 yrs",
-  "14-15 yrs",
-  "15-16 yrs",
-];
 
 const KIDS_SIZE_CHART = {
   "1-2 yrs": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
@@ -3050,7 +3033,7 @@ export default function ProductForm() {
                   return (
                     <div className="added-product-row" key={item._id}>
                       <span className="product-info">
-                        {i + 1}. {item.product_name} | {item.category || (item.isKids ? "Kids" : "Women")} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}
+                        {i + 1}. {item.product_name} | {getItemCategory(item)} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}
                       </span>
 
                       <div className="product-buttons">

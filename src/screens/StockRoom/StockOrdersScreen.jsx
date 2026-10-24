@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { getItemCategory, isKidsItem } from "../../utils/itemCategory";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { startOrderMode } from "../../utils/orderMode";
@@ -99,7 +100,7 @@ function StockOrderCard({ order, now, view, openAction, canWrite }) {
         <Thumb src={item.image_url} className="sr-so-thumb" size={160} />
         <div className="sr-so-det">
           <div className="sr-so-line"><span className="sr-so-label">Product name</span><span className="sr-so-value" title={item.product_name}>{item.product_name || "—"}</span></div>
-          <div className="sr-so-line"><span className="sr-so-label">Category</span><span className="sr-so-value">{item.isKids ? "Kids" : "Women"}</span></div>
+          <div className="sr-so-line"><span className="sr-so-label">Category</span><span className="sr-so-value">{getItemCategory(item)}</span></div>
           <div className="sr-so-line"><span className="sr-so-label">Location</span><span className="sr-so-value">{order.mode_of_delivery || "—"}</span></div>
           <div className="sr-so-grid-det">
             <div className="sr-so-ditem"><span className="sr-so-label">Items</span><span className="sr-so-value">{order.items?.length || 0}</span></div>
@@ -225,7 +226,7 @@ export default function StockOrdersScreen({ orders, ready = true, view, openActi
   const q = search.trim().toLowerCase();
   const filtered = useMemo(() => orders.filter((o) => {
     if (location && (o.mode_of_delivery || "").trim() !== location) return false;
-    if (category && !itemsOf(o).some((i) => (category === "kids") === !!i.isKids)) return false;
+    if (category && !itemsOf(o).some((i) => (category === "kids") === isKidsItem(i))) return false;
     if (design && !itemsOf(o).some((i) => i.product_name === design)) return false;
     if (size && !itemsOf(o).some((i) => i.size && sizeLabel(i.size) === size)) return false;
     if (age) {

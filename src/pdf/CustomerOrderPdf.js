@@ -1,4 +1,5 @@
 import React from "react";
+import { getItemCategory } from "../utils/itemCategory";
 import {
   Document,
   Page,
@@ -234,7 +235,7 @@ const ColorField = ({ label, color }) => (
 
 // Product Item Component
 const ProductItem = ({ item, order, showPricing = true }) => {
-  const category = item?.category || (item?.isKids ? "Kids" : "Women");
+  const category = getItemCategory(item);
   const hasTop = item?.top && item.top.trim() !== "";
   const hasBottom = item?.bottom && item.bottom.trim() !== "";
   const hasExtras = item?.extras && item.extras.length > 0;

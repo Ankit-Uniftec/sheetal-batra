@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { getItemCategory } from "../../utils/itemCategory";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
@@ -1147,7 +1148,7 @@ export default function B2bMerchandiserDashboard() {
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Top:</span><span className="merch-appr-dvalue"><GarmentValue name={item.top} color={item.top_color} /></span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Bottom:</span><span className="merch-appr-dvalue"><GarmentValue name={item.bottom} color={item.bottom_color} /></span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Size:</span><span className="merch-appr-dvalue">{item.size || "\u2014"}</span></div>
-                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Category:</span><span className="merch-appr-dvalue">{item.isKids ? "Kids" : "Women"}</span></div>
+                                                        <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Category:</span><span className="merch-appr-dvalue">{getItemCategory(item)}</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Markdown:</span><span className="merch-appr-dvalue">{order.markdown_percent || 0}%</span></div>
                                                         <div className="merch-appr-gitem"><span className="merch-appr-dlabel">Delivery:</span><span className="merch-appr-dvalue">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                     </div>
@@ -1238,7 +1239,7 @@ export default function B2bMerchandiserDashboard() {
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Top:</span><span className="merch-ocard-dval"><GarmentValue name={item.top} color={item.top_color} /></span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Bottom:</span><span className="merch-ocard-dval"><GarmentValue name={item.bottom} color={item.bottom_color} /></span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Size:</span><span className="merch-ocard-dval">{item.size || "\u2014"}</span></div>
-                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Category:</span><span className="merch-ocard-dval">{item.isKids ? "Kids" : "Women"}</span></div>
+                                                    <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Category:</span><span className="merch-ocard-dval">{getItemCategory(item)}</span></div>
                                                     {!order.is_stock_order && (<div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Markdown:</span><span className="merch-ocard-dval">{order.markdown_percent || 0}%</span></div>)}
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Delivery:</span><span className="merch-ocard-dval">{formatDate(order.delivery_date) || "\u2014"}</span></div>
                                                 </div>

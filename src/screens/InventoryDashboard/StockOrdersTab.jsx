@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { getItemCategory } from "../../utils/itemCategory";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { getOrderChannelKey } from "../../utils/barcodeService";
@@ -383,7 +384,7 @@ export default function StockOrdersTab({ highlightOrderId, onHighlightShown }) {
                     </div>
                     <div className="ad-product-name">
                       <span className="ad-order-label">Category:</span>
-                      <span className="ad-value">{item.isKids ? "Kids" : "Women"}</span>
+                      <span className="ad-value">{getItemCategory(item)}</span>
                     </div>
                     <div className="ad-product-name">
                       <span className="ad-order-label">Location:</span>

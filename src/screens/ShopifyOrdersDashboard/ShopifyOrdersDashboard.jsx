@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { getItemCategory } from "../../utils/itemCategory";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import config from "../../config/config";
@@ -1374,7 +1375,7 @@ export default function ShopifyOrdersDashboard() {
             </div>
             <div className="sho-product-row">
               <span className="sho-order-label">Category:</span>
-              <span className="sho-value">{item.isKids ? "Kids" : "Women"}</span>
+              <span className="sho-value">{getItemCategory(item)}</span>
             </div>
             <div className="sho-details-grid">
               <div className="sho-detail-item">
