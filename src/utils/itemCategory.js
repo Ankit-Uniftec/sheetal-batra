@@ -7,9 +7,9 @@
 // through getItemCategory() so every screen and PDF agrees, and so
 // a new category shows correctly everywhere at once.
 //
-// "Men" is recognised here already, but is NOT yet selectable on the
-// order forms (ORDER_CATEGORIES) — that comes with the men's sizes,
-// size chart and measurements (Release 21, phase 2).
+// "Men" can be chosen on the store order form. For now it is a label
+// only: a men's piece uses the women's sizes, chart and measurements.
+// Men's own sizes / chart / measurements come later (Release 21).
 // ============================================================
 import { B2B_SIZE_OPTIONS } from "./b2bSizeChart";
 
@@ -20,8 +20,8 @@ export const CATEGORY_KIDS = "Kids";
 // Every category an item can carry.
 export const ALL_CATEGORIES = [CATEGORY_WOMEN, CATEGORY_MEN, CATEGORY_KIDS];
 
-// The categories staff can choose when placing an order today.
-export const ORDER_CATEGORIES = [CATEGORY_WOMEN, CATEGORY_KIDS];
+// The categories staff can choose on the store order form.
+export const ORDER_CATEGORIES = [CATEGORY_WOMEN, CATEGORY_MEN, CATEGORY_KIDS];
 
 // Adult (women's) letter sizes — the same list as the B2B / house size chart.
 export const WOMEN_SIZE_OPTIONS = B2B_SIZE_OPTIONS;
@@ -47,7 +47,7 @@ export function getItemCategory(item) {
 
 export const isKidsItem = (item) => getItemCategory(item) === CATEGORY_KIDS;
 
-/** The standard size list for a category (Women's list until men's sizes exist). */
+/** The standard size list for a category (Men use the Women's list until men's sizes exist). */
 export function sizeOptionsFor(category) {
   return category === CATEGORY_KIDS ? KIDS_SIZE_OPTIONS : WOMEN_SIZE_OPTIONS;
 }
