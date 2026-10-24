@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { getItemCategory, KIDS_SIZE_OPTIONS } from "../../utils/itemCategory";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import "../Screen4.css";
@@ -108,12 +109,6 @@ const measurementFields = {
 };
 
 // ===== KIDS CONSTANTS (matching B2C ProductForm) =====
-const KIDS_SIZE_OPTIONS = [
-    "1-2 yrs", "2-3 yrs", "3-4 yrs", "4-5 yrs", "5-6 yrs",
-    "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
-    "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
-];
-
 const KIDS_SIZE_CHART = {
     "1-2 yrs": { Bust: 20, Waist: 19, Hip: 21, Length: 18 },
     "2-3 yrs": { Bust: 21, Waist: 20, Hip: 22, Length: 20 },
@@ -690,7 +685,7 @@ export default function B2bProductForm() {
                                     const opts = getProductOptions(item.product_id);
                                     return (
                                         <div className="added-product-row" key={item._id}>
-                                            <span className="product-info">{i + 1}. {item.product_name} | {item.category || (item.isKids ? "Kids" : "Women")} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}</span>
+                                            <span className="product-info">{i + 1}. {item.product_name} | {getItemCategory(item)} | Size: {item.size} | Qty: {formatIndianNumber(item.quantity)} | ₹{formatIndianNumber(item.price)} | Delivery: {item.delivery_date ? formatDate(item.delivery_date) : "Not set"}</span>
                                             {item.extras && item.extras.length > 0 && (
                                                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4, paddingLeft: 16 }}>
                                                     {item.extras.map((extra, eidx) => (

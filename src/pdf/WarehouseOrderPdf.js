@@ -1,4 +1,5 @@
 import React from "react";
+import { getItemCategory } from "../utils/itemCategory";
 import { getWarehouseDateObj } from "../utils/warehouseDate";
 import { standardSizeMeasurementsByCategory } from "../utils/b2bSizeChart";
 import { mergeOrderNotes } from "../utils/orderNotes";
@@ -647,7 +648,7 @@ const ProductItem = ({ item }) => {
   const validAdditionals = (item?.additionals || []).filter(a => a.name && a.name.trim() !== "" && a.name.trim() !== " ");
   const hasAdditionals = validAdditionals.length > 0;
 
-  const category = item?.category || (item?.isKids ? "Kids" : "Women");
+  const category = getItemCategory(item);
 
   return (
     <View style={warehouseStyles.productRow}>

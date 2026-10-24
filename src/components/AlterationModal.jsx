@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { getItemCategory, sizeOptionsFor } from "../utils/itemCategory";
 import "./AlterationModal.css";
 import { supabase } from "../lib/supabaseClient";
 import formatIndianNumber from "../utils/formatIndianNumber";
@@ -46,14 +47,6 @@ const measurementFields = {
   ShararaGharara: ["Waist", "Hip", "Length"],
   Lehenga: ["Waist", "Hip", "Length"],
 };
-
-// Size options
-const WOMEN_SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
-const KIDS_SIZE_OPTIONS = [
-  "1-2 yrs", "2-3 yrs", "3-4 yrs", "4-5 yrs", "5-6 yrs",
-  "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
-  "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
-];
 
 // Alteration type options
 const ALTERATION_TYPES = [
@@ -310,8 +303,8 @@ export default function AlterationModal({
 
   if (!isOpen || !item) return null;
 
-  const isKids = item.isKids || item.category === "Kids";
-  const sizeOptions = isKids ? KIDS_SIZE_OPTIONS : WOMEN_SIZE_OPTIONS;
+  const category = getItemCategory(item);
+  const sizeOptions = sizeOptionsFor(category);
   const alterationNumber = existingAlterations.length + 1;
   const currentCategoryKey = CATEGORY_KEY_MAP[activeCategory];
 
@@ -337,7 +330,7 @@ export default function AlterationModal({
           />
           <div className="alteration-product-details">
             <h3>{item.product_name}</h3>
-            <p>Size: {item.size} | {isKids ? "Kids" : "Women"}</p>
+            <p>Size: {item.size} | {category}</p>
           </div>
         </div>
 

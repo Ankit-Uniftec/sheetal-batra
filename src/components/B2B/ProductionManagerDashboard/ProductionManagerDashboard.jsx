@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { getItemCategory, sizeOptionsFor, CATEGORY_KIDS } from "../../../utils/itemCategory";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import "./ProductionManagerDashboard.css";
@@ -71,13 +72,6 @@ const measurementFields = {
     ShararaGharara: ["Waist", "Hip", "Length"],
     Lehenga: ["Waist", "Hip", "Length"],
 };
-
-const WOMEN_SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
-const KIDS_SIZE_OPTIONS = [
-    "1-2 yrs", "2-3 yrs", "3-4 yrs", "4-5 yrs", "5-6 yrs",
-    "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
-    "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
-];
 
 // ==================== SVG ICONS ====================
 const Icons = {
@@ -2026,7 +2020,7 @@ export default function ProductionManagerDashboard() {
             top_color: topColorVal,
             bottom_color: bottomColorVal,
             size: item.size || "",
-            isKids: item.isKids || item.category === "Kids" || false,
+            category: getItemCategory(item),
             delivery_date: order.delivery_date?.slice(0, 10) || "",
             delivery_name: order.delivery_name || "",
             delivery_phone: order.delivery_phone || "",
@@ -2219,8 +2213,8 @@ export default function ProductionManagerDashboard() {
                         <div className="pm-edit-form">
 
                             {/* Category Badge */}
-                            <div style={{ marginBottom: 12, padding: "6px 12px", background: editFormData.isKids ? "#e8f5e9" : "#fce4ec", borderRadius: 4, display: "inline-block", fontSize: 13, fontWeight: 500, color: editFormData.isKids ? "#2e7d32" : "#c2185b" }}>
-                                Category: {editFormData.isKids ? "Kids" : "Women"}
+                            <div style={{ marginBottom: 12, padding: "6px 12px", background: editFormData.category === CATEGORY_KIDS ? "#e8f5e9" : "#fce4ec", borderRadius: 4, display: "inline-block", fontSize: 13, fontWeight: 500, color: editFormData.category === CATEGORY_KIDS ? "#2e7d32" : "#c2185b" }}>
+                                Category: {editFormData.category}
                             </div>
 
                             <p className="pm-edit-section-title">Product Details</p>
@@ -2253,7 +2247,7 @@ export default function ProductionManagerDashboard() {
                                 <div className="pm-edit-field"><label>Size</label>
                                     <select value={editFormData.size} onChange={(e) => setEditFormData({ ...editFormData, size: e.target.value })}>
                                         <option value="">Select Size</option>
-                                        {(editFormData.isKids ? KIDS_SIZE_OPTIONS : WOMEN_SIZE_OPTIONS).map(s => <option key={s} value={s}>{s}</option>)}
+                                        {sizeOptionsFor(editFormData.category).map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
                             </div>
@@ -2905,7 +2899,7 @@ export default function ProductionManagerDashboard() {
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Top:</span><span className="pm-ovalue">{item.top || "—"}{item.top_color?.hex && (<><span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: item.top_color.hex, borderRadius: "50%", marginLeft: 6, border: "1px solid #ccc", verticalAlign: "middle" }} /><span style={{ marginLeft: 4 }}>{item.top_color.name}</span></>)}</span></div>
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Bottom:</span><span className="pm-ovalue">{item.bottom || "—"}{item.bottom_color?.hex && (<><span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: item.bottom_color.hex, borderRadius: "50%", marginLeft: 6, border: "1px solid #ccc", verticalAlign: "middle" }} /><span style={{ marginLeft: 4 }}>{item.bottom_color.name}</span></>)}</span></div>
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Size:</span><span className="pm-ovalue">{item.size || "—"}</span></div>
-                                                            <div className="pm-odetail-item"><span className="pm-order-label">Category:</span><span className="pm-ovalue">{item.isKids ? "Kids" : "Women"}</span></div>
+                                                            <div className="pm-odetail-item"><span className="pm-order-label">Category:</span><span className="pm-ovalue">{getItemCategory(item)}</span></div>
                                                         </div>
                                                         {item.extras && item.extras.length > 0 && (
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Extras:</span><span className="pm-ovalue">{item.extras.map((extra, idx) => (<span key={idx}>{extra.name}{extra.color?.hex && (<><span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: extra.color.hex, borderRadius: "50%", marginLeft: 6, border: "1px solid #ccc", verticalAlign: "middle" }} /><span style={{ marginLeft: 4 }}>{extra.color.name}</span></>)}{idx < item.extras.length - 1 && <span style={{ margin: "0 8px" }}>|</span>}</span>))}</span></div>

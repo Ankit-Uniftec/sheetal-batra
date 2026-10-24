@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { getItemCategory } from "../utils/itemCategory";
 import "./OrderHistory.css";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -1838,7 +1839,7 @@ export default function OrderHistory() {
                           </div>
                           <div className="oh-detail">
                             <span className="oh-label">Category:</span>
-                            <span className="oh-value">{item.category || (item.isKids ? "Kids" : "Women")}</span>
+                            <span className="oh-value">{getItemCategory(item)}</span>
                           </div>
                         </div>
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getItemCategory, sizeOptionsFor, CATEGORY_KIDS } from "../utils/itemCategory";
 import { supabase } from "../lib/supabaseClient";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
@@ -46,14 +47,6 @@ const measurementFields = {
   ShararaGharara: ["Waist", "Hip", "Length"],
   Lehenga: ["Waist", "Hip", "Length"],
 };
-
-const WOMEN_SIZE_OPTIONS = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
-
-const KIDS_SIZE_OPTIONS = [
-  "1-2 yrs", "2-3 yrs", "3-4 yrs", "4-5 yrs", "5-6 yrs",
-  "6-7 yrs", "7-8 yrs", "8-9 yrs", "9-10 yrs", "10-11 yrs",
-  "11-12 yrs", "12-13 yrs", "13-14 yrs", "14-15 yrs", "15-16 yrs",
-];
 
 const colorName = (c) => (typeof c === "object" && c !== null ? c.name || "" : c || "");
 
@@ -115,7 +108,7 @@ export default function EditOrderModal({
     delivery_state: order.delivery_state || "",
     delivery_pincode: order.delivery_pincode || "",
     mode_of_delivery: order.mode_of_delivery || "",
-    isKids: item.isKids || item.category === "Kids" || false,
+    category: getItemCategory(item),
     comments: order.comments || "",
   });
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
@@ -257,14 +250,14 @@ export default function EditOrderModal({
           <div className="oh-category-badge" style={{
             marginBottom: '15px',
             padding: '6px 12px',
-            background: form.isKids ? '#e8f5e9' : '#fce4ec',
+            background: form.category === CATEGORY_KIDS ? '#e8f5e9' : '#fce4ec',
             borderRadius: '4px',
             display: 'inline-block',
             fontSize: '13px',
             fontWeight: '500',
-            color: form.isKids ? '#2e7d32' : '#c2185b'
+            color: form.category === CATEGORY_KIDS ? '#2e7d32' : '#c2185b'
           }}>
-            Category: {form.isKids ? 'Kids' : 'Women'}
+            Category: {form.category}
           </div>
 
           {/* Top & Bottom with Colors */}
@@ -301,7 +294,7 @@ export default function EditOrderModal({
               <label>Size</label>
               <select value={form.size} onChange={set("size")}>
                 <option value="">Select</option>
-                {(form.isKids ? KIDS_SIZE_OPTIONS : WOMEN_SIZE_OPTIONS).map(s => <option key={s} value={s}>{s}</option>)}
+                {sizeOptionsFor(form.category).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div className="oh-modal-field">

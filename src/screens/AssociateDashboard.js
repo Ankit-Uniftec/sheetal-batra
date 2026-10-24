@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { getItemCategory } from "../utils/itemCategory";
 import "./AssociateDashboard.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -1598,7 +1599,7 @@ export default function Dashboard() {
                           </div>
                           <div className="ad-product-name">
                             <span className="ad-order-label">Category:</span>
-                            <span className="ad-value">{item.isKids ? "Kids" : "Women"}</span>
+                            <span className="ad-value">{getItemCategory(item)}</span>
                           </div>
                           <div className="ad-product-name">
                             <span className="ad-order-label">Client Name:</span>

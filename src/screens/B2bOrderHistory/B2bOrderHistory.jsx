@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { getItemCategory } from "../../utils/itemCategory";
 import "./B2bOrderHistory.css";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
@@ -382,7 +383,7 @@ export default function B2bOrderHistory() {
                                                 </div>
                                                 <div className="b2boh-detail">
                                                     <span className="b2boh-label">Category</span>
-                                                    <span className="b2boh-value">{item.category || (item.isKids ? "Kids" : "Women")}</span>
+                                                    <span className="b2boh-value">{getItemCategory(item)}</span>
                                                 </div>
                                             </div>
 
