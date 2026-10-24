@@ -47,6 +47,17 @@ export function getItemCategory(item) {
 
 export const isKidsItem = (item) => getItemCategory(item) === CATEGORY_KIDS;
 
+// "Custom Men's Product" — the one catalogue product used to take men's
+// orders while there is no men's catalogue. Recognised by its SKU (row added
+// by db/meeting_points/custom_mens_product.sql). On the store order form it
+// is listed only under Men, its Top / Bottom are typed in, and its price is
+// typed per order (saved on the item as custom_price).
+export const CUSTOM_MENS_SKU = "SB-MEN-CUSTOM";
+
+/** Is this product (or order item — both carry sku_id) the Custom Men's Product? */
+export const isCustomMensProduct = (productOrItem) =>
+  String(productOrItem?.sku_id ?? "").trim().toUpperCase() === CUSTOM_MENS_SKU;
+
 /** The standard size list for a category (Men use the Women's list until men's sizes exist). */
 export function sizeOptionsFor(category) {
   return category === CATEGORY_KIDS ? KIDS_SIZE_OPTIONS : WOMEN_SIZE_OPTIONS;

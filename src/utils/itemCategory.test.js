@@ -1,5 +1,5 @@
 import {
-  getItemCategory, isKidsItem, sizeOptionsFor, ORDER_CATEGORIES,
+  getItemCategory, isKidsItem, sizeOptionsFor, ORDER_CATEGORIES, isCustomMensProduct,
   KIDS_SIZE_OPTIONS, WOMEN_SIZE_OPTIONS,
 } from "./itemCategory";
 
@@ -36,4 +36,12 @@ test("isKidsItem and size lists", () => {
 test("Men is choosable and uses the women's sizes for now", () => {
   expect(ORDER_CATEGORIES).toEqual(["Women", "Men", "Kids"]);
   expect(sizeOptionsFor("Men")).toBe(WOMEN_SIZE_OPTIONS);
+});
+
+test("Custom Men's Product is recognised by its SKU, on products and items", () => {
+  expect(isCustomMensProduct({ sku_id: "SB-MEN-CUSTOM" })).toBe(true);
+  expect(isCustomMensProduct({ sku_id: " sb-men-custom " })).toBe(true);
+  expect(isCustomMensProduct({ sku_id: "SKU-0472" })).toBe(false);
+  expect(isCustomMensProduct({})).toBe(false);
+  expect(isCustomMensProduct(null)).toBe(false);
 });

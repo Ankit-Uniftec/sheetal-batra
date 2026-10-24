@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { getItemCategory, KIDS_SIZE_OPTIONS } from "../utils/itemCategory";
+import { getItemCategory, KIDS_SIZE_OPTIONS, isCustomMensProduct } from "../utils/itemCategory";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
@@ -679,6 +679,9 @@ export default function ProductForm() {
   // Men: for now a label only — men's pieces use the women's sizes, chart and
   // measurements (no kids discount). Men's own sizes/chart come later.
   const [isMenProduct, setIsMenProduct] = useState(false);
+  // Custom Men's Product (no men's catalogue yet): price typed per order.
+  const [customMensPrice, setCustomMensPrice] = useState("");
+  const isCustomMens = isCustomMensProduct(selectedProduct);
   const [isGiftingOrder, setIsGiftingOrder] = useState(false); // Gifting order toggle
   // Custom Piece mode — independent of Gifting (a customer can gift a custom piece).
   // When ON, the product list filters to `is_custom_piece = true`, Women/Kids
@@ -902,7 +905,9 @@ export default function ProductForm() {
         if (patch.additionals !== undefined) {
           const product = products.find((p) => p.id === updated.product_id);
           if (product) {
-            let basePrice = isPrivateSA ? 0 : Number(product.base_price || 0);
+            let basePrice = isPrivateSA ? 0
+              : isCustomMensProduct(updated) ? Number(updated.custom_price || 0)
+              : Number(product.base_price || 0);
 
             // Kids discount
             if (updated.isKids && updated.size && KIDS_DISCOUNT_PERCENT[updated.size]) {
@@ -1172,6 +1177,7 @@ export default function ProductForm() {
         // Kids Product
         if (draftData.isKidsProduct !== undefined) setIsKidsProduct(draftData.isKidsProduct);
         setIsMenProduct(draftData.isMenProduct === true);
+        if (draftData.customMensPrice != null) setCustomMensPrice(draftData.customMensPrice);
 
         // Gifting Order
         if (draftData.isGiftingOrder !== undefined) setIsGiftingOrder(draftData.isGiftingOrder);
@@ -1262,6 +1268,7 @@ export default function ProductForm() {
         // Kids Product
         if (data.isKidsProduct !== undefined) setIsKidsProduct(data.isKidsProduct);
         setIsMenProduct(data.isMenProduct === true);
+        if (data.customMensPrice != null) setCustomMensPrice(data.customMensPrice);
 
         // Gifting Order
         if (data.isGiftingOrder !== undefined) setIsGiftingOrder(data.isGiftingOrder);
@@ -1315,6 +1322,7 @@ export default function ProductForm() {
       attachments,
       isKidsProduct,
       isMenProduct,
+      customMensPrice,
       isGiftingOrder,
       urgentReason,
       otherUrgentReason,
@@ -1358,6 +1366,7 @@ export default function ProductForm() {
     attachments,
     isKidsProduct,
     isMenProduct,
+    customMensPrice,
     isGiftingOrder,
     urgentReason,
     otherUrgentReason,
@@ -1671,6 +1680,11 @@ export default function ProductForm() {
       setIsKidsProduct(false);
     }
     if (syncEnabled || selectedProduct.is_custom_piece === true) setIsMenProduct(false);
+    // The Custom Men's Product is always Men.
+    if (isCustomMensProduct(selectedProduct)) {
+      setIsMenProduct(true);
+      setIsKidsProduct(false);
+    }
 
     // Pre-fill the dupatta toggle from the product. Staff can still override
     // before adding to the cart (e.g. a customer who declines the dupatta).
@@ -1957,6 +1971,26 @@ export default function ProductForm() {
       return;
     }
 
+    // Custom Men's Product: the garment(s) and the price are typed in.
+    if (isCustomMens) {
+      if (!selectedTop.trim() && !selectedBottom.trim()) {
+        showPopup({
+          title: "Garment Required",
+          message: "Please type the Top and/or Bottom for this Custom Men's Product.",
+          type: "warning",
+        });
+        return;
+      }
+      if (!isPrivateSA && !(Number(customMensPrice) > 0)) {
+        showPopup({
+          title: "Price Required",
+          message: "Please enter the price for this Custom Men's Product.",
+          type: "warning",
+        });
+        return;
+      }
+    }
+
     // Comms inventory block check — refuse to add a product that's currently
     // reserved by Nazreen for a shoot/event. Comms-placed orders and stock
     // orders are exempt: Nazreen shouldn't be blocked by her own reservations,
@@ -2089,6 +2123,7 @@ export default function ProductForm() {
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
       sku_id: selectedProduct.sku_id,
+      ...(isCustomMens ? { custom_price: Number(customMensPrice) || 0 } : {}),
       color: selectedColor, // Now an object { name, hex }
       top: selectedTop,
       top_color: selectedTopColor, // Now an object { name, hex }
@@ -2134,6 +2169,7 @@ export default function ProductForm() {
 
     // Reset inputs
     setSelectedProduct(null);
+    setCustomMensPrice("");
     setSelectedColor({ name: "", hex: "" }); // Reset to initial object structure
     setSelectedTop("");
     setSelectedBottom("");
@@ -2235,6 +2271,8 @@ export default function ProductForm() {
     if (isSyncProduct && selectedSize && productVariants.length > 0) {
       const variant = productVariants.find(v => v.size === selectedSize);
       price = Number(variant?.price || selectedProduct.base_price || 0);
+    } else if (isCustomMensProduct(selectedProduct)) {
+      price = Number(customMensPrice) || 0; // typed per order
     } else {
       price = Number(selectedProduct.base_price || 0);
     }
@@ -2489,6 +2527,7 @@ export default function ProductForm() {
         attachments,
         isKidsProduct,
         isMenProduct,
+        customMensPrice,
         isGiftingOrder,
         urgentReason,
         otherUrgentReason,
@@ -2623,6 +2662,26 @@ export default function ProductForm() {
         return;
       }
 
+      // Custom Men's Product: the garment(s) and the price are typed in.
+      if (isCustomMens) {
+        if (!selectedTop.trim() && !selectedBottom.trim()) {
+          showPopup({
+            title: "Garment Required",
+            message: "Please type the Top and/or Bottom for this Custom Men's Product.",
+            type: "warning",
+          });
+          return;
+        }
+        if (!isPrivateSA && !(Number(customMensPrice) > 0)) {
+          showPopup({
+            title: "Price Required",
+            message: "Please enter the price for this Custom Men's Product.",
+            type: "warning",
+          });
+          return;
+        }
+      }
+
       // Capture pending extra if selected but not added
       let finalExtras = [...selectedExtrasWithColors];
       if (selectedExtra) {
@@ -2662,6 +2721,7 @@ export default function ProductForm() {
         product_id: selectedProduct.id,
         product_name: selectedProduct.name,
         sku_id: selectedProduct.sku_id,
+        ...(isCustomMens ? { custom_price: Number(customMensPrice) || 0 } : {}),
         color: selectedColor,
         top: selectedTop,
         top_color: selectedTopColor,
@@ -2949,8 +3009,14 @@ export default function ProductForm() {
                   className="category-select"
                   value={isKidsProduct ? "kids" : isMenProduct ? "men" : "women"}
                   onChange={(e) => {
-                    setIsKidsProduct(e.target.value === "kids");
-                    setIsMenProduct(e.target.value === "men");
+                    const v = e.target.value;
+                    setIsKidsProduct(v === "kids");
+                    setIsMenProduct(v === "men");
+                    // Men lists only the Custom Men's Product and Women / Kids
+                    // never do: drop a picked product that no longer belongs.
+                    if (selectedProduct && (v === "men") !== isCustomMensProduct(selectedProduct)) {
+                      setSelectedProduct(null);
+                    }
                   }}
                   disabled={isSyncProduct || isCustomPieceMode}
                 >
@@ -3074,12 +3140,22 @@ export default function ProductForm() {
                           <div className="row">
                             <div className="field">
                               <label>Top</label>
+                              {isCustomMensProduct(item) ? (
+                                <input
+                                  type="text"
+                                  className="input-line"
+                                  value={item.top || ""}
+                                  onChange={(e) => updateItem(item._id, { top: e.target.value })}
+                                  placeholder="Top"
+                                />
+                              ) : (
                               <SearchableSelect
                                 options={toOptions(productOptions.tops)}
                                 value={item.top || ""}
                                 onChange={(val) => updateItem(item._id, { top: val })}
                                 placeholder="Select Top"
                               />
+                              )}
                             </div>
 
                             {item.top && (
@@ -3099,12 +3175,22 @@ export default function ProductForm() {
 
                             <div className="field">
                               <label>Bottom</label>
+                              {isCustomMensProduct(item) ? (
+                                <input
+                                  type="text"
+                                  className="input-line"
+                                  value={item.bottom || ""}
+                                  onChange={(e) => updateItem(item._id, { bottom: e.target.value })}
+                                  placeholder="Bottom"
+                                />
+                              ) : (
                               <SearchableSelect
                                 options={toOptions(productOptions.bottoms)}
                                 value={item.bottom || ""}
                                 onChange={(val) => updateItem(item._id, { bottom: val })}
                                 placeholder="Select Bottom"
                               />
+                              )}
                             </div>
 
                             {item.bottom && (
@@ -3499,22 +3585,44 @@ export default function ProductForm() {
                   options={products
                     .filter((p) => isCustomPieceMode ? p.is_custom_piece === true : !p.is_custom_piece)
                     .filter((p) => isProductVisibleForStore(p, saStore))
+                    .filter((p) => isMenProduct ? isCustomMensProduct(p) : !isCustomMensProduct(p))
                     .map((p) => ({
                       label: p.name,
                       value: p.id,
                     }))}
                   value={selectedProduct?.id || ""}
-                  onChange={(val) =>
-                    setSelectedProduct(
-                      products.find((p) => String(p.id) === String(val)) || null
-                    )
-                  }
+                  onChange={(val) => {
+                    const next = products.find((p) => String(p.id) === String(val)) || null;
+                    // Custom Men's Product starts blank: garments and price are typed in.
+                    if (isCustomMensProduct(next) && !isCustomMensProduct(selectedProduct)) {
+                      setSelectedTop("");
+                      setSelectedBottom("");
+                      setSelectedTopColor({ name: "", hex: "" });
+                      setSelectedBottomColor({ name: "", hex: "" });
+                      setCustomMensPrice("");
+                    }
+                    setSelectedProduct(next);
+                  }}
                   placeholder="Select Product"
                   className="product-select"
                 />
 
                 {/* CHANGE #1: Price Display - Show base price without extras */}
-                {selectedProduct && (
+                {selectedProduct && isCustomMens && !isPrivateSA && (
+                  <p className="product-price">
+                    Price ₹:{" "}
+                    <input
+                      type="number"
+                      min="1"
+                      className="input-line"
+                      style={{ width: 130 }}
+                      placeholder="Amount"
+                      value={customMensPrice}
+                      onChange={(e) => setCustomMensPrice(e.target.value)}
+                    />
+                  </p>
+                )}
+                {selectedProduct && !(isCustomMens && !isPrivateSA) && (
                   <p className="product-price">
                     Price:{" "}
                     <strong>₹{formatIndianNumber(getBasePrice())}</strong>
@@ -3560,6 +3668,16 @@ export default function ProductForm() {
             {/* TOP / BOTTOM / EXTRA */}
             <div className="row">
               <div className="field">
+                {isCustomMens ? (
+                  <input
+                    type="text"
+                    className="input-line"
+                    placeholder="Top (type, e.g. Sherwani)"
+                    value={selectedTop}
+                    onChange={(e) => setSelectedTop(e.target.value)}
+                    onBlur={(e) => setSelectedTop(e.target.value.trim())}
+                  />
+                ) : (
                 <SearchableSelect
                   options={toOptions(tops)}
                   value={selectedTop}
@@ -3567,6 +3685,7 @@ export default function ProductForm() {
                   placeholder="Select Top"
                   disabled={isSyncProduct}
                 />
+                )}
               </div>
 
               {selectedTop && (
@@ -3586,6 +3705,16 @@ export default function ProductForm() {
               )}
 
               <div className="field">
+                {isCustomMens ? (
+                  <input
+                    type="text"
+                    className="input-line"
+                    placeholder="Bottom (type, e.g. Churidar)"
+                    value={selectedBottom}
+                    onChange={(e) => setSelectedBottom(e.target.value)}
+                    onBlur={(e) => setSelectedBottom(e.target.value.trim())}
+                  />
+                ) : (
                 <SearchableSelect
                   options={toOptions(bottoms)}
                   value={selectedBottom}
@@ -3593,6 +3722,7 @@ export default function ProductForm() {
                   placeholder="Select Bottom"
                   disabled={isSyncProduct}
                 />
+                )}
               </div>
               {selectedBottom && (
                 <div className="field">
