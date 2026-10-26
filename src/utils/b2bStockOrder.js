@@ -72,15 +72,23 @@ export const B2B_EDIT_KEY = "b2bEditingOrderId";
 export function clearB2bOrderFlow() {
   B2B_FLOW_SESSION_KEYS.forEach((k) => sessionStorage.removeItem(k));
   sessionStorage.removeItem(B2B_STOCK_FLAG);
+  sessionStorage.removeItem(B2B_GIFTING_FLAG);
 }
 
 /** Start a NEW normal B2B order: nothing from an earlier order or edit carries over. */
 export const startNewB2bOrder = clearB2bOrderFlow;
 
-/** Start editing one order: clears leftovers first, then remembers only this order. */
-export function beginB2bEdit(orderId) {
+/**
+ * Start editing one order: clears leftovers first, then remembers only this
+ * order. Pass the order row (or `{ gifting: true }`) so editing a Partner
+ * Gifting order stays a gifting order instead of reopening as a priced one.
+ */
+export function beginB2bEdit(orderId, orderOrOpts = null) {
   clearB2bOrderFlow();
   sessionStorage.setItem(B2B_EDIT_KEY, orderId);
+  if (orderOrOpts?.gifting === true || isPartnerGiftingRow(orderOrOpts)) {
+    sessionStorage.setItem(B2B_GIFTING_FLAG, "true");
+  }
 }
 
 /** Is the B2B flow currently editing an existing order? */
@@ -110,6 +118,81 @@ export function clearB2bStockOrder() {
  */
 export function isB2bStockOrderRow(order) {
   return order?.is_stock_order === true;
+}
+
+// ============================================================
+// B2B PARTNER GIFTING (Release 24, open point #14)
+//
+// A gift to one of our B2B partners, modelled on Comms gifting: the products
+// are picked at their real prices (so the gift's value is on record) but the
+// order total is ₹0 — no charge, no vendor credit, not a sale. Approval works
+// like any B2B order (merchandiser: auto-approved; executive: waits for the
+// merchandiser). Saved as a normal SB-B2B order with is_gifting = true and
+// b2b_order_type = "Partner Gifting". The order PDF shows the B2B team number.
+// ============================================================
+export const B2B_GIFTING_FLAG = "isB2bPartnerGifting";
+export const PARTNER_GIFTING_TYPE = "Partner Gifting";
+export const B2B_TEAM_PHONE = "+91 98706 29038";
+export const PARTNER_GIFTING_PURPOSES = [
+  "Festive gifting", "Store launch / event", "Relationship gesture", "Display / showcase", "Other",
+];
+
+/** Is the in-progress B2B order a Partner Gifting order? */
+export function isB2bGifting(locationState) {
+  return (
+    locationState?.isB2bGifting === true ||
+    sessionStorage.getItem(B2B_GIFTING_FLAG) === "true"
+  );
+}
+
+/** Begin a NEW Partner Gifting order (nothing from an earlier order carries over). */
+export function startB2bGifting() {
+  clearB2bOrderFlow();
+  sessionStorage.setItem(B2B_GIFTING_FLAG, "true");
+}
+
+// The order note line the review writes for a gifting order. Read back on
+// Edit so purpose / POC come back into the form (and the line is not doubled).
+const GIFT_LINE = /^Partner Gifting — Purpose: (.*?)(?: · POC: (.*))?$/;
+
+/** The gifting line written into orders.comments. */
+export function partnerGiftingNote(purpose, pocName) {
+  return `Partner Gifting — Purpose: ${purpose || ""}${pocName ? ` · POC: ${pocName}` : ""}`;
+}
+
+/**
+ * The b2bVendorData fields for editing a saved Partner Gifting order: the
+ * recipient, purpose and POC, plus remarks without the gifting line.
+ */
+export function giftingSessionFields(order) {
+  let purpose = "";
+  let pocName = "";
+  const rest = String(order?.comments || "").split("\n\n").filter((part) => {
+    const m = part.match(GIFT_LINE);
+    if (!m) return true;
+    purpose = m[1] || "";
+    pocName = m[2] || "";
+    return false;
+  });
+  const listed = PARTNER_GIFTING_PURPOSES.includes(purpose) && purpose !== "Other";
+  return {
+    isGifting: true,
+    orderType: PARTNER_GIFTING_TYPE,
+    poNumber: "",
+    recipientName: order?.gift_recipient_name || order?.delivery_name || "",
+    recipientContact: order?.gift_recipient_contact || order?.delivery_phone || "",
+    recipientEmail: order?.delivery_email || "",
+    pocName,
+    purpose: listed ? purpose : (purpose ? "Other" : ""),
+    purposeOther: listed ? "" : purpose,
+    finalPurpose: purpose,
+    remarks: rest.join("\n\n"),
+  };
+}
+
+/** Is a SAVED order a Partner Gifting order? */
+export function isPartnerGiftingRow(order) {
+  return order?.is_b2b === true && order?.b2b_order_type === PARTNER_GIFTING_TYPE;
 }
 
 /**

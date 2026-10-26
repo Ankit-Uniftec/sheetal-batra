@@ -8,7 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
-import { isB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
+import { isB2bStockOrder, B2B_STOCK_DELIVERY, isB2bGifting } from "../../utils/b2bStockOrder";
 import { STOCK_HEAD_OPTIONS } from "../../utils/stockProductionHead";
 import { b2bPricing } from "../../utils/b2bPricing";
 
@@ -25,6 +25,8 @@ export default function B2bOrderDetails() {
     // not fire, and the delivery destination is the fixed internal one rather
     // than a vendor's shipping address. See src/utils/b2bStockOrder.js.
     const isStockOrder = isB2bStockOrder(location.state);
+    // Partner Gifting: no charge and no partner credit (total is ₹0).
+    const isGifting = isB2bGifting(location.state);
 
     const [vendorData, setVendorData] = useState(null);
     const [productData, setProductData] = useState(null);
@@ -118,7 +120,7 @@ export default function B2bOrderDetails() {
     // Stock orders draw against no vendor credit at all. Without this guard the
     // check would compare against creditLimit 0 (no vendor row) and warn on any
     // non-zero total — it only stays quiet today because stock totals are zeroed.
-    const exceedsCredit = !isStockOrder && orderType === "Buyout" && projectedCredit > creditLimit;
+    const exceedsCredit = !isStockOrder && !isGifting && orderType === "Buyout" && projectedCredit > creditLimit;
 
     const deliveryAddress = isStockOrder
         ? B2B_STOCK_DELIVERY.delivery_address
@@ -153,7 +155,7 @@ export default function B2bOrderDetails() {
 
             <header className="pf-header">
                 <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
-                <h1 className="pf-header-title">{isStockOrder ? "B2B Stock Order Details" : "Order Details"}</h1>
+                <h1 className="pf-header-title">{isStockOrder ? "B2B Stock Order Details" : isGifting ? "B2B Partner Gifting" : "Order Details"}</h1>
                 {isStockOrder ? (
                     <div className="b2b-vendor-badge">
                         <span className="vendor-name">Internal Stock</span>
@@ -178,6 +180,19 @@ export default function B2bOrderDetails() {
                             <div className="b2b-od-field"><label>Order For:</label><span>Internal Stock</span></div>
                             <div className="b2b-od-field"><label>Products:</label><span>{items.length} item(s), {totalQuantity} unit(s)</span></div>
                         </div>
+                    ) : isGifting ? (
+                        <>
+                            <div className="b2b-od-row3">
+                                <div className="b2b-od-field"><label>Partner:</label><span>{vendor?.store_brand_name} ({vendor?.vendor_code})</span></div>
+                                <div className="b2b-od-field"><label>Order Type:</label><span className="b2b-od-badge badge-blue">Partner Gifting</span></div>
+                                <div className="b2b-od-field"><label>Merchandiser:</label><span>{vendorData?.merchandiser}</span></div>
+                            </div>
+                            <div className="b2b-od-row3">
+                                <div className="b2b-od-field"><label>Recipient:</label><span>{vendorData?.recipientName} · {vendorData?.recipientContact}</span></div>
+                                <div className="b2b-od-field"><label>Purpose:</label><span>{vendorData?.finalPurpose}</span></div>
+                                <div className="b2b-od-field"><label>Products:</label><span>{items.length} item(s), {totalQuantity} unit(s)</span></div>
+                            </div>
+                        </>
                     ) : (
                         <>
                             <div className="b2b-od-row3">
@@ -263,7 +278,16 @@ export default function B2bOrderDetails() {
                 {/* Order Totals — a stock order has none (no charge, no vendor
                     credit to draw against), so the whole block is omitted rather
                     than rendered as a column of zeros. */}
-                {!isStockOrder && (
+                {isGifting && (
+                <div className="b2b-od-section">
+                    <h3>Order Totals</h3>
+                    <div className="b2b-od-payment-rows">
+                        <div className="b2b-od-field-inline"><label>Gift value (for the record):</label><span>{"\u20B9"}{formatIndianNumber(Math.round(grandTotal))}</span></div>
+                        <div className="b2b-od-final-total-inline"><label>Order Total:</label><span>{"\u20B9"}0 · Partner Gifting</span></div>
+                    </div>
+                </div>
+                )}
+                {!isStockOrder && !isGifting && (
                 <div className="b2b-od-section">
                     <h3>Order Totals</h3>
                     <div className="b2b-od-payment-rows">

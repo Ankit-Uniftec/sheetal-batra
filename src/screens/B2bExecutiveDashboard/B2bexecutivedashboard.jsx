@@ -11,7 +11,7 @@ import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam } from "../../components/PeriodFilter";
-import { isB2bStockOrderRow, startNewB2bOrder, clearB2bOrderFlow, beginB2bEdit } from "../../utils/b2bStockOrder";
+import { isB2bStockOrderRow, startNewB2bOrder, clearB2bOrderFlow, beginB2bEdit, startB2bGifting, isPartnerGiftingRow, giftingSessionFields } from "../../utils/b2bStockOrder";
 import DashboardHeader from "../../components/DashboardHeader";
 
 export default function B2bExecutiveDashboard() {
@@ -180,6 +180,8 @@ export default function B2bExecutiveDashboard() {
     };
 
     const handleNewOrder = () => { startNewB2bOrder(); navigate("/b2b-vendor-selection"); };
+    // B2B Partner Gifting: same flow, gifting mode (partner, recipient, purpose; total ₹0).
+    const handleNewGifting = () => { startB2bGifting(); navigate("/b2b-vendor-selection", { state: { isB2bGifting: true } }); };
     // Back on the dashboard = no order is being entered or edited (see clearB2bOrderFlow).
     useEffect(() => { clearB2bOrderFlow(); }, []);
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
@@ -217,7 +219,7 @@ export default function B2bExecutiveDashboard() {
                 vendorFull = data;
             }
 
-            beginB2bEdit(order.id);
+            beginB2bEdit(order.id, order);
 
             sessionStorage.setItem("b2bVendorData", JSON.stringify({
                 selectedVendorId: order.vendor_id,
@@ -230,6 +232,8 @@ export default function B2bExecutiveDashboard() {
                 discountPercent: order.markdown_percent || 0,
                 remarks: order.comments || "",
                 availableCredit: vendorFull ? (vendorFull.credit_limit || 0) - (vendorFull.current_credit_used || 0) : 0,
+                // Partner Gifting: recipient / purpose / POC back into the form.
+                ...(isPartnerGiftingRow(order) ? giftingSessionFields(order) : {}),
             }));
 
             sessionStorage.setItem("b2bProductFormData", JSON.stringify({
@@ -299,6 +303,7 @@ export default function B2bExecutiveDashboard() {
                         <a className={`b2b-menu-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => { setActiveTab("dashboard"); setShowSidebar(false); }}>Dashboard</a>
                         <a className={`b2b-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
                         <a className={`b2b-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
+                        <a className="b2b-menu-item" onClick={() => { setShowSidebar(false); handleNewGifting(); }}>B2B Partner Gifting</a>
                         <a className="b2b-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
@@ -398,6 +403,7 @@ export default function B2bExecutiveDashboard() {
                                 <option value="buyout">Buyout</option>
                                 <option value="consignment">Consignment</option>
                                 <option value="client order">Client Order</option>
+                                <option value="partner gifting">Partner Gifting</option>
                                 <option value="stock">Stock</option>
                             </select>
                             <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }}>

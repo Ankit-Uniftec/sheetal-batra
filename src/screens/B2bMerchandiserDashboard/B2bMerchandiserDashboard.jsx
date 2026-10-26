@@ -23,7 +23,7 @@ import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange } from "../../components/PeriodFilter";
-import { startB2bStockOrder, clearB2bStockOrder, startNewB2bOrder, clearB2bOrderFlow } from "../../utils/b2bStockOrder";
+import { startB2bStockOrder, clearB2bStockOrder, startNewB2bOrder, clearB2bOrderFlow, startB2bGifting, isPartnerGiftingRow } from "../../utils/b2bStockOrder";
 import WarehouseTab from "../../components/stock/WarehouseTab";
 import StockExchangeTab from "../../components/stock/StockExchangeTab";
 import StockPanel from "../../components/stock/StockPanel";
@@ -263,7 +263,8 @@ export default function B2bMerchandiserDashboard() {
         // It must be excluded from every commercial figure below — note that
         // `b2b_order_type !== "Consignment"` would otherwise sweep stock (whose
         // type is NULL) into salesOrders and inflate the sales count with ₹0 rows.
-        const commercialOrders = periodOrders.filter(o => !o.is_stock_order);
+        // Partner Gifting is ₹0 and not a sale either (Release 24).
+        const commercialOrders = periodOrders.filter(o => !o.is_stock_order && !isPartnerGiftingRow(o));
         const salesOrders = commercialOrders.filter(o => o.b2b_order_type !== "Consignment");
         const consignmentOrders = commercialOrders.filter(o => o.b2b_order_type === "Consignment");
         const salesRevenue = salesOrders.reduce((sum, o) => sum + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
@@ -984,6 +985,11 @@ export default function B2bMerchandiserDashboard() {
                                 onClick={() => { setShowSidebar(false); handleStartB2bStockOrder(); }}
                             >B2B Stock Order</a>
                         )}
+                        {/* B2B Partner Gifting (Release 24): same flow, gifting mode. */}
+                        <a
+                            className="merch-menu-item"
+                            onClick={() => { setShowSidebar(false); startB2bGifting(); navigate("/b2b-vendor-selection", { state: { isB2bGifting: true } }); }}
+                        >B2B Partner Gifting</a>
                         <a className="merch-menu-item-logout" onClick={handleLogout}>Log Out</a>
                     </nav>
                 </aside>
@@ -1182,7 +1188,7 @@ export default function B2bMerchandiserDashboard() {
                             <input type="text" placeholder="Search order #, PO, vendor, merchandiser, client, product..." value={orderSearch} onChange={(e) => { setOrderSearch(e.target.value); setCurrentPage(1); }} className="merch-search-input" />
                             <div className="merch-filters-controls">
                                 <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select>
-                                <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option><option value="stock">Stock</option></select>
+                                <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Types</option><option value="buyout">Buyout</option><option value="consignment">Consignment</option><option value="client order">Client Order</option><option value="partner gifting">Partner Gifting</option><option value="stock">Stock</option></select>
                                 <select value={vendorFilter} onChange={(e) => { setVendorFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Vendors</option>{uniqueVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
                                 <select value={merchandiserFilter} onChange={(e) => { setMerchandiserFilter(e.target.value); setCurrentPage(1); }} className="merch-filter-select"><option value="all">All Merchandisers</option>{uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}</select>
                                 {ordersPeriodControl}
