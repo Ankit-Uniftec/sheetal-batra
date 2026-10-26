@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { fetchAllRows } from "./fetchAllRows";
+import { fetchAllRowsParallel, runLimited } from "./fetchAllRowsParallel";
 import { isAssignedToHead } from "./stockProductionHead";
 
 /**
@@ -1678,13 +1679,15 @@ export async function enrichComponentsWithMovements(components) {
   if (outsideIds.length === 0) return components;
 
   const stagesById = {};
-  for (let i = 0; i < outsideIds.length; i += 500) {
-    const chunk = outsideIds.slice(i, i + 500);
-    const { data, error } = await supabase
-      .from("external_movements")
-      .select("component_id, stages_outside")
-      .in("component_id", chunk)
-      .eq("status", "exited");
+  const chunks = [];
+  for (let i = 0; i < outsideIds.length; i += 500) chunks.push(outsideIds.slice(i, i + 500));
+  // Chunks side by side rather than one after another.
+  const results = await runLimited(chunks.map((chunk) => () => supabase
+    .from("external_movements")
+    .select("component_id, stages_outside")
+    .in("component_id", chunk)
+    .eq("status", "exited")));
+  for (const { data, error } of results) {
     if (error) { console.error("enrichComponentsWithMovements failed:", error); continue; }
     (data || []).forEach((m) => { stagesById[m.component_id] = m.stages_outside; });
   }
@@ -1702,9 +1705,11 @@ export async function enrichComponentsWithMovements(components) {
 // filter and (while still 'configured') edit them.
 export async function fetchAllMovements() {
   // Paged past Supabase's 1000-row cap — full movements table grows without bound.
-  const { data, error } = await fetchAllRows("external_movements", (q) => q
+  // Pages are fetched in parallel (same rows as one-by-one paging).
+  const { data, error } = await fetchAllRowsParallel("external_movements", (q) => q
     .select("id, vendor_id, vendor_name, vendor_location, stages_outside, return_date, status, created_by, created_at, exit_scan_at, entry_scan_at, repeat_reason, component_id, order_components ( barcode, order_no, component_type, order_id, item_index )")
-    .order("created_at", { ascending: false }));
+    .order("created_at", { ascending: false })
+    .order("id"));
   if (error) { console.error("fetchAllMovements failed:", error); return []; }
 
   const rows = (data || []).map((m) => ({
@@ -1727,10 +1732,12 @@ export async function fetchAllMovements() {
   // isB2bOrder), so neither alone is reliable.
   const orderIds = [...new Set(rows.map((r) => r.order_id).filter(Boolean))];
   const infoById = {};
-  for (let i = 0; i < orderIds.length; i += 100) {
-    const chunk = orderIds.slice(i, i + 100);
-    const { data: ords, error: oErr } = await supabase
-      .from("orders").select("id, created_at, is_b2b, salesperson_store").in("id", chunk);
+  const chunks = [];
+  for (let i = 0; i < orderIds.length; i += 100) chunks.push(orderIds.slice(i, i + 100));
+  // Several chunks at a time instead of one after another (dozens of chunks).
+  const results = await runLimited(chunks.map((chunk) => () =>
+    supabase.from("orders").select("id, created_at, is_b2b, salesperson_store").in("id", chunk)));
+  for (const { data: ords, error: oErr } of results) {
     if (oErr) { console.error("fetchAllMovements order fetch failed:", oErr); break; }
     (ords || []).forEach((o) => { infoById[o.id] = o; });
   }
