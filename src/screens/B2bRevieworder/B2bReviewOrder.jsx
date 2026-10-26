@@ -9,7 +9,7 @@ import formatDate from "../../utils/formatDate";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
-import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY } from "../../utils/b2bStockOrder";
+import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY, isB2bGifting, B2B_GIFTING_FLAG, PARTNER_GIFTING_TYPE, partnerGiftingNote } from "../../utils/b2bStockOrder";
 import { isValidStockHeadDesignation } from "../../utils/stockProductionHead";
 import { b2bPricing } from "../../utils/b2bPricing";
 
@@ -48,6 +48,11 @@ export default function B2bReviewOrder() {
     // barcode identifies the channel) and is auto-approved regardless of role.
     // See src/utils/b2bStockOrder.js and db/barcode_system/v2/54_b2b_stock_orders.sql.
     const isStockOrder = isB2bStockOrder(location.state);
+    // B2B PARTNER GIFTING: a gift to the selected partner. Items keep their
+    // prices (the gift's value on record, like Comms gifting) but every
+    // order-level amount is 0 — no charge, no partner credit, not a sale.
+    // Approval as for any B2B order. See utils/b2bStockOrder.js.
+    const isGifting = !isStockOrder && isB2bGifting(location.state);
 
     const [user, setUser] = useState(null);
     const [userRole, setUserRole] = useState(null);
@@ -152,7 +157,7 @@ export default function B2bReviewOrder() {
     const creditLimit = vendor?.credit_limit || 0;
     // Stock orders draw against no vendor credit — see the same guard in
     // B2bOrderDetails.jsx. Without it, creditLimit 0 (no vendor) would flag them.
-    const exceedsCredit = !isStockOrder && orderType === "Buyout" && projectedCredit > creditLimit;
+    const exceedsCredit = !isStockOrder && !isGifting && orderType === "Buyout" && projectedCredit > creditLimit;
 
     // Submit Order (INSERT for new, UPDATE for edit)
     const handleSubmit = async () => {
@@ -218,7 +223,10 @@ export default function B2bReviewOrder() {
                 delivery_date: earliestDeliveryDate,
                 delivery_address: deliveryAddress,
                 items: items,
-                comments: [remarks, orderNotes].filter(Boolean).join("\n\n"),
+                comments: [
+                    isGifting ? partnerGiftingNote(vendorData?.finalPurpose, vendorData?.pocName) : "",
+                    remarks, orderNotes,
+                ].filter(Boolean).join("\n\n"),
                 delivery_notes: orderNotes || "",
                 subtotal: isStockOrder ? 0 : subtotal,
                 taxes: isStockOrder ? 0 : taxes,
@@ -231,6 +239,34 @@ export default function B2bReviewOrder() {
                 credit_exceeded: exceedsCredit || false,
                 updated_at: new Date().toISOString(),
             };
+
+            // Partner Gifting: who receives it, and every order-level amount 0.
+            // Applied to both new orders and edits, so an edit keeps it a gift.
+            if (isGifting) {
+                Object.assign(orderPayload, {
+                    po_number: null,
+                    b2b_order_type: PARTNER_GIFTING_TYPE,
+                    is_gifting: true,
+                    gift_recipient_name: vendorData?.recipientName || null,
+                    gift_recipient_contact: vendorData?.recipientContact || null,
+                    delivery_name: vendorData?.recipientName || null,
+                    delivery_phone: vendorData?.recipientContact || null,
+                    delivery_email: vendorData?.recipientEmail || null,
+                    markdown_percent: 0,
+                    markdown_amount: 0,
+                    discount_percent: 0,
+                    discount_amount: 0,
+                    discount_code: null,
+                    subtotal: 0,
+                    taxes: 0,
+                    grand_total: 0,
+                    grand_total_after_discount: 0,
+                    net_total: 0,
+                    advance_payment: 0,
+                    remaining_payment: 0,
+                    credit_exceeded: false,
+                });
+            }
 
             let resultOrderNo;
             let insertedOrderId  = null;
@@ -405,7 +441,7 @@ export default function B2bReviewOrder() {
             const dashboardPath = isMerchandiser ? "/b2b-merchandiser-dashboard" : userRole?.toLowerCase().includes("production") ? "/b2b-production-dashboard" : "/b2b-executive-dashboard";
 
             showPopup({
-                title: isEdit ? "Order Updated!" : isStockOrder ? "Stock Order Created!" : "Order Submitted!",
+                title: isEdit ? "Order Updated!" : isStockOrder ? "Stock Order Created!" : isGifting ? "Partner Gifting Order Submitted!" : "Order Submitted!",
                 message: isEdit
                     ? `Order #${resultOrderNo} has been updated${autoApprove ? "." : " and resubmitted for approval."}`
                     : isStockOrder
@@ -427,6 +463,7 @@ export default function B2bReviewOrder() {
                     sessionStorage.removeItem(DETAILS_SESSION_KEY);
                     sessionStorage.removeItem("b2bEditingOrderId");
                     clearB2bStockOrder();
+                    sessionStorage.removeItem(B2B_GIFTING_FLAG);
                     navigate(dashboardPath);
                 },
             });
@@ -470,7 +507,7 @@ export default function B2bReviewOrder() {
 
             <header className="pf-header">
                 <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
-                <h1 className="pf-header-title">{isStockOrder ? "Review Stock Order" : "Review Order"}</h1>
+                <h1 className="pf-header-title">{isStockOrder ? "Review Stock Order" : isGifting ? "Review Partner Gifting" : "Review Order"}</h1>
                 {isStockOrder ? (
                     <div className="b2b-vendor-badge">
                         <span className="vendor-name">Internal Stock</span>
@@ -496,7 +533,7 @@ export default function B2bReviewOrder() {
                     and a section of "N/A" rows only invites the question. */}
                 {!isStockOrder && (
                 <div className="b2b-ro-section">
-                    <h3>Vendor Details</h3>
+                    <h3>{isGifting ? "Partner Details" : "Vendor Details"}</h3>
                     <div className="b2b-ro-row3">
                         <div className="b2b-ro-field"><label>Vendor:</label><span>{vendor?.store_brand_name}</span></div>
                         <div className="b2b-ro-field"><label>Vendor Code:</label><span>{vendor?.vendor_code}</span></div>
@@ -518,6 +555,19 @@ export default function B2bReviewOrder() {
                             <div className="b2b-ro-field"><label>Raised By:</label><span>{salespersonName || user?.email}</span></div>
                             <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{B2B_STOCK_DELIVERY.mode_of_delivery}</span></div>
                         </div>
+                    ) : isGifting ? (
+                    <>
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field"><label>Order Type:</label><span className="b2b-ro-badge badge-blue">Partner Gifting</span></div>
+                        <div className="b2b-ro-field"><label>Merchandiser:</label><span>{merchandiser}</span></div>
+                        <div className="b2b-ro-field"><label>Mode of Delivery:</label><span>{productData?.modeOfDelivery || "B2B Store"}</span></div>
+                    </div>
+                    <div className="b2b-ro-row3">
+                        <div className="b2b-ro-field"><label>Recipient:</label><span>{vendorData?.recipientName}</span></div>
+                        <div className="b2b-ro-field"><label>Contact:</label><span>{vendorData?.recipientContact}{vendorData?.recipientEmail ? ` · ${vendorData.recipientEmail}` : ""}</span></div>
+                        <div className="b2b-ro-field"><label>Purpose:</label><span>{vendorData?.finalPurpose}{vendorData?.pocName ? ` · POC: ${vendorData.pocName}` : ""}</span></div>
+                    </div>
+                    </>
                     ) : (
                     <>
                     <div className="b2b-ro-row3">
@@ -627,6 +677,14 @@ export default function B2bReviewOrder() {
                         <h3>Payment Details</h3>
                         <div className="b2b-ro-payment-rows">
                             <div className="b2b-ro-field-inline"><label>Internal Stock</label><span>No charge</span></div>
+                        </div>
+                    </div>
+                ) : isGifting ? (
+                    <div className="b2b-ro-section">
+                        <h3>Payment Details</h3>
+                        <div className="b2b-ro-payment-rows">
+                            <div className="b2b-ro-field-inline"><label>Gift value (for the record):</label><span>{"\u20B9"}{formatIndianNumber(Math.round(grandTotal))}</span></div>
+                            <div className="b2b-ro-field-inline"><label>Partner Gifting</label><span>No charge · Order total ₹0</span></div>
                         </div>
                     </div>
                 ) : (

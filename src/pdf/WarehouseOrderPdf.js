@@ -596,6 +596,9 @@ const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isU
   if (order.is_b2b && order.po_number) {
     rows.push({ label: "PO NUMBER:", value: order.po_number });
   }
+  if (order.is_b2b && order.b2b_order_type === "Partner Gifting") {
+    rows.push({ label: "ORDER TYPE:", value: "B2B PARTNER GIFTING" });
+  }
   if (order.is_gifting && order.gift_recipient_name) {
     rows.push({
       label: "GIFT RECIPIENT:",

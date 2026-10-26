@@ -7,7 +7,7 @@ import Logo from "../../images/logo.png";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
-import { isEditingB2bOrder } from "../../utils/b2bStockOrder";
+import { isEditingB2bOrder, isB2bGifting, PARTNER_GIFTING_TYPE, PARTNER_GIFTING_PURPOSES } from "../../utils/b2bStockOrder";
 
 const SESSION_KEY = "b2bVendorData";
 
@@ -76,6 +76,17 @@ export default function B2bVendorSelection() {
     const [collectorApplied, setCollectorApplied] = useState(false);
     const [remarks, setRemarks] = useState("");
 
+    // B2B Partner Gifting (Release 24): a gift to the selected partner. No PO,
+    // order type, markdown or collector code — the order total is ₹0 — but who
+    // receives it and why are required. See utils/b2bStockOrder.js.
+    const [isGifting] = useState(() => isB2bGifting());
+    const [recipientName, setRecipientName] = useState("");
+    const [recipientContact, setRecipientContact] = useState("");
+    const [recipientEmail, setRecipientEmail] = useState("");
+    const [pocName, setPocName] = useState("");
+    const [purpose, setPurpose] = useState("");
+    const [purposeOther, setPurposeOther] = useState("");
+
     const [merchandisers, setMerchandisers] = useState([]);
 
     // Fetch user role
@@ -114,6 +125,12 @@ export default function B2bVendorSelection() {
                 if (data.collectorCode) setCollectorCode(data.collectorCode);
                 if (data.collectorApplied) setCollectorApplied(data.collectorApplied);
                 if (data.remarks) setRemarks(data.remarks);
+                if (data.recipientName) setRecipientName(data.recipientName);
+                if (data.recipientContact) setRecipientContact(data.recipientContact);
+                if (data.recipientEmail) setRecipientEmail(data.recipientEmail);
+                if (data.pocName) setPocName(data.pocName);
+                if (data.purpose) setPurpose(data.purpose);
+                if (data.purposeOther) setPurposeOther(data.purposeOther);
             } catch (e) {
                 console.error("Error restoring vendor data:", e);
             }
@@ -134,9 +151,9 @@ export default function B2bVendorSelection() {
 
     // Save to session
     useEffect(() => {
-        const data = { selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, collectorDiscount, collectorCode, collectorApplied, remarks };
+        const data = { selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, collectorDiscount, collectorCode, collectorApplied, remarks, recipientName, recipientContact, recipientEmail, pocName, purpose, purposeOther };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
-    }, [selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, collectorDiscount, collectorCode, collectorApplied, remarks]);
+    }, [selectedVendorId, selectedVendor, vendorContacts, poNumber, merchandiser, orderType, discountPercent, collectorDiscount, collectorCode, collectorApplied, remarks, recipientName, recipientContact, recipientEmail, pocName, purpose, purposeOther]);
 
     // Fetch vendors
     useEffect(() => {
@@ -220,6 +237,27 @@ export default function B2bVendorSelection() {
     };
 
     const handleContinue = () => {
+        if (isGifting) {
+            if (!selectedVendor) { showPopup({ title: "Partner Required", message: "Please select the partner this gift is for.", type: "warning" }); return; }
+            if (!merchandiser) { showPopup({ title: "Merchandiser Required", message: "Please select a merchandiser for this order.", type: "warning" }); return; }
+            if (!recipientName.trim()) { showPopup({ title: "Recipient Required", message: "Please enter who receives the gift.", type: "warning" }); return; }
+            if (!/^\+?\d[\d\s-]{7,}$/.test(recipientContact.trim())) { showPopup({ title: "Contact Required", message: "Please enter the recipient's phone number.", type: "warning" }); return; }
+            const finalPurpose = purpose === "Other" ? purposeOther.trim() : purpose;
+            if (!finalPurpose) { showPopup({ title: "Purpose Required", message: "Please choose the purpose of the gift.", type: "warning" }); return; }
+            const giftData = {
+                selectedVendorId, vendor: selectedVendor, vendorContacts, primaryContact,
+                poNumber: "", merchandiser, orderType: PARTNER_GIFTING_TYPE,
+                discountPercent: 0, collectorDiscount: 0, collectorCode: "", collectorApplied: false,
+                remarks, availableCredit,
+                isGifting: true,
+                recipientName: recipientName.trim(), recipientContact: recipientContact.trim(),
+                recipientEmail: recipientEmail.trim(), pocName: pocName.trim(),
+                purpose, purposeOther: purposeOther.trim(), finalPurpose,
+            };
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(giftData));
+            navigate("/b2b-product-form");
+            return;
+        }
         if (!selectedVendor) { showPopup({ title: "Vendor Required", message: "Please select a vendor to continue.", type: "warning" }); return; }
         if (!poNumber.trim()) { showPopup({ title: "PO Number Required", message: "Please enter the Purchase Order (PO) number.", type: "warning" }); return; }
         if (!merchandiser) { showPopup({ title: "Merchandiser Required", message: "Please select a merchandiser for this order.", type: "warning" }); return; }
@@ -245,7 +283,7 @@ export default function B2bVendorSelection() {
 
             <header className="pf-header">
                 <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
-                <h1 className="pf-header-title">B2B Vendor Selection</h1>
+                <h1 className="pf-header-title">{isGifting ? "B2B Partner Gifting" : "B2B Vendor Selection"}</h1>
                 <div></div>
             </header>
 
@@ -253,7 +291,7 @@ export default function B2bVendorSelection() {
                 <div className="screen4-layout">
                     <div className="screen4-form">
 
-                        <h4 className="product-title">Select Vendor</h4>
+                        <h4 className="product-title">{isGifting ? "Select Partner" : "Select Vendor"}</h4>
 
                         <div className="row">
                             <div className="flex items-center gap-2 pt-2 min-h-10 flex-1" style={{ borderBottom: "2px solid #D5B85A", margin: 0 }}>
@@ -309,8 +347,46 @@ export default function B2bVendorSelection() {
                             </div>
                         )}
 
+                        {/* Gifting Details — replaces the commercial order details */}
+                        {selectedVendor && isGifting && (
+                            <>
+                                <h4 className="product-title" style={{ marginTop: 30 }}>Gifting Details</h4>
+                                <div className="row">
+                                    <div className="field"><label>Recipient Name *</label><input type="text" className="input-line" placeholder="Who receives the gift" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} /></div>
+                                    <div className="field"><label>Recipient Contact *</label><input type="tel" className="input-line" placeholder="Phone number" value={recipientContact} onChange={(e) => setRecipientContact(e.target.value)} /></div>
+                                </div>
+                                <div className="row">
+                                    <div className="field"><label>Recipient Email</label><input type="email" className="input-line" placeholder="Optional" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} /></div>
+                                    <div className="field"><label>POC Name</label><input type="text" className="input-line" placeholder="Our point of contact (optional)" value={pocName} onChange={(e) => setPocName(e.target.value)} /></div>
+                                </div>
+                                <div className="row">
+                                    <div className="field"><label>Purpose *</label><SearchableSelect options={PARTNER_GIFTING_PURPOSES} value={purpose} onChange={setPurpose} placeholder="Select purpose" /></div>
+                                    {purpose === "Other" ? (
+                                        <div className="field"><label>Purpose (Other) *</label><input type="text" className="input-line" placeholder="Describe the purpose" value={purposeOther} onChange={(e) => setPurposeOther(e.target.value)} /></div>
+                                    ) : (
+                                        <div className="field"><label>Merchandiser *</label><SearchableSelect options={merchandisers} value={merchandiser} onChange={setMerchandiser} placeholder="Select Merchandiser" /></div>
+                                    )}
+                                </div>
+                                {purpose === "Other" && (
+                                    <div className="row">
+                                        <div className="field"><label>Merchandiser *</label><SearchableSelect options={merchandisers} value={merchandiser} onChange={setMerchandiser} placeholder="Select Merchandiser" /></div>
+                                    </div>
+                                )}
+                                <div className="row">
+                                    <div className="field"><label>Remarks (Optional)</label><input type="text" className="input-line" placeholder="Any special instructions or notes..." value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
+                                </div>
+                                <p style={{ fontSize: 13, color: "#6b5842", margin: "8px 0 0" }}>
+                                    {"\uD83C\uDF81"} A gift: products keep their prices for the record, but the order total is ₹0 — no charge and no partner credit used.
+                                </p>
+                                <div className="footer-btns">
+                                    <button className="draftBtn" onClick={handleBack}> Cancel</button>
+                                    <button className="continueBtn" onClick={handleContinue}>Continue to Products</button>
+                                </div>
+                            </>
+                        )}
+
                         {/* Order Details */}
-                        {selectedVendor && (
+                        {selectedVendor && !isGifting && (
                             <>
                                 <h4 className="product-title" style={{ marginTop: 30 }}>Order Details</h4>
 

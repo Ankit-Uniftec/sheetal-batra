@@ -13,7 +13,7 @@ import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import ExtrasPopup from "../../components/ExtrasPopup";
 import { B2B_SIZE_OPTIONS, SIZE_CHART_US, resolveSizeChart, chartValueSet, measurementsForSize } from "../../utils/b2bSizeChart";
-import { isB2bStockOrder, clearB2bStockOrder } from "../../utils/b2bStockOrder";
+import { isB2bStockOrder, clearB2bStockOrder, isB2bGifting } from "../../utils/b2bStockOrder";
 
 /**
  * Session Storage Keys
@@ -658,7 +658,7 @@ export default function B2bProductForm() {
 
             <header className="pf-header">
                 <img src={Logo} alt="logo" className="pf-header-logo" onClick={handleBack} />
-                <h1 className="pf-header-title">{isStockOrder ? "B2B Stock Order" : "B2B Order Form"}</h1>
+                <h1 className="pf-header-title">{isStockOrder ? "B2B Stock Order" : isB2bGifting(location.state) ? "B2B Partner Gifting" : "B2B Order Form"}</h1>
                 {/* Stock orders have no vendor — show the internal destination in the
                     badge slot instead, so the screen is never ambiguous about what
                     kind of order is being raised. */}

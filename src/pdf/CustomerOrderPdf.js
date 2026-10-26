@@ -12,6 +12,7 @@ import {
 import { styles, COLORS } from "./pdfStyles";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
 import { STORE_ADDRESSES } from "../utils/shippingAddress";
+import { isPartnerGiftingRow, B2B_TEAM_PHONE } from "../utils/b2bStockOrder";
 
 // Register Noto Sans font for Rupee symbol support
 Font.register({
@@ -457,6 +458,9 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
   // in the pending amount. Website (Shopify) orders keep their shipping outside
   // net_total and are paid online — left exactly as before.
   const isWebsiteOrder = /^SB-SHOP/i.test(String(order.order_no || ""));
+  // B2B Partner Gifting (Release 24): titled as such, and the contact line
+  // gives the B2B team number instead of the placing executive's phone.
+  const isPartnerGifting = isPartnerGiftingRow(order);
   const shippingCharge = isWebsiteOrder ? 0 : (Number(order.shipping_charge) || 0);
   const netTotal = grandTotal - discountAmount - collectorsCode + shippingCharge;
   const remaining = netTotal - advancePayment - storeCreditUsed;
@@ -520,7 +524,7 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
 
         {/* Title Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>{order.is_gifting ? "Gift Order Copy" : "Order Copy"}</Text>
+          <Text style={styles.title}>{isPartnerGifting ? "B2B Partner Gifting" : order.is_gifting ? "Gift Order Copy" : "Order Copy"}</Text>
           <View style={styles.orderInfo}>
             <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>
@@ -575,9 +579,11 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
 
             {/* Team - Center/Right */}
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text style={pdfStyles.salesTeamText}>In-Store Client Relations Team: </Text>
+              <Text style={pdfStyles.salesTeamText}>{isPartnerGifting ? "B2B Team: " : "In-Store Client Relations Team: "}</Text>
               {/* Phone - Right */}
-              {order.salesperson_phone?.trim() && (
+              {isPartnerGifting ? (
+                <Text style={pdfStyles.salesPhoneText}>{B2B_TEAM_PHONE}</Text>
+              ) : order.salesperson_phone?.trim() && (
                 <Text style={pdfStyles.salesPhoneText}>{formatPhone(order.salesperson_phone)}</Text>
               )}
             </View>
@@ -608,7 +614,7 @@ const CustomerOrderPdf = ({ order, logoUrl, resolvedClientName = "" }) => {
 
         {/* Title Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>{order.is_gifting ? "Gift Order Copy" : "Order Copy"}</Text>
+          <Text style={styles.title}>{isPartnerGifting ? "B2B Partner Gifting" : order.is_gifting ? "Gift Order Copy" : "Order Copy"}</Text>
           <View style={styles.orderInfo}>
             <Text style={styles.orderId}>Order ID: {safeString(order.order_no || order.order_id)}</Text>
             <Text style={styles.orderDate}>{formatDateTime(order.created_at)}</Text>

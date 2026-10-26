@@ -80,5 +80,7 @@ export const isSaleOrder = (o) => {
   if (!isRevenueOrder(o)) return false;
   if (o.is_stock_order === true) return false;
   if (o.is_alteration === true) return false;
+  // B2B Partner Gifting: a ₹0 gift, not a sale (Release 24).
+  if (o.is_b2b === true && o.b2b_order_type === "Partner Gifting") return false;
   return true;
 };

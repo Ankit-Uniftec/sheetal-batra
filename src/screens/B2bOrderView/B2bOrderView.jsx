@@ -7,7 +7,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { getWarehouseDate } from "../../utils/warehouseDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
-import { isB2bStockOrderRow, beginB2bEdit } from "../../utils/b2bStockOrder";
+import { isB2bStockOrderRow, beginB2bEdit, isPartnerGiftingRow, giftingSessionFields } from "../../utils/b2bStockOrder";
 
 function ColorDotDisplay({ colorObject }) {
     if (!colorObject) return null;
@@ -133,7 +133,7 @@ export default function B2bOrderView() {
         if (!order || !vendor) return;
 
         // Start editing THIS order (clears any leftover order / edit first).
-        beginB2bEdit(order.id);
+        beginB2bEdit(order.id, order);
 
         // Populate vendor session data
         const vendorSessionData = {
@@ -150,6 +150,8 @@ export default function B2bOrderView() {
             collectorApplied: (order.discount_percent || 0) > 0,
             remarks: order.comments || "",
             availableCredit: (vendor.credit_limit || 0) - (vendor.current_credit_used || 0),
+            // Partner Gifting: recipient / purpose / POC back into the form.
+            ...(isPartnerGiftingRow(order) ? giftingSessionFields(order) : {}),
         };
         sessionStorage.setItem("b2bVendorData", JSON.stringify(vendorSessionData));
 
