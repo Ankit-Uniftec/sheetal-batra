@@ -24,6 +24,7 @@ const AccountsDashboard = lazy(() => import("./screens/AccountsDashboard/Account
 const AccountantDashboard = lazy(() => import("./screens/AccountantDashboard/AccountantDashboard"));
 const HeadOfDesignDashboard = lazy(() => import("./screens/HeadOfDesignDashboard/HeadOfDesignDashboard"));
 const ScanStationPage = lazy(() => import("./screens/ScanStationPage/ScanStationPage"));
+const StoreGatePage = lazy(() => import("./screens/StoreGate/StoreGatePage"));
 const OrderDetailPage = lazy(() => import("./pages/OrderDetailPage"));
 const AdminDashboard = lazy(() => import("./screens/AdminDashboard/AdminDashboard"));
 const B2BVendorSelection = lazy(() => import("./screens/B2bvendorSelection/B2bvendorselection"));
@@ -95,6 +96,7 @@ function App() {
         <Route path="/accountant-dashboard" element={<PrivateRoute><AccountantDashboard /></PrivateRoute>} />
         <Route path="/head-of-design-dashboard" element={<PrivateRoute><HeadOfDesignDashboard /></PrivateRoute>} />
         <Route path="/scan-station" element={<PrivateRoute><ScanStationPage /></PrivateRoute>} />
+        <Route path="/store-gate" element={<PrivateRoute><StoreGatePage /></PrivateRoute>} />
         <Route path="/order/:orderId" element={<PrivateRoute><OrderDetailPage /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         <Route path="/b2b-executive-dashboard" element={<PrivateRoute><B2bExecutiveDashboard /></PrivateRoute>} />
