@@ -37,7 +37,8 @@ import PeriodFilter, { usePeriodFilter, periodLabel } from "../../../components/
 import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfLazy";
-import { fetchAllRowsParallel, selectAllExcept } from "../../../utils/fetchAllRowsParallel";
+import { fetchAllRowsParallel } from "../../../utils/fetchAllRowsParallel";
+import { PM_ORDER_SELECT, fetchFullOrder } from "../../../utils/pmOrderColumns";
 import { PRODUCTION_STAGES, getStageLabel, getStageColor, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_FILTER_SEGMENTS, getOrderStatusLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../../utils/barcodeService";
 import { computeChannelBreakdown, computeStatusStats, computeProductionMetrics, computeReJourneyCount, countActiveComponents, computeDispatchReady, isOrderStillRunning } from "../../../utils/productionMetrics";
 import downloadCsv from "../../../utils/downloadCsv";
@@ -438,18 +439,27 @@ export default function ProductionManagerDashboard() {
             // after another — orders first, pieces only after — took over a
             // minute once the tables grew. Same rows as before; `id` is the
             // tie-breaker so page boundaries never shift.
-            // Every order column EXCEPT shopify_raw — the raw Shopify payload is
-            // over half of an order row's size and nothing on this screen (or
-            // the PDF / edit / cancel it opens) reads it.
-            const orderColumns = await selectAllExcept("orders", ["shopify_raw"]);
-            const [ordersRes, componentsRes] = await Promise.all([
+            // Only the order columns this screen reads (PM_ORDER_COLUMNS — about
+            // a third of them; half the data). The warehouse PDF, Edit and
+            // Cancel load the full row first (fetchFullOrder).
+            const [ordersRes, componentsRes, vendorsRes] = await Promise.all([
                 fetchAllRowsParallel("orders", (q) => q
-                    .select(orderColumns)
+                    .select(PM_ORDER_SELECT)
                     .order("created_at", { ascending: false })
                     .order("id")),
                 fetchAllRowsParallel("order_components", (q) => q
                     .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts, is_rework, is_active, channel_key")
                     .order("created_at", { ascending: false })
+                    .order("id"))
+                    // Attach stages_outside for pieces out at a vendor (badge reads
+                    // "Out to Vendor (Embroidery)" instead of the stalled stage) as
+                    // soon as the pieces arrive — while the orders still download.
+                    .then(async (res) => (res.error ? res : { ...res, data: await enrichComponentsWithMovements(res.data || []) })),
+                // B2B "client name": store_brand_name of the order's vendor
+                // (delivery_name is empty for B2B). The vendor list is small, so
+                // load it whole alongside instead of waiting for the orders.
+                fetchAllRowsParallel("vendors", (q) => q
+                    .select("id, store_brand_name, vendor_code, location")
                     .order("id")),
             ]);
             if (ordersRes.error) throw ordersRes.error;
@@ -460,27 +470,9 @@ export default function ProductionManagerDashboard() {
             // Head + Warehouse dashboards already apply). Non-B2B orders are
             // unaffected.
             allOrders = allOrders.filter(o => !o.is_b2b || o.approval_status === "approved");
-            setOrders(allOrders);
 
-            // Resolve B2B "client name" — fetch all vendors referenced by the
-            // loaded B2B orders. delivery_name is empty for B2B; store_brand_name
-            // is the right analogue for the production manager view.
-            const vendorIds = [...new Set(
-                allOrders
-                    .filter(o => o.is_b2b && o.vendor_id)
-                    .map(o => o.vendor_id)
-            )];
-            if (vendorIds.length > 0) {
-                const { data: vData } = await supabase
-                    .from("vendors")
-                    .select("id, store_brand_name, vendor_code, location")
-                    .in("id", vendorIds);
-                if (vData) {
-                    const vMap = {};
-                    vData.forEach(v => { vMap[v.id] = v; });
-                    setVendorMap(vMap);
-                }
-            }
+            const vMap = {};
+            (vendorsRes.data || []).forEach(v => { vMap[v.id] = v; });
 
             // Every order_components row (fetched above, alongside the orders)
             // so the Production tab can aggregate counts per stage.
@@ -491,11 +483,12 @@ export default function ProductionManagerDashboard() {
             // don't count pieces of orders that aren't in production yet.
             const visibleOrderIds = new Set(allOrders.map(o => o.id));
             allComponents = allComponents.filter(c => visibleOrderIds.has(c.order_id));
-            // Attach stages_outside for pieces out at a vendor so the badge reads
-            // "Out to Vendor (Embroidery)" instead of the stalled stage.
-            allComponents = await enrichComponentsWithMovements(allComponents);
-            setComponents(allComponents);
 
+            // All together, after the last await: one render over the 14k orders
+            // instead of one per piece of state.
+            setOrders(allOrders);
+            setVendorMap(vMap);
+            setComponents(allComponents);
             setLoading(false);
         } catch (err) {
             console.error("Load error:", err);
@@ -1075,7 +1068,8 @@ export default function ProductionManagerDashboard() {
         if (warehousePdfLoading === order.id) return;
         try {
             setWarehousePdfLoading(order.id);
-            const result = await downloadWarehousePdf(order, null, false);
+            // The PDF reads more of the order than this screen loads.
+            const result = await downloadWarehousePdf(await fetchFullOrder(order), null, false);
             if (!result) {
                 showPopup({ type: "error", title: "PDF Failed", message: "Could not open or generate the warehouse PDF. Please try again." });
                 return;
@@ -1987,8 +1981,10 @@ export default function ProductionManagerDashboard() {
     };
 
     // ==================== EDIT (PM can edit everything, no restrictions) ====================
-    const openEditModal = (e, order) => {
+    const openEditModal = async (e, listOrder) => {
         e.stopPropagation();
+        // The list holds only the columns this screen shows; edit the full row.
+        const order = await fetchFullOrder(listOrder);
         const item = order.items?.[0] || {};
 
         let topColorVal = "";
@@ -2128,7 +2124,8 @@ export default function ProductionManagerDashboard() {
         }
         setActionLoading(cancelTarget.id);
         try {
-            const { cancelledComponents } = await cancelOrder(cancelTarget, cancelReason.trim(), {
+            // The list holds only the columns this screen shows; cancel the full row.
+            const { cancelledComponents } = await cancelOrder(await fetchFullOrder(cancelTarget), cancelReason.trim(), {
                 cancelledBy: profile?.saleperson || currentUserEmail || "",
                 email: currentUserEmail || "",
             });
@@ -2481,8 +2478,8 @@ export default function ProductionManagerDashboard() {
                                         Clicks through to the vendor panel, pre-filtered to those trips. */}
                                     <StatCard
                                         title="Vendor Rework"
-                                        value={vendorRework.count}
-                                        subtitle={vendorRework.count > 0
+                                        value={extMovementsLoading ? "…" : vendorRework.count}
+                                        subtitle={extMovementsLoading ? "Loading vendor trips…" : vendorRework.count > 0
                                             ? `${vendorRework.pct}% of ${vendorRework.total} trips ${"\u00B7"} worst: ${vendorRework.worst.vendor} (${vendorRework.worst.count})`
                                             : vendorRework.total > 0 ? `No re-sends across ${vendorRework.total} trips` : "No vendor movements"}
                                         highlight={vendorRework.count > 0}
