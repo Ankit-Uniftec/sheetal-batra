@@ -14,6 +14,7 @@ import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationServi
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import AlterationModal from "../components/AlterationModal";
 import PaymentProofsPanel from "../components/PaymentProofsPanel";
+import { GATE_EVENTS, GATE_FLAGS, fetchOrderGateEvents } from "../utils/storeGate";
 
 // Time calculation helpers
 const getHoursSinceDelivery = (deliveredAt) => {
@@ -127,6 +128,14 @@ export default function OrderDetailPage() {
   const customerFromState = location.state?.customer;
 
   const [order, setOrder] = useState(null);
+  // Store gate scans for this order (Release 22): in / out of the store.
+  const [gateEvents, setGateEvents] = useState([]);
+  useEffect(() => {
+    if (!order?.id) return;
+    let cancelled = false;
+    fetchOrderGateEvents(order.id).then((rows) => { if (!cancelled) setGateEvents(rows); });
+    return () => { cancelled = true; };
+  }, [order?.id]);
   const [alterations, setAlterations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(null);
@@ -695,6 +704,29 @@ export default function OrderDetailPage() {
             })}
           </div>
         </section>
+
+        {/* Store Gate (Release 22) — only when the gate has scanned this order */}
+        {gateEvents.length > 0 && (
+          <section className="odp-section">
+            <h2 className="odp-section-title">Store Gate</h2>
+            <div className="odp-gate-list">
+              {gateEvents.map((e, i) => (
+                <div key={`${e.barcode}-${e.scanned_at}-${i}`} className="odp-gate-row" style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "6px 0", borderBottom: "1px solid #f0f0f0", fontSize: 14 }}>
+                  <strong>{GATE_EVENTS[e.event] || e.event}</strong>
+                  {e.reason && <span>({e.reason})</span>}
+                  <span>· {e.store}</span>
+                  <span style={{ fontFamily: "monospace", color: "#555" }}>· {e.barcode}</span>
+                  <span style={{ color: "#777" }}>· {formatDate(e.scanned_at)} {new Date(e.scanned_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</span>
+                  {e.marked_delivered && <span style={{ color: "#2e7d32" }}>· marked delivered</span>}
+                  {(e.flags || []).length > 0 && (
+                    <span style={{ color: "#a35a00" }}>⚠ {e.flags.map((f) => GATE_FLAGS[f] || f).join(", ")}</span>
+                  )}
+                  {e.note && <span style={{ color: "#555" }}>· {e.note}</span>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Order Info Section */}
         <section className="odp-section">
