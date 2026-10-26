@@ -1,0 +1,101 @@
+name: CI
+
+# Session 3.1.1 of the foundations plan: checks on today's app before the monorepo move.
+# Every job must pass before a pull request can merge into main (branch protection).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Placeholders so modules that create the Supabase client can load. No test talks to Supabase.
+  REACT_APP_SUPABASE_URL: http://localhost:54321
+  REACT_APP_SUPABASE_KEY: ci-placeholder-anon-key
+
+jobs:
+  test:
+    name: Unit tests (Jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # `npm ci` refuses today's package-lock.json (out of step with package.json).
+      # The committed pnpm lock file in session 3.1.2 replaces this.
+      - run: npm install --no-audit --no-fund
+      - run: npx react-scripts test --watchAll=false
+        env:
+          CI: true
+
+  node-checks:
+    name: Self-checks and .mjs tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: bash scripts/ci/node-checks.sh
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      # CI=false: the existing ESLint warnings would otherwise fail the build.
+      # Lint becomes its own blocking job in session 3.1.5.
+      - run: npm run build
+        env:
+          CI: false
+
+  secrets:
+    name: Secret scan (gitleaks)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Scans only the commits in this pull request.
+      - run: >
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.18.4
+          detect --source /repo --redact --verbose
+          --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+  audit:
+    name: Dependency audit (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Report only for now: Create React App pulls in known-vulnerable build tools.
+    # Becomes blocking after the move to Vite (session 3.1.6).
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm audit --omit=dev --audit-level=high
