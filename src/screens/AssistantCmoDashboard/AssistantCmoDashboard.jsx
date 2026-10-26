@@ -181,6 +181,8 @@ export default function AssistantCmoDashboard() {
         // every ₹0 stock movement counts as a sale, inflating order counts and
         // deflating AOV — the same near-silent failure fixed in ExhibitionPanel.
         "is_alteration", "is_stock_order", "is_b2b", "is_comms",
+        // b2b_order_type: isSaleOrder leaves out B2B Partner Gifting (₹0 gifts).
+        "b2b_order_type",
         "items", "order_no", "refund_status", "return_reason",
         "salesperson", "salesperson_store", "status", "user_id",
       ].join(", ");
