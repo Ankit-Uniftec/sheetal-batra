@@ -29,6 +29,7 @@ import { downloadCsv } from "../../utils/downloadCsv";
 import { EXPORT_HEADERS, buildPackagingExportRows } from "../../utils/packagingExport";
 import "./PackagingDashboard.css";
 import DashboardHeader from "../../components/DashboardHeader";
+import DispatchReport from "../../components/DispatchReport";
 
 // ============================================================
 // PackagingDashboard — the packaging & dispatch desk (Aryadeep).
@@ -528,6 +529,10 @@ export default function PackagingDashboard() {
               className={`pkg-nav-item ${activeTab === "analytics" ? "active" : ""}`}
               onClick={() => { setActiveTab("analytics"); setShowSidebar(false); }}
             >Analytics &amp; Reports</button>
+            <button
+              className={`pkg-nav-item ${activeTab === "dispatch_report" ? "active" : ""}`}
+              onClick={() => { setActiveTab("dispatch_report"); setShowSidebar(false); }}
+            >Dispatch Report</button>
             <button className="pkg-nav-item logout" onClick={handleLogout}>Logout</button>
           </nav>
         </aside>
@@ -848,6 +853,16 @@ export default function PackagingDashboard() {
             <h2 className="pkg-section-title">Override Log</h2>
           </div>
           <OverrideLog rows={overrideLog} onLoad={setOverrideLog} />
+        </>
+      )}
+
+      {/* Dispatch report (open point #11): every box dispatched, printable. */}
+      {activeTab === "dispatch_report" && (
+        <>
+          <div className="pkg-tab-header">
+            <h2 className="pkg-section-title">Dispatch Report</h2>
+          </div>
+          <DispatchReport />
         </>
       )}
 
