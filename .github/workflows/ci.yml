@@ -1,0 +1,124 @@
+name: CI
+
+# Session 3.1.1 of the foundations plan: checks on today's app before the monorepo move.
+# Every job must pass before a pull request can merge into main (branch protection).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Placeholders so modules that create the Supabase client can load. No test talks to Supabase.
+  REACT_APP_SUPABASE_URL: http://localhost:54321
+  REACT_APP_SUPABASE_KEY: ci-placeholder-anon-key
+
+jobs:
+  test:
+    name: Unit tests (Jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # `npm ci` refuses today's package-lock.json (out of step with package.json).
+      # The committed pnpm lock file in session 3.1.2 replaces this.
+      - run: npm install --no-audit --no-fund
+      - run: npx react-scripts test --watchAll=false
+        env:
+          CI: true
+
+  node-checks:
+    name: Self-checks and .mjs tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: bash scripts/ci/node-checks.sh
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      # CI=false: the existing ESLint warnings would otherwise fail the build.
+      # Lint becomes its own blocking job in session 3.1.5.
+      - run: npm run build
+        env:
+          CI: false
+
+  secrets:
+    name: Secret scan (gitleaks)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Scans only the commits in this pull request.
+      - run: >
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.18.4
+          detect --source /repo --redact --verbose
+          --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+  audit:
+    name: Dependency audit (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Report only for now: almost every finding comes from Create React App's build and
+    # test tooling, which never reaches the browser. The findings are written to the run's
+    # summary page instead of failing the job. Becomes blocking after Vite (session 3.1.6).
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - name: Write audit summary
+        run: |
+          npm audit --omit=dev --json > audit.json || true
+          node -e '
+            const a = require("./audit.json");
+            const m = a.metadata?.vulnerabilities || {};
+            const rows = Object.values(a.vulnerabilities || {})
+              .filter(v => ["critical", "high"].includes(v.severity))
+              .sort((x, y) => x.severity.localeCompare(y.severity) || x.name.localeCompare(y.name))
+              .map(v => `| ${v.name} | ${v.severity} | ${v.range} | ${v.isDirect ? "yes" : "no"} |`);
+            const out = [
+              "## Dependency audit (report only)",
+              "",
+              `critical ${m.critical || 0} · high ${m.high || 0} · moderate ${m.moderate || 0} · low ${m.low || 0}`,
+              "",
+              "Most findings come from react-scripts build and test tooling, which is not shipped to the browser.",
+              "",
+              "| Package | Severity | Vulnerable range | Direct dependency |",
+              "| --- | --- | --- | --- |",
+              ...rows,
+            ].join("\n");
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, out + "\n");
+            console.log(out);
+          '
