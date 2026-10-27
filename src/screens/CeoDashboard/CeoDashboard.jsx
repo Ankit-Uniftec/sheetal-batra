@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import CancellationsPanel from "../../components/CancellationsPanel";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
@@ -1585,6 +1586,7 @@ export default function CEODashboard() {
                         <button className={`admin-nav-item ${activeTab === "cost_expenditure" ? "active" : ""}`} onClick={() => { setActiveTab("cost_expenditure"); setShowSidebar(false); }}>Cost & Expenditure</button>
                         <button className={`admin-nav-item ${activeTab === "targets_growth" ? "active" : ""}`} onClick={() => { setActiveTab("targets_growth"); setShowSidebar(false); }}>Targets & Growth</button>
                         <button className={`admin-nav-item ${activeTab === "ops_flags" ? "active" : ""}`} onClick={() => { setActiveTab("ops_flags"); setShowSidebar(false); }}>Operational Flags</button>
+                        <button className={`admin-nav-item ${activeTab === "cancellations" ? "active" : ""}`} onClick={() => { setActiveTab("cancellations"); setShowSidebar(false); }}>Cancellations</button>
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
@@ -2867,6 +2869,12 @@ export default function CEODashboard() {
 
 
                     {/* ═══════════ CEO: OPERATIONAL FLAGS ═══════════ */}
+                    {activeTab === "cancellations" && (
+                        <div>
+                            <h2 className="admin-section-title">Cancellations</h2>
+                            <CancellationsPanel />
+                        </div>
+                    )}
                     {activeTab === "ops_flags" && (
                         <div className="admin-dashboard-tab">
                             <h2 className="admin-section-title">Operational Flags</h2>

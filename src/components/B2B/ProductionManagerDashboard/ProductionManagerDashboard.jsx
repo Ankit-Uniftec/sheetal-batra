@@ -38,6 +38,7 @@ import CompletePicker from "../../../components/CompletePicker";
 import "../../../components/ProductionOverrides.css";
 import { downloadWarehousePdf } from "../../../utils/pdfLazy";
 import DispatchReport from "../../../components/DispatchReport";
+import CancellationsPanel from "../../../components/CancellationsPanel";
 import { fetchAllRowsParallel } from "../../../utils/fetchAllRowsParallel";
 import { PM_ORDER_SELECT, fetchFullOrder } from "../../../utils/pmOrderColumns";
 import { PRODUCTION_STAGES, getStageLabel, getStageColor, STAGE_GROUPS, enrichComponentsWithMovements, classifyComponentForStageCard, getOrderChannelKey, getOrderChannelLabel, CHANNEL_FILTER_SEGMENTS, getOrderStatusLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../../utils/barcodeService";
@@ -2393,6 +2394,7 @@ export default function ProductionManagerDashboard() {
                             <a className={`pm-menu-item ${activeTab === "vendors" ? "active" : ""}`} onClick={() => { setActiveTab("vendors"); setSubTab("directory"); setExtRepeatOnly(false); setShowSidebar(false); }}>Vendors</a>
                             <a className={`pm-menu-item ${activeTab === "vendor_delays" ? "active" : ""}`} onClick={() => { setActiveTab("vendor_delays"); setShowSidebar(false); }}>Vendor Delays</a>
                             <a className={`pm-menu-item ${activeTab === "dispatch_report" ? "active" : ""}`} onClick={() => { setActiveTab("dispatch_report"); setShowSidebar(false); }}>Dispatch Report</a>
+                            <a className={`pm-menu-item ${activeTab === "cancellations" ? "active" : ""}`} onClick={() => { setActiveTab("cancellations"); setShowSidebar(false); }}>Cancellations</a>
                             <a className={`pm-menu-item ${activeTab === "replacements" ? "active" : ""}`} onClick={() => { setActiveTab("replacements"); setShowSidebar(false); }}>Replacement Approvals</a>
                             <a className={`pm-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
                             <a className={`pm-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
@@ -4519,6 +4521,13 @@ export default function ProductionManagerDashboard() {
                             </div>
                         )}
                         {/* Vendor delays + penalties (Release 20). */}
+                        {/* Cancellations (open point #4). */}
+                        {activeTab === "cancellations" && (
+                            <div className="pm-orders-tab">
+                                <h2 className="pm-tab-title">Cancellations</h2>
+                                <CancellationsPanel />
+                            </div>
+                        )}
                         {/* Dispatch report (open point #11): every box dispatched, printable. */}
                         {activeTab === "dispatch_report" && (
                             <div className="pm-orders-tab">

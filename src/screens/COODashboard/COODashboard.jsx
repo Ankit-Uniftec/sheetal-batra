@@ -17,6 +17,7 @@ import VendorApprovals from "../../components/VendorApprovals";
 import FactoryPause from "../../components/FactoryPause";
 import VendorDelaysTab from "../../components/VendorDelays/VendorDelaysTab";
 import { fetchExternalMovements } from "../../utils/externalMovements";
+import CancellationsPanel from "../../components/CancellationsPanel";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
 import config from "../../config/config";
@@ -773,6 +774,7 @@ export default function COODashboard() {
                         <button className={`admin-nav-item ${activeTab === "operations" ? "active" : ""}`} onClick={() => { setActiveTab("operations"); setShowSidebar(false); }}>Operations Summary</button>
                         <button className={`admin-nav-item ${activeTab === "brand" ? "active" : ""}`} onClick={() => { setActiveTab("brand"); setShowSidebar(false); }}>Brand Performance</button>
                         <button className={`admin-nav-item ${activeTab === "qc_issues" ? "active" : ""}`} onClick={() => { setActiveTab("qc_issues"); setShowSidebar(false); }}>QC & Issues</button>
+                        <button className={`admin-nav-item ${activeTab === "cancellations" ? "active" : ""}`} onClick={() => { setActiveTab("cancellations"); setShowSidebar(false); }}>Cancellations</button>
                         <button className={`admin-nav-item ${activeTab === "consignment" ? "active" : ""}`} onClick={() => { setActiveTab("consignment"); setShowSidebar(false); }}>Consignment</button>
                         <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
                         <button className={`admin-nav-item ${activeTab === "financial" ? "active" : ""}`} onClick={() => { setActiveTab("financial"); setShowSidebar(false); }}>Financial</button>
@@ -922,6 +924,12 @@ export default function COODashboard() {
                     )}
 
                     {/* ═══════════ QC & ISSUES ═══════════ */}
+                    {activeTab === "cancellations" && (
+                        <div>
+                            <h2 className="admin-section-title">Cancellations</h2>
+                            <CancellationsPanel />
+                        </div>
+                    )}
                     {activeTab === "qc_issues" && (
                         <div>
                             <h2 className="admin-section-title">QC & Customer Issues</h2>
