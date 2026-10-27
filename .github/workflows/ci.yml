@@ -88,9 +88,9 @@ jobs:
     name: Dependency audit (report only)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Report only for now: Create React App pulls in known-vulnerable build tools.
-    # Becomes blocking after the move to Vite (session 3.1.6).
-    continue-on-error: true
+    # Report only for now: almost every finding comes from Create React App's build and
+    # test tooling, which never reaches the browser. The findings are written to the run's
+    # summary page instead of failing the job. Becomes blocking after Vite (session 3.1.6).
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -98,4 +98,27 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm install --no-audit --no-fund
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Write audit summary
+        run: |
+          npm audit --omit=dev --json > audit.json || true
+          node -e '
+            const a = require("./audit.json");
+            const m = a.metadata?.vulnerabilities || {};
+            const rows = Object.values(a.vulnerabilities || {})
+              .filter(v => ["critical", "high"].includes(v.severity))
+              .sort((x, y) => x.severity.localeCompare(y.severity) || x.name.localeCompare(y.name))
+              .map(v => `| ${v.name} | ${v.severity} | ${v.range} | ${v.isDirect ? "yes" : "no"} |`);
+            const out = [
+              "## Dependency audit (report only)",
+              "",
+              `critical ${m.critical || 0} · high ${m.high || 0} · moderate ${m.moderate || 0} · low ${m.low || 0}`,
+              "",
+              "Most findings come from react-scripts build and test tooling, which is not shipped to the browser.",
+              "",
+              "| Package | Severity | Vulnerable range | Direct dependency |",
+              "| --- | --- | --- | --- |",
+              ...rows,
+            ].join("\n");
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, out + "\n");
+            console.log(out);
+          '
