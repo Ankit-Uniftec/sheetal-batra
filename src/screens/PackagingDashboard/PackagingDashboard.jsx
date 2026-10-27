@@ -19,6 +19,7 @@ import { shippingAddressOf } from "../../utils/shippingAddress";
 import { orderPayment } from "../../utils/orderPayment";
 import { dispatchSummary } from "../../utils/shipmentStatus";
 import DispatchBadge from "../../components/DispatchBadge";
+import { isAllLxrtsOrder } from "../../utils/lxrtsProduct.mjs";
 import DispatchCalendar from "./DispatchCalendar";
 import DispatchOverrideModal from "../../components/DispatchOverrideModal";
 import {
@@ -244,20 +245,37 @@ export default function PackagingDashboard() {
     return map;
   }, [shipments]);
 
+  // Ready stock (LXRTS — "OTR", point #12): the piece already exists on the
+  // shelf, nothing is produced. STORE ready-stock orders are packed at the
+  // store and never come to this desk, so they are left out entirely. WEBSITE
+  // ready-stock orders do come here, and are ready to pack as soon as they are
+  // placed — they never pass through production, so they must not wait in
+  // In Production for a status that would never come.
+  const isReadyStock = useCallback((o) => isAllLxrtsOrder(o), []);
+  const deskOrders = useMemo(
+    () => orders.filter((o) => !(isReadyStock(o) && !o.shopify_order_id)),
+    [orders, isReadyStock]
+  );
+  const isOpenReadyStock = useCallback(
+    (o) => isReadyStock(o) && !!o.shopify_order_id && IN_PRODUCTION_STATUSES.includes((o.status || "").toLowerCase()),
+    [isReadyStock]
+  );
+
   // The dispatch desk working set: past production, in the chosen date range.
   const dispatchOrders = useMemo(
-    () => orders.filter((o) => DISPATCH_STATUSES.includes((o.status || "").toLowerCase())),
-    [orders]
+    () => deskOrders.filter((o) => DISPATCH_STATUSES.includes((o.status || "").toLowerCase()) || isOpenReadyStock(o)),
+    [deskOrders, isOpenReadyStock]
   );
 
   // Not finished yet — the view-only In Production tab. A B2B order is only in
   // production once the merchandiser approves it (a rejected or pending one
   // never reaches this desk), the same rule the PM and Warehouse dashboards use.
   const productionOrders = useMemo(
-    () => orders.filter((o) =>
+    () => deskOrders.filter((o) =>
       IN_PRODUCTION_STATUSES.includes((o.status || "").toLowerCase()) &&
+      !isOpenReadyStock(o) &&
       (!o.is_b2b || o.approval_status === "approved")),
-    [orders]
+    [deskOrders, isOpenReadyStock]
   );
   const isInProduction = (o) => IN_PRODUCTION_STATUSES.includes((o.status || "").toLowerCase());
 
@@ -321,7 +339,7 @@ export default function PackagingDashboard() {
       if (!inPeriod(o.created_at)) return false;
 
       const status = (o.status || "").toLowerCase();
-      if (statusFilter === "ready" && !(status === "completed" && !isDispatched(o))) return false;
+      if (statusFilter === "ready" && !((status === "completed" || isOpenReadyStock(o)) && !isDispatched(o))) return false;
       if (statusFilter === "dispatched" && !(isDispatched(o) && status !== "delivered")) return false;
       if (statusFilter === "delivered" && status !== "delivered") return false;
 
@@ -334,7 +352,7 @@ export default function PackagingDashboard() {
       return (o[searchField] || "").toString().toLowerCase().includes(q);
     });
   }, [dispatchOrders, productionOrders, inPeriod, statusFilter, channelFilter, urgencyFilter,
-      paymentFilter, t2Filter, paymentById, t2Bucket, search, searchField, isDispatched, urgencyOf]);
+      paymentFilter, t2Filter, paymentById, t2Bucket, search, searchField, isDispatched, urgencyOf, isOpenReadyStock]);
 
   const visibleOrders = useMemo(() => {
     if (!dayFilter) return filteredOrders;
@@ -398,11 +416,11 @@ export default function PackagingDashboard() {
   // disagree with the list it opens.
   const counts = useMemo(() => ({
     all: dispatchOrders.length,
-    ready: dispatchOrders.filter((o) => o.status === "completed" && !isDispatched(o)).length,
+    ready: dispatchOrders.filter((o) => (o.status === "completed" || isOpenReadyStock(o)) && !isDispatched(o)).length,
     dispatched: dispatchOrders.filter((o) => isDispatched(o) && o.status !== "delivered").length,
     delivered: dispatchOrders.filter((o) => o.status === "delivered").length,
     in_production: productionOrders.length,
-  }), [dispatchOrders, productionOrders, isDispatched]);
+  }), [dispatchOrders, productionOrders, isDispatched, isOpenReadyStock]);
 
   // Only channels actually present in the list being looked at — an option
   // that matches nothing is noise on a shop-floor screen.
@@ -690,6 +708,7 @@ export default function PackagingDashboard() {
                         {shipTo.missing && <span className="pkg-addr-missing">Address missing</span>}
                         {pay && <span className={`pkg-pay pkg-pay-${pay.variant}`}>{pay.label}</span>}
                         <DispatchBadge summary={sent} />
+                        {isReadyStock(o) && <span className="pkg-store-tag" title="Ready stock (LXRTS) — on the shelf, nothing to produce">Ready stock</span>}
                         <span className={`pkg-status pkg-status-${(o.status || "").toLowerCase()}`}>
                           {getOrderStatusLabel(o.status)}
                         </span>
