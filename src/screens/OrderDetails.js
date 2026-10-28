@@ -173,6 +173,8 @@ export default function OrderDetails() {
   const SHOPMORE_CODES = {
     SHOPMORE28K: { amount: 2200, minSpend: 28000 },
     SHOPMORE45K: { amount: 4200, minSpend: 45000 },
+    // ₹1,000 off the order total, no minimum spend.
+    SBFIRST: { amount: 1000, minSpend: 0 },
   };
 
   const [shippingCharge, setShippingCharge] = useState(0);
