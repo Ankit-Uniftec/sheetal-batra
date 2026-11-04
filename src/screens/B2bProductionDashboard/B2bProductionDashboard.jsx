@@ -37,6 +37,7 @@ import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 import { usePeriodFilter } from "../../components/PeriodFilter";
 import { uniqueMerchandiserNames, isSameMerchandiser } from "../../utils/merchandiserName";
+import { POST_DISPATCH_TYPES, postDispatchLabel, fetchPostDispatchActions, groupActionsByOrder } from "../../utils/postDispatch";
 
 // Garment piece + its colour — "Short Kurta ● Mint Green" — matching how the
 // PM / Merchandiser order cards render top and bottom.
@@ -120,6 +121,14 @@ export default function B2bProductionDashboard() {
     // All Orders type filter
     const [allTypeFilter, setAllTypeFilter] = useFilterParam("type", "all");
     const [merchandiserFilter, setMerchandiserFilter] = useFilterParam("merch", "all");
+    // Post Dispatch Actions (point #1): read-only here. Merchandisers record them.
+    const [postDispatchFilter, setPostDispatchFilter] = useFilterParam("postDispatch", "all");
+    const [postDispatchByOrder, setPostDispatchByOrder] = useState({});
+    useEffect(() => {
+        fetchPostDispatchActions()
+            .then((rows) => setPostDispatchByOrder(groupActionsByOrder(rows)))
+            .catch((err) => console.warn("Post dispatch actions not loaded:", err.message));
+    }, []);
     // Order-date scope for the All Orders list — shared PeriodFilter (select variant).
     const {
         control: ordersPeriodControl, timeline: ordersTimeline,
@@ -444,6 +453,9 @@ export default function B2bProductionDashboard() {
         else if (allTypeFilter === "comms") filtered = filtered.filter(o => o.is_comms);
         else if (allTypeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && !o.is_comms && o.b2b_order_type === allTypeFilter);
         if (merchandiserFilter !== "all") filtered = filtered.filter(o => isSameMerchandiser(o.merchandiser_name, merchandiserFilter));
+        if (postDispatchFilter !== "all") {
+            filtered = filtered.filter(o => (postDispatchByOrder[o.id] || []).some(a => postDispatchFilter === "any" || a.action_type === postDispatchFilter));
+        }
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();
@@ -468,7 +480,7 @@ export default function B2bProductionDashboard() {
             });
         }
         return filtered;
-    }, [orders, prodFilter, allTypeFilter, merchandiserFilter, ordersPeriodRange, inOrdersPeriod, orderSearch, vendorMap, stageFilter, stageKindFilter, orderStageGroups]);
+    }, [orders, prodFilter, allTypeFilter, merchandiserFilter, postDispatchFilter, postDispatchByOrder, ordersPeriodRange, inOrdersPeriod, orderSearch, vendorMap, stageFilter, stageKindFilter, orderStageGroups]);
 
     const paginatedOrders = useMemo(() => {
         const start = (currentPage - 1) * ORDERS_PER_PAGE;
@@ -763,7 +775,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>{"\u2728"} No orders pending production!</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedQueue.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedQueue.map(order => <OrderCard key={order.id} postDispatch={postDispatchByOrder[order.id]} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 <Paginator page={queuePage} totalPages={Math.ceil(filteredQueue.length / ORDERS_PER_PAGE)} onChange={setQueuePage} />
                             </div>
                         )}
@@ -788,7 +800,7 @@ export default function B2bProductionDashboard() {
                             <p className="prod-muted" style={{ padding: 40, textAlign: "center" }}>No orders in production</p>
                         ) : (
                             <div className="prod-list-scroll">
-                                {paginatedInprod.map(order => <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
+                                {paginatedInprod.map(order => <OrderCard key={order.id} postDispatch={postDispatchByOrder[order.id]} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />)}
                                 <Paginator page={inprodPage} totalPages={Math.ceil(filteredInprod.length / ORDERS_PER_PAGE)} onChange={setInprodPage} />
                             </div>
                         )}
@@ -822,7 +834,7 @@ export default function B2bProductionDashboard() {
                         ) : (
                             <div className="prod-list-scroll">
                                 {paginatedDispatch.map(order => (
-                                    <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder}
+                                    <OrderCard key={order.id} postDispatch={postDispatchByOrder[order.id]} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder}
                                         getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />
                                 ))}
                                 <Paginator page={dispatchPage} totalPages={Math.ceil(dispatchList.length / ORDERS_PER_PAGE)} onChange={setDispatchPage} />
@@ -857,6 +869,11 @@ export default function B2bProductionDashboard() {
                                 <option value="all">All Merchandisers</option>
                                 {uniqueMerchandisers.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
+                            <select value={postDispatchFilter} onChange={(e) => { setPostDispatchFilter(e.target.value); setCurrentPage(1); }} className="prod-filter-select">
+                                <option value="all">All Post Dispatch</option>
+                                <option value="any">Any action</option>
+                                {POST_DISPATCH_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                            </select>
                             {ordersPeriodControl}
                             {stageFilter && (
                                 <button onClick={() => { setStageFilter(null); setStageKindFilter("both"); setCurrentPage(1); }} title="Clear stage filter"
@@ -873,7 +890,7 @@ export default function B2bProductionDashboard() {
                         <div className="prod-list-scroll">
                             {filteredOrders.length === 0 && <p className="prod-muted">No orders match your filters.</p>}
                             {paginatedOrders.map(order => {
-                                return <OrderCard key={order.id} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
+                                return <OrderCard key={order.id} postDispatch={postDispatchByOrder[order.id]} order={order} vendorMap={vendorMap} components={componentsByOrder[order.id] || []} shipments={shipmentsByOrder[order.id]} halfMade={halfMade} onJourney={openJourney} onRequest={setRequestOrder} onManualComplete={markManualComplete} onView={handleViewOrder} getStageStatusClass={getStageStatusClass} getStageStatusLabel={getStageStatusLabel} onWarehousePdf={handleDownloadWarehousePdf} pdfLoading={pdfLoading} />;
                             })}
                             <Paginator page={currentPage} totalPages={Math.ceil(filteredOrders.length / ORDERS_PER_PAGE)} onChange={setCurrentPage} />
                         </div>
@@ -1047,7 +1064,7 @@ export default function B2bProductionDashboard() {
 }
 
 // ==================== ORDER CARD COMPONENT ====================
-function OrderCard({ order, vendorMap, components = [], shipments, halfMade, onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete, onRequest }) {
+function OrderCard({ postDispatch, order, vendorMap, components = [], shipments, halfMade, onView, getStageStatusClass, getStageStatusLabel, onWarehousePdf, pdfLoading, onJourney, onManualComplete, onRequest }) {
     const item = order.items?.[0] || {};
     const imgSrc = item.image_url || "/placeholder.png";
     // Internal stock: no vendor, no PO, no order type — hide those rows entirely.
@@ -1055,6 +1072,11 @@ function OrderCard({ order, vendorMap, components = [], shipments, halfMade, onV
 
     return (
         <div className="prod-order-card-full" onClick={() => onView(order.id)} style={{ cursor: "pointer" }}>
+            {postDispatch?.length > 0 && (
+                <div style={{ padding: "6px 12px", background: "#fff3e0", color: "#b35c00", fontSize: 12, fontWeight: 600 }}>
+                    Post Dispatch: {postDispatch.map(a => postDispatchLabel(a.action_type)).join(", ")}
+                </div>
+            )}
             <div className="prod-ocard-header">
                 <div className="prod-ocard-info">
                     <div className="prod-ocard-field"><span className="prod-ocard-label">ORDER NO:</span><span className="prod-ocard-val">{order.order_no || "\u2014"}</span></div>

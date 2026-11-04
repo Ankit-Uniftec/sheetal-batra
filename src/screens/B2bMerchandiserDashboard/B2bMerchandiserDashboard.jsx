@@ -13,6 +13,9 @@ import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationSe
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import QcReportModal from "../../components/QcReportModal";
+import PostDispatchModal from "../../components/PostDispatchModal";
+import PostDispatchAnalytics from "../../components/PostDispatchAnalytics";
+import { canPostDispatch, revokeBlock, fetchPostDispatchActions, groupActionsByOrder } from "../../utils/postDispatch";
 import { canCancelB2bAnytime } from "../../utils/appEnvironment";
 import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel, getOrderProgressStatus } from "../../utils/barcodeService";
 import VendorSizeChartEditor from "../../components/VendorSizeChartEditor";
@@ -134,6 +137,14 @@ export default function B2bMerchandiserDashboard() {
     const [cancelResults, setCancelResults] = useState(null); // matches from the last search, or null before searching
     const [cancelOrder, setCancelOrder] = useState(null);   // the looked-up order (with vendors join)
     const [cancelReason, setCancelReason] = useState("");
+    const [cancelMode, setCancelMode] = useState("cancel"); // "cancel" | "revoke"
+    // Post Dispatch Action (point #1). Before r29_01 runs the list is just empty.
+    const [postDispatchActions, setPostDispatchActions] = useState([]);
+    const [postDispatchOrder, setPostDispatchOrder] = useState(null);
+    useEffect(() => {
+        fetchPostDispatchActions().then(setPostDispatchActions).catch((err) => console.warn("Post dispatch actions not loaded:", err.message));
+    }, []);
+    const postDispatchByOrder = useMemo(() => groupActionsByOrder(postDispatchActions), [postDispatchActions]);
     const [cancelProcessing, setCancelProcessing] = useState(false);
 
     // Edit vendor
@@ -729,6 +740,7 @@ export default function B2bMerchandiserDashboard() {
     // Show the card's Cancel button only when the cancel would actually be
     // allowed. A button that exists only to say "no" is worse than no button.
     const canCancelFromCard = (o) => !!o && !cancelBlock(o);
+    const canRevokeFromCard = (o) => !!o && !revokeBlock(o);
 
     // The Cancel Order tab already owns the reason box, the eligibility banner
     // and the confirm. Jump to it with the order preloaded instead of building
@@ -739,13 +751,19 @@ export default function B2bMerchandiserDashboard() {
         setCancelError("");
         setCancelReason("");
         setCancelSearch(o.order_no || "");
+        setCancelMode("cancel");
         setActiveTab("cancel_order");
+    };
+    const openRevokeForOrder = (o) => {
+        openCancelForOrder(o);
+        setCancelMode("revoke");
     };
     const orderAmount = (o) => Number(o?.net_total ?? o?.grand_total_after_discount ?? o?.grand_total ?? 0);
 
     const handleFindCancelOrder = async () => {
         const term = cancelSearch.trim();
         if (!term) return;
+        setCancelMode("cancel");
         setCancelLoading(true);
         setCancelError("");
         setCancelOrder(null);
@@ -800,32 +818,35 @@ export default function B2bMerchandiserDashboard() {
         if (!cancelReason.trim()) { alert("Please enter a reason for cancellation."); return; }
         // Re-checked at confirm time, not only when the order was opened: the
         // window can run out, or the order ship, while this screen sits open.
-        const blocked = cancelBlock(order);
+        const revoking = cancelMode === "revoke";
+        const blocked = revoking ? revokeBlock(order) : cancelBlock(order);
         if (blocked) { alert(blocked.message); return; }
+        const nextStatus = revoking ? "revoked" : "cancelled";
         setCancelProcessing(true);
         try {
             // Whole cancellation (status, components, inventory, credit, notify)
             // lives in utils/cancelOrder so the PM dashboard runs the same steps.
             const { cancelledComponents } = await runCancelOrder(order, cancelReason.trim(), {
+                status: nextStatus,
                 cancelledBy: profile?.saleperson || "",
                 email: user?.email || "",
             });
 
-            setCancelOrder(prev => prev ? { ...prev, status: "cancelled", cancellation_reason: cancelReason.trim() } : prev);
+            setCancelOrder(prev => prev ? { ...prev, status: nextStatus, cancellation_reason: cancelReason.trim() } : prev);
             // The card in the All Orders list is a different object — patch it too,
             // or the badge stays green until the next reload.
-            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "cancelled" } : o));
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: nextStatus } : o));
             setCancelReason("");
             showPopup({
                 type: "success",
-                title: "Order Cancelled",
-                message: `Order ${order.order_no} has been cancelled.`
+                title: revoking ? "Order Revoked" : "Order Cancelled",
+                message: `Order ${order.order_no} has been ${nextStatus}.`
                     + (cancelledComponents ? ` ${cancelledComponents} piece(s) pulled out of production.` : ""),
                 confirmText: "OK",
             });
         } catch (err) {
             console.error("Cancel error:", err);
-            showPopup({ type: "error", title: "Error", message: "Failed to cancel: " + (err.message || "Unknown error"), confirmText: "OK" });
+            showPopup({ type: "error", title: "Error", message: `Failed to ${cancelMode}: ` + (err.message || "Unknown error"), confirmText: "OK" });
         } finally {
             setCancelProcessing(false);
         }
@@ -1268,7 +1289,7 @@ export default function B2bMerchandiserDashboard() {
                                                 ))}
                                             </div>
                                         )}
-                                        {(order.approval_status === "pending" || (canViewProduction && order.approval_status === "approved") || canCancelFromCard(order)) && (
+                                        {(order.approval_status === "pending" || (canViewProduction && order.approval_status === "approved") || canCancelFromCard(order) || canRevokeFromCard(order) || canPostDispatch(order)) && (
                                             <div className="merch-ocard-actions" onClick={(e) => e.stopPropagation()}>
                                                 {order.approval_status === "pending" ? (
                                                     <>
@@ -1292,6 +1313,14 @@ export default function B2bMerchandiserDashboard() {
                                                     cancelling still costs a typed reason plus a confirm. */}
                                                 {canCancelFromCard(order) && (
                                                     <button className="merch-btn-cancel" onClick={() => openCancelForOrder(order)}>Cancel Order</button>
+                                                )}
+                                                {canRevokeFromCard(order) && (
+                                                    <button className="merch-btn-cancel" onClick={() => openRevokeForOrder(order)}>Revoke</button>
+                                                )}
+                                                {canPostDispatch(order) && (
+                                                    <button className="merch-btn-qc" onClick={() => setPostDispatchOrder(order)}>
+                                                        Post Dispatch Action{postDispatchByOrder[order.id] ? ` (${postDispatchByOrder[order.id].length})` : ""}
+                                                    </button>
                                                 )}
                                             </div>
                                         )}
@@ -1438,7 +1467,8 @@ export default function B2bMerchandiserDashboard() {
                             const hrs = hoursSince(o.created_at);
                             const hoursLeft = Math.max(0, Math.floor(CANCEL_WINDOW_HOURS - hrs));
                             // Same rule as the card button and the confirm.
-                            const blocked = cancelBlock(o);
+                            const revoking = cancelMode === "revoke";
+                            const blocked = revoking ? revokeBlock(o) : cancelBlock(o);
                             const canCancel = !blocked;
                             return (
                                 <div className="merch-modal" style={{ maxWidth: 560, margin: 0, boxShadow: "0 1px 6px rgba(0,0,0,0.08)" }}>
@@ -1448,7 +1478,11 @@ export default function B2bMerchandiserDashboard() {
                                     </div>
                                     <div className="merch-modal-body">
                                         {/* Eligibility banner */}
-                                        {blocked?.kind === "done" ? (
+                                        {revoking && !blocked ? (
+                                            <div style={{ padding: "10px 14px", borderRadius: 8, background: "#e8f5e9", color: "#2e7d32", fontSize: 13 }}>
+                                                ✓ Eligible for revoke. This takes the order and its pieces out of production.
+                                            </div>
+                                        ) : blocked?.kind === "done" ? (
                                             <div style={{ padding: "10px 14px", borderRadius: 8, background: "#f5f5f5", color: "#888", fontWeight: 600, marginBottom: 14 }}>
                                                 {blocked.message}
                                             </div>
@@ -1464,6 +1498,10 @@ export default function B2bMerchandiserDashboard() {
                                             <div style={{ padding: "10px 14px", borderRadius: 8, background: "#e8f5e9", color: "#2e7d32", fontWeight: 600, marginBottom: 14 }}>
                                                 ✓ Eligible for cancellation — about {hoursLeft} hour{hoursLeft === 1 ? "" : "s"} left in the {CANCEL_WINDOW_HOURS}-hour window.
                                             </div>
+                                        )}
+
+                                        {!revoking && blocked?.kind === "window" && !revokeBlock(o) && (
+                                            <button type="button" className="merch-btn-cancel" style={{ marginTop: 10 }} onClick={() => setCancelMode("revoke")}>Revoke instead</button>
                                         )}
 
                                         {/* Details */}
@@ -1490,12 +1528,12 @@ export default function B2bMerchandiserDashboard() {
                                         {/* Cancel action — only when eligible */}
                                         {canCancel && (
                                             <div style={{ marginTop: 18 }}>
-                                                <label className="merch-ocard-dlabel" style={{ display: "block", marginBottom: 6 }}>Reason for cancellation *</label>
+                                                <label className="merch-ocard-dlabel" style={{ display: "block", marginBottom: 6 }}>{revoking ? "Reason for revoke" : "Reason for cancellation"} *</label>
                                                 <textarea
                                                     rows={3}
                                                     value={cancelReason}
                                                     onChange={(e) => setCancelReason(e.target.value)}
-                                                    placeholder="Why is this order being cancelled?"
+                                                    placeholder={revoking ? "Why is this order being revoked?" : "Why is this order being cancelled?"}
                                                     style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, resize: "vertical" }}
                                                 />
                                             </div>
@@ -1504,7 +1542,7 @@ export default function B2bMerchandiserDashboard() {
                                     {canCancel && (
                                         <div className="merch-modal-footer">
                                             <button className="merch-modal-confirm reject" onClick={handleConfirmCancel} disabled={cancelProcessing || !cancelReason.trim()}>
-                                                {cancelProcessing ? "Cancelling..." : "Cancel This Order"}
+                                                {cancelProcessing ? (revoking ? "Revoking..." : "Cancelling...") : (revoking ? "Revoke This Order" : "Cancel This Order")}
                                             </button>
                                         </div>
                                     )}
@@ -1560,6 +1598,7 @@ export default function B2bMerchandiserDashboard() {
                             <span style={{ fontWeight: 600, fontSize: 15, display: 'block', marginBottom: 10 }}>Vendor Growth Analytics</span>
                             {analyticsPeriodControl}
                         </div>
+                        <PostDispatchAnalytics actions={postDispatchActions} orders={orders} vendorMap={vendorMap} inPeriod={inAnalyticsPeriod} />
 
                         {vendorGrowthStats.length === 0 ? (
                             <div className="merch-ios-card" style={{ textAlign: 'center', color: '#999', padding: 32 }}>No vendor data for this period</div>
@@ -1719,6 +1758,17 @@ export default function B2bMerchandiserDashboard() {
                 {/* Shared with the Inventory dashboard — see src/components/stock/. */}
                 {activeTab === "warehouses" && (
                     <div className="merch-tab-wrapper"><WarehouseTab /></div>
+                )}
+
+                {postDispatchOrder && (
+                    <PostDispatchModal
+                        order={postDispatchOrder}
+                        actions={postDispatchByOrder[postDispatchOrder.id] || []}
+                        by={user?.email || ""}
+                        onClose={() => setPostDispatchOrder(null)}
+                        onSaved={(row) => setPostDispatchActions((prev) => [row, ...prev])}
+                        showPopup={showPopup}
+                    />
                 )}
 
                 {/* ===== STOCK EXCHANGE TAB ===== */}
