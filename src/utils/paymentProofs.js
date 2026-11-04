@@ -142,6 +142,68 @@ export function matchAdvanceProofs(parts, proofs) {
   return { parts: out, unlabeled: leftover };
 }
 
+/**
+ * How much of an order has a proof behind it (point #6). Pending is measured
+ * against the ORDER amount: a ₹20 proof on a ₹100 order leaves ₹80 pending,
+ * whether or not the ₹80 has been received yet. Cash and legacy adjustments can
+ * never carry a proof, so they do not count as pending.
+ *
+ * @param {object}   order
+ * @param {object[]} proofs    its payment_proofs rows
+ * @param {object[]} payments  its order_payments rows
+ * @returns {object|null} null when the order has no proofs to speak of
+ */
+export function proofSummary(order, proofs, payments) {
+  if (!order || isWebsiteOrder(order) || order.is_stock_order) return null;
+  if (CLOSED.includes(String(order.status || "").toLowerCase())) return null;
+  const total = Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total) || 0;
+  if (total <= 0) return null;
+
+  const advance = Number(order.advance_payment) || 0;
+  const provableAdvance = advanceProofParts(order).reduce((s, p) => s + p.amount, 0);
+  const cashAdvance = Math.max(0, advance - provableAdvance);
+  const noProofLater = (payments || [])
+    .filter((p) => {
+      const mode = String(p.payment_mode || "").trim().toLowerCase();
+      return mode === "cash" || mode === "cod" || mode === "legacy adjustment";
+    })
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+  const attached = (proofs || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const noProofNeeded = cashAdvance + noProofLater;
+  return {
+    total,
+    paid: Number(order.total_paid ?? order.advance_payment) || 0,
+    balance: Math.max(0, Number(order.remaining_payment) || 0),
+    count: (proofs || []).length,
+    attached,
+    noProofNeeded,
+    pending: Math.max(0, total - attached - noProofNeeded),
+  };
+}
+
+/**
+ * Proofs and payments for a page of orders, grouped by order id.
+ * @returns {Promise<{ proofs: object, payments: object }>}
+ */
+export async function fetchProofStatus(orderIds) {
+  const ids = [...new Set(orderIds || [])];
+  if (!ids.length) return { proofs: {}, payments: {} };
+  const [proofRes, payRes] = await Promise.all([
+    supabase.from("payment_proofs")
+      .select("id, order_id, checkpoint, payment_mode, amount, file_path, file_name")
+      .in("order_id", ids).order("created_at", { ascending: true }),
+    supabase.from("order_payments").select("order_id, payment_mode, amount").in("order_id", ids),
+  ]);
+  if (proofRes.error) throw proofRes.error;
+  if (payRes.error) throw payRes.error;
+  const byOrder = (rows) => (rows || []).reduce((m, r) => {
+    (m[r.order_id] = m[r.order_id] || []).push(r);
+    return m;
+  }, {});
+  return { proofs: byOrder(proofRes.data), payments: byOrder(payRes.data) };
+}
+
 /** null when the file is acceptable, otherwise the message to show. */
 export function validateProofFile(file) {
   if (!file) return "Choose a file to upload.";

@@ -22,6 +22,9 @@ import ExhibitionPanel from "../components/ExhibitionPanel";
 import ProductionHeadVendors from "../components/ProductionHeadVendors";
 import "../components/ProductionHeadVendors.css";
 import useTabParam from "../hooks/useTabParam";
+import OutstandingPanel from "../components/OutstandingPanel";
+import OrderProofLine from "../components/OrderProofLine";
+import { fetchProofStatus } from "../utils/paymentProofs";
 import Paginator from "../components/Paginator";
 import StockPanel from "../components/stock/StockPanel";
 import { poolsForUser } from "../utils/stockVisibility";
@@ -278,6 +281,18 @@ export default function Dashboard() {
     return filteredOrders.slice(startIndex, startIndex + ORDERS_PER_PAGE);
   }, [filteredOrders, currentPage]);
 
+  // Proofs and payments for the cards on screen (point #6). If this fails the
+  // cards simply show no proof line.
+  const [proofStatus, setProofStatus] = useState(null);
+  useEffect(() => {
+    if (activeTab !== "orders") return undefined;
+    let cancelled = false;
+    fetchProofStatus(paginatedOrders.map((o) => o.id))
+      .then((status) => { if (!cancelled) setProofStatus(status); })
+      .catch((err) => console.error("Proof status failed:", err));
+    return () => { cancelled = true; };
+  }, [activeTab, paginatedOrders]);
+
   // ✅ OPTIMIZED: Memoize filtered clients
   const filteredClients = useMemo(() => {
     if (!clientSearch.trim()) return clients;
@@ -457,6 +472,8 @@ export default function Dashboard() {
           "mode_of_delivery", "items", "attachments",
           "cancellation_reason", "exchange_reason",
           "customer_url", "warehouse_urls", "vendor_id", "is_b2b",
+          // Outstanding tab (point #6).
+          "salesperson_store", "is_comms", "refund_status",
         ].join(", ");
         const isServicesUser = spData.role === "sa_services";
         const { data: ordersData } = await fetchAllRows("orders", (q) => {
@@ -1320,6 +1337,7 @@ export default function Dashboard() {
               )}
               <a className={`ad-menu-item ${activeTab === "calendar" ? "active" : ""}`} onClick={() => { setActiveTab("calendar"); setShowSidebar(false); }}>Calendar</a>
               <a className={`ad-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Order History</a>
+              <a className={`ad-menu-item ${activeTab === "outstanding" ? "active" : ""}`} onClick={() => { setActiveTab("outstanding"); setShowSidebar(false); }}>Outstanding</a>
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
               <a className={`ad-menu-item ${activeTab === "walkin" ? "active" : ""}`} onClick={() => { setActiveTab("walkin"); setShowSidebar(false); }}>Walk-In</a>
               <a className={`ad-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
@@ -1605,6 +1623,14 @@ export default function Dashboard() {
                             <span className="ad-order-label">Client Name:</span>
                             <span className="ad-value">{order.delivery_name || "—"}</span>
                           </div>
+                          {proofStatus && (
+                            <OrderProofLine
+                              order={order}
+                              proofs={proofStatus.proofs[order.id] || []}
+                              payments={proofStatus.payments[order.id] || []}
+                              showPopup={showPopup}
+                            />
+                          )}
                           <div className="ad-details-grid">
                             <div className="ad-detail-item">
                               <span className="ad-order-label">Amount:</span>
@@ -1800,6 +1826,13 @@ export default function Dashboard() {
                   onChange={setCurrentPage}
                 />
               </div>
+            </div>
+          )}
+
+          {activeTab === "outstanding" && (
+            <div className="ad-order-details-wrapper" style={{ minWidth: 0, overflowX: "hidden" }}>
+              <h2 className="ad-order-title">Outstanding</h2>
+              <OutstandingPanel orders={orders} showSplits={isServices} />
             </div>
           )}
 
