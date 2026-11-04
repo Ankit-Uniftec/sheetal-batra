@@ -13,6 +13,8 @@ import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY, isB2bGifting, 
 import { isValidStockHeadDesignation } from "../../utils/stockProductionHead";
 import { b2bPricing } from "../../utils/b2bPricing";
 import { cleanMerchandiserName } from "../../utils/merchandiserName";
+import { fetchLinePieces } from "../../utils/breakdownChangeApi";
+import { planPieceSync, planToRpcArgs } from "../../utils/orderPieceEdit";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -133,6 +135,28 @@ export default function B2bReviewOrder() {
     // Derived data
     const vendor = vendorData?.vendor;
     const items = productData?.orderItems || [];
+
+    // Editing: a dupatta or extra taken off the order must come off the floor
+    // too. ensureOrderComponents only ever adds (point #9).
+    const [pieceSync, setPieceSync] = useState(null);
+    const [pieceReason, setPieceReason] = useState("");
+    useEffect(() => {
+        if (!editingOrderId || !productData) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data: existing, error } = await supabase
+                    .from("orders").select("id, order_no, items").eq("id", editingOrderId).single();
+                if (error) throw error;
+                const { components, packedIds } = await fetchLinePieces(editingOrderId);
+                if (!cancelled) setPieceSync(planPieceSync(existing, productData.orderItems || [], components, packedIds));
+            } catch (err) {
+                console.warn("B2B piece check skipped:", err.message);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [editingOrderId, productData]);
+    const piecesLeaving = !!pieceSync && pieceSync.remove.length + pieceSync.relabel.length > 0;
     const subtotal = productData?.subtotal || 0;
     const taxes = productData?.taxes || 0;
     const grandTotal = productData?.grandTotal || 0;
@@ -163,6 +187,19 @@ export default function B2bReviewOrder() {
     // Submit Order (INSERT for new, UPDATE for edit)
     const handleSubmit = async () => {
         if (isSubmitting) return;
+
+        if (pieceSync?.blocked.length) {
+            showPopup({
+                title: "Can't Save This Edit",
+                message: pieceSync.blocked.map((b) => `${b.barcode} ${b.why}`).join(". "),
+                type: "error",
+            });
+            return;
+        }
+        if (piecesLeaving && !pieceReason.trim()) {
+            showPopup({ title: "Reason Required", message: "Please say why pieces are being removed or changed.", type: "warning" });
+            return;
+        }
 
         // Hard requirement: must have a resolved store. The 4 lookups at mount
         // time (sessionStorage → currentSalesperson → salesperson DB → vendor
@@ -272,6 +309,7 @@ export default function B2bReviewOrder() {
             let resultOrderNo;
             let insertedOrderId  = null;
 
+            let pieceWarning = "";
             if (editingOrderId) {
                 // ===== EDIT MODE: UPDATE existing order =====
                 // The PO number of an existing order never changes: a different
@@ -299,6 +337,21 @@ export default function B2bReviewOrder() {
                 if (updateError) throw updateError;
 
                 resultOrderNo = updatedOrder.order_no;
+
+                // The order is saved; a failure here is reported, not thrown.
+                if (piecesLeaving) {
+                    const { data: pieceResult, error: pieceError } = await supabase.rpc("edit_order_pieces", {
+                        p_order_id: editingOrderId,
+                        p_items: null,
+                        ...planToRpcArgs({ ...pieceSync, add: [] }),
+                        p_reason: pieceReason.trim(),
+                        p_by: user?.email || null,
+                        p_source: "b2b",
+                    });
+                    if (pieceError || !pieceResult?.success) {
+                        pieceWarning = ` But its pieces could not be updated: ${pieceError?.message || pieceResult?.message}`;
+                    }
+                }
 
                 // Barcodes belong to the order, not to its approval state, so an
                 // executive edit that resets the order to "pending" keeps them
@@ -444,7 +497,7 @@ export default function B2bReviewOrder() {
             showPopup({
                 title: isEdit ? "Order Updated!" : isStockOrder ? "Stock Order Created!" : isGifting ? "Partner Gifting Order Submitted!" : "Order Submitted!",
                 message: isEdit
-                    ? `Order #${resultOrderNo} has been updated${autoApprove ? "." : " and resubmitted for approval."}`
+                    ? `Order #${resultOrderNo} has been updated${autoApprove ? "." : " and resubmitted for approval."}${pieceWarning}`
                     : isStockOrder
                         ? `Stock order #${resultOrderNo} has been created.`
                         : autoApprove
@@ -527,6 +580,20 @@ export default function B2bReviewOrder() {
                 {editingOrderId && (
                     <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 8, padding: "10px 16px", marginBottom: 16, textAlign: "center", fontSize: 14, color: "#f57f17", fontWeight: 500 }}>
                         {"\u270E"} Editing existing order {!userRole?.toLowerCase().includes("merchandiser") ? "\u2014 will be resubmitted for approval" : ""}
+                    </div>
+                )}
+
+                {pieceSync?.blocked.length > 0 && (
+                    <div style={{ background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>
+                        This edit can't be saved: {pieceSync.blocked.map((b) => `${b.barcode} ${b.why}`).join(". ")}.
+                    </div>
+                )}
+                {piecesLeaving && (
+                    <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13 }}>
+                        {pieceSync.remove.length > 0 && <div>Removes: {pieceSync.remove.map((c) => c.barcode).join(", ")}</div>}
+                        {pieceSync.relabel.length > 0 && <div>Renames: {pieceSync.relabel.map((r) => r.label).join(", ")}</div>}
+                        <label style={{ display: "block", marginTop: 8, fontWeight: 600 }}>Reason for this change *</label>
+                        <input type="text" className="input-line" value={pieceReason} onChange={(e) => setPieceReason(e.target.value)} placeholder="Why are these pieces changing?" />
                     </div>
                 )}
 

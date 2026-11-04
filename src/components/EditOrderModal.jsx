@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getItemCategory, sizeOptionsFor, CATEGORY_KIDS } from "../utils/itemCategory";
 import { supabase } from "../lib/supabaseClient";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
 import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
+import { fetchLinePieces } from "../utils/breakdownChangeApi";
+import { planPieceSync, previewMoney, pieceLock, planToRpcArgs } from "../utils/orderPieceEdit";
 import "../screens/OrderHistory.css";
 
 // ============================================================
@@ -113,11 +115,83 @@ export default function EditOrderModal({
   });
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
+  // Dupatta and extras, per product (point #9).
+  const pieceEditable = !/^SB-SHOP/i.test(order.order_no || "");
+  const freeOrder = !(Number(order.grand_total) > 0);
+  const [pieceItems, setPieceItems] = useState(() => (order.items || []).map((it) => ({
+    includes_dupatta: it.includes_dupatta === true,
+    dupatta_color: colorName(it.dupatta_color),
+    extras: Array.isArray(it.extras) ? it.extras : [],
+  })));
+  const [pieceIdx, setPieceIdx] = useState(0);
+  const [pieces, setPieces] = useState({ components: [], packedIds: new Set(), loaded: false, failed: false });
+  const [extrasList, setExtrasList] = useState([]);
+  const [dupattaColors, setDupattaColors] = useState([]);
+  const [newExtra, setNewExtra] = useState("");
+  const [newExtraColor, setNewExtraColor] = useState("");
+
   useEffect(() => {
     supabase.from("colors").select("name, hex").order("name").then(({ data, error }) => {
       if (!error && data) setColors(data);
     });
   }, []);
+
+  useEffect(() => {
+    if (!pieceEditable) return;
+    fetchLinePieces(order.id)
+      .then(({ components, packedIds }) => setPieces({ components, packedIds, loaded: true, failed: false }))
+      .catch(() => setPieces((p) => ({ ...p, failed: true })));
+    supabase.from("extras").select("name, price, sort_order").order("sort_order", { ascending: true })
+      .then(({ data, error }) => { if (!error && data) setExtrasList(data); });
+    supabase.from("dupatta_colors").select("name").order("name")
+      .then(({ data, error }) => { if (!error && data) setDupattaColors(data.map((d) => d.name)); });
+  }, [order.id, pieceEditable]);
+
+  const activePiece = pieceItems[pieceIdx] || { includes_dupatta: false, dupatta_color: "", extras: [] };
+  const changePieceItem = (patch) =>
+    setPieceItems((prev) => prev.map((p, i) => (i === pieceIdx ? { ...p, ...patch } : p)));
+  const removeExtra = (index) => changePieceItem({ extras: activePiece.extras.filter((_, i) => i !== index) });
+  const addExtra = () => {
+    const details = extrasList.find((x) => x.name === newExtra);
+    const color = colors.find((c) => c.name === newExtraColor) || { name: newExtraColor, hex: "#888" };
+    changePieceItem({
+      extras: [...activePiece.extras, { name: newExtra, color, price: freeOrder ? 0 : Number(details?.price) || 0 }],
+    });
+    setNewExtra("");
+    setNewExtraColor("");
+  };
+  const dupattaLock = activePiece.includes_dupatta
+    ? pieceLock(pieces.components, pieces.packedIds, pieceIdx, "dupatta")
+    : null;
+
+  // The items with the dupatta and extras edits applied. A dupatta colour left
+  // alone keeps exactly what was stored.
+  const pieceDraftItems = useMemo(() => (order.items || []).map((it, i) => {
+    const p = pieceItems[i];
+    if (!p) return it;
+    return {
+      ...it,
+      includes_dupatta: p.includes_dupatta,
+      dupatta_color: !p.includes_dupatta
+        ? null
+        : p.dupatta_color === colorName(it.dupatta_color) ? it.dupatta_color : (p.dupatta_color || null),
+      extras: p.extras,
+    };
+  }), [order.items, pieceItems]);
+
+  const piecePlan = useMemo(
+    () => (pieceEditable && pieces.loaded
+      ? planPieceSync(order, pieceDraftItems, pieces.components, pieces.packedIds)
+      : null),
+    [pieceEditable, pieces, order, pieceDraftItems]
+  );
+  const pieceChanged = !!piecePlan?.changed;
+  const pieceMoney = previewMoney(order, pieceDraftItems);
+  const pieceProblem = !pieceChanged && !piecePlan?.blocked.length ? null
+    : piecePlan.blocked.length ? piecePlan.blocked.map((b) => `${b.barcode} ${b.why}`).join(". ")
+    : pieceMoney.belowPaid ? `The new total would be below the ₹${Number(order.total_paid || 0).toLocaleString("en-IN")} already paid.`
+    : null;
+  const needReason = requireReason || pieceChanged;
 
   const updateMeasurement = (categoryKey, field, value) => {
     setMeasurements((prev) => ({
@@ -128,7 +202,8 @@ export default function EditOrderModal({
 
   const handleSave = async () => {
     const trimmedReason = reason.trim();
-    if (requireReason && !trimmedReason) return;
+    if (needReason && !trimmedReason) return;
+    if (pieceProblem) return;
     const blocked = recheck?.(order);
     if (blocked) {
       showPopup({ type: "error", title: "Can't edit this order", message: blocked, confirmText: "OK" });
@@ -139,7 +214,7 @@ export default function EditOrderModal({
       const topColorObj = colors.find(c => c.name === form.top_color) || { name: form.top_color, hex: "#888" };
       const bottomColorObj = colors.find(c => c.name === form.bottom_color) || { name: form.bottom_color, hex: "#888" };
 
-      const updatedItems = order.items?.map((it, i) => i === 0 ? {
+      const updatedItems = pieceDraftItems.map((it, i) => i === 0 ? {
         ...it,
         size: form.size,
         top: form.top,
@@ -148,6 +223,25 @@ export default function EditOrderModal({
         bottom_color: bottomColorObj,
         measurements: cleanMeasurements(measurements),
       } : it);
+
+      // Pieces and money first, in one database step. A refusal stops the whole
+      // save, so nothing below runs for an edit that did not land.
+      if (pieceChanged) {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const { data: pieceResult, error: pieceError } = await supabase.rpc("edit_order_pieces", {
+          p_order_id: order.id,
+          p_items: updatedItems,
+          ...planToRpcArgs(piecePlan),
+          p_reason: trimmedReason,
+          p_by: editedBy || authUser?.email || null,
+          p_source: reasonSource || "order_history",
+        });
+        if (pieceError) throw pieceError;
+        if (!pieceResult?.success) {
+          showPopup({ type: "error", title: "Can't save this change", message: pieceResult?.message || "The change could not be saved.", confirmText: "OK" });
+          return;
+        }
+      }
 
       // Delete old PDF files from storage to force regeneration
       try {
@@ -181,7 +275,7 @@ export default function EditOrderModal({
       // fails, the edit stands and the user is told the reason was not stored
       // (it still travels on the ORDER_EDITED notification below).
       let reasonNotSaved = false;
-      if (requireReason) {
+      if (requireReason && !pieceChanged) { // edit_order_pieces has already logged it
         const { error: logErr } = await supabase.from("order_edit_log").insert({
           order_id: order.id,
           order_no: order.order_no,
@@ -201,7 +295,7 @@ export default function EditOrderModal({
       onClose();
       showPopup(reasonNotSaved
         ? { type: "warning", title: "Order Updated", message: "The order was updated, but the reason for the edit could not be saved. Please tell the admin.", confirmText: "OK" }
-        : { type: "success", title: "Order Updated", message: "Order has been updated successfully!", confirmText: "OK" });
+        : { type: "success", title: "Order Updated", message: pieceChanged ? "Order has been updated. The pieces changed, so please reprint the work order." : "Order has been updated successfully!", confirmText: "OK" });
 
       if (notifyCustomer) {
         sendWhatsApp({
@@ -362,6 +456,126 @@ export default function EditOrderModal({
             </div>
           </div>
 
+          {/* Dupatta and extras (point #9). Website orders keep Breakdown Changes. */}
+          {pieceEditable && (
+            <div style={{ marginTop: '15px', padding: '12px', border: '1px solid #e0d6c3', borderRadius: '8px' }}>
+              <div style={{ fontWeight: 600, marginBottom: '10px' }}>Dupatta and Extras</div>
+
+              {pieces.failed ? (
+                <p style={{ margin: 0, fontSize: '13px', color: '#c62828' }}>
+                  Could not load this order's pieces, so dupatta and extras can't be changed right now.
+                </p>
+              ) : !pieces.loaded ? (
+                <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>Loading pieces...</p>
+              ) : (
+                <>
+                  {pieceItems.length > 1 && (
+                    <div className="oh-modal-field" style={{ marginBottom: '10px' }}>
+                      <label>Product</label>
+                      <select value={pieceIdx} onChange={(e) => setPieceIdx(Number(e.target.value))}>
+                        {(order.items || []).map((it, i) => (
+                          <option key={i} value={i}>{it.product_name || `Product ${i + 1}`}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="oh-modal-row">
+                    <div className="oh-modal-field">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          style={{ width: 'auto' }}
+                          checked={activePiece.includes_dupatta}
+                          disabled={!!dupattaLock}
+                          onChange={(e) => changePieceItem({ includes_dupatta: e.target.checked })}
+                        />
+                        Dupatta included {dupattaLock ? `(locked: ${dupattaLock})` : ""}
+                      </label>
+                    </div>
+                    <div className="oh-modal-field">
+                      <label>Dupatta Color</label>
+                      <select
+                        value={activePiece.dupatta_color}
+                        disabled={!activePiece.includes_dupatta}
+                        onChange={(e) => changePieceItem({ dupatta_color: e.target.value })}
+                      >
+                        <option value="">Select Color</option>
+                        {activePiece.dupatta_color && !dupattaColors.includes(activePiece.dupatta_color) && (
+                          <option value={activePiece.dupatta_color}>{activePiece.dupatta_color}</option>
+                        )}
+                        {dupattaColors.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="oh-modal-field full" style={{ marginTop: '10px' }}>
+                    <label>Extras</label>
+                    {activePiece.extras.length === 0 && (
+                      <div style={{ fontSize: '13px', color: '#666' }}>No extras on this product.</div>
+                    )}
+                    {activePiece.extras.map((x, i) => {
+                      const lock = pieceLock(pieces.components, pieces.packedIds, pieceIdx, "extra", i);
+                      return (
+                        <div key={`${x.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', padding: '4px 0' }}>
+                          <span style={{ flex: 1 }}>
+                            {x.name}{colorName(x.color) ? ` (${colorName(x.color)})` : ""}{freeOrder ? "" : ` · ₹${Number(x.price || 0).toLocaleString("en-IN")}`}
+                          </span>
+                          {lock
+                            ? <span style={{ color: '#666' }}>Locked: {lock}</span>
+                            : <button type="button" className="oh-modal-btn cancel" onClick={() => removeExtra(i)}>Remove</button>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="oh-modal-row" style={{ marginTop: '10px' }}>
+                    <div className="oh-modal-field">
+                      <label>Add Extra</label>
+                      <select value={newExtra} onChange={(e) => setNewExtra(e.target.value)}>
+                        <option value="">Select Extra</option>
+                        {extrasList.map((x) => (
+                          <option key={x.name} value={x.name}>
+                            {x.name}{freeOrder ? "" : ` (₹${Number(x.price || 0).toLocaleString("en-IN")})`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="oh-modal-field">
+                      <label>Extra Color</label>
+                      <select value={newExtraColor} onChange={(e) => setNewExtraColor(e.target.value)}>
+                        <option value="">Select Color</option>
+                        {colors.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      className="oh-modal-btn save"
+                      disabled={!newExtra || !newExtraColor}
+                      onClick={addExtra}
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {pieceChanged && (
+                    <div style={{ marginTop: '10px', padding: '8px 10px', background: '#fff8e1', borderRadius: '6px', fontSize: '13px' }}>
+                      {piecePlan.add.length > 0 && <div>Adds: {piecePlan.add.map((a) => a.barcode).join(", ")}</div>}
+                      {piecePlan.remove.length > 0 && <div>Removes: {piecePlan.remove.map((c) => c.barcode).join(", ")}</div>}
+                      {piecePlan.relabel.length > 0 && <div>Renames: {piecePlan.relabel.map((r) => r.label).join(", ")}</div>}
+                      {pieceMoney.delta !== 0 && (
+                        <div>Total: ₹{pieceMoney.oldTotal.toLocaleString("en-IN")} → ₹{pieceMoney.newTotal.toLocaleString("en-IN")} (balance ₹{pieceMoney.newDue.toLocaleString("en-IN")})</div>
+                      )}
+                    </div>
+                  )}
+                  {pieceProblem && (
+                    <div style={{ marginTop: '8px', fontSize: '13px', color: '#c62828' }}>{pieceProblem}</div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Order Notes */}
           <div className="oh-modal-field full" style={{ marginTop: '15px' }}>
             <label>Order Notes</label>
@@ -375,7 +589,7 @@ export default function EditOrderModal({
             />
           </div>
 
-          {requireReason && (
+          {needReason && (
             <div className="oh-modal-field full" style={{ marginTop: '15px' }}>
               <label>Reason for edit *</label>
               <textarea
@@ -393,8 +607,8 @@ export default function EditOrderModal({
           <button
             className="oh-modal-btn save"
             onClick={handleSave}
-            disabled={saving || (requireReason && !reason.trim())}
-            title={requireReason && !reason.trim() ? "Enter a reason for the edit first" : undefined}
+            disabled={saving || !!pieceProblem || (needReason && !reason.trim())}
+            title={needReason && !reason.trim() ? "Enter a reason for the edit first" : undefined}
           >
             {saving ? "Saving..." : "Save"}
           </button>
