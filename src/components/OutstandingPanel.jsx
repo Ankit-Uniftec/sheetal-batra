@@ -16,7 +16,7 @@ import "./CancellationsPanel.css";
 
 const money = (n) => `₹${formatIndianNumber(Math.round(n || 0))}`;
 const LIST_LIMIT = 100;
-const statusLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\w/g, (c) => c.toUpperCase());
+const statusLabel = (s) => String(s || "").replace(/_/g, " ").replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 const bucketLabel = (key) => AGE_BUCKETS.find((b) => b.key === key)?.label || "";
 const ageText = (r) => (r.days == null ? "No date" : r.days < 0 ? `Due in ${-r.days}d` : `${r.days}d`);
 
