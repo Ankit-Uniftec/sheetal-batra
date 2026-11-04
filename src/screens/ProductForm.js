@@ -417,6 +417,7 @@ const CATEGORY_KEY_MAP = {
   // Bottoms - Sharara variants
   "Sharara": "ShararaGharara",
   "Gharara": "ShararaGharara",
+  "Garara": "ShararaGharara", // same garment, spelled this way on 144 products
 
   // One-piece
   "Lehenga": "Lehenga",

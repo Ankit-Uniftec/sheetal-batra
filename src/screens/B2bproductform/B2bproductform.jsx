@@ -86,7 +86,7 @@ const CATEGORY_KEY_MAP = {
     "Blouse": "Blouse", "Short Anarkali": "Anarkali", "Anarkali": "Anarkali",
     "Salwar": "SalwarDhoti", "Dhoti": "SalwarDhoti",
     "Churidaar": "ChuridaarTrouserPantsPlazo", "Trouser": "ChuridaarTrouserPantsPlazo", "Pants": "ChuridaarTrouserPantsPlazo", "Palazzo": "ChuridaarTrouserPantsPlazo",
-    "Sharara": "ShararaGharara", "Gharara": "ShararaGharara", "Lehenga": "Lehenga",
+    "Sharara": "ShararaGharara", "Gharara": "ShararaGharara", "Garara": "ShararaGharara", "Lehenga": "Lehenga",
 };
 
 const CATEGORY_DISPLAY_NAMES = {
