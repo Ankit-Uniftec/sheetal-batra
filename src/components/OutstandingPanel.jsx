@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import useFilterParam, { useClearFilterParams } from "../hooks/useFilterParam";
 import formatDate from "../utils/formatDate";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import downloadCsv from "../utils/downloadCsv";
@@ -9,6 +10,8 @@ import "./CancellationsPanel.css";
 // Outstanding balances (point #6). Read-only. Screens that already hold their
 // orders pass them in (SA: their own, Store Manager: their store); without
 // `orders` it loads every order with a balance (COO, CEO).
+// `onOpenOrder(order)` opens a line the way that dashboard opens any order. The
+// filters live in the URL, so Back from an order returns to the same list.
 
 const money = (n) => `₹${formatIndianNumber(Math.round(n || 0))}`;
 const LIST_LIMIT = 100;
@@ -42,12 +45,13 @@ function SplitTable({ title, items, onPick, picked }) {
   );
 }
 
-export default function OutstandingPanel({ orders = null, showSplits = true }) {
+export default function OutstandingPanel({ orders = null, showSplits = true, onOpenOrder = null }) {
   const [loaded, setLoaded] = useState(null);
   const [error, setError] = useState("");
-  const [sa, setSa] = useState("");
-  const [store, setStore] = useState("");
-  const [bucket, setBucket] = useState("");
+  const [sa, setSa] = useFilterParam("outSa", "");
+  const [store, setStore] = useFilterParam("outStore", "");
+  const [bucket, setBucket] = useFilterParam("outAge", "");
+  const clearFilters = useClearFilterParams(["outSa", "outStore", "outAge"]);
 
   useEffect(() => {
     if (orders) return undefined;
@@ -119,7 +123,7 @@ export default function OutstandingPanel({ orders = null, showSplits = true }) {
           <h4 style={{ margin: 0 }}>
             {shown.length} orders · {money(shownTotal)}
             {(sa || store || bucket) && (
-              <button type="button" style={{ marginLeft: 10 }} onClick={() => { setSa(""); setStore(""); setBucket(""); }}>Clear filters</button>
+              <button type="button" style={{ marginLeft: 10 }} onClick={clearFilters}>Clear filters</button>
             )}
           </h4>
           <div className="cx-presets"><button type="button" onClick={exportCsv} disabled={!shown.length}>Download CSV</button></div>
@@ -134,8 +138,18 @@ export default function OutstandingPanel({ orders = null, showSplits = true }) {
             </thead>
             <tbody>
               {shown.slice(0, LIST_LIMIT).map((r) => (
-                <tr key={r.id} style={{ borderTop: "1px solid #eee" }}>
-                  <td style={{ padding: "4px 6px 4px 0" }}>{r.orderNo}</td>
+                <tr
+                  key={r.id}
+                  className={onOpenOrder ? "cx-row-open" : undefined}
+                  style={{ borderTop: "1px solid #eee" }}
+                  role={onOpenOrder ? "link" : undefined}
+                  tabIndex={onOpenOrder ? 0 : undefined}
+                  onClick={onOpenOrder ? () => onOpenOrder(r.order) : undefined}
+                  onKeyDown={onOpenOrder ? (e) => { if (e.key === "Enter") onOpenOrder(r.order); } : undefined}
+                >
+                  <td style={{ padding: "4px 6px 4px 0" }}>
+                    {onOpenOrder ? <span className="cx-order-link">{r.orderNo}</span> : r.orderNo}
+                  </td>
                   <td>{r.customer || "—"}</td>
                   <td>{r.sa || "—"}</td>
                   <td>{r.store || "—"}</td>

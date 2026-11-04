@@ -38,3 +38,8 @@
 .cx-mono { font-family: monospace; font-size: 12px; }
 .cx-num { text-align: right; white-space: nowrap; }
 .cx-more { margin-top: 8px; padding: 6px 12px; border: 1px solid #d5b85a; background: #fff; border-radius: 16px; cursor: pointer; }
+
+/* Outstanding: a line opens its order. */
+.cx-row-open { cursor: pointer; }
+.cx-row-open:hover, .cx-row-open:focus { background: #fff8e1; outline: none; }
+.cx-order-link { color: #8a6d1d; text-decoration: underline; }

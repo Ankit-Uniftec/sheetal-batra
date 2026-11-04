@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { getItemCategory } from "../utils/itemCategory";
 import "./OrderHistory.css";
 import { supabase } from "../lib/supabaseClient";
@@ -221,6 +221,8 @@ export default function OrderHistory() {
 
   // Edit modal state
   const [editingOrder, setEditingOrder] = useState(null);
+  // Opened from an Outstanding line: bring that order's card into view.
+  const highlightOrderId = location.state?.highlightOrderId || null;
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [deliveryOrder, setDeliveryOrder] = useState(null);
@@ -329,6 +331,20 @@ export default function OrderHistory() {
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const startIndex = (currentPage - 1) * ordersPerPage;
   const currentOrders = filteredOrders.slice(startIndex, startIndex + ordersPerPage);
+
+  // Once, when the list has loaded: go to the page holding the order, then scroll to it.
+  const highlightDone = useRef(false);
+  useEffect(() => {
+    if (!highlightOrderId || highlightDone.current) return undefined;
+    const index = filteredOrders.findIndex((o) => o.id === highlightOrderId);
+    if (index < 0) return undefined;
+    highlightDone.current = true;
+    setCurrentPage(Math.floor(index / ordersPerPage) + 1);
+    const timer = setTimeout(() => {
+      document.querySelector(`[data-order-id="${highlightOrderId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [highlightOrderId, filteredOrders, ordersPerPage]);
   const recent = useMemo(() => orders.slice(0, 2), [orders]);
 
   // Handle PDF download
@@ -1761,11 +1777,12 @@ export default function OrderHistory() {
                 return (
                   <div
                     key={order.id}
+                    data-order-id={order.id}
                     className="oh-order-card"
                     onClick={() => navigate(`/order/${order.id}`, {
                       state: { fromAssociate, customer: customerFromState }
                     })}
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', ...(order.id === highlightOrderId ? { boxShadow: "0 0 0 3px #d5b85a" } : {}) }}
                   >
                     {/* Card Header */}
                     <div className="oh-card-top">

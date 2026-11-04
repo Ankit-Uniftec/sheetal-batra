@@ -285,6 +285,31 @@ export default function StoreManagerDashboard() {
         [orders, userStore]
     );
 
+    // Opens a customer's order cards, from the Orders and Outstanding tabs.
+    const openCustomerOrders = (o, extraState = {}) => {
+                                                    sessionStorage.setItem("currentSalesperson", JSON.stringify({
+                                                        store: userStore,
+                                                        name: currentUserName,
+                                                        email: currentUserEmail,
+                                                    }));
+                                                    sessionStorage.setItem("returnDashboard", "/store-manager-dashboard");
+                                                    navigate("/orderHistory", {
+                                                        state: {
+                                                            customer: {
+                                                                user_id: o.user_id,
+                                                                name: o.delivery_name,
+                                                                email: o.delivery_email,
+                                                                phone: o.delivery_phone,
+                                                            },
+                                                            fromAssociate: true,
+                                                            readOnly: false,
+                                                            saEmail: null,
+                                                            isServices: true,
+                                                            ...extraState,
+                                                        }
+                                                    });
+    };
+
     const getOrderSalesperson = (order) => order.salesperson || null;
 
     const knownStoreNames = useMemo(() => {
@@ -1273,28 +1298,7 @@ export default function StoreManagerDashboard() {
                                     <tbody>
                                         {currentOrders.length === 0 ? <tr><td colSpan="13" className="sm-no-data">No orders found</td></tr> :
                                             currentOrders.map(o => (
-                                                <tr key={o.id} style={{ cursor: 'pointer' }} onClick={() => {
-                                                    sessionStorage.setItem("currentSalesperson", JSON.stringify({
-                                                        store: userStore,
-                                                        name: currentUserName,
-                                                        email: currentUserEmail,
-                                                    }));
-                                                    sessionStorage.setItem("returnDashboard", "/store-manager-dashboard");
-                                                    navigate("/orderHistory", {
-                                                        state: {
-                                                            customer: {
-                                                                user_id: o.user_id,
-                                                                name: o.delivery_name,
-                                                                email: o.delivery_email,
-                                                                phone: o.delivery_phone,
-                                                            },
-                                                            fromAssociate: true,
-                                                            readOnly: false,
-                                                            saEmail: null,
-                                                            isServices: true,
-                                                        }
-                                                    });
-                                                }}>
+                                                <tr key={o.id} style={{ cursor: 'pointer' }} onClick={() => openCustomerOrders(o)}>
                                                     {(() => {
                                                         const mrp = Number(o.grand_total || 0);
                                                         const discount = Number(o.discount_amount || 0);
@@ -1363,7 +1367,7 @@ export default function StoreManagerDashboard() {
                     {activeTab === "outstanding" && (
                         <div>
                             <h2 className="sm-section-title">Outstanding</h2>
-                            <OutstandingPanel orders={outstandingOrders} />
+                            <OutstandingPanel orders={outstandingOrders} onOpenOrder={(o) => openCustomerOrders(o, { highlightOrderId: o.id })} />
                         </div>
                     )}
 

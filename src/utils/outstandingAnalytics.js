@@ -17,7 +17,7 @@ import { REVENUE_EXCLUDED_STATUSES, REFUNDED_STATUSES } from "./revenue";
 const NOT_CUSTOMER_PREFIXES = new Set(["B2B", "B2BSTOCK", "STOCK", "COM", "SHOPIFY", "SHOP"]);
 
 export const OUTSTANDING_COLUMNS = [
-  "id", "order_no", "status", "created_at", "delivery_date", "delivery_name", "salesperson", "salesperson_store",
+  "id", "user_id", "order_no", "status", "created_at", "delivery_date", "delivery_name", "salesperson", "salesperson_store",
   "net_total", "grand_total_after_discount", "grand_total", "total_paid", "remaining_payment",
   "refund_status", "is_b2b", "is_comms", "is_stock_order", "is_alteration",
 ].join(", ");
@@ -77,6 +77,7 @@ export function buildOutstanding(orders, today = new Date()) {
   const rows = (orders || []).filter(isOutstanding).map((o) => {
     const days = daysPastDelivery(o, today);
     return {
+      order: o,
       id: o.id,
       orderNo: o.order_no,
       customer: o.delivery_name || "",

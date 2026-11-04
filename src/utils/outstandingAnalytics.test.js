@@ -52,6 +52,7 @@ test("totals, ageing and splits add up, oldest first", () => {
   expect(out.count).toBe(3);
   expect(out.total).toBe(1600);
   expect(out.rows.map((r) => r.id)).toEqual(["b", "c", "a"]);
+  expect(out.rows[0].order.id).toBe("b"); // the full row, so a click can open the order
   expect(out.buckets.map((b) => [b.key, b.count, b.value])).toEqual([
     ["not_due", 1, 600], ["d0_30", 1, 100], ["d31_60", 0, 0], ["d60", 1, 900],
   ]);

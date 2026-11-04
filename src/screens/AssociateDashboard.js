@@ -999,7 +999,7 @@ export default function Dashboard() {
   };
 
   // Navigate to Customer Orders
-  const viewCustomerOrders = (order) => {
+  const viewCustomerOrders = (order, extraState = {}) => {
     // ✅ Save salesperson data before navigating
     if (salesperson) {
       sessionStorage.setItem("currentSalesperson", JSON.stringify({
@@ -1027,6 +1027,7 @@ export default function Dashboard() {
         readOnly: isReadOnly,
         saEmail: salesperson?.email || null,
         isServices: isServices,
+        ...extraState,
       }
     });
   };
@@ -1832,7 +1833,7 @@ export default function Dashboard() {
           {activeTab === "outstanding" && (
             <div className="ad-order-details-wrapper" style={{ minWidth: 0, overflowX: "hidden" }}>
               <h2 className="ad-order-title">Outstanding</h2>
-              <OutstandingPanel orders={orders} showSplits={isServices} />
+              <OutstandingPanel orders={orders} showSplits={isServices} onOpenOrder={(o) => viewCustomerOrders(o, { highlightOrderId: o.id })} />
             </div>
           )}
 
