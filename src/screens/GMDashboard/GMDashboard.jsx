@@ -26,6 +26,7 @@ import {
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
 import { startOrderMode } from "../../utils/orderMode";
+import { cleanMerchandiserName } from "../../utils/merchandiserName";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -355,7 +356,7 @@ export default function GMDashboard() {
 
     const getOrderSalesperson = (order) => {
         if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") {
-            return order.merchandiser_name || order.salesperson || null;
+            return cleanMerchandiserName(order.merchandiser_name || order.salesperson) || null;
         }
         return order.salesperson || null;
     };

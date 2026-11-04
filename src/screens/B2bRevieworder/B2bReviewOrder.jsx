@@ -12,6 +12,7 @@ import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationSe
 import { isB2bStockOrder, clearB2bStockOrder, B2B_STOCK_DELIVERY, isB2bGifting, B2B_GIFTING_FLAG, PARTNER_GIFTING_TYPE, partnerGiftingNote } from "../../utils/b2bStockOrder";
 import { isValidStockHeadDesignation } from "../../utils/stockProductionHead";
 import { b2bPricing } from "../../utils/b2bPricing";
+import { cleanMerchandiserName } from "../../utils/merchandiserName";
 
 const VENDOR_SESSION_KEY = "b2bVendorData";
 const PRODUCT_SESSION_KEY = "b2bProductFormData";
@@ -205,7 +206,7 @@ export default function B2bReviewOrder() {
                 vendor_id: isStockOrder ? null : vendor?.id,
                 po_number: isStockOrder ? null : poNumber,
                 b2b_order_type: isStockOrder ? null : orderType,
-                merchandiser_name: merchandiser,
+                merchandiser_name: cleanMerchandiserName(merchandiser),
                 salesperson_store: salespersonStore,
                 salesperson: salespersonName || "",
                 salesperson_email: user?.email || "",

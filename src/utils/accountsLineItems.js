@@ -7,6 +7,8 @@
 // already-scoped order array as a param and reads no module or component state,
 // so each dashboard passes its own base array (Admin: nonCommsOrders; CEO/GM:
 // orders) and the numbers stay byte-identical to before.
+import { cleanMerchandiserName } from "./merchandiserName";
+
 
 // LXRTS (Shopify-synced) orders are excluded from the accounts view.
 const isLxrtsOrder = (order) => order?.items?.[0]?.sync_enabled === true;
@@ -15,7 +17,7 @@ const isLxrtsOrder = (order) => order?.items?.[0]?.sync_enabled === true;
 const getOrderSalesperson = (order) => {
     // For B2B orders, use merchandiser_name or approved_by as the person
     if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") {
-        return order.merchandiser_name || order.salesperson || null;
+        return cleanMerchandiserName(order.merchandiser_name || order.salesperson) || null;
     }
     return order.salesperson || null;
 };

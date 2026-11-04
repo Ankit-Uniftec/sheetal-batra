@@ -30,6 +30,7 @@ import StockPanel from "../../components/stock/StockPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
 import downloadCsv from "../../utils/downloadCsv";
 import DashboardHeader from "../../components/DashboardHeader";
+import { uniqueMerchandiserNames, isSameMerchandiser } from "../../utils/merchandiserName";
 
 // Garment value with its colour swatch — "Short Kurta ● Mint Green" — matching
 // how the Production Head / PM order cards render top and bottom.
@@ -313,7 +314,7 @@ export default function B2bMerchandiserDashboard() {
     const cancelAnytime = useMemo(() => canCancelB2bAnytime(user?.email), [user]);
 
     const uniqueMerchandisers = useMemo(() => {
-        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        const names = uniqueMerchandiserNames(orders);
         return names.sort();
     }, [orders]);
 
@@ -374,7 +375,7 @@ export default function B2bMerchandiserDashboard() {
         // type and are identified by the flag, so they get their own filter case.
         if (typeFilter === "stock") filtered = filtered.filter(o => o.is_stock_order === true);
         else if (typeFilter !== "all") filtered = filtered.filter(o => !o.is_stock_order && o.b2b_order_type?.toLowerCase() === typeFilter);
-        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => isSameMerchandiser(o.merchandiser_name, merchandiserFilter));
         // vendor_id is a uuid in the URL — compare as string, not by identity.
         if (vendorFilter !== "all") filtered = filtered.filter(o => String(o.vendor_id) === vendorFilter);
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
