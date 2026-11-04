@@ -10,6 +10,7 @@ import SearchByDropdown from "../../components/SearchByDropdown";
 import Paginator from "../../components/Paginator";
 import useTabParam from "../../hooks/useTabParam";
 import StockPanel from "../../components/stock/StockPanel";
+import OutstandingPanel from "../../components/OutstandingPanel";
 import { poolsForUser } from "../../utils/stockVisibility";
 import { usePopup } from "../../components/Popup";
 import { startOrderMode } from "../../utils/orderMode";
@@ -277,6 +278,12 @@ export default function StoreManagerDashboard() {
             return storeMatches(o.salesperson_store, userStore);
         });
     }, [orders, userStore]);
+
+    // Outstanding counts every order of this store, as the COO and CEO see it.
+    const outstandingOrders = useMemo(
+        () => orders.filter((o) => storeMatches(o.salesperson_store, userStore)),
+        [orders, userStore]
+    );
 
     const getOrderSalesperson = (order) => order.salesperson || null;
 
@@ -915,6 +922,7 @@ export default function StoreManagerDashboard() {
                             { key: "sales", label: "Sales Overview" },
                             { key: "sa_performance", label: "SA Performance" },
                             { key: "orders", label: "Orders" },
+                            { key: "outstanding", label: "Outstanding" },
                             { key: "calendar", label: "Delivery Calendar" },
                             { key: "returns", label: "Returns & Issues" },
                             { key: "inventory", label: "Store Inventory" },
@@ -1352,6 +1360,13 @@ export default function StoreManagerDashboard() {
                     {/* This store's orders plotted on their delivery date; pick a
                         day to see each order number and the SA it's assigned to.
                         Clicking an order jumps to it in the Orders tab. */}
+                    {activeTab === "outstanding" && (
+                        <div>
+                            <h2 className="sm-section-title">Outstanding</h2>
+                            <OutstandingPanel orders={outstandingOrders} />
+                        </div>
+                    )}
+
                     {activeTab === "calendar" && (
                         <StoreCalendarTab
                             orders={storeOrders}

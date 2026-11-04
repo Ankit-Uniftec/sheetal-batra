@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import CancellationsPanel from "../../components/CancellationsPanel";
+import OutstandingPanel from "../../components/OutstandingPanel";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
@@ -1588,6 +1589,7 @@ export default function CEODashboard() {
                         <button className={`admin-nav-item ${activeTab === "targets_growth" ? "active" : ""}`} onClick={() => { setActiveTab("targets_growth"); setShowSidebar(false); }}>Targets & Growth</button>
                         <button className={`admin-nav-item ${activeTab === "ops_flags" ? "active" : ""}`} onClick={() => { setActiveTab("ops_flags"); setShowSidebar(false); }}>Operational Flags</button>
                         <button className={`admin-nav-item ${activeTab === "cancellations" ? "active" : ""}`} onClick={() => { setActiveTab("cancellations"); setShowSidebar(false); }}>Cancellations</button>
+                        <button className={`admin-nav-item ${activeTab === "outstanding" ? "active" : ""}`} onClick={() => { setActiveTab("outstanding"); setShowSidebar(false); }}>Outstanding</button>
                         <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
@@ -2870,6 +2872,12 @@ export default function CEODashboard() {
 
 
                     {/* ═══════════ CEO: OPERATIONAL FLAGS ═══════════ */}
+                    {activeTab === "outstanding" && (
+                        <div>
+                            <h2 className="admin-section-title">Outstanding</h2>
+                            <OutstandingPanel />
+                        </div>
+                    )}
                     {activeTab === "cancellations" && (
                         <div>
                             <h2 className="admin-section-title">Cancellations</h2>
