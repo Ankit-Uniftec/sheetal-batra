@@ -4,7 +4,7 @@ import formatDate from "../utils/formatDate";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import downloadCsv from "../utils/downloadCsv";
 import { fetchAllRowsParallel } from "../utils/fetchAllRowsParallel";
-import { AGE_BUCKETS, OUTSTANDING_COLUMNS, buildOutstanding } from "../utils/outstandingAnalytics";
+import { AGE_BUCKETS, OUTSTANDING_COLUMNS, buildOutstanding, matchesOutstandingSearch } from "../utils/outstandingAnalytics";
 import "./CancellationsPanel.css";
 
 // Outstanding balances (point #6). Read-only. Screens that already hold their
@@ -45,13 +45,14 @@ function SplitTable({ title, items, onPick, picked }) {
   );
 }
 
-export default function OutstandingPanel({ orders = null, showSplits = true, onOpenOrder = null }) {
+export default function OutstandingPanel({ orders = null, showSplits = true, showSa = true, onOpenOrder = null }) {
   const [loaded, setLoaded] = useState(null);
   const [error, setError] = useState("");
   const [sa, setSa] = useFilterParam("outSa", "");
   const [store, setStore] = useFilterParam("outStore", "");
   const [bucket, setBucket] = useFilterParam("outAge", "");
-  const clearFilters = useClearFilterParams(["outSa", "outStore", "outAge"]);
+  const [search, setSearch] = useFilterParam("outQ", "");
+  const clearFilters = useClearFilterParams(["outSa", "outStore", "outAge", "outQ"]);
 
   useEffect(() => {
     if (orders) return undefined;
@@ -70,13 +71,14 @@ export default function OutstandingPanel({ orders = null, showSplits = true, onO
   const data = useMemo(() => buildOutstanding(source || []), [source]);
   const shown = useMemo(() => data.rows.filter((r) =>
     (!sa || (r.sa || "—") === sa) && (!store || (r.store || "—") === store) && (!bucket || r.bucket === bucket)
-  ), [data, sa, store, bucket]);
+    && matchesOutstandingSearch(r, search)
+  ), [data, sa, store, bucket, search]);
   const shownTotal = shown.reduce((s, r) => s + r.balance, 0);
 
   const exportCsv = () => downloadCsv({
     filename: "outstanding_balances",
-    headers: ["Order No", "Customer", "SA", "Store", "Status", "Delivery Date", "Days Past", "Age", "Total", "Paid", "Balance", "Check"],
-    rows: shown.map((r) => [r.orderNo, r.customer, r.sa, r.store, r.status, r.deliveryDate ? formatDate(r.deliveryDate) : "",
+    headers: ["Order No", "Customer", ...(showSa ? ["SA"] : []), "Store", "Status", "Delivery Date", "Days Past", "Age", "Total", "Paid", "Balance", "Check"],
+    rows: shown.map((r) => [r.orderNo, r.customer, ...(showSa ? [r.sa] : []), r.store, r.status, r.deliveryDate ? formatDate(r.deliveryDate) : "",
       r.days ?? "", bucketLabel(r.bucket), r.total, r.paid, r.balance, r.bucket === "d60" ? "May already be collected" : ""]),
   });
 
@@ -121,18 +123,26 @@ export default function OutstandingPanel({ orders = null, showSplits = true, onO
       <div className="cx-card">
         <div className="cx-toolbar">
           <h4 style={{ margin: 0 }}>
-            {shown.length} orders · {money(shownTotal)}
-            {(sa || store || bucket) && (
+            {shown.length} {shown.length === 1 ? "order" : "orders"} · {money(shownTotal)}
+            {(sa || store || bucket || search) && (
               <button type="button" style={{ marginLeft: 10 }} onClick={clearFilters}>Clear filters</button>
             )}
           </h4>
           <div className="cx-presets"><button type="button" onClick={exportCsv} disabled={!shown.length}>Download CSV</button></div>
         </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={showSa ? "Search order no, customer, SA, store or status..." : "Search order no, customer, store or status..."}
+          aria-label="Search outstanding orders"
+          style={{ width: "100%", boxSizing: "border-box", margin: "10px 0", padding: "8px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14 }}
+        />
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: 720 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "#6b5842" }}>
-                <th>Order</th><th>Customer</th><th>SA</th><th>Store</th><th>Status</th><th>Delivery</th><th>Past</th>
+                <th>Order</th><th>Customer</th>{showSa && <th>SA</th>}<th>Store</th><th>Status</th><th>Delivery</th><th>Past</th>
                 <th style={{ textAlign: "right" }}>Total</th><th style={{ textAlign: "right" }}>Paid</th><th style={{ textAlign: "right" }}>Balance</th>
               </tr>
             </thead>
@@ -151,7 +161,7 @@ export default function OutstandingPanel({ orders = null, showSplits = true, onO
                     {onOpenOrder ? <span className="cx-order-link">{r.orderNo}</span> : r.orderNo}
                   </td>
                   <td>{r.customer || "—"}</td>
-                  <td>{r.sa || "—"}</td>
+                  {showSa && <td>{r.sa || "—"}</td>}
                   <td>{r.store || "—"}</td>
                   <td>{r.status}</td>
                   <td>{r.deliveryDate ? formatDate(r.deliveryDate) : "—"}</td>
@@ -167,7 +177,7 @@ export default function OutstandingPanel({ orders = null, showSplits = true, onO
         {shown.length > LIST_LIMIT && (
           <div className="cx-muted" style={{ marginTop: 8 }}>Showing the oldest {LIST_LIMIT}. The CSV has all {shown.length}.</div>
         )}
-        {shown.length === 0 && <div className="cx-empty">No outstanding balances here.</div>}
+        {shown.length === 0 && <div className="cx-empty">{search ? `Nothing matches "${search}".` : "No outstanding balances here."}</div>}
       </div>
     </div>
   );

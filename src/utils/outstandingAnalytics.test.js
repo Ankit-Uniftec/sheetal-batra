@@ -1,4 +1,4 @@
-import { isOutstanding, daysPastDelivery, ageBucket, buildOutstanding } from "./outstandingAnalytics";
+import { isOutstanding, daysPastDelivery, ageBucket, buildOutstanding, matchesOutstandingSearch } from "./outstandingAnalytics";
 
 const TODAY = new Date(2026, 10, 4);
 const order = (over = {}) => ({
@@ -62,4 +62,11 @@ test("totals, ageing and splits add up, oldest first", () => {
 
 test("an empty or missing list is safe", () => {
   expect(buildOutstanding(undefined, TODAY)).toMatchObject({ count: 0, total: 0 });
+});
+
+test("search matches order number, customer, SA, store and status, ignoring case and spaces", () => {
+  const row = { orderNo: "SB-DLC-0926-007646", customer: "Divya Khullar", sa: "Asha", store: "Delhi Store", status: "completed" };
+  ["007646", " divya ", "ASHA", "delhi", "complet", ""].forEach((q) => expect(matchesOutstandingSearch(row, q)).toBe(true));
+  ["ludhiana", "99999"].forEach((q) => expect(matchesOutstandingSearch(row, q)).toBe(false));
+  expect(matchesOutstandingSearch({ orderNo: "SB-1" }, "khullar")).toBe(false); // missing fields are safe
 });

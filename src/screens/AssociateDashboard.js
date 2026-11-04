@@ -1833,7 +1833,7 @@ export default function Dashboard() {
           {activeTab === "outstanding" && (
             <div className="ad-order-details-wrapper" style={{ minWidth: 0, overflowX: "hidden" }}>
               <h2 className="ad-order-title">Outstanding</h2>
-              <OutstandingPanel orders={orders} showSplits={isServices} onOpenOrder={(o) => viewCustomerOrders(o, { highlightOrderId: o.id })} />
+              <OutstandingPanel orders={orders} showSplits={isServices} showSa={isServices} onOpenOrder={(o) => viewCustomerOrders(o, { highlightOrderId: o.id })} />
             </div>
           )}
 

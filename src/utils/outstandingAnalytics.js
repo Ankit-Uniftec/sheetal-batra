@@ -56,6 +56,14 @@ export function ageBucket(days) {
   return "d60";
 }
 
+/** Does a list row match the search box? Order number, customer, SA, store or status. */
+export function matchesOutstandingSearch(row, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  return [row.orderNo, row.customer, row.sa, row.store, row.status]
+    .some((v) => String(v || "").toLowerCase().includes(q));
+}
+
 const group = (rows, keyOf) => {
   const map = new Map();
   rows.forEach((r) => {
