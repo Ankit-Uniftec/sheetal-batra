@@ -197,6 +197,7 @@ const GARMENT_CATEGORY = {
     "plazo": "ChuridaarTrouserPantsPlazo",
     "sharara": "ShararaGharara",
     "gharara": "ShararaGharara",
+    "garara": "ShararaGharara",
     "lehenga": "Lehenga",
 };
 
