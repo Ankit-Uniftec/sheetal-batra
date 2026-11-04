@@ -4,7 +4,8 @@ import formatDate from "../utils/formatDate";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import downloadCsv from "../utils/downloadCsv";
 import { fetchAllRowsParallel } from "../utils/fetchAllRowsParallel";
-import { AGE_BUCKETS, OUTSTANDING_COLUMNS, buildOutstanding, matchesOutstandingSearch } from "../utils/outstandingAnalytics";
+import { usePeriodFilterParam } from "./PeriodFilter";
+import { AGE_BUCKETS, OUTSTANDING_COLUMNS, buildOutstanding, filterOutstanding, summariseOutstanding } from "../utils/outstandingAnalytics";
 import "./CancellationsPanel.css";
 
 // Outstanding balances (point #6). Read-only. Screens that already hold their
@@ -15,6 +16,7 @@ import "./CancellationsPanel.css";
 
 const money = (n) => `₹${formatIndianNumber(Math.round(n || 0))}`;
 const LIST_LIMIT = 100;
+const statusLabel = (s) => String(s || "").replace(/_/g, " ").replace(/\w/g, (c) => c.toUpperCase());
 const bucketLabel = (key) => AGE_BUCKETS.find((b) => b.key === key)?.label || "";
 const ageText = (r) => (r.days == null ? "No date" : r.days < 0 ? `Due in ${-r.days}d` : `${r.days}d`);
 
@@ -52,7 +54,11 @@ export default function OutstandingPanel({ orders = null, showSplits = true, sho
   const [store, setStore] = useFilterParam("outStore", "");
   const [bucket, setBucket] = useFilterParam("outAge", "");
   const [search, setSearch] = useFilterParam("outQ", "");
-  const clearFilters = useClearFilterParams(["outSa", "outStore", "outAge", "outQ"]);
+  const [status, setStatus] = useFilterParam("outStatus", "");
+  const { control: periodControl, timeline, inPeriod, range } = usePeriodFilterParam("all", {
+    variant: "select", label: "Order date:", param: "outPeriod", fromParam: "outFrom", toParam: "outTo",
+  });
+  const clearFilters = useClearFilterParams(["outSa", "outStore", "outAge", "outQ", "outStatus", "outPeriod", "outFrom", "outTo"]);
 
   useEffect(() => {
     if (orders) return undefined;
@@ -68,11 +74,16 @@ export default function OutstandingPanel({ orders = null, showSplits = true, sho
   }, [orders]);
 
   const source = orders || loaded;
-  const data = useMemo(() => buildOutstanding(source || []), [source]);
-  const shown = useMemo(() => data.rows.filter((r) =>
-    (!sa || (r.sa || "—") === sa) && (!store || (r.store || "—") === store) && (!bucket || r.bucket === bucket)
-    && matchesOutstandingSearch(r, search)
-  ), [data, sa, store, bucket, search]);
+  const allRows = useMemo(() => buildOutstanding(source || []).rows, [source]);
+  const scoped = useMemo(() => filterOutstanding(allRows, {
+    sa, store, status, search, inPeriod: range ? inPeriod : null,
+  }), [allRows, sa, store, status, search, inPeriod, range]);
+  // The cards and tables follow every filter. Age narrows only the list, so the
+  // other age cards still show what they hold.
+  const data = useMemo(() => summariseOutstanding(scoped), [scoped]);
+  const shown = useMemo(() => (bucket ? scoped.filter((r) => r.bucket === bucket) : scoped), [scoped, bucket]);
+  const optionsOf = (key) => [...new Set(allRows.map((r) => r[key] || "—"))].sort();
+  const filtering = !!(sa || store || bucket || search || status) || timeline !== "all";
   const shownTotal = shown.reduce((s, r) => s + r.balance, 0);
 
   const exportCsv = () => downloadCsv({
@@ -89,6 +100,41 @@ export default function OutstandingPanel({ orders = null, showSplits = true, sho
 
   return (
     <div className="cx-wrap" style={{ minWidth: 0, maxWidth: "100%" }}>
+      <div className="cx-card">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={showSa ? "Search order no, customer, SA, store or status..." : "Search order no, customer, store or status..."}
+          aria-label="Search outstanding orders"
+          style={{ width: "100%", boxSizing: "border-box", marginBottom: 10, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14 }}
+        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 13 }}>
+          {periodControl}
+          <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} className="cx-filter">
+            <option value="">All Statuses</option>
+            {optionsOf("status").map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
+          </select>
+          <select aria-label="Age" value={bucket} onChange={(e) => setBucket(e.target.value)} className="cx-filter">
+            <option value="">All Ages</option>
+            {AGE_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+          </select>
+          {showSplits && (
+            <select aria-label="Store" value={store} onChange={(e) => setStore(e.target.value)} className="cx-filter">
+              <option value="">All Stores</option>
+              {optionsOf("store").map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {showSa && (
+            <select aria-label="SA" value={sa} onChange={(e) => setSa(e.target.value)} className="cx-filter">
+              <option value="">All SAs</option>
+              {optionsOf("sa").map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {filtering && <button type="button" className="cx-filter" onClick={clearFilters}>Clear filters</button>}
+        </div>
+      </div>
+
       <div className="cx-kpis">
         <div className="cx-kpi">
           <span className="cx-kpi-label">Total outstanding</span>
@@ -124,20 +170,9 @@ export default function OutstandingPanel({ orders = null, showSplits = true, sho
         <div className="cx-toolbar">
           <h4 style={{ margin: 0 }}>
             {shown.length} {shown.length === 1 ? "order" : "orders"} · {money(shownTotal)}
-            {(sa || store || bucket || search) && (
-              <button type="button" style={{ marginLeft: 10 }} onClick={clearFilters}>Clear filters</button>
-            )}
           </h4>
           <div className="cx-presets"><button type="button" onClick={exportCsv} disabled={!shown.length}>Download CSV</button></div>
         </div>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={showSa ? "Search order no, customer, SA, store or status..." : "Search order no, customer, store or status..."}
-          aria-label="Search outstanding orders"
-          style={{ width: "100%", boxSizing: "border-box", margin: "10px 0", padding: "8px 12px", border: "1px solid #ddd", borderRadius: 8, fontSize: 14 }}
-        />
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: 720 }}>
             <thead>
@@ -163,7 +198,7 @@ export default function OutstandingPanel({ orders = null, showSplits = true, sho
                   <td>{r.customer || "—"}</td>
                   {showSa && <td>{r.sa || "—"}</td>}
                   <td>{r.store || "—"}</td>
-                  <td>{r.status}</td>
+                  <td>{statusLabel(r.status)}</td>
                   <td>{r.deliveryDate ? formatDate(r.deliveryDate) : "—"}</td>
                   <td style={{ color: r.bucket === "d60" ? "#c62828" : undefined }}>{ageText(r)}</td>
                   <td style={{ textAlign: "right" }}>{money(r.total)}</td>
@@ -177,7 +212,7 @@ export default function OutstandingPanel({ orders = null, showSplits = true, sho
         {shown.length > LIST_LIMIT && (
           <div className="cx-muted" style={{ marginTop: 8 }}>Showing the oldest {LIST_LIMIT}. The CSV has all {shown.length}.</div>
         )}
-        {shown.length === 0 && <div className="cx-empty">{search ? `Nothing matches "${search}".` : "No outstanding balances here."}</div>}
+        {shown.length === 0 && <div className="cx-empty">{filtering ? "Nothing matches these filters." : "No outstanding balances here."}</div>}
       </div>
     </div>
   );

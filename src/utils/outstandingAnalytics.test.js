@@ -1,4 +1,4 @@
-import { isOutstanding, daysPastDelivery, ageBucket, buildOutstanding, matchesOutstandingSearch } from "./outstandingAnalytics";
+import { isOutstanding, daysPastDelivery, ageBucket, buildOutstanding, matchesOutstandingSearch, filterOutstanding, summariseOutstanding } from "./outstandingAnalytics";
 
 const TODAY = new Date(2026, 10, 4);
 const order = (over = {}) => ({
@@ -69,4 +69,24 @@ test("search matches order number, customer, SA, store and status, ignoring case
   ["007646", " divya ", "ASHA", "delhi", "complet", ""].forEach((q) => expect(matchesOutstandingSearch(row, q)).toBe(true));
   ["ludhiana", "99999"].forEach((q) => expect(matchesOutstandingSearch(row, q)).toBe(false));
   expect(matchesOutstandingSearch({ orderNo: "SB-1" }, "khullar")).toBe(false); // missing fields are safe
+});
+
+test("filters narrow the rows, and the totals follow them", () => {
+  const { rows } = buildOutstanding([
+    order({ id: "a", created_at: "2026-11-01T10:00:00Z" }),
+    order({ id: "b", salesperson: "Bina", salesperson_store: "Ludhiana Store", status: "completed", remaining_payment: 900, delivery_date: "2026-08-01", created_at: "2026-07-20T10:00:00Z" }),
+  ], TODAY);
+  const ids = (f) => filterOutstanding(rows, f).map((r) => r.id).sort();
+  expect(ids({})).toEqual(["a", "b"]);
+  expect(ids({ sa: "Bina" })).toEqual(["b"]);
+  expect(ids({ store: "Delhi Store" })).toEqual(["a"]);
+  expect(ids({ status: "completed" })).toEqual(["b"]);
+  expect(ids({ search: "ludhiana" })).toEqual(["b"]);
+  expect(ids({ inPeriod: (d) => d >= "2026-11-01" })).toEqual(["a"]);
+  expect(filterOutstanding(undefined)).toEqual([]);
+
+  const s = summariseOutstanding(filterOutstanding(rows, { sa: "Bina" }));
+  expect(s).toMatchObject({ count: 1, total: 900 });
+  expect(s.buckets.find((b) => b.key === "d60")).toMatchObject({ count: 1, value: 900 });
+  expect(s.buckets.find((b) => b.key === "not_due")).toMatchObject({ count: 0, value: 0 });
 });

@@ -77,6 +77,34 @@ const group = (rows, keyOf) => {
   return [...map.values()].sort((a, b) => b.value - a.value);
 };
 
+/** Totals, ageing and splits for any set of rows, so filtered cards add up to the list. */
+export function summariseOutstanding(rows) {
+  return {
+    count: rows.length,
+    total: rows.reduce((s, r) => s + r.balance, 0),
+    buckets: AGE_BUCKETS.map((b) => {
+      const mine = rows.filter((r) => r.bucket === b.key);
+      return { ...b, count: mine.length, value: mine.reduce((s, r) => s + r.balance, 0) };
+    }),
+    bySa: group(rows, (r) => r.sa),
+    byStore: group(rows, (r) => r.store),
+  };
+}
+
+/**
+ * Every filter except age. The age cards stay readable when one is picked, so
+ * age is applied to the list only.
+ */
+export function filterOutstanding(rows, { sa = "", store = "", status = "", search = "", inPeriod = null } = {}) {
+  return (rows || []).filter((r) =>
+    (!sa || (r.sa || "—") === sa)
+    && (!store || (r.store || "—") === store)
+    && (!status || r.status === status)
+    && matchesOutstandingSearch(r, search)
+    && (!inPeriod || inPeriod(r.createdAt))
+  );
+}
+
 /**
  * @param {object[]} orders any list; only outstanding orders are used
  * @returns {{ rows, count, total, buckets, bySa, byStore }} rows are oldest first
@@ -93,6 +121,7 @@ export function buildOutstanding(orders, today = new Date()) {
       store: String(o.salesperson_store || "").trim(),
       status: o.status || "",
       deliveryDate: o.delivery_date || null,
+      createdAt: o.created_at || null,
       days,
       bucket: ageBucket(days),
       total: Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total) || 0,
@@ -101,17 +130,5 @@ export function buildOutstanding(orders, today = new Date()) {
     };
   }).sort((a, b) => (b.days ?? -Infinity) - (a.days ?? -Infinity));
 
-  const buckets = AGE_BUCKETS.map((b) => {
-    const mine = rows.filter((r) => r.bucket === b.key);
-    return { ...b, count: mine.length, value: mine.reduce((s, r) => s + r.balance, 0) };
-  });
-
-  return {
-    rows,
-    count: rows.length,
-    total: rows.reduce((s, r) => s + r.balance, 0),
-    buckets,
-    bySa: group(rows, (r) => r.sa),
-    byStore: group(rows, (r) => r.store),
-  };
+  return { rows, ...summariseOutstanding(rows) };
 }

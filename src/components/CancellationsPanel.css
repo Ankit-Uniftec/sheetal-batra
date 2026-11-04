@@ -43,3 +43,4 @@
 .cx-row-open { cursor: pointer; }
 .cx-row-open:hover, .cx-row-open:focus { background: #fff8e1; outline: none; }
 .cx-order-link { color: #8a6d1d; text-decoration: underline; }
+.cx-filter { width: auto; padding: 7px 10px; border: 1px solid #d5b85a; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; }
