@@ -930,7 +930,7 @@ export default function COODashboard() {
                     {activeTab === "outstanding" && (
                         <div>
                             <h2 className="admin-section-title">Outstanding</h2>
-                            <OutstandingPanel />
+                            <OutstandingPanel onOpenOrder={(o) => navigate(`/order/${o.id}`)} />
                         </div>
                     )}
                     {activeTab === "cancellations" && (

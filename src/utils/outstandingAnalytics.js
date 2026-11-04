@@ -17,7 +17,7 @@ import { REVENUE_EXCLUDED_STATUSES, REFUNDED_STATUSES } from "./revenue";
 const NOT_CUSTOMER_PREFIXES = new Set(["B2B", "B2BSTOCK", "STOCK", "COM", "SHOPIFY", "SHOP"]);
 
 export const OUTSTANDING_COLUMNS = [
-  "id", "order_no", "status", "created_at", "delivery_date", "delivery_name", "salesperson", "salesperson_store",
+  "id", "user_id", "order_no", "status", "created_at", "delivery_date", "delivery_name", "salesperson", "salesperson_store",
   "net_total", "grand_total_after_discount", "grand_total", "total_paid", "remaining_payment",
   "refund_status", "is_b2b", "is_comms", "is_stock_order", "is_alteration",
 ].join(", ");
@@ -56,6 +56,14 @@ export function ageBucket(days) {
   return "d60";
 }
 
+/** Does a list row match the search box? Order number, customer, SA, store or status. */
+export function matchesOutstandingSearch(row, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  return [row.orderNo, row.customer, row.sa, row.store, row.status]
+    .some((v) => String(v || "").toLowerCase().includes(q));
+}
+
 const group = (rows, keyOf) => {
   const map = new Map();
   rows.forEach((r) => {
@@ -69,6 +77,34 @@ const group = (rows, keyOf) => {
   return [...map.values()].sort((a, b) => b.value - a.value);
 };
 
+/** Totals, ageing and splits for any set of rows, so filtered cards add up to the list. */
+export function summariseOutstanding(rows) {
+  return {
+    count: rows.length,
+    total: rows.reduce((s, r) => s + r.balance, 0),
+    buckets: AGE_BUCKETS.map((b) => {
+      const mine = rows.filter((r) => r.bucket === b.key);
+      return { ...b, count: mine.length, value: mine.reduce((s, r) => s + r.balance, 0) };
+    }),
+    bySa: group(rows, (r) => r.sa),
+    byStore: group(rows, (r) => r.store),
+  };
+}
+
+/**
+ * Every filter except age. The age cards stay readable when one is picked, so
+ * age is applied to the list only.
+ */
+export function filterOutstanding(rows, { sa = "", store = "", status = "", search = "", inPeriod = null } = {}) {
+  return (rows || []).filter((r) =>
+    (!sa || (r.sa || "—") === sa)
+    && (!store || (r.store || "—") === store)
+    && (!status || r.status === status)
+    && matchesOutstandingSearch(r, search)
+    && (!inPeriod || inPeriod(r.createdAt))
+  );
+}
+
 /**
  * @param {object[]} orders any list; only outstanding orders are used
  * @returns {{ rows, count, total, buckets, bySa, byStore }} rows are oldest first
@@ -77,6 +113,7 @@ export function buildOutstanding(orders, today = new Date()) {
   const rows = (orders || []).filter(isOutstanding).map((o) => {
     const days = daysPastDelivery(o, today);
     return {
+      order: o,
       id: o.id,
       orderNo: o.order_no,
       customer: o.delivery_name || "",
@@ -84,6 +121,7 @@ export function buildOutstanding(orders, today = new Date()) {
       store: String(o.salesperson_store || "").trim(),
       status: o.status || "",
       deliveryDate: o.delivery_date || null,
+      createdAt: o.created_at || null,
       days,
       bucket: ageBucket(days),
       total: Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total) || 0,
@@ -92,17 +130,5 @@ export function buildOutstanding(orders, today = new Date()) {
     };
   }).sort((a, b) => (b.days ?? -Infinity) - (a.days ?? -Infinity));
 
-  const buckets = AGE_BUCKETS.map((b) => {
-    const mine = rows.filter((r) => r.bucket === b.key);
-    return { ...b, count: mine.length, value: mine.reduce((s, r) => s + r.balance, 0) };
-  });
-
-  return {
-    rows,
-    count: rows.length,
-    total: rows.reduce((s, r) => s + r.balance, 0),
-    buckets,
-    bySa: group(rows, (r) => r.sa),
-    byStore: group(rows, (r) => r.store),
-  };
+  return { rows, ...summariseOutstanding(rows) };
 }
