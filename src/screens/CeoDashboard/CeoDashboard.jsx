@@ -23,6 +23,7 @@ import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel } from 
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import { summariseQcFails, isOrderStillRunning, computeStatusStats } from "../../utils/productionMetrics";
+import { cleanMerchandiserName } from "../../utils/merchandiserName";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -397,7 +398,7 @@ export default function CEODashboard() {
     const getOrderSalesperson = (order) => {
         // For B2B orders, use merchandiser_name or approved_by as the person
         if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") {
-            return order.merchandiser_name || order.salesperson || null;
+            return cleanMerchandiserName(order.merchandiser_name || order.salesperson) || null;
         }
         return order.salesperson || null;
     };
@@ -1196,7 +1197,7 @@ export default function CEODashboard() {
         let currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
 
         // Merchandiser filter
-        const merchandiserList = salespersonTable.filter(s => s.role === "merchandiser").map(s => s.saleperson).sort();
+        const merchandiserList = salespersonTable.filter(s => s.role === "merchandiser").map(s => cleanMerchandiserName(s.saleperson)).sort();
         if (b2bMerchandiserFilter) {
             currentB2b = currentB2b.filter(o =>
                 getOrderSalesperson(o) === b2bMerchandiserFilter

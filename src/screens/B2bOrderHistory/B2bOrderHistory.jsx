@@ -11,6 +11,7 @@ import Paginator from "../../components/Paginator";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import { usePeriodFilterParam } from "../../components/PeriodFilter";
 import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
+import { uniqueMerchandiserNames, isSameMerchandiser } from "../../utils/merchandiserName";
 
 // Color display component (same as OrderHistory)
 function ColorDot({ color }) {
@@ -116,7 +117,7 @@ export default function B2bOrderHistory() {
     }, [statusFilter, typeFilter]);
 
     const uniqueMerchandisers = useMemo(() => {
-        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        const names = uniqueMerchandiserNames(orders);
         return names.sort();
     }, [orders]);
 
@@ -124,7 +125,7 @@ export default function B2bOrderHistory() {
     const filteredOrders = useMemo(() => {
         let filtered = [...orders];
 
-        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => isSameMerchandiser(o.merchandiser_name, merchandiserFilter));
         if (periodRange) filtered = filtered.filter(o => inPeriod(o.created_at));
 
         if (searchQuery.trim()) {

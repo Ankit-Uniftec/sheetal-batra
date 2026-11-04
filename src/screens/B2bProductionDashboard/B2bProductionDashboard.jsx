@@ -36,6 +36,7 @@ import { fetchReJourneys } from "../../utils/reJourneys";
 import { runManualCompleteWithOverride } from "../../utils/manualComplete";
 import { isB2bStockOrderRow } from "../../utils/b2bStockOrder";
 import { usePeriodFilter } from "../../components/PeriodFilter";
+import { uniqueMerchandiserNames, isSameMerchandiser } from "../../utils/merchandiserName";
 
 // Garment piece + its colour — "Short Kurta ● Mint Green" — matching how the
 // PM / Merchandiser order cards render top and bottom.
@@ -428,7 +429,7 @@ export default function B2bProductionDashboard() {
     }, [orders]);
 
     const uniqueMerchandisers = useMemo(() => {
-        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        const names = uniqueMerchandiserNames(orders);
         return names.sort();
     }, [orders]);
 
@@ -442,7 +443,7 @@ export default function B2bProductionDashboard() {
         // order carries a null type and is identified by is_comms.
         else if (allTypeFilter === "comms") filtered = filtered.filter(o => o.is_comms);
         else if (allTypeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && !o.is_comms && o.b2b_order_type === allTypeFilter);
-        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => isSameMerchandiser(o.merchandiser_name, merchandiserFilter));
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
         if (orderSearch.trim()) {
             const q = orderSearch.toLowerCase();

@@ -13,6 +13,7 @@ import Paginator from "../../components/Paginator";
 import { usePeriodFilter, usePeriodFilterParam } from "../../components/PeriodFilter";
 import { isB2bStockOrderRow, startNewB2bOrder, clearB2bOrderFlow, beginB2bEdit, startB2bGifting, isPartnerGiftingRow, giftingSessionFields } from "../../utils/b2bStockOrder";
 import DashboardHeader from "../../components/DashboardHeader";
+import { uniqueMerchandiserNames, isSameMerchandiser } from "../../utils/merchandiserName";
 
 export default function B2bExecutiveDashboard() {
     const navigate = useNavigate();
@@ -138,7 +139,7 @@ export default function B2bExecutiveDashboard() {
     }, [orders]);
 
     const uniqueMerchandisers = useMemo(() => {
-        const names = [...new Set(orders.map(o => o.merchandiser_name).filter(Boolean))];
+        const names = uniqueMerchandiserNames(orders);
         return names.sort();
     }, [orders]);
 
@@ -151,7 +152,7 @@ export default function B2bExecutiveDashboard() {
         // identified by is_stock_order instead.
         if (typeFilter === "stock") filtered = filtered.filter(o => isB2bStockOrderRow(o));
         else if (typeFilter !== "all") filtered = filtered.filter(o => !isB2bStockOrderRow(o) && o.b2b_order_type?.toLowerCase() === typeFilter);
-        if (merchandiserFilter !== "all") filtered = filtered.filter(o => o.merchandiser_name === merchandiserFilter);
+        if (merchandiserFilter !== "all") filtered = filtered.filter(o => isSameMerchandiser(o.merchandiser_name, merchandiserFilter));
         if (ordersPeriodRange) filtered = filtered.filter(o => inOrdersPeriod(o.created_at));
 
         if (orderSearch.trim()) {

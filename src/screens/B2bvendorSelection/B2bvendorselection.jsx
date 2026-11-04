@@ -8,6 +8,7 @@ import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
 import { checkB2bRole } from "../../utils/b2bRoleGuard";
 import { isEditingB2bOrder, isB2bGifting, PARTNER_GIFTING_TYPE, PARTNER_GIFTING_PURPOSES } from "../../utils/b2bStockOrder";
+import { cleanMerchandiserName } from "../../utils/merchandiserName";
 
 const SESSION_KEY = "b2bVendorData";
 
@@ -118,7 +119,7 @@ export default function B2bVendorSelection() {
                 const data = JSON.parse(saved);
                 if (data.selectedVendorId) setSelectedVendorId(data.selectedVendorId);
                 if (data.poNumber) setPoNumber(data.poNumber);
-                if (data.merchandiser) setMerchandiser(data.merchandiser);
+                if (data.merchandiser) setMerchandiser(cleanMerchandiserName(data.merchandiser));
                 if (data.orderType) setOrderType(data.orderType);
                 if (data.discountPercent !== undefined) setDiscountPercent(data.discountPercent);
                 if (data.collectorDiscount !== undefined) setCollectorDiscount(data.collectorDiscount);
@@ -142,7 +143,7 @@ export default function B2bVendorSelection() {
         const fetchMerchandisers = async () => {
             const { data } = await supabase.from("salesperson").select("saleperson, role");
             if (data) {
-                const list = data.filter(s => s.role === "merchandiser").map(s => ({ label: s.saleperson, value: s.saleperson }));
+                const list = data.filter(s => s.role === "merchandiser").map(s => ({ label: cleanMerchandiserName(s.saleperson), value: cleanMerchandiserName(s.saleperson) }));
                 setMerchandisers(list);
             }
         };

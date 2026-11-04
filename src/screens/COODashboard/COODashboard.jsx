@@ -28,6 +28,7 @@ import {
     computeStatusStats, computeReJourneyCount, countActiveComponents, computeDispatchReady,
 } from "../../utils/productionMetrics";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
+import { cleanMerchandiserName } from "../../utils/merchandiserName";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
@@ -234,7 +235,7 @@ export default function COODashboard() {
     const getOrderChannel = (order) => getOrderChannelLabel(order);
 
     const getOrderSalesperson = (order) => {
-        if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") return order.merchandiser_name || order.salesperson || null;
+        if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") return cleanMerchandiserName(order.merchandiser_name || order.salesperson) || null;
         return order.salesperson || null;
     };
 

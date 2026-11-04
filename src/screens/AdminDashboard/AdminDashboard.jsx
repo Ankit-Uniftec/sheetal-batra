@@ -28,6 +28,7 @@ import {
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import { startOrderMode } from "../../utils/orderMode";
 import OverrideHistory from "../../components/OverrideHistory";
+import { cleanMerchandiserName } from "../../utils/merchandiserName";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -615,7 +616,7 @@ export default function AdminDashboard() {
     const getOrderSalesperson = (order) => {
         // For B2B orders, use merchandiser_name or approved_by as the person
         if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") {
-            return order.merchandiser_name || order.salesperson || null;
+            return cleanMerchandiserName(order.merchandiser_name || order.salesperson) || null;
         }
         return order.salesperson || null;
     };
@@ -1609,7 +1610,7 @@ export default function AdminDashboard() {
         let currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
 
         // Merchandiser filter
-        const merchandiserList = salespersonTable.filter(s => s.role === "merchandiser").map(s => s.saleperson).sort();
+        const merchandiserList = salespersonTable.filter(s => s.role === "merchandiser").map(s => cleanMerchandiserName(s.saleperson)).sort();
         if (b2bMerchandiserFilter) {
             currentB2b = currentB2b.filter(o =>
                 getOrderSalesperson(o) === b2bMerchandiserFilter
