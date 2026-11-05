@@ -1,56 +1,30 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import CancellationsPanel from "../../components/CancellationsPanel";
-import OutstandingPanel from "../../components/OutstandingPanel";
-import { useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
-import { fetchAllRows } from "../../utils/fetchAllRows";
+import Logo from "../../images/logo.png";
+import LogoVideo from "../../images/logo.mp4";
+import LogoVideoWebm from "../../images/logo.webm";
+import NotificationBell from "../../components/NotificationBell";
+import { fetchAllExhibitions, totalNetSbRevenue } from "../../utils/exhibitionService";
+import useFilterParam from "../../hooks/useFilterParam";
+import { buildAttention, buildBrief, buildHighlights, headline, itemShare, lapsedVips, revenueSeries } from "./ceoInsights";
+import {
+  biggestOrders, birthdaysSoon, briefItems, cashIn, cityBoard, clientConcentration, dateKey, dayHeat, deliveryPromise, dueSoonBoard, exhibitionBoard, healthBoard, monthlySeries, orderBook, priceBands, slowDesigns, stageBoard, targetCoach, todayPulse, vendorBoard, walkinFunnel,
+} from "./ceoOwner";
+import { clearSnapshots, closeAssignment, loadAssignments, loadCore, loadExtras, loadOrders, readSnapshot, saveAssignment, saveSnapshot } from "./ceoData";
+import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
+import { CalendarIcon, Chips, ClientsIcon, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, Select } from "./CeoUi";
+import CeoDetail from "./CeoDetail";
+import { B2bPage, ClientsPage, HomePage, OpsPage, ProductsPage, RevenuePage, StoresPage, TargetsPage, VendorsPage } from "./CeoPages";
+import { AccountsPage, CashPage, ExhibitionsPage, LossesPage, OrdersPage, StockPage } from "./CeoWork";
 import { isRevenueOrder, isSaleOrder } from "../../utils/revenue";
-import "./CeoDashboard.css";
-import formatIndianNumber from "../../utils/formatIndianNumber";
-import formatDate from "../../utils/formatDate";
-import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
+import "./CeoMakeover.css";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
-import Paginator from "../../components/Paginator";
-import DashboardHeader from "../../components/DashboardHeader";
-import StockPanel from "../../components/stock/StockPanel";
-import { poolsForUser } from "../../utils/stockVisibility";
-import ExhibitionApprovals from "../../components/ExhibitionApprovals";
-import { totalNetSbRevenue } from "../../utils/exhibitionService";
-import SearchByDropdown from "../../components/SearchByDropdown";
-import config from "../../config/config";
-import { itemFinalAmount } from "../../utils/itemNetAmount";
-import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel } from "../../utils/barcodeService";
-import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
-import { fetchQcRecords } from "../../utils/qcHistory";
+import { getOrderChannelLabel } from "../../utils/barcodeService";
+import { usePeriodFilterParam, comparisonPeriodRange, inRange, periodLabel, PERIOD_OPTIONS } from "../../components/PeriodFilter";
 import { summariseQcFails, isOrderStillRunning, computeStatusStats } from "../../utils/productionMetrics";
 import { cleanMerchandiserName } from "../../utils/merchandiserName";
-import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
-} from "recharts";
-
-// Status options
-const ORDER_STATUS_OPTIONS = [
-    // The order lifecycle, in order. Deliberately excludes the dead statuses
-    // in_production / ready / prepared / confirmed / pending: ZERO orders carry
-    // them (they predate barcode tracking, which now derives the middle of the
-    // flow from components), and offering them let a human write bad data back.
-    { value: "order_received", label: "Order Received", color: "#ff9800" },
-    { value: "completed", label: "Completed", color: "#388e3c" },
-    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
-    { value: "delivered", label: "Delivered", color: "#2e7d32" },
-    { value: "cancelled", label: "Cancelled", color: "#f44336" },
-];
-
-// Status Tabs for Orders
-const STATUS_TABS = [
-    { value: "all", label: "All Orders" },
-    { value: "unfulfilled", label: "Unfulfilled" },
-    { value: "prepared", label: "Prepared" },
-    { value: "delivered", label: "Delivered" },
-    { value: "cancelled", label: "Cancelled" },
-];
 
 // Comparison options (like Shopify)
 const COMPARISON_OPTIONS = [
@@ -60,7 +34,6 @@ const COMPARISON_OPTIONS = [
 ];
 
 const ITEMS_PER_PAGE = 15;
-const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
 
 // ── The money rule for this dashboard ────────────────────────────────────────
 // Most blocks below open-coded `net_total ?? grand_total_after_discount ??
@@ -98,190 +71,66 @@ const dayLabel = (ts) => {
     return `${d.getDate()}/${d.getMonth() + 1}`;
 };
 
-// Chart colors
-const CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B", "#DAA520", "#B8860B", "#CD853F", "#DEB887"];
-const PIE_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37"];
 
-// Channel filter options
-const CHANNEL_OPTIONS = [
-    { value: "all", label: "All Channels" },
-    { value: "store", label: "Stores" },
-    { value: "b2b", label: "B2B" },
-    { value: "exhibition", label: "Exhibitions" },
-];
 
-// Placeholder badge for data not yet connected
-const PlaceholderBadge = ({ label }) => (
-    <span className="placeholder-badge" title="Data source pending — will be connected later">⏳ {label || "Placeholder"}</span>
-);
 
-// Map color names to actual hex values for chart bars
-const COLOR_NAME_MAP = {
-    "black": "#1a1a1a", "white": "#f5f5f5", "red": "#c62828", "blue": "#1565c0",
-    "navy": "#0d2137", "navy blue": "#0d2137", "green": "#2e7d32", "yellow": "#f9a825",
-    "pink": "#e91e8f", "baby pink": "#f8bbd0", "blush pink": "#f4a0b5", "dusty pink": "#d4919a",
-    "hot pink": "#ff1493", "purple": "#7b1fa2", "lavender": "#b39ddb", "orange": "#ef6c00",
-    "brown": "#5d4037", "beige": "#d7ccc8", "cream": "#fffdd0", "ivory": "#fffff0",
-    "grey": "#757575", "gray": "#757575", "silver": "#bdbdbd", "gold": "#d5b85a",
-    "maroon": "#6a1b29", "burgundy": "#800020", "wine": "#722f37", "rust": "#b7410e",
-    "teal": "#008080", "turquoise": "#40e0d0", "coral": "#ff7f50", "peach": "#ffdab9",
-    "sage": "#9caf88", "sage green": "#9caf88", "olive": "#6b8e23", "olive green": "#6b8e23",
-    "mint": "#98fb98", "mint green": "#98fb98", "forest green": "#228b22",
-    "sky blue": "#87ceeb", "royal blue": "#4169e1", "powder blue": "#b0c4de",
-    "taupe": "#8b8378", "tan": "#d2b48c", "camel": "#c19a6b", "khaki": "#c3b091",
-    "charcoal": "#36454f", "off white": "#faf0e6", "off-white": "#faf0e6",
-    "magenta": "#c2185b", "lilac": "#c8a2c8", "plum": "#8e4585", "mauve": "#e0b0ff",
-    "copper": "#b87333", "rose": "#e8a0bf", "rose gold": "#b76e79", "emerald": "#50c878",
-    "aqua": "#00bcd4", "indigo": "#3f51b5", "lemon": "#fff44f", "mustard": "#e1ad01",
-    "nude": "#e3bc9a", "champagne": "#f7e7ce", "sand": "#c2b280", "slate": "#708090",
-    "denim": "#1560bd", "cobalt": "#0047ab", "cerulean": "#007ba7", "fuchsia": "#ff00ff",
-    "scarlet": "#ff2400", "crimson": "#dc143c", "tangerine": "#ff9966", "apricot": "#fbceb1",
-    "sea green": "#2e8b57", "pistachio": "#93c572", "lime": "#a4c639", "moss": "#8a9a5b",
-};
 
-const getColorHex = (colorName) => {
-    if (!colorName) return "#d5b85a";
-    const lower = colorName.toLowerCase().trim();
-    // Direct match
-    if (COLOR_NAME_MAP[lower]) return COLOR_NAME_MAP[lower];
-    // Partial match
-    for (const [key, hex] of Object.entries(COLOR_NAME_MAP)) {
-        if (lower.includes(key) || key.includes(lower)) return hex;
-    }
-    // Fallback: generate a consistent color from name hash
-    let hash = 0;
-    for (let i = 0; i < lower.length; i++) hash = lower.charCodeAt(i) + ((hash << 5) - hash);
-    const h = Math.abs(hash) % 360;
-    return `hsl(${h}, 55%, 50%)`;
-};
 
-// Custom tooltip for charts
-const ChartTooltip = ({ active, payload, label, prefix = "₹", suffix = "" }) => {
-    if (!active || !payload?.length) return null;
-    return (
-        <div className="cmo-chart-tooltip">
-            <p className="cmo-chart-tooltip-label">{label}</p>
-            {payload.map((p, i) => (
-                <p key={i} className="cmo-chart-tooltip-row">
-                    <span className="cmo-chart-tooltip-dot" style={{ background: p.color || p.fill }}></span>
-                    <span>{p.name || "Value"}: {prefix}{formatIndianNumber(Math.round(p.value))}{suffix}</span>
-                </p>
-            ))}
-        </div>
-    );
-};
 
-// Custom XAxis tick that renders text HORIZONTAL and wraps long names
-const WrappedAxisTick = ({ x, y, payload, maxWidth = 80 }) => {
-    const text = payload?.value || "";
-    const words = text.split(/\s+/);
-    const lines = [];
-    let current = "";
-    words.forEach(w => {
-        const test = current ? current + " " + w : w;
-        if (test.length > 12 && current) { lines.push(current); current = w; }
-        else { current = test; }
-    });
-    if (current) lines.push(current);
-    // Truncate to max 2 lines
-    if (lines.length > 2) { lines.length = 2; lines[1] = lines[1].substring(0, 10) + "…"; }
-    return (
-        <g transform={`translate(${x},${y})`}>
-            {lines.map((line, i) => (
-                <text key={i} x={0} y={i * 14 + 8} textAnchor="middle" fill="#666" fontSize={11} fontFamily="inherit">
-                    {line}
-                </text>
-            ))}
-        </g>
-    );
-};
 
-// Growth Indicator Component
-const GrowthIndicator = ({ value, inverse = false }) => {
-    if (value === 0 || isNaN(value)) return null;
-    const isPositive = inverse ? value < 0 : value > 0;
-    const displayValue = Math.abs(value).toFixed(1);
-
-    return (
-        <span className={`growth-indicator ${isPositive ? 'positive' : 'negative'}`}>
-            <span className="growth-arrow">{isPositive ? '↑' : '↓'}</span>
-            {displayValue}%
-        </span>
-    );
-};
 
 export default function CEODashboard() {
     const { showPopup, PopupComponent } = usePopup();
     const navigate = useNavigate();
 
     // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
-    const [activeTab, setActiveTab] = useTabParam("brand_performance");
-    const [showSidebar, setShowSidebar] = useState(false);
-    const [orders, setOrders] = useState([]);
+    const [tabParam, setActiveTab] = useTabParam("home");
+    // Old links keep working: each older tab name opens the page that replaced it.
+    const OLD_TABS = { brand_performance: "home", cancellations: "cost_expenditure" };
+    const activeTab = OLD_TABS[tabParam] || tabParam;
+    const [allOrders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [salespersonTable, setSalespersonTable] = useState([]);
-    const [pdfLoading, setPdfLoading] = useState(null);
     const [vendors, setVendors] = useState([]);
     const [consignmentInventory, setConsignmentInventory] = useState([]);
-    // qc_records — the only real QC-failure signal (see fetchAllData).
+    // qc_records: the only real QC-failure signal.
     const [qcRecords, setQcRecords] = useState([]);
     const [qcLoaded, setQcLoaded] = useState(false);
-
-    // Dashboard states
-    const [recentOrdersCount, setRecentOrdersCount] = useState(10);
-    // Shared PeriodFilter (dashboard/brand/store/clients/b2b/etc. tabs);
-    // comparison stays local.
-    const { inPeriod, range: periodRangeValue, props: periodProps } = usePeriodFilter("today", { variant: "pills" });
-    const [comparison, setComparison] = useState("previous_period");
-
-    // Inventory states
-    const [inventorySearch, setInventorySearch] = useState("");
-    const [inventoryPage, setInventoryPage] = useState(1);
-    const [inventoryStockFilter, setInventoryStockFilter] = useState("all"); // all, in_stock, low_stock, out_of_stock
-    const [inventoryTypeFilter, setInventoryTypeFilter] = useState("all"); // all, lxrts, regular
-    const [editingProductId, setEditingProductId] = useState(null);
-    const [editInventoryValue, setEditInventoryValue] = useState("");
-    const [savingInventory, setSavingInventory] = useState(false);
-    const [expandedProduct, setExpandedProduct] = useState(null);
-    const [editingVariant, setEditingVariant] = useState(null);
-    const [variantEditValue, setVariantEditValue] = useState("");
-    const [savingVariant, setSavingVariant] = useState(false);
-    const [variantInventory, setVariantInventory] = useState({});
-    const [lxrtsSyncLoading, setLxrtsSyncLoading] = useState(false);
-
-    // Orders states
-    const [orderSearch, setOrderSearch] = useState("");
-    const [orderSearchField, setOrderSearchField] = useState("order_no");
-    const [sortBy, setSortBy] = useState("newest");
-    const [statusTab, setStatusTab] = useState("all");
-    const [ordersPage, setOrdersPage] = useState(1);
-    const [statusUpdating, setStatusUpdating] = useState(null);
-    const [filters, setFilters] = useState({
-        minPrice: 0, maxPrice: 500000,
-        payment: [], priority: [], orderType: [], store: [], salesperson: "",
+    const [payments, setPayments] = useState([]);
+    const [walkins, setWalkins] = useState([]);
+    const [exhibitions, setExhibitions] = useState([]);
+    const [profiles, setProfiles] = useState([]);
+    const [movements, setMovements] = useState([]);
+    const [assignments, setAssignments] = useState({ available: false, rows: [] });
+    const [variants, setVariants] = useState({});
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [syncedAt, setSyncedAt] = useState(null);
+    const [navOpen, setNavOpen] = useState(false);
+    const [viewOpen, setViewOpen] = useState(false);
+    const [stack, setStack] = useState([]);
+    // The welcome shows once per browser session, then gets out of the way.
+    const [welcome, setWelcome] = useState(() => {
+        try { return sessionStorage.getItem("sb-ceo-welcomed") ? "off" : "on"; } catch { return "on"; }
     });
-    // Order-date scope for the orders list — shared PeriodFilter (select),
-    // rendered inside the Date Range dropdown panel.
-    const {
-        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
-        range: ordersPeriodRange, props: ordersPeriodProps,
-    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
-    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
-    const [openDropdown, setOpenDropdown] = useState(null);
-    const dropdownRef = useRef(null);
 
-    // Accounts states
-    const [accountsSearch, setAccountsSearch] = useState("");
-    // Order-date scope for the accounts line items — shared PeriodFilter (select).
-    const {
-        control: accountsPeriodControl, timeline: accountsTimeline,
-        inPeriod: inAccountsPeriod, range: accountsPeriodRange, props: accountsPeriodProps,
-    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
-    const [accountsStatus, setAccountsStatus] = useState("");
-    const [accountsStore, setAccountsStore] = useState("");
-    const [accountsSA, setAccountsSA] = useState("");
-    const [accountsPage, setAccountsPage] = useState(1);
+    // One period for the whole dashboard, so every page answers for the same dates.
+    const { inPeriod, range: periodRangeValue, props: periodProps, timeline: periodTimeline } = usePeriodFilterParam("month", { variant: "pills" });
+    const [comparison, setComparison] = useFilterParam("compare", "previous_period");
+    const [channelFilter, setChannelFilter] = useFilterParam("channel", "");
+    const [, setSearchParams] = useSearchParams();
+    // Several values at once must go in one update, or each would undo the last.
+    const setParams = useCallback((entries) => {
+        setSearchParams((prev) => {
+            const p = new URLSearchParams(prev);
+            Object.entries(entries).forEach(([k, v]) => { if (v) p.set(k, v); else p.delete(k); });
+            return p;
+        }, { replace: true });
+    }, [setSearchParams]);
+    const scrollerRef = useRef(null);
+    // Every figure follows the chosen channel.
+    const orders = useMemo(() => (channelFilter ? allOrders.filter((o) => getOrderChannelLabel(o) === channelFilter) : allOrders), [allOrders, channelFilter]);
+    const channelList = useMemo(() => [...new Set(allOrders.map(getOrderChannelLabel).filter(Boolean))].sort(), [allOrders]);
 
     // Clients tab states
     const [clientsSearch, setClientsSearch] = useState("");
@@ -294,106 +143,126 @@ export default function CEODashboard() {
     const [b2bPage, setB2bPage] = useState(1);
     const [b2bMerchandiserFilter, setB2bMerchandiserFilter] = useState("");
 
-    // Channel filter for dashboard
-    const [channelFilter, setChannelFilter] = useState("all");
 
-    // Analytics states — separate PeriodFilter instance for the analytics tab.
-    const { inPeriod: inAnalyticsPeriod, props: analyticsPeriodProps } = usePeriodFilter("month", { variant: "pills" });
+    const inAnalyticsPeriod = inPeriod;
     const [currentUserEmail, setCurrentUserEmail] = useState("");
-    // Fetch data on mount
+    const [userName, setUserName] = useState("");
+    const [pendingExhibitions, setPendingExhibitions] = useState(0);
+    const [monthlyTargets, setMonthlyTargets] = useState([]);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const applyExtras = useCallback((x) => {
+        setQcRecords(x.qc || []);
+        setQcLoaded(true);
+        setPayments(x.payments || []);
+        setWalkins(x.walkins || []);
+        setExhibitions(x.exhibitions || []);
+        setPendingExhibitions((x.exhibitions || []).filter((e) => e.status === "pending_approval").length);
+        setMonthlyTargets(x.targets || []);
+        setConsignmentInventory(x.consignment || []);
+        setProfiles(x.profiles || []);
+        setMovements(x.movements || []);
+    }, []);
+
+    // Show the saved copy at once if there is one, then bring in fresh data behind
+    // the page. With no copy, the page opens as soon as the newest orders are here.
+    const refresh = useCallback(async (email, hasCopy) => {
+        setRefreshing(true);
+        try {
+            const corePromise = loadCore();
+            if (!hasCopy) {
+                setHistoryLoading(true);
+                const core = await corePromise;
+                setProducts(core.products);
+                setSalespersonTable(core.people);
+                setVendors(core.vendors);
+            }
+            const coreDone = await corePromise;
+            const extrasPromise = loadExtras();
+            const clean = (rows) => rows.filter((o) => !o.is_comms);
+            const allRows = await loadOrders((rows, done) => {
+                if (hasCopy) return;
+                setOrders(clean(rows));
+                setLoading(false);
+                if (done) setHistoryLoading(false);
+            });
+            const extras = await extrasPromise;
+            const finalOrders = clean(allRows);
+            setOrders(finalOrders);
+            setProducts(coreDone.products);
+            setSalespersonTable(coreDone.people);
+            setVendors(coreDone.vendors);
+            applyExtras(extras);
+            setHistoryLoading(false);
+            setLoading(false);
+            setSyncedAt(new Date());
+            saveSnapshot(email, { orders: finalOrders, ...coreDone, extras });
+        } catch (err) {
+            console.error("Error fetching data:", err);
+            setHistoryLoading(false);
+            setLoading(false);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [applyExtras]);
+
     useEffect(() => {
-        const checkAuthAndFetch = async () => {
+        const start = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) { navigate("/login", { replace: true }); return; }
+            const email = session.user.email?.toLowerCase() || "";
 
-            // ✅ Role check - only admin users allowed
+            // Only the CEO may be here.
             const { data: userRecord } = await supabase
                 .from("salesperson")
-                .select("role")
-                .eq("email", session.user.email?.toLowerCase())
+                .select("role, saleperson")
+                .eq("email", email)
                 .single();
-
             if (!userRecord || userRecord.role !== "ceo") {
                 await supabase.auth.signOut();
                 navigate("/login", { replace: true });
                 return;
             }
+            setCurrentUserEmail(email);
+            setUserName(userRecord.saleperson || "");
+            loadAssignments().then(setAssignments);
 
-            setCurrentUserEmail(session.user.email?.toLowerCase() || "");
-            fetchAllData();
+            const snap = await readSnapshot(email);
+            if (snap?.orders?.length) {
+                setOrders(snap.orders);
+                setProducts(snap.products || []);
+                setSalespersonTable(snap.people || []);
+                setVendors(snap.vendors || []);
+                if (snap.extras) applyExtras(snap.extras);
+                setSyncedAt(new Date(snap.savedAt));
+                setLoading(false);
+            }
+            refresh(email, !!snap?.orders?.length);
         };
-        checkAuthAndFetch();
-    }, [navigate]);
+        start();
+    }, [navigate, refresh, applyExtras]);
 
-    const fetchAllData = async () => {
-        setLoading(true);
-        try {
-            const [ordersRes, productsRes, spRes, vendorsRes, consRes, qcRes] = await Promise.all([
-                fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                // products_live, not products: reserved-but-unfilled barcode rows
-                // (name IS NULL) have NULL inventory, which reads as 0 and would
-                // inflate the out-of-stock count. See v2/74_reserve_sku_rows.sql.
-                fetchAllRows("products_live", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
-                supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
-                supabase.from("vendors").select("*"),
-                supabase.from("consignment_inventory").select("*"),
-                // QC failures come from qc_records (written by record_qc_result).
-                // orders.qc_fail_reason is a dead column nothing writes, so the
-                // old count was permanently 0 — and rendered GREEN, reading as
-                // "no QC failures" to the CEO.
-                fetchQcRecords({ paged: true }),
-            ]);
-            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
-            if (productsRes.data) setProducts(productsRes.data);
-            if (spRes.data) setSalespersonTable(spRes.data);
-            if (vendorsRes.data) setVendors(vendorsRes.data);
-            if (consRes.data) setConsignmentInventory(consRes.data);
-            setQcRecords(qcRes || []);
-            setQcLoaded(true);
-        } catch (err) { console.error("Error fetching data:", err); }
-        finally { setLoading(false); }
-    };
-
+    // Let the tree finish a moment of its story, but never hold the page back.
+    const firstPaintDone = !loading;
     useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpenDropdown(null);
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+        if (welcome !== "on" || !firstPaintDone) return undefined;
+        const timer = setTimeout(() => {
+            setWelcome("fading");
+            try { sessionStorage.setItem("sb-ceo-welcomed", "1"); } catch { /* private window */ }
+            setTimeout(() => setWelcome("off"), 600);
+        }, 3200);
+        return () => clearTimeout(timer);
+    }, [welcome, firstPaintDone]);
 
-    const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+    const handleLogout = async () => { await clearSnapshots(); await supabase.auth.signOut(); navigate("/login"); };
 
     // Helper functions
-    const getPaymentStatus = (order) => {
-        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-        // total_paid = everything received. advance_payment is the order-time
-        // advance only and would under-report any balance collected later.
-        const paid = Number(order.total_paid ?? order.advance_payment) || 0;
-        if (paid >= total) return "paid";
-        if (paid > 0) return "partial";
-        return "unpaid";
-    };
-
-    const getPriority = (order) => {
-        if (order.is_urgent || order.order_flag === "Urgent" || order.alteration_status === "upcoming_occasion") return "urgent";
-        return "normal";
-    };
-
-    const getOrderType = (order) => {
-        if (order.is_alteration) return "alteration";
-        const item = order.items?.[0];
-        if (item?.order_type === "Custom" || item?.payment_order_type === "Custom") return "custom";
-        return "standard";
-    };
-
     const isLxrtsOrder = (order) => order.items?.[0]?.sync_enabled === true;
-    const isLxrtsProduct = (product) => product.sync_enabled === true;
 
     // Channel classifier: LXRTS → Website, B2B → B2B, store → store name
     // Channel = the shared prefix-based classifier (LXRTS is a TYPE, not a
     // channel — such orders report under the channel they were placed in).
-    const getOrderChannel = (order) => getOrderChannelLabel(order);
+    const getOrderChannel = getOrderChannelLabel;
 
     // Get actual person name (not store name) for salesperson fields
     const getOrderSalesperson = (order) => {
@@ -417,26 +286,6 @@ export default function CEODashboard() {
     const isPersonName = (name) => {
         if (!name || name === "-" || name === "Unknown") return false;
         return !knownStoreNames.has(name);
-    };
-
-    const getLxrtsTotalInventory = (productId) => {
-        const variants = variantInventory[productId];
-        if (!variants) return 0;
-        return Object.values(variants).reduce((sum, qty) => sum + (qty || 0), 0);
-    };
-
-    const getProductSizes = (productId) => {
-        const variants = variantInventory[productId];
-        if (!variants) return [];
-        const knownSizes = SIZE_ORDER.filter((s) => variants[s] !== undefined);
-        const extraSizes = Object.keys(variants).filter((s) => !SIZE_ORDER.includes(s)).sort();
-        return [...knownSizes, ...extraSizes];
-    };
-
-    const getInventoryClass = (count) => {
-        if (count === 0) return "admin-stock-out";
-        if (count < 5) return "admin-stock-low";
-        return "admin-stock-ok";
     };
 
     const calculateGrowth = (current, previous) => {
@@ -493,28 +342,6 @@ export default function CEODashboard() {
         };
     }, [orders, inPeriod, periodRangeValue, comparison]);
 
-    const inventoryStats = useMemo(() => {
-        const total = products.length;
-        const onShopify = products.filter(p => p.shopify_product_id).length;
-        let lowStock = 0, outOfStock = 0, totalInventory = 0;
-
-        products.forEach((p) => {
-            if (p.sync_enabled) {
-                const totalQty = getLxrtsTotalInventory(p.id);
-                totalInventory += totalQty;
-                if (totalQty === 0) outOfStock++;
-                else if (totalQty < 5) lowStock++;
-            } else {
-                const qty = p.inventory || 0;
-                totalInventory += qty;
-                if (qty === 0) outOfStock++;
-                else if (qty < 5) lowStock++;
-            }
-        });
-        return { total, onShopify, lowStock, outOfStock, totalInventory };
-    }, [products, variantInventory]);
-
-    // Analytics Data
     const analyticsData = useMemo(() => {
         // Sales only: the store and salesperson blocks below carry per-row
         // counts alongside their sales figures.
@@ -526,7 +353,7 @@ export default function CEODashboard() {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += itemFinalAmount(order, item);
+                productSales[name].sales += itemShare(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
@@ -540,7 +367,7 @@ export default function CEODashboard() {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name || "Unknown";
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = itemFinalAmount(order, item);
+                const itemSales = itemShare(order, item);
 
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
@@ -619,393 +446,8 @@ export default function CEODashboard() {
         };
     }, [orders, inAnalyticsPeriod]);
 
-    const recentOrders = useMemo(() => orders.filter(o => !isLxrtsOrder(o)).slice(0, recentOrdersCount), [orders, recentOrdersCount]);
 
     // Inventory
-    const filteredProducts = useMemo(() => {
-        let result = products;
-        // Search filter
-        if (inventorySearch) {
-            const q = inventorySearch.toLowerCase();
-            result = result.filter(p => p.name?.toLowerCase().includes(q) || p.sku_id?.toLowerCase().includes(q));
-        }
-        // Type filter
-        if (inventoryTypeFilter === "lxrts") result = result.filter(p => p.sync_enabled);
-        else if (inventoryTypeFilter === "regular") result = result.filter(p => !p.sync_enabled);
-        // Stock level filter
-        if (inventoryStockFilter === "out_of_stock") result = result.filter(p => {
-            const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
-            return inv === 0;
-        });
-        else if (inventoryStockFilter === "low_stock") result = result.filter(p => {
-            const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
-            return inv > 0 && inv < 5;
-        });
-        else if (inventoryStockFilter === "in_stock") result = result.filter(p => {
-            const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
-            return inv >= 5;
-        });
-        return result;
-    }, [products, inventorySearch, inventoryTypeFilter, inventoryStockFilter, variantInventory]);
-
-    const inventoryTotalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
-    const currentProducts = useMemo(() => {
-        const start = (inventoryPage - 1) * ITEMS_PER_PAGE;
-        return filteredProducts.slice(start, start + ITEMS_PER_PAGE);
-    }, [filteredProducts, inventoryPage]);
-
-    const handleInventoryUpdate = async (productId) => {
-        if (editInventoryValue === "" || isNaN(Number(editInventoryValue))) {
-            showPopup({ title: "Invalid", message: "Please enter a valid number.", type: "warning" });
-            return;
-        }
-        setSavingInventory(true);
-        const { error } = await supabase.from("products").update({ inventory: Number(editInventoryValue) }).eq("id", productId);
-        if (error) showPopup({ title: "Error", message: "Failed to update inventory.", type: "error" });
-        else {
-            setProducts(prev => prev.map(p => p.id === productId ? { ...p, inventory: Number(editInventoryValue) } : p));
-            setEditingProductId(null);
-            setEditInventoryValue("");
-        }
-        setSavingInventory(false);
-    };
-
-    // LXRTS functions
-    const fetchAllLxrtsInventory = async (lxrtsProducts) => {
-        setLxrtsSyncLoading(true);
-        const inventoryMap = {};
-
-        await Promise.allSettled(lxrtsProducts.map(async (product) => {
-            try {
-                const response = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-inventory`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` },
-                    body: JSON.stringify({ action: "fetch", product_id: product.id }),
-                });
-                const result = await response.json();
-                if (result.success && result.inventory) inventoryMap[product.id] = result.inventory;
-                else {
-                    const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
-                    if (variants) { const map = {}; variants.forEach((v) => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
-                }
-            } catch (err) {
-                console.error(`Error syncing ${product.name}:`, err);
-                const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
-                if (variants) { const map = {}; variants.forEach((v) => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
-            }
-        }));
-        setVariantInventory(inventoryMap);
-        setLxrtsSyncLoading(false);
-    };
-
-    const handleExpandProduct = (product) => setExpandedProduct(expandedProduct === product.id ? null : product.id);
-
-    const handleVariantInventoryUpdate = async (productId, size) => {
-        const newQty = Number(variantEditValue);
-        if (variantEditValue === "" || isNaN(newQty) || newQty < 0) return;
-        setSavingVariant(true);
-        try {
-            const oldQty = variantInventory[productId]?.[size] || 0;
-            const { error: updateError } = await supabase.from("product_variants").update({ inventory: newQty }).eq("product_id", productId).eq("size", size);
-            if (updateError) throw new Error("Failed to update Supabase");
-            const delta = oldQty - newQty;
-            if (delta !== 0) {
-                try {
-                    const response = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-inventory`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` },
-                        body: JSON.stringify({ action: "reduce", product_id: productId, size, quantity: delta }),
-                    });
-                    const result = await response.json();
-                    if (!result.success) console.error("Shopify sync failed:", result.error);
-                } catch (shopifyErr) { console.error("Shopify sync error:", shopifyErr); }
-            }
-            setVariantInventory((prev) => ({ ...prev, [productId]: { ...prev[productId], [size]: newQty } }));
-        } catch (err) { console.error("Variant update error:", err); }
-        setEditingVariant(null);
-        setVariantEditValue("");
-        setSavingVariant(false);
-    };
-
-    // Orders
-    const salespersons = useMemo(() => {
-        const spSet = new Set();
-        orders.forEach(o => {
-            const sp = getOrderSalesperson(o);
-            if (sp && isPersonName(sp)) spSet.add(sp);
-        });
-        return Array.from(spSet).sort();
-    }, [orders, knownStoreNames]);
-
-    // "Unfulfilled" means still owed to the customer. Excluding only
-    // completed/delivered/cancelled left returned, revoked and refunded orders
-    // sitting in the queue as if they were outstanding work.
-    const matchesStatusTab = (o, tab) => {
-        const status = (o.status || "").toLowerCase();
-        switch (tab) {
-            case "unfulfilled":
-                return status !== "completed" && status !== "delivered" && isRevenueOrder(o);
-            case "prepared": return status === "completed";
-            case "delivered": return status === "delivered";
-            case "cancelled": return !isRevenueOrder(o);
-            default: return true;
-        }
-    };
-
-    const filteredByStatus = useMemo(
-        () => orders.filter(o => !isLxrtsOrder(o) && matchesStatusTab(o, statusTab)),
-        [orders, statusTab]
-    );
-
-    // Every filter EXCEPT the status tab. Shared by the list and the tab counts,
-    // so a badge can never contradict the rows underneath it.
-    const passesNonStatusFilters = (order) => {
-        if (isLxrtsOrder(order)) return false;
-        if (orderSearch.trim()) {
-            const q = orderSearch.trim().toLowerCase();
-            const hit = orderSearchField === "product_name"
-                ? (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
-                : orderSearchField === "client_name"
-                    ? order.delivery_name?.toLowerCase().includes(q)
-                    : orderSearchField === "phone"
-                        ? (order.delivery_phone || "").includes(q)
-                        : orderSearchField === "salesperson"
-                            ? (getOrderSalesperson(order) || "").toLowerCase().includes(q)
-                            : order.order_no?.toLowerCase().includes(q);
-            if (!hit) return false;
-        }
-        if (ordersPeriodRange && !inOrdersPeriod(order.created_at)) return false;
-        if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-            const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-            if (total < filters.minPrice || total > filters.maxPrice) return false;
-        }
-        if (filters.payment.length > 0 && !filters.payment.includes(getPaymentStatus(order))) return false;
-        if (filters.priority.length > 0 && !filters.priority.includes(getPriority(order))) return false;
-        if (filters.orderType.length > 0 && !filters.orderType.includes(getOrderType(order))) return false;
-        if (filters.store.length > 0 && !filters.store.includes(order.salesperson_store)) return false;
-        if (filters.salesperson && getOrderSalesperson(order) !== filters.salesperson) return false;
-        return true;
-    };
-
-    const filteredOrders = useMemo(() => {
-        let result = filteredByStatus.filter(passesNonStatusFilters);
-
-        const getOrderNum = (no) => {
-            const clean = (no || "").replace(/-[A-Z]\d*$/, "");
-            const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
-            if (!match) return 0;
-            return parseInt(match[2] + match[1] + match[3]);
-        };
-        result = [...result].sort((a, b) => {
-            switch (sortBy) {
-                case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
-                case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
-                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
-                default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
-            }
-        });
-        return result;
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
-
-    // Counted over the same filtered set the list uses — these used to be
-    // computed over ALL orders, so with a date range or store filter applied the
-    // badges showed totals that no longer matched a single visible row.
-    const orderTabCounts = useMemo(() => {
-        const validOrders = orders.filter(passesNonStatusFilters);
-        return STATUS_TABS.reduce((acc, t) => {
-            acc[t.value] = validOrders.filter(o => matchesStatusTab(o, t.value)).length;
-            return acc;
-        }, {});
-    }, [orders, orderSearch, orderSearchField, filters, ordersPeriodRange, inOrdersPeriod]);
-
-    const ordersTotalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-    const currentOrders = useMemo(() => {
-        const start = (ordersPage - 1) * ITEMS_PER_PAGE;
-        return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
-    }, [filteredOrders, ordersPage]);
-
-    const appliedFilters = useMemo(() => {
-        const chips = [];
-        if (ordersTimeline !== "all") {
-            chips.push({ type: "date", label: periodLabel(ordersTimeline) });
-        }
-        if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `₹${(filters.minPrice / 1000).toFixed(0)}K - ₹${(filters.maxPrice / 1000).toFixed(0)}K` });
-        filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
-        filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
-        filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }));
-        filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
-        if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
-        return chips;
-    }, [filters, ordersTimeline]);
-
-    const removeFilter = (type, value) => {
-        if (type === "date") clearOrdersPeriod();
-        else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
-        else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
-        else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
-    };
-
-    const clearAllFilters = () => {
-        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
-        clearOrdersPeriod();
-    };
-
-    const toggleFilter = (category, value) => setFilters(prev => ({
-        ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value]
-    }));
-
-    const handleExportCSV = () => {
-        if (filteredOrders.length === 0) return;
-        const headers = ["Order No", "Product Name", "Customer Name", "Customer Number", "Customer Email", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Notes", "Order Date", "Delivery Date"];
-        const rows = filteredOrders.map(order => {
-            const item = order.items?.[0] || {};
-            return [
-                order.order_no || "",
-                item.product_name || "",
-                order.delivery_name || "",
-                order.delivery_phone || "",
-                order.delivery_email || order.email || "",
-                item.size || "",
-                order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0,
-                item.top_color?.name || item.color?.name || "",
-                item.bottom_color?.name || "",
-                order.salesperson || "",
-                order.salesperson_store || "",
-                order.status || "",
-                order.notes || order.special_instructions || "",
-                order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
-                order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : "",
-            ].map(v => `"${String(v).replace(/"/g, '""')}"`);
-        });
-        const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `orders_export_${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-    };
-
-    const updateOrderStatus = async (orderId, newStatus) => {
-        setStatusUpdating(orderId);
-        const updateData = { status: newStatus };
-        if (newStatus === "delivered") updateData.delivered_at = new Date().toISOString();
-        const { error } = await supabase.from("orders").update(updateData).eq("id", orderId);
-        if (error) showPopup({ title: "Error", message: "Failed to update status.", type: "error" });
-        else setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updateData } : o));
-        setStatusUpdating(null);
-    };
-
-    // Accounts
-    const accountsLineItems = useMemo(() => {
-        const items = [];
-        const GST_RATE = 0.05;
-        orders.forEach(order => {
-            if (isLxrtsOrder(order)) return;
-            const orderItems = order.items || [];
-            // Discount allocated proportionally across line items by their
-            // GST-inclusive gross — same basis as `gross` so the ratio is unit-free.
-            const orderGrossSum = orderItems.reduce(
-                (s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0
-            );
-            const orderDiscount = Number(order.discount_amount || 0);
-            orderItems.forEach((item, idx) => {
-                const productPrice = Number(item.price || 0);
-                const quantity = Number(item.quantity || 1);
-                // item.price is the GST-inclusive MRP shown on the customer invoice.
-                const grossValue = productPrice * quantity;
-                const discountRatio = orderGrossSum > 0 ? grossValue / orderGrossSum : 0;
-                const productDiscount = Math.min(grossValue, orderDiscount * discountRatio);
-                const invoiceValue = Math.max(0, grossValue - productDiscount);
-                const taxableValue = invoiceValue / (1 + GST_RATE);
-                const gst = invoiceValue - taxableValue;
-
-                items.push({
-                    id: `${order.id}-${idx}`, order_no: order.order_no, order_date: order.created_at,
-                    sa_name: getOrderSalesperson(order) || "-", client_name: order.delivery_name || "-",
-                    product_name: item.product_name || "-",
-                    gross_value: Math.round(grossValue * 100) / 100, discount: Math.round(productDiscount * 100) / 100,
-                    taxable_value: Math.round(taxableValue * 100) / 100, gst: Math.round(gst * 100) / 100,
-                    invoice_value: Math.round(invoiceValue * 100) / 100, quantity,
-                    status: order.status || "order_received", delivery_date: item.delivery_date || order.delivery_date,
-                    store: order.salesperson_store || "-", payment_mode: order.payment_mode || "-",
-                });
-            });
-        });
-        return items;
-    }, [orders]);
-
-    const filteredAccountItems = useMemo(() => {
-        let result = accountsLineItems;
-        if (accountsSearch.trim()) {
-            const q = accountsSearch.toLowerCase();
-            result = result.filter(item => item.order_no?.toLowerCase().includes(q) || item.client_name?.toLowerCase().includes(q) ||
-                item.product_name?.toLowerCase().includes(q) || item.sa_name?.toLowerCase().includes(q));
-        }
-        if (accountsPeriodRange) result = result.filter(item => inAccountsPeriod(item.order_date));
-        if (accountsStatus) result = result.filter(item => (item.status === "pending" ? "order_received" : item.status) === accountsStatus);
-        if (accountsStore) result = result.filter(item => item.store === accountsStore);
-        if (accountsSA) result = result.filter(item => item.sa_name === accountsSA);
-        return result;
-    }, [accountsLineItems, accountsSearch, accountsPeriodRange, inAccountsPeriod, accountsStatus, accountsStore, accountsSA]);
-
-    // Unique stores and SAs for account filter dropdowns
-    const accountsStoreOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.store).filter(s => s && s !== "-"))].sort(), [accountsLineItems]);
-    const accountsSAOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.sa_name).filter(s => s && s !== "-" && isPersonName(s)))].sort(), [accountsLineItems, knownStoreNames]);
-
-    const accountsTotalPages = Math.ceil(filteredAccountItems.length / 20);
-    const currentAccountItems = useMemo(() => {
-        const start = (accountsPage - 1) * 20;
-        return filteredAccountItems.slice(start, start + 20);
-    }, [filteredAccountItems, accountsPage]);
-
-    const accountsTotals = useMemo(() => ({
-        gross: filteredAccountItems.reduce((sum, i) => sum + i.gross_value, 0),
-        discount: filteredAccountItems.reduce((sum, i) => sum + i.discount, 0),
-        taxable: filteredAccountItems.reduce((sum, i) => sum + i.taxable_value, 0),
-        gst: filteredAccountItems.reduce((sum, i) => sum + i.gst, 0),
-        invoice: filteredAccountItems.reduce((sum, i) => sum + i.invoice_value, 0),
-    }), [filteredAccountItems]);
-
-    // ═══════════════════════════════════════════════════════════
-    // NEW: ENHANCED DASHBOARD STATS (Channel breakdown, AOV)
-    // ═══════════════════════════════════════════════════════════
-    const enhancedDashboardStats = useMemo(() => {
-        // Had no revenue guard at all: cancelled, returned and refunded orders
-        // counted as sales here, so the channel mix and AOV ran ahead of the
-        // Cumulative Sales cards above for the very same period. Sales-only, so
-        // AOV divides by real orders rather than by stock movements too.
-        const validOrders = saleOrdersIn(orders, inPeriod);
-
-        const totalRevenue = periodRevenue(validOrders);
-        const totalOrders = validOrders.length;
-        const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-        const totalItems = validOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
-
-        // Channel breakdown using proper classification
-        const channelMap = {};
-        validOrders.forEach(o => {
-            const ch = getOrderChannel(o);
-            if (!channelMap[ch]) channelMap[ch] = { name: ch, revenue: 0, orders: 0 };
-            channelMap[ch].revenue += orderNetRevenue(o);
-            channelMap[ch].orders += 1;
-        });
-        const channelBreakdown = Object.values(channelMap).sort((a, b) => b.revenue - a.revenue);
-
-        // Revenue mix %
-        const revenueMix = channelBreakdown.map(ch => ({
-            ...ch,
-            percent: totalRevenue > 0 ? ((ch.revenue / totalRevenue) * 100).toFixed(1) : 0
-        }));
-
-        return { avgOrderValue, totalItems, channelBreakdown, revenueMix };
-    }, [orders, inPeriod]);
-
-    // ═══════════════════════════════════════════════════════════
-    // NEW: ORDER VALUE TREND (Daily line chart)
-    // ═══════════════════════════════════════════════════════════
     const orderValueTrend = useMemo(() => {
         // Sales only — this chart's whole point is the daily AOV line, which a
         // 0-value stock movement would drag down on whatever day it landed.
@@ -1039,7 +481,7 @@ export default function CEODashboard() {
             (order.items || []).forEach(item => {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, sales: 0, count: 0 };
-                productSales[name].sales += itemFinalAmount(order, item);
+                productSales[name].sales += itemShare(order, item);
                 productSales[name].count += Number(item.quantity || 1);
             });
         });
@@ -1052,7 +494,7 @@ export default function CEODashboard() {
             (order.items || []).forEach(item => {
                 const topColor = item.top_color?.name || item.color?.name;
                 const bottomColor = item.bottom_color?.name;
-                const itemSales = itemFinalAmount(order, item);
+                const itemSales = itemShare(order, item);
                 if (topColor && topColor !== "Unknown") {
                     if (!colorSales[topColor]) colorSales[topColor] = { name: topColor, sales: 0, count: 0 };
                     colorSales[topColor].sales += bottomColor ? itemSales / 2 : itemSales;
@@ -1264,7 +706,7 @@ export default function CEODashboard() {
                 const name = item.product_name || "Unknown";
                 if (!productSales[name]) productSales[name] = { name, qty: 0, revenue: 0 };
                 productSales[name].qty += Number(item.quantity || 1);
-                productSales[name].revenue += itemFinalAmount(o, item);
+                productSales[name].revenue += itemShare(o, item);
             });
         });
         const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
@@ -1299,33 +741,6 @@ export default function CEODashboard() {
     // ═══════════════════════════════════════════════════════════
     // NEW: ENHANCED INVENTORY (Delayed deliveries)
     // ═══════════════════════════════════════════════════════════
-    const enhancedInventoryStats = useMemo(() => {
-        const now = new Date();
-        const activeOrders = orders.filter(o =>
-            !isLxrtsOrder(o) &&
-            o.status !== "delivered" && o.status !== "completed" && o.status !== "cancelled"
-        );
-        const delayedDeliveries = activeOrders.filter(o => {
-            if (!o.delivery_date) return false;
-            return new Date(o.delivery_date) < now;
-        });
-
-        // Store-wise product count
-        const storeProducts = {};
-        products.forEach(p => {
-            const store = p.store || "All Stores";
-            if (!storeProducts[store]) storeProducts[store] = { name: store, count: 0, totalInventory: 0 };
-            storeProducts[store].count += 1;
-            storeProducts[store].totalInventory += Number(p.inventory || 0);
-        });
-
-        return {
-            delayedCount: delayedDeliveries.length,
-            delayedOrders: delayedDeliveries.slice(0, 20),
-            storeProducts: Object.values(storeProducts).sort((a, b) => b.totalInventory - a.totalInventory),
-        };
-    }, [orders, products]);
-
     // ═══════════════════════════════════════════════════════════
     // NEW: FINANCIAL STATS (Discounts by channel, salesperson)
     // ═══════════════════════════════════════════════════════════
@@ -1397,15 +812,6 @@ export default function CEODashboard() {
 
         return { monthlyData, storeGrowthList };
     }, [orders, inPeriod, periodRangeValue]);
-
-    const handleGeneratePdf = async (order, type = "customer") => {
-        setPdfLoading(order.id);
-        try {
-            if (type === "warehouse") await downloadWarehousePdf(order, null, true);
-            else await downloadCustomerPdf(order);
-        } catch (error) { console.error("PDF generation failed:", error); }
-        finally { setPdfLoading(null); }
-    };
 
     // ═══════════════════════════════════════════════════════════
     // CEO: STORE PERFORMANCE
@@ -1505,7 +911,7 @@ export default function CEODashboard() {
         // (comms orders are filtered out of `orders`). null until loaded so the
         // card can show "—" rather than a green 0.
         const orderIds = new Set(orders.map(o => o.id));
-        const qc = qcLoaded ? summariseQcFails(qcRecords.filter(r => orderIds.has(r.order_id))) : null;
+        const qc = qcLoaded ? summariseQcFails(qcRecords.filter(r => orderIds.has(r.order_id) && inPeriod(r.created_at))) : null;
 
         // In Production / backlog from the real warehouse_stage signal.
         // orders.status "in_production" and production_status are dead — this
@@ -1516,13 +922,13 @@ export default function CEODashboard() {
         return {
             delayedCount: delayed.length,
             qcFailCount: qc ? qc.fail : null,
-            qcFailRate: qc ? qc.ratePct.toFixed(1) : null,
+            qcFailRate: qc && qc.inspected > 0 ? qc.ratePct.toFixed(1) : null,
             qcInspected: qc ? qc.inspected : 0,
             backlogCount: stats.orderReceived,
             delayed: delayed.slice(0, 15),
             inProductionCount: stats.inProd,
         };
-    }, [orders, qcRecords, qcLoaded]);
+    }, [orders, qcRecords, qcLoaded, inPeriod]);
 
     // ═══════════════════════════════════════════════════════════
     // CEO: CONSIGNMENT OVERVIEW
@@ -1535,1611 +941,445 @@ export default function CEODashboard() {
     }, [consignmentInventory]);
 
     // Reset pages
-    useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy, ordersPeriodRange]);
-    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsPeriodRange, accountsStatus, accountsStore, accountsSA]);
     useEffect(() => { setClientsPage(1); }, [clientsSearch, clientsSortBy, clientsStoreFilter]);
     useEffect(() => { setB2bPage(1); }, [b2bSearch]);
 
-    useEffect(() => {
-        if (activeTab === "inventory" || activeTab === "brand_performance") {
-            const lxrtsProducts = products.filter((p) => p.sync_enabled);
-            if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
-        }
-    }, [activeTab, products]);
 
 
-    if (loading) {
-        return (
-            <div className="admin-page">
-                <div className="admin-loading">
-                    <div className="admin-spinner"></div>
-                    <p>Loading CEO Dashboard...</p>
-                </div>
-            </div>
-        );
-    }
+    // ═══ The dashboard's one brief for the chosen period ═══
+    const comparisonRange = comparison === "none" ? null : comparisonPeriodRange(periodRangeValue, comparison);
+    const brief = useMemo(() => buildBrief({
+        orders, products, inPeriod, previousRange: comparisonRange, channelOf: getOrderChannelLabel,
+    }), [orders, products, inPeriod, periodRangeValue, comparison]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const allSales = useMemo(() => orders.filter(isSaleOrder), [orders]);
+    const sparkline = useMemo(() => revenueSeries(brief.sales, brief.previous, periodRangeValue),
+        [brief.sales, brief.previous, periodRangeValue]);
+
+    const colourHex = useMemo(() => {
+        const map = {};
+        brief.sales.forEach((o) => (o.items || []).forEach((it) => {
+            [it.top_color, it.bottom_color, it.color].forEach((c) => { if (c?.name && c?.hex) map[c.name] = c.hex; });
+        }));
+        return map;
+    }, [brief.sales]);
+
+    const lapsed = useMemo(() => lapsedVips(allSales), [allSales]);
+    const pulse = useMemo(() => todayPulse(allSales), [allSales]);
+    const book = useMemo(() => orderBook(orders), [orders]);
+    const scopedPayments = useMemo(() => {
+        if (!channelFilter) return payments;
+        const ids = new Set(orders.map((o) => o.id));
+        return payments.filter((p) => ids.has(p.order_id));
+    }, [payments, orders, channelFilter]);
+    const cash = useMemo(() => cashIn(allSales, scopedPayments, inPeriod), [allSales, scopedPayments, inPeriod]);
+    const promise = useMemo(() => deliveryPromise(orders, inPeriod), [orders, inPeriod]);
+    const bands = useMemo(() => priceBands(brief.sales), [brief.sales]);
+    const big = useMemo(() => biggestOrders(brief.sales), [brief.sales]);
+    const cities = useMemo(() => cityBoard(brief.sales), [brief.sales]);
+    const months = useMemo(() => monthlySeries(allSales), [allSales]);
+    const heat = useMemo(() => dayHeat(allSales), [allSales]);
+    const slow = useMemo(() => slowDesigns(products, allSales), [products, allSales]);
+    const stages = useMemo(() => stageBoard(orders), [orders]);
+    const concentration = useMemo(() => clientConcentration(allSales), [allSales]);
+    const birthdays = useMemo(() => birthdaysSoon(profiles, allSales), [profiles, allSales]);
+    const exhibitionRows = useMemo(() => exhibitionBoard(exhibitions, allSales), [exhibitions, allSales]);
+    const peopleByEmail = useMemo(() => Object.fromEntries(salespersonTable.map((s) => [String(s.email || "").toLowerCase(), s])), [salespersonTable]);
+    const walkin = useMemo(() => walkinFunnel(walkins, inPeriod, peopleByEmail), [walkins, inPeriod, peopleByEmail]);
+    const feed = useMemo(() => [...brief.sales.length ? allSales : []].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 7), [allSales, brief.sales.length]);
+
+    const delayedRows = useMemo(() => {
+        const now = Date.now();
+        return orders.filter((o) => isSaleOrder(o) && isOrderStillRunning(o))
+            .filter((o) => o.delivery_date && new Date(o.delivery_date).getTime() < now)
+            .map((o) => ({
+                ...o,
+                channel: getOrderChannelLabel(o),
+                daysLate: Math.floor((now - new Date(o.delivery_date).getTime()) / 864e5),
+            }))
+            .sort((a, b) => b.daysLate - a.daysLate);
+    }, [orders]);
+    const internalLate = useMemo(() => {
+        const now = Date.now();
+        return orders.filter((o) => !isSaleOrder(o) && isOrderStillRunning(o) && o.delivery_date && new Date(o.delivery_date).getTime() < now).length;
+    }, [orders]);
+    const delayedValue = useMemo(() => delayedRows.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0), [delayedRows]);
+
+    // Each person's target: this month's row, or the most recent one before it.
+    const saProgress = useMemo(() => {
+        const now = new Date();
+        const latest = {};
+        monthlyTargets.forEach((r) => {
+            const e = String(r.salesperson_email || "").toLowerCase();
+            const stamp = r.year * 12 + r.month;
+            if (!latest[e] || stamp > latest[e].stamp) latest[e] = { stamp, amount: Number(r.target_amount) || 0 };
+        });
+        const soldBy = {};
+        allOrders.forEach((o) => {
+            const d = new Date(o.created_at);
+            if (!isSaleOrder(o) || d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) return;
+            const e = String(o.salesperson_email || "").toLowerCase();
+            soldBy[e] = (soldBy[e] || 0) + orderNetRevenue(o);
+        });
+        return salespersonTable
+            .filter((s) => ["salesperson", "sa_services"].includes(s.role))
+            .map((s) => {
+                const e = String(s.email || "").toLowerCase();
+                return { email: e, name: String(s.saleperson || e).trim(), store: s.store_name || "", target: latest[e]?.amount || Number(s.sales_target) || 0, sold: soldBy[e] || 0 };
+            })
+            .filter((r) => r.target > 0)
+            .sort((a, b) => (b.sold / b.target) - (a.sold / a.target));
+    }, [monthlyTargets, salespersonTable, allOrders]);
+
+    const attention = useMemo(() => buildAttention({
+        pendingExhibitions,
+        delayedCount: delayedRows.length,
+        delayedValue,
+        outstanding: brief.outstanding,
+        qcFailRate: opsFlags.qcFailRate != null ? Number(opsFlags.qcFailRate) : null,
+        qcFailCount: opsFlags.qcFailCount || 0,
+        qcInspected: opsFlags.qcInspected || 0,
+        cancellations: brief.aftercare.cancellations,
+        previousCancellations: brief.previousAftercare?.cancellations || null,
+        discountRate: brief.discount.rate,
+        previousDiscountRate: comparisonRange ? brief.previousDiscount.rate : null,
+        b2bBalance: b2bStats.totalB2bBalance,
+        b2bPartnersOwing: b2bStats.advancePending.length,
+    }), [pendingExhibitions, delayedRows, delayedValue, brief, opsFlags, b2bStats]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Against a period with almost no sales, "+90,000%" says nothing. Leave it out.
+    const fairGrowth = comparison !== "none" && brief.previousRevenue > 0 && Math.abs(dashboardStats.revenueGrowth) < 1000 ? dashboardStats.revenueGrowth : null;
+    const health = useMemo(() => healthBoard({
+        growth: fairGrowth,
+        cash: cash.total,
+        revenue: dashboardStats.totalRevenue,
+        onTimeRate: promise.rate,
+        delivered: promise.delivered,
+        qcRate: opsFlags.qcFailRate != null ? Number(opsFlags.qcFailRate) : null,
+        qcInspected: opsFlags.qcInspected,
+        returningShare: brief.mix.newRevenue + brief.mix.returningRevenue > 0 ? brief.mix.returningShare : null,
+        discountRate: brief.count ? brief.discount.rate : null,
+        walkinRate: walkin.rate,
+        walkins: walkin.total,
+    }), [fairGrowth, brief, dashboardStats, cash, promise, opsFlags, walkin]);
+
+    // Vendor figures follow the chosen channel through each piece's order.
+    const scopedMovements = useMemo(() => {
+        if (!channelFilter) return movements;
+        const ids = new Set(orders.map((o) => o.id));
+        return movements.filter((m) => ids.has(m.order_id));
+    }, [movements, orders, channelFilter]);
+    const vendorStats = useMemo(() => vendorBoard(scopedMovements, inPeriod), [scopedMovements, inPeriod]);
+    const dueSoon = useMemo(() => dueSoonBoard(book.dueWeek), [book]);
+    const coach = useMemo(() => targetCoach(saProgress), [saProgress]);
+    const peopleTotal = useMemo(() => salespersonTable.filter((s) => ["salesperson", "sa_services"].includes(s.role)).length, [salespersonTable]);
+    const brief2 = useMemo(() => briefItems({
+        attention,
+        values: {
+            delayed: delayedValue,
+            outstanding: brief.outstanding.old?.value,
+            cancellations: brief.aftercare.cancellations.value,
+            discounts: brief.discount.value,
+            b2b: b2bStats.totalB2bBalance,
+        },
+        dueSoon, vendors: vendorStats, coach, peopleWithTargets: saProgress.length, peopleTotal,
+    }), [attention, delayedValue, brief, b2bStats, dueSoon, vendorStats, coach, saProgress, peopleTotal]);
+
+    const assignItem = useCallback(async (item, person, note) => {
+        const saved = await saveAssignment({
+            item_key: item.key, title: item.title, detail: item.detail, amount: item.value, page: item.tab, note: note || null,
+            assigned_to_email: person.email, assigned_to_name: person.saleperson, created_by: currentUserEmail,
+        });
+        setAssignments((a) => ({ ...a, rows: [saved, ...a.rows] }));
+        // An in-app notice for the person. The assignment stands even if this fails.
+        const sent = await sendNotification(NOTIFICATION_TYPES.CEO_ASSIGNMENT, {
+            metadata: { assigned_by: (userName || "The CEO").replace(/(^|\s)[a-z]/g, (c) => c.toUpperCase()), item_title: item.title, note },
+            extraRecipients: [{ email: person.email, role: person.role }],
+        });
+        return !!sent;
+    }, [currentUserEmail, userName]);
+    const finishAssignment = useCallback(async (row) => {
+        await closeAssignment(row.id, currentUserEmail);
+        setAssignments((a) => ({ ...a, rows: a.rows.filter((r) => r.id !== row.id) }));
+    }, [currentUserEmail]);
+
+    const open = useCallback((layer) => setStack((s) => [...s, layer]), []);
+    const go = useCallback((tab) => {
+        setActiveTab(tab);
+        setStack([]);
+        setNavOpen(false);
+        scrollerRef.current?.scrollTo(0, 0);
+    }, [setActiveTab]);
+    const personOf = useCallback((o) => getOrderSalesperson(o), []); // eslint-disable-line react-hooks/exhaustive-deps
+    const isPerson = useCallback((n) => isPersonName(n), [knownStoreNames]); // eslint-disable-line react-hooks/exhaustive-deps
+    const showPeriodPicker = ["home", "revenue", "store_performance", "products_style", "client_insights", "b2b_vendor", "cost_expenditure", "targets_growth", "outstanding", "ops_flags", "vendors"].includes(activeTab);
+    const reloadExhibitions = useCallback(async () => {
+        const rows = await fetchAllExhibitions();
+        setExhibitions(rows || []);
+        setPendingExhibitions((rows || []).filter((e) => e.status === "pending_approval").length);
+    }, []);
+
+    const highlights = useMemo(() => buildHighlights({
+        topChannel: brief.movers[0] || null,
+        topProduct: brief.board.top[0] || null,
+        risingProduct: brief.board.rising[0] || null,
+        topSa: storePerformanceStats.saBreakdown[0] || null,
+        clients: brief.mix,
+        bestDay: brief.bestDay,
+        topColour: analyticsData.topColors[0] || null,
+    }).map((h) => ({
+        ...h,
+        open: {
+            channel: () => open({ type: "channel", name: brief.movers[0]?.name }),
+            product: () => open({ type: "design", name: brief.board.top[0]?.name }),
+            rising: () => open({ type: "design", name: brief.board.rising[0]?.name }),
+            sa: () => open({ type: "person", name: storePerformanceStats.saBreakdown[0]?.name }),
+            clients: () => go("client_insights"),
+            day: () => go("revenue"),
+            colour: () => go("products_style"),
+        }[h.id] || (() => go("revenue")),
+    })), [brief, storePerformanceStats, analyticsData, open, go]);
+
+    const periodName = periodLabel(periodTimeline);
+    // Average Order Value is the Total Sales shown, divided by the orders shown.
+    const averageOrder = brief.count ? dashboardStats.totalRevenue / brief.count : 0;
+    const averageOrderGrowth = fairGrowth != null && brief.countGrowth != null && brief.countGrowth > -100
+        ? (((1 + fairGrowth / 100) / (1 + brief.countGrowth / 100)) - 1) * 100 : null;
+    const compareName = COMPARISON_OPTIONS.find((c) => c.value === comparison)?.label || "";
+
+    const NAV = [
+        { group: "", items: [{ id: "home", label: "Home", icon: "overview", tag: attention.filter((a) => a.tone === "crit").length }] },
+        { group: "Money", items: [
+            { id: "revenue", label: "Sales & Revenue", icon: "inr" },
+            { id: "outstanding", label: "Cash & Collections", icon: "alert" },
+            { id: "cost_expenditure", label: "Discounts & Returns", icon: "sale" },
+            { id: "accounts", label: "Accounts", icon: "doc" },
+        ] },
+        { group: "Business", items: [
+            { id: "store_performance", label: "Stores & Team", icon: "pin" },
+            { id: "products_style", label: "Designs", icon: "products" },
+            { id: "client_insights", label: "Clients", icon: "clients" },
+            { id: "b2b_vendor", label: "B2B Partners", icon: "transfer" },
+            { id: "exhibition_approvals", label: "Exhibitions", icon: "receive", tag: pendingExhibitions },
+            { id: "targets_growth", label: "Targets & Growth", icon: "trend" },
+        ] },
+        { group: "Operations", items: [
+            { id: "ops_flags", label: "Production", icon: "integrity" },
+            { id: "vendors", label: "Vendors", icon: "warehouse" },
+            { id: "orders", label: "Orders", icon: "orders" },
+            { id: "inventory", label: "Stock", icon: "stock" },
+        ] },
+    ];
+    const pages = NAV.flatMap((g) => g.items);
+
+    const storesTarget = saProgress.reduce((s, r) => s + r.target, 0);
+    const storesSold = saProgress.reduce((s, r) => s + r.sold, 0);
+
+    const ctx = {
+        vendors: vendorStats, dueSoon, coach, peopleTotal, briefList: brief2, assignments, assignItem, finishAssignment, people: salespersonTable,
+        go, open, navigate, userName, startOnCancellations: tabParam === "cancellations", brief, attention, highlights, periodName, sparkline, inPeriod, periodRangeValue,
+        isThisMonth: periodTimeline === "month",
+        trendData: sparkline,
+        sentence: headline({ revenue: dashboardStats.totalRevenue, growth: fairGrowth, periodName, topChannel: brief.movers[0], pace: brief.pace, isThisMonth: periodTimeline === "month" }),
+        dash: dashboardStats,
+        aovTrend: orderValueTrend,
+        analytics: analyticsData,
+        enhanced: enhancedAnalytics,
+        colourHex,
+        store: storePerformanceStats,
+        targets: targetsData,
+        fin: financialStats,
+        ops: opsFlags,
+        consignment: consignmentStats,
+        clients: clientAnalytics,
+        clientsUi: {
+            search: clientsSearch, setSearch: setClientsSearch, page: clientsPage, setPage: setClientsPage,
+            sort: clientsSortBy, setSort: setClientsSortBy, store: clientsStoreFilter, setStore: setClientsStoreFilter,
+        },
+        b2b: b2bStats,
+        b2bUi: { search: b2bSearch, setSearch: setB2bSearch, page: b2bPage, setPage: setB2bPage, merchandiser: b2bMerchandiserFilter, setMerchandiser: setB2bMerchandiserFilter },
+        lapsed, saProgress, delayedRows, delayedValue, internalLate, averageOrder, averageOrderGrowth, fairGrowth, pulse, book, cash, health, feed, birthdays, bands, big, months, heat, slow, stages, cities, concentration, promise, walkin,
+        allOrders: orders, orders, allSales, products, setOrders, setProducts, variants, setVariants, showPopup,
+        channelOf: getOrderChannelLabel, personOf, isPerson,
+        partnerOf: (o) => vendors.find((v) => v.id === o.vendor_id)?.store_brand_name || o.delivery_name || "Unknown",
+        storeOrders: (name) => brief.sales.filter((o) => (o.salesperson_store || "Other") === name),
+        exhibitionRows, reloadExhibitions, currentUserEmail,
+        targetProgress: storesTarget > 0 ? { target: storesTarget, stores: storesSold } : null,
+        ago: (ts) => {
+            const mins = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 6e4));
+            if (mins < 60) return `${mins || 1} min ago`;
+            if (mins < 24 * 60) return `${Math.round(mins / 60)} hours ago`;
+            const days = Math.round(mins / 1440);
+            return days === 1 ? "Yesterday" : `${days} days ago`;
+        },
+        openDay: (key) => {
+            const list = allSales.filter((o) => dateKey(o.created_at) === key);
+            open({ type: "orders", title: new Date(`${key}T12:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }), sub: "Sales on this day", orders: list });
+        },
+        openMonth: (m) => {
+            if (!m?.start) return;
+            const list = allSales.filter((o) => {
+                const d = new Date(o.created_at);
+                return d.getFullYear() === m.start.getFullYear() && d.getMonth() === m.start.getMonth();
+            });
+            open({ type: "orders", title: m.name, sub: "Sales in this month", orders: list });
+        },
+    };
+
+    const navItem = (item) => (
+        <button key={item.id} type="button" className="ceo-nav-item" aria-current={activeTab === item.id ? "page" : undefined} onClick={() => go(item.id)}>
+            {item.icon === "clients" ? <ClientsIcon /> : <Icon name={item.icon} />}{item.label}
+            {item.tag > 0 && <span className="ceo-nav-tag">{item.tag}</span>}
+        </button>
+    );
+    const shortName = (userName || "Sheetal").trim().split(/\s+/)[0];
+    const hour = new Date().getHours();
+    const welcomeLine = hour < 5 ? "Burning the midnight oil. Your house, at a glance."
+        : hour < 12 ? "Your house is awake. Here is how the day is shaping up."
+        : hour < 17 ? "Here is how your house is doing today."
+            : "Here is how your house did today.";
 
     return (
-        <div className="admin-page">
-            {PopupComponent}
-
-            {/* HEADER */}
-            <DashboardHeader
-                title="CEO Dashboard"
-                onHome={() => setActiveTab("brand_performance")}
-                onMenuToggle={() => setShowSidebar(!showSidebar)}
-                userEmail={currentUserEmail}
-                onLogout={handleLogout}
-            />
-
-            <div className="admin-layout">
-                {/* SIDEBAR */}
-                <aside className={`admin-sidebar ${showSidebar ? "open" : ""}`}>
-                    <nav className="admin-nav">
-                        <span className="nav-section-label">Dashboard</span>
-                        <button className={`admin-nav-item ${activeTab === "brand_performance" ? "active" : ""}`} onClick={() => { setActiveTab("brand_performance"); setShowSidebar(false); }}>Brand Performance</button>
-                        <button className={`admin-nav-item ${activeTab === "store_performance" ? "active" : ""}`} onClick={() => { setActiveTab("store_performance"); setShowSidebar(false); }}>Store Performance</button>
-                        <button className={`admin-nav-item ${activeTab === "revenue" ? "active" : ""}`} onClick={() => { setActiveTab("revenue"); setShowSidebar(false); }}>Revenue & Drivers</button>
-                        <button className={`admin-nav-item ${activeTab === "products_style" ? "active" : ""}`} onClick={() => { setActiveTab("products_style"); setShowSidebar(false); }}>Products & Style</button>
-                        <button className={`admin-nav-item ${activeTab === "client_insights" ? "active" : ""}`} onClick={() => { setActiveTab("client_insights"); setShowSidebar(false); }}>Client Insights</button>
-                        <button className={`admin-nav-item ${activeTab === "b2b_vendor" ? "active" : ""}`} onClick={() => { setActiveTab("b2b_vendor"); setShowSidebar(false); }}>B2B Performance</button>
-                        <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
-                        <button className={`admin-nav-item ${activeTab === "cost_expenditure" ? "active" : ""}`} onClick={() => { setActiveTab("cost_expenditure"); setShowSidebar(false); }}>Cost & Expenditure</button>
-                        <button className={`admin-nav-item ${activeTab === "targets_growth" ? "active" : ""}`} onClick={() => { setActiveTab("targets_growth"); setShowSidebar(false); }}>Targets & Growth</button>
-                        <button className={`admin-nav-item ${activeTab === "ops_flags" ? "active" : ""}`} onClick={() => { setActiveTab("ops_flags"); setShowSidebar(false); }}>Operational Flags</button>
-                        <button className={`admin-nav-item ${activeTab === "cancellations" ? "active" : ""}`} onClick={() => { setActiveTab("cancellations"); setShowSidebar(false); }}>Cancellations</button>
-                        <button className={`admin-nav-item ${activeTab === "outstanding" ? "active" : ""}`} onClick={() => { setActiveTab("outstanding"); setShowSidebar(false); }}>Outstanding</button>
-                        <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
-                        <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
-                        <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
-                        <button className={`admin-nav-item ${activeTab === "exhibition_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("exhibition_approvals"); setShowSidebar(false); }}>Exhibition Approvals</button>
-                        {/* <button className="admin-nav-item logout" onClick={handleLogout}>Logout</button> */}
-                    </nav>
-                </aside>
-
-                {/* MAIN CONTENT */}
-                <main className="admin-content">
-
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 1: OVERALL BRAND PERFORMANCE */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "brand_performance" && (
-                        <div className="admin-dashboard-tab">
-                            {/* Clean filter bar */}
-                            <div className="cmo-tab-header">
-                                <h2 className="admin-section-title">Overall Brand Performance</h2>
-                                <PeriodFilter {...periodProps} variant="pills">
-                                    <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
-                                        {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                    </select>
-                                </PeriodFilter>
-                            </div>
-
-                            {/* 1. Cumulative Sales (website + stores + B2B + exhibitions) */}
-                            <h3 className="admin-subsection-title">Cumulative Sales</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Revenue</span>
-                                    <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue)}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Net SB Revenue</span>
-                                    <span className="stat-value">₹{formatIndianNumber(Math.round(dashboardStats.netSbRev))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Orders</span>
-                                    <span className="stat-value">{formatIndianNumber(dashboardStats.totalOrders)}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.ordersGrowth} />}
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Items Sold</span>
-                                    <span className="stat-value">{formatIndianNumber(enhancedDashboardStats.totalItems)}</span>
-                                </div>
-                            </div>
-
-                            {/* Channel breakdown */}
-                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Sales by Channel</h3>
-                                    {enhancedDashboardStats.channelBreakdown.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <PieChart>
-                                                <Pie data={enhancedDashboardStats.channelBreakdown} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="revenue"
-                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
-                                                    {enhancedDashboardStats.channelBreakdown.map((_, i) => (
-                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip content={<ChartTooltip />} />
-                                                <Legend verticalAlign="bottom" height={36} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Channel Revenue Breakdown</h3>
-                                    {enhancedDashboardStats.revenueMix.length > 0 ? (
-                                        <div className="revenue-mix-list">
-                                            {enhancedDashboardStats.revenueMix.map((ch, i) => (
-                                                <div key={i} className="revenue-mix-row">
-                                                    <div className="revenue-mix-info">
-                                                        <span className="revenue-mix-dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}></span>
-                                                        <span className="revenue-mix-name">{ch.name}</span>
-                                                    </div>
-                                                    <div className="revenue-mix-bar-wrap">
-                                                        <div className="revenue-mix-bar" style={{ width: `${ch.percent}%`, background: PIE_COLORS[i % PIE_COLORS.length] }}></div>
-                                                    </div>
-                                                    <span className="revenue-mix-val">{ch.percent}%</span>
-                                                    <span className="revenue-mix-amt">₹{formatIndianNumber(Math.round(ch.revenue))}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                            </div>
-
-                            {/* 2. Cumulative Refund */}
-                            <h3 className="admin-subsection-title">Cumulative Refund</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refund Value</span>
-                                    <span className="stat-value">₹0</span>
-                                    <PlaceholderBadge label="Refund data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refund Quantity</span>
-                                    <span className="stat-value">0</span>
-                                    <PlaceholderBadge label="Refund data pending" />
-                                </div>
-                            </div>
-
-                            {/* 3. Top-performing Products */}
-                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
-                                <h3 className="chart-title">Top-Performing Products (Descending)</h3>
-                                {analyticsData.topProducts.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={400}>
-                                        <BarChart data={analyticsData.topProducts} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
-                                            <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
-                                            <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
-                                                tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
-                                            <Tooltip content={({ active, payload, label }) => {
-                                                if (!active || !payload?.length) return null;
-                                                const item = analyticsData.topProducts.find(p => p.name === label);
-                                                return (
-                                                    <div className="cmo-chart-tooltip">
-                                                        <p className="cmo-chart-tooltip-label">{label}</p>
-                                                        <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                        <p className="cmo-chart-tooltip-row">Qty sold: {item?.count || 0}</p>
-                                                    </div>
-                                                );
-                                            }} />
-                                            <Bar dataKey="sales" radius={[0, 6, 6, 0]} barSize={20}>
-                                                {analyticsData.topProducts.map((_, i) => (
-                                                    <Cell key={i} fill={`rgba(213, 184, 90, ${1 - i * 0.07})`} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : <div className="no-chart-data">No data available</div>}
-                            </div>
-
-                            {/* 4. Top & Bottom Colours — bars use ACTUAL colour */}
-                            <div className="analytics-charts-grid">
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Top Performing Colours</h3>
-                                    {analyticsData.topColors.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={380}>
-                                            <BarChart data={analyticsData.topColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    const item = analyticsData.topColors.find(c => c.name === label);
-                                                    return (
-                                                        <div className="cmo-chart-tooltip">
-                                                            <p className="cmo-chart-tooltip-label">
-                                                                <span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>
-                                                                {label}
-                                                            </p>
-                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                            <p className="cmo-chart-tooltip-row">Orders: {item?.count || 0}</p>
-                                                        </div>
-                                                    );
-                                                }} />
-                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
-                                                    {analyticsData.topColors.map((entry, i) => (
-                                                        <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Bottom Performing Colours</h3>
-                                    {enhancedAnalytics.bottomColors.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={380}>
-                                            <BarChart data={enhancedAnalytics.bottomColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (
-                                                        <div className="cmo-chart-tooltip">
-                                                            <p className="cmo-chart-tooltip-label">
-                                                                <span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>
-                                                                {label}
-                                                            </p>
-                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                        </div>
-                                                    );
-                                                }} />
-                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
-                                                    {enhancedAnalytics.bottomColors.map((entry, i) => (
-                                                        <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                            </div>
-                        </div>
+        <>
+        {PopupComponent}
+        <div className={`ceo${navOpen ? " is-nav-open" : ""}`}>
+            {welcome !== "off" && (
+                <div className={`ceo-welcome${welcome === "fading" ? " is-done" : ""}`} role="status">
+                    <video autoPlay muted playsInline loop poster={Logo} aria-hidden="true">
+                        <source src={LogoVideoWebm} type="video/webm" />
+                        <source src={LogoVideo} type="video/mp4" />
+                    </video>
+                    <div className="ceo-welcome-hello">Welcome back, {shortName}</div>
+                    <p className="ceo-welcome-line">{welcomeLine}</p>
+                    {firstPaintDone && (
+                        <button type="button" className="ceo-welcome-skip" onClick={() => { setWelcome("fading"); setTimeout(() => setWelcome("off"), 600); }}>Go to dashboard</button>
                     )}
+                </div>
+            )}
+            {welcome === "off" && loading && (
+                <div className="ceo-welcome" role="status">
+                    <video autoPlay muted playsInline loop poster={Logo} aria-hidden="true">
+                        <source src={LogoVideoWebm} type="video/webm" />
+                        <source src={LogoVideo} type="video/mp4" />
+                    </video>
+                    <p className="ceo-welcome-state">Bringing your numbers together</p>
+                </div>
+            )}
 
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* CEO: STORE PERFORMANCE */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "store_performance" && (
-                        <div className="admin-dashboard-tab">
-                            <h2 className="admin-section-title">Store Performance</h2>
+            <button type="button" className="ceo-nav-veil" aria-label="Close menu" onClick={() => setNavOpen(false)} />
+            <nav className="ceo-nav" aria-label="CEO dashboard">
+                <button type="button" className="ceo-logo" onClick={() => go("home")} aria-label="Home">
+                    <img src={Logo} alt="Sheetal Batra" />
+                </button>
+                {NAV.map((g) => (
+                    <div className="ceo-nav-group" key={g.group || "home"}>
+                        {g.group && <span className="ceo-label ceo-nav-title">{g.group}</span>}
+                        {g.items.map(navItem)}
+                    </div>
+                ))}
+                <div className="ceo-nav-foot">
+                    <div className="ceo-who">
+                        <span className="ceo-avatar">{(userName || "SB").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")}</span>
+                        <span><b title={userName}>{String(userName || currentUserEmail).replace(/(^|\s)[a-z]/g, (c) => c.toUpperCase())}</b><small>{syncedAt ? `Data updated ${syncedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : "Founder"}</small></span>
+                    </div>
+                    <div className="ceo-foot-actions">
+                        <button type="button" className="ceo-btn" onClick={() => refresh(currentUserEmail, true)} disabled={refreshing}><Icon name="refresh" />{refreshing ? "Updating" : "Refresh"}</button>
+                        <button type="button" className="ceo-btn" onClick={handleLogout}><Icon name="logout" />Log out</button>
+                    </div>
+                </div>
+            </nav>
 
-                            {/* Revenue per store */}
-                            <h3 className="admin-subsection-title">Revenue per Store</h3>
-                            {storePerformanceStats.storeBreakdown.length > 0 ? (
-                                <div className="admin-chart-container">
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={storePerformanceStats.storeBreakdown}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                                            <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `\u20B9${(v / 1000).toFixed(0)}K`} />
-                                            <Tooltip content={<ChartTooltip />} />
-                                            <Bar dataKey="revenue" fill="#d5b85a" name="Revenue" radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            ) : <p className="no-data">No store data</p>}
-
-                            {/* Store-wise order count */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Store-wise Order Count</h3>
-                            <div className="admin-stats-grid">
-                                {storePerformanceStats.storeBreakdown.map(s => (
-                                    <div className="admin-stat-card" key={s.name}><div className="stat-info"><span className="stat-label">{s.name}</span><span className="stat-value">{s.orders} orders</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(s.revenue))} {"\u00B7"} {s.items} items</span></div>
-                                ))}
-                            </div>
-
-                            {/* SA-wise report */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>SA-wise Performance</h3>
-                            <div className="admin-table-wrapper"><div className="admin-table-container"><table className="admin-table">
-                                <thead><tr><th>SA Name</th><th>Store</th><th className="amount">Revenue</th><th>Orders</th><th>Items</th><th className="amount">Discount</th><th className="amount">Avg Order</th></tr></thead>
-                                <tbody>{storePerformanceStats.saBreakdown.length === 0 ? <tr><td colSpan="7" className="no-data">No data</td></tr> :
-                                    storePerformanceStats.saBreakdown.map(sa => (<tr key={sa.name}><td>{sa.name}</td><td>{sa.store}</td><td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.revenue))}</td><td>{sa.orders}</td><td>{sa.items}</td><td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.discount))}</td><td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.orders > 0 ? sa.revenue / sa.orders : 0))}</td></tr>))}</tbody>
-                            </table></div></div>
-
-                            {/* Top-performing days */}
-                            {storePerformanceStats.topDays.length > 0 && (<>
-                                <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Top Performing Days</h3>
-                                <div className="admin-chart-container"><ResponsiveContainer width="100%" height={250}>
-                                    <BarChart data={storePerformanceStats.topDays}><CartesianGrid strokeDasharray="3 3" stroke="#eee" /><XAxis dataKey="name" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} tickFormatter={v => `\u20B9${(v / 1000).toFixed(0)}K`} /><Tooltip content={<ChartTooltip />} /><Bar dataKey="revenue" fill="#d5b85a" name="Revenue" radius={[4, 4, 0, 0]} /></BarChart>
-                                </ResponsiveContainer></div>
-                            </>)}
-
-                            {/* SA-wise issues: refunds/returns/exchanges/cancellations with max SA highlighted */}
-                            {storePerformanceStats.saIssuesList.length > 0 && (<>
-                                <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>SA-wise Returns, Refunds, Exchanges & Cancellations</h3>
-                                {storePerformanceStats.maxIssueSA && <p style={{ fontSize: 13, color: '#c62828', marginBottom: 8 }}>{"\u26A0\uFE0F"} Highest: {storePerformanceStats.maxIssueSA.name} ({storePerformanceStats.maxIssueSA.refunds + storePerformanceStats.maxIssueSA.returns + storePerformanceStats.maxIssueSA.exchanges + storePerformanceStats.maxIssueSA.cancellations} total issues)</p>}
-                                <div className="admin-table-wrapper"><div className="admin-table-container"><table className="admin-table">
-                                    <thead><tr><th>SA</th><th>Refunds</th><th>Returns</th><th>Exchanges</th><th>Cancellations</th><th className="amount">Value</th></tr></thead>
-                                    <tbody>{storePerformanceStats.saIssuesList.map(sa => (<tr key={sa.name} style={{ background: sa === storePerformanceStats.maxIssueSA ? '#fff8e1' : 'transparent' }}><td>{sa.name}</td><td>{sa.refunds}</td><td>{sa.returns}</td><td>{sa.exchanges}</td><td>{sa.cancellations}</td><td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.total))}</td></tr>))}</tbody>
-                                </table></div></div>
-                            </>)}
-                        </div>
+            <main className="ceo-main">
+                <div className="ceo-top">
+                    <button type="button" className="ceo-icon-btn ceo-menu-btn" aria-label="Open menu" onClick={() => setNavOpen(true)}><MenuIcon /></button>
+                    <GlobalSearch
+                        pages={pages}
+                        orders={allOrders}
+                        products={products}
+                        clients={clientAnalytics.sortedClients}
+                        onPage={go}
+                        onOrder={(o) => open({ type: "order", order: o })}
+                        onClient={(c) => open({ type: "client", phone: c.phone })}
+                        onDesign={(p) => open({ type: "design", name: p.name })}
+                    />
+                    {showPeriodPicker && (
+                        <button type="button" className="ceo-view" onClick={() => setViewOpen(true)}>
+                            <CalendarIcon />
+                            <b>{periodName}</b>
+                            <span>{channelFilter || "All channels"} · {comparison === "none" ? "No comparison" : `vs ${compareName.toLowerCase()}`}</span>
+                        </button>
                     )}
+                    <div className="ceo-top-end"><NotificationBell userEmail={currentUserEmail} /></div>
+                </div>
+                {historyLoading && !loading && <div className="ceo-history">Loading older orders. All-time figures will update in a moment.</div>}
 
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 2: REVENUE & BUSINESS DRIVERS */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "revenue" && (
-                        <div className="admin-dashboard-tab">
-                            <div className="cmo-tab-header">
-                                <h2 className="admin-section-title">Revenue & Business Drivers</h2>
-                                <PeriodFilter {...periodProps} variant="pills">
-                                    <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
-                                        {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                    </select>
-                                </PeriodFilter>
-                            </div>
-
-                            {/* 1. Total Revenue (multi-channel) */}
-                            <h3 className="admin-subsection-title">Total Revenue</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Revenue</span>
-                                    <span className="stat-value">₹{formatIndianNumber(dashboardStats.totalRevenue)}</span>
-                                    {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.revenueGrowth} />}
-                                </div>
-                                {enhancedDashboardStats.channelBreakdown.map((ch, i) => (
-                                    <div key={i} className="admin-stat-card overview-card">
-                                        <span className="stat-label">{ch.name}</span>
-                                        <span className="stat-value">₹{formatIndianNumber(Math.round(ch.revenue))}</span>
-                                        <span className="stat-sub">{ch.orders} orders</span>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* 2. Revenue Mix % */}
-                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
-                                <h3 className="chart-title">Revenue Mix %</h3>
-                                {enhancedDashboardStats.revenueMix.length > 0 ? (
-                                    <div className="revenue-mix-list">
-                                        {enhancedDashboardStats.revenueMix.map((ch, i) => (
-                                            <div key={i} className="revenue-mix-row">
-                                                <div className="revenue-mix-info">
-                                                    <span className="revenue-mix-dot" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}></span>
-                                                    <span className="revenue-mix-name">{ch.name}</span>
-                                                </div>
-                                                <div className="revenue-mix-bar-wrap">
-                                                    <div className="revenue-mix-bar" style={{ width: `${ch.percent}%`, background: PIE_COLORS[i % PIE_COLORS.length] }}></div>
-                                                </div>
-                                                <span className="revenue-mix-val">{ch.percent}%</span>
-                                                <span className="revenue-mix-amt">₹{formatIndianNumber(Math.round(ch.revenue))}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : <div className="no-chart-data">No data available</div>}
-                            </div>
-
-                            {/* 3. Order Value Trend */}
-                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
-                                <h3 className="chart-title">Order Value Trend</h3>
-                                {orderValueTrend.length > 1 ? (
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <AreaChart data={orderValueTrend} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                            <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                            <Tooltip formatter={(v, name) => [`₹${formatIndianNumber(v)}`, name === "revenue" ? "Revenue" : "AOV"]} />
-                                            <Legend />
-                                            <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#d5b85a" fill="rgba(213,184,90,0.15)" strokeWidth={2} />
-                                            <Line type="monotone" dataKey="aov" name="AOV" stroke="#8B7355" strokeWidth={2} dot={false} />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                ) : <div className="no-chart-data">Select a wider date range to see trends</div>}
-                            </div>
-
-                            {/* 4. Growth % Comparison */}
-                            <h3 className="admin-subsection-title">Growth % Comparison</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Revenue Growth</span>
-                                    <span className="stat-value"><GrowthIndicator value={dashboardStats.revenueGrowth} /></span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Orders Growth</span>
-                                    <span className="stat-value"><GrowthIndicator value={dashboardStats.ordersGrowth} /></span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Delivered Growth</span>
-                                    <span className="stat-value"><GrowthIndicator value={dashboardStats.deliveredGrowth} /></span>
-                                </div>
-                            </div>
-
-                            {/* 5. Average Order Value */}
-                            <h3 className="admin-subsection-title">Average Order Value</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">AOV</span>
-                                    <span className="stat-value">₹{formatIndianNumber(enhancedDashboardStats.avgOrderValue.toFixed(0))}</span>
-                                </div>
-                            </div>
-
-                            {/* 6. Customer Cohorts */}
-                            <h3 className="admin-subsection-title">Customer Cohorts</h3>
-                            <div className="analytics-charts-grid">
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Customer Segmentation</h3>
-                                    {clientAnalytics.segmentation.some(s => s.value > 0) ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <PieChart>
-                                                <Pie data={clientAnalytics.segmentation.filter(s => s.value > 0)} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="value"
-                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
-                                                    {clientAnalytics.segmentation.map((_, i) => (
-                                                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip />
-                                                <Legend verticalAlign="bottom" height={36} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Cohort Stats</h3>
-                                    <div className="admin-stats-grid" style={{ gridTemplateColumns: '1fr' }}>
-                                        <div className="admin-stat-card overview-card">
-                                            <span className="stat-label">Repeat Customer Rate</span>
-                                            <span className="stat-value">{clientAnalytics.repeatRate}%</span>
-                                        </div>
-                                        <div className="admin-stat-card overview-card">
-                                            <span className="stat-label">New Clients (Period)</span>
-                                            <span className="stat-value">{clientAnalytics.newClientsCount}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* 7. Gross Margin Trend (Placeholder) */}
-                            <div className="analytics-chart-card" style={{ marginTop: 20 }}>
-                                <h3 className="chart-title">Gross Margin Trend (Overall)</h3>
-                                <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                    <PlaceholderBadge label="COGS data integration pending" />
-                                    <span>Margin trend over time will appear here</span>
-                                </div>
-                            </div>
-                        </div>
+                <div className="ceo-scroll" ref={scrollerRef}>
+                    {!loading && (
+                        <>
+                            {activeTab === "home" && <HomePage ctx={ctx} />}
+                            {activeTab === "revenue" && <RevenuePage ctx={ctx} />}
+                            {activeTab === "outstanding" && <CashPage ctx={ctx} />}
+                            {activeTab === "cost_expenditure" && <LossesPage ctx={ctx} />}
+                            {activeTab === "accounts" && <AccountsPage ctx={ctx} />}
+                            {activeTab === "store_performance" && <StoresPage ctx={ctx} />}
+                            {activeTab === "products_style" && <ProductsPage ctx={ctx} />}
+                            {activeTab === "client_insights" && <ClientsPage ctx={ctx} />}
+                            {activeTab === "b2b_vendor" && <B2bPage ctx={ctx} />}
+                            {activeTab === "exhibition_approvals" && <ExhibitionsPage ctx={ctx} />}
+                            {activeTab === "targets_growth" && <TargetsPage ctx={ctx} />}
+                            {activeTab === "ops_flags" && <OpsPage ctx={ctx} />}
+                            {activeTab === "vendors" && <VendorsPage ctx={ctx} />}
+                            {activeTab === "orders" && <OrdersPage ctx={ctx} />}
+                            {activeTab === "inventory" && <StockPage ctx={ctx} />}
+                        </>
                     )}
+                </div>
 
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 3: PRODUCT, STYLE & DESIGN PERFORMANCE */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "products_style" && (
-                        <div className="admin-analytics-tab">
-                            <div className="cmo-tab-header">
-                                <h2 className="admin-section-title">Product, Style & Design Performance</h2>
-                                <PeriodFilter {...analyticsPeriodProps} variant="pills" />
-                            </div>
+                <div className="ceo-tabbar">
+                    {[["home", "Home", "overview"], ["revenue", "Sales", "inr"], ["orders", "Orders", "orders"], ["client_insights", "Clients", "clients"]].map(([id, label, icon]) => (
+                        <button key={id} type="button" aria-current={activeTab === id ? "page" : undefined} onClick={() => go(id)}>{icon === "clients" ? <ClientsIcon /> : <Icon name={icon} />}{label}</button>
+                    ))}
+                    <button type="button" onClick={() => setNavOpen(true)}><MenuIcon />More</button>
+                </div>
+            </main>
 
-                            <div className="analytics-charts-grid">
-                                {/* 1. Top Products (descending) */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Top-Performing Products</h3>
-                                    {analyticsData.topProducts.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={400}>
-                                            <BarChart data={analyticsData.topProducts} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
-                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
-                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
-                                                    tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    const item = analyticsData.topProducts.find(p => p.name === label);
-                                                    return (
-                                                        <div className="cmo-chart-tooltip">
-                                                            <p className="cmo-chart-tooltip-label">{label}</p>
-                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                            <p className="cmo-chart-tooltip-row">Qty sold: {item?.count || 0}</p>
-                                                        </div>
-                                                    );
-                                                }} />
-                                                <Bar dataKey="sales" radius={[0, 6, 6, 0]} barSize={20}>
-                                                    {analyticsData.topProducts.map((_, i) => (
-                                                        <Cell key={i} fill={`rgba(213, 184, 90, ${1 - i * 0.07})`} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-
-                                {/* 2. Bottom Products */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Bottom-Performing Products</h3>
-                                    {enhancedAnalytics.bottomProducts.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={400}>
-                                            <BarChart data={enhancedAnalytics.bottomProducts} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
-                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
-                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
-                                                    tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (
-                                                        <div className="cmo-chart-tooltip">
-                                                            <p className="cmo-chart-tooltip-label">{label}</p>
-                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                        </div>
-                                                    );
-                                                }} />
-                                                <Bar dataKey="sales" radius={[0, 6, 6, 0]} barSize={20}>
-                                                    {enhancedAnalytics.bottomProducts.map((_, i) => (
-                                                        <Cell key={i} fill={`rgba(198, 40, 40, ${0.9 - i * 0.07})`} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-
-                                {/* 3. Top Colours */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Top Performing Colours</h3>
-                                    {analyticsData.topColors.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={380}>
-                                            <BarChart data={analyticsData.topColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (
-                                                        <div className="cmo-chart-tooltip">
-                                                            <p className="cmo-chart-tooltip-label"><span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>{label}</p>
-                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                        </div>
-                                                    );
-                                                }} />
-                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
-                                                    {analyticsData.topColors.map((entry, i) => <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />)}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-
-                                {/* 3b. Bottom Colours */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Bottom Performing Colours</h3>
-                                    {enhancedAnalytics.bottomColors.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={380}>
-                                            <BarChart data={enhancedAnalytics.bottomColors} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (
-                                                        <div className="cmo-chart-tooltip">
-                                                            <p className="cmo-chart-tooltip-label"><span className="cmo-chart-tooltip-dot" style={{ background: getColorHex(label) }}></span>{label}</p>
-                                                            <p className="cmo-chart-tooltip-row">Sales: ₹{formatIndianNumber(payload[0].value)}</p>
-                                                        </div>
-                                                    );
-                                                }} />
-                                                <Bar dataKey="sales" radius={[6, 6, 0, 0]} barSize={32}>
-                                                    {enhancedAnalytics.bottomColors.map((entry, i) => <Cell key={i} fill={getColorHex(entry.name)} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />)}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-
-                                {/* 4. High & Repetitive Alterations */}
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">High Alterations by Outfit</h3>
-                                    {analyticsData.alterationsByOutfit.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <BarChart data={analyticsData.alterationsByOutfit} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
-                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
-                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
-                                                    tickFormatter={(v) => v.length > 20 ? v.substring(0, 20) + '…' : v} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p><p className="cmo-chart-tooltip-row">Alterations: {payload[0].value}</p></div>);
-                                                }} />
-                                                <Bar dataKey="count" fill="#C9A94E" radius={[0, 6, 6, 0]} barSize={20} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No alteration data available</div>}
-                                </div>
-
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Alterations by Customers</h3>
-                                    {analyticsData.alterationsByCustomer.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <BarChart data={analyticsData.alterationsByCustomer} layout="vertical" margin={{ top: 5, right: 40, left: 5, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#eee" />
-                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#888' }} axisLine={false} />
-                                                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: '#444' }}
-                                                    tickFormatter={(v) => v.length > 18 ? v.substring(0, 18) + '…' : v} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p><p className="cmo-chart-tooltip-row">Alterations: {payload[0].value}</p></div>);
-                                                }} />
-                                                <Bar dataKey="count" fill="#A67C52" radius={[0, 6, 6, 0]} barSize={20} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No alteration data available</div>}
-                                </div>
-                            </div>
-
-                            {/* Flagged Repetitive Alterations */}
-                            <div className="analytics-chart-card wide" style={{ marginTop: 20 }}>
-                                <h3 className="chart-title">🚩 Flagged: Repetitive Alterations (3+ on same outfit)</h3>
-                                <p className="chart-subtitle">Avg alterations per outfit: {enhancedAnalytics.avgAlterationsPerOutfit.toFixed(2)} | Total: {enhancedAnalytics.totalAlterations}</p>
-                                {enhancedAnalytics.flaggedAlterations.length > 0 ? (
-                                    <div className="admin-table-wrapper" style={{ maxHeight: 300, overflow: 'auto' }}>
-                                        <table className="admin-table">
-                                            <thead><tr><th>Outfit / Product</th><th>Alteration Count</th><th>Status</th></tr></thead>
-                                            <tbody>
-                                                {enhancedAnalytics.flaggedAlterations.map((a, i) => (
-                                                    <tr key={i} className="urgent-row">
-                                                        <td>{a.name}</td>
-                                                        <td><span className="urgent-badge" style={{ fontSize: 11 }}>{a.count} alterations</span></td>
-                                                        <td><span className="status-badge cancelled">Needs Review</span></td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : <div className="no-chart-data">No repetitive alterations — all good!</div>}
-                            </div>
-
-                            {/* 5. Average Alterations per Outfit */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 20 }}>Alteration Stats</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Avg Alterations / Outfit</span>
-                                    <span className="stat-value">{enhancedAnalytics.avgAlterationsPerOutfit.toFixed(2)}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Alterations</span>
-                                    <span className="stat-value">{enhancedAnalytics.totalAlterations}</span>
-                                </div>
-                            </div>
-
-                            {/* 6. High Return Styles (Placeholder) */}
-                            <div className="analytics-chart-card" style={{ marginTop: 20 }}>
-                                <h3 className="chart-title">High Return Styles (%)</h3>
-                                <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                    <PlaceholderBadge label="Returns data pending" />
-                                    <span>Return tracking by style will be displayed here</span>
-                                </div>
-                            </div>
-
-                            {/* 7. Customisation Trends (Placeholder) */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 20 }}>Customisation Trends</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Length-related</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Measurement aggregation pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Fit & Structure</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Measurement aggregation pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Silhouette-wise</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Measurement aggregation pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Colour-driven</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Measurement aggregation pending" />
-                                </div>
-                            </div>
-                        </div>
+            {viewOpen && (
+                <Drawer
+                    title="Dashboard Filters"
+                    sub="Pages that show a period or channel follow these choices"
+                    onClose={() => setViewOpen(false)}
+                    footer={(
+                        <>
+                            <button type="button" className="ceo-btn" onClick={() => setParams({ period: "", from: "", to: "", channel: "", compare: "" })}>Reset Filters</button>
+                            <button type="button" className="ceo-btn is-primary" onClick={() => setViewOpen(false)}>Done</button>
+                        </>
                     )}
+                >
+                    <FilterGroup label="Period">
+                        <Chips
+                            options={PERIOD_OPTIONS.map((o) => ({ value: o.value, label: o.value === "custom" ? "Choose dates" : o.label }))}
+                            value={periodTimeline}
+                            onChange={(v) => periodProps.setTimeline(v || "month")}
+                        />
+                        {periodTimeline === "custom" && (
+                            <DateRange
+                                from={periodProps.customFrom}
+                                to={periodProps.customTo}
+                                onChange={(a, b) => setParams({ from: a, to: b })}
+                            />
+                        )}
+                    </FilterGroup>
+                    <FilterGroup label="Compare With">
+                        <Select label="Compare with" value={comparison} onChange={setComparison} options={COMPARISON_OPTIONS} search={false} />
+                    </FilterGroup>
+                    <FilterGroup label="Sales Channel">
+                        <Chips options={channelList.map((c) => ({ value: c, label: c }))} value={channelFilter} onChange={setChannelFilter} />
+                    </FilterGroup>
+                </Drawer>
+            )}
 
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 4: CLIENT INSIGHTS */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "client_insights" && (
-                        <div className="admin-clients-tab">
-                            <h2 className="admin-section-title">Client Insights</h2>
-
-                            {/* Stats Row */}
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Clients</span>
-                                    <span className="stat-value">{formatIndianNumber(clientAnalytics.totalClients)}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">New Clients (Period)</span>
-                                    <span className="stat-value">{clientAnalytics.newClientsCount}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Repeat Customer Rate</span>
-                                    <span className="stat-value">{clientAnalytics.repeatRate}%</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total SB Clients</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="SB client book pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Avg Age of Clients</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="DOB data pending" />
-                                </div>
-                            </div>
-
-                            {/* Segmentation + Store breakdown */}
-                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Client Segmentation Growth</h3>
-                                    {clientAnalytics.segmentation.some(s => s.value > 0) ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <PieChart>
-                                                <Pie data={clientAnalytics.segmentation.filter(s => s.value > 0)} cx="50%" cy="45%" innerRadius={55} outerRadius={95} dataKey="value"
-                                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} labelLine={true}>
-                                                    {clientAnalytics.segmentation.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                                                </Pie>
-                                                <Tooltip />
-                                                <Legend verticalAlign="bottom" height={36} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Clients by Store</h3>
-                                    {clientAnalytics.storeClients.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={clientAnalytics.storeClients} margin={{ top: 10, right: 30, left: 10, bottom: 50 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="name" tick={<WrappedAxisTick />} interval={0} axisLine={false} tickLine={false} height={50} />
-                                                <YAxis />
-                                                <Tooltip />
-                                                <Bar dataKey="count" name="Clients" fill="#d5b85a" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                            </div>
-
-                            {/* 1. Top Clients per Store */}
-                            <h3 className="admin-subsection-title">Top Clients per Store</h3>
-                            <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search name, phone, city..." value={clientsSearch} onChange={(e) => setClientsSearch(e.target.value)} className="admin-search-input" />
-                                    {clientsSearch && <button className="search-clear" onClick={() => setClientsSearch("")}>×</button>}
-                                </div>
-                                <div className="cmo-filters-right" style={{ gap: 8 }}>
-                                    <select value={clientsStoreFilter} onChange={(e) => setClientsStoreFilter(e.target.value)} className="cmo-compare-select">
-                                        <option value="">All Stores</option>
-                                        {clientAnalytics.storeList.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                    <select value={clientsSortBy} onChange={(e) => setClientsSortBy(e.target.value)} className="cmo-compare-select">
-                                        <option value="totalSpend">Highest Spend</option>
-                                        <option value="orderCount">Most Orders</option>
-                                        <option value="recent">Most Recent</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container" style={{ minWidth: 1000 }}>
-                                    <table className="admin-table">
-                                        <thead>
-                                            <tr><th>#</th><th>Name</th><th>Phone</th><th>City</th><th>Stores</th><th>Birthday</th><th>Orders</th><th>Items</th><th className="amount">12M Spend</th><th className="amount">Lifetime Spend</th><th>Last Order</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            {clientAnalytics.currentClients.length === 0 ?
-                                                <tr><td colSpan="11" className="no-data">No clients found</td></tr> :
-                                                clientAnalytics.currentClients.map((c, idx) => (
-                                                    <tr key={c.phone}>
-                                                        <td>{(clientsPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
-                                                        <td>{c.phone}</td>
-                                                        <td>{c.city}</td>
-                                                        <td>{c.stores || "-"}</td>
-                                                        <td><PlaceholderBadge label="DOB" /></td>
-                                                        <td>{c.orderCount}</td>
-                                                        <td>{c.items}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.spend12M.toFixed(0))}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.totalSpend.toFixed(0))}</td>
-                                                        <td>{formatDate(c.lastOrder)}</td>
-                                                    </tr>
-                                                ))
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <Paginator page={clientsPage} totalPages={clientAnalytics.clientsTotalPages} onChange={setClientsPage} />
-
-                            {/* 2-3. Client Purchase History + SB Client Book */}
-                            <div className="analytics-charts-grid" style={{ marginTop: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Client Purchase History (12M + Lifetime)</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="12-month rolling view pending" />
-                                        <span>Monthly purchase trend per client will appear here</span>
-                                    </div>
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">SB Client Book</h3>
-                                    <div className="no-chart-data" style={{ flexDirection: 'column', gap: 8 }}>
-                                        <PlaceholderBadge label="SB client book data pending" />
-                                        <span>Store-based client assignments will appear here</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 5: INVENTORY OVERVIEW */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "inventory" && (
-                        <div className="admin-inventory-tab">
-                            {/* Where stock actually sits — per location and per
-                                channel, from the shared panel every dashboard
-                                uses. Above the catalogue-health figures below,
-                                which count products rather than placement. */}
-                            <h2 className="admin-section-title">Stock by Location &amp; Channel</h2>
-                            <StockPanel pools={poolsForUser({ role: "ceo" })} />
-
-                            <h2 className="admin-section-title">Inventory Overview</h2>
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                                <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Delayed Deliveries</span><span className="stat-value">{enhancedInventoryStats.delayedCount}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Active LXRTS Products</span><span className="stat-value">{products.filter(p => p.sync_enabled).length}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Products</span><span className="stat-value">{inventoryStats.total}</span></div></div>
-                                {/* <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Stock</span><span className="stat-value">{formatIndianNumber(inventoryStats.totalInventory)}</span></div></div> */}
-                                <div className="admin-stat-card warning"><div className="stat-info"><span className="stat-label">Low Stock (&lt;5)</span><span className="stat-value">{inventoryStats.lowStock}</span></div></div>
-                                <div className="admin-stat-card danger"><div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value">{inventoryStats.outOfStock}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Consignment Stock</span><span className="stat-value">{consignmentStats.consignmentValue} pcs</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Consignment Inventory</span><span className="stat-value">—</span><PlaceholderBadge label="Consignment data pending" /></div></div>
-                            </div>
-
-                            {/* Delayed Deliveries Table */}
-                            {enhancedInventoryStats.delayedCount > 0 && (
-                                <div style={{ marginBottom: 20 }}>
-                                    <h3 className="admin-subsection-title">⚠️ Delayed Deliveries ({enhancedInventoryStats.delayedCount})</h3>
-                                    <div className="admin-table-wrapper"><div className="admin-table-container">
-                                        <table className="admin-table">
-                                            <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Promise Date</th><th>Days Late</th><th>Status</th></tr></thead>
-                                            <tbody>
-                                                {enhancedInventoryStats.delayedOrders.map(o => {
-                                                    const daysLate = Math.floor((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
-                                                    return (
-                                                        <tr key={o.id} className="urgent-row">
-                                                            <td><span className="order-id">{o.order_no || "-"}</span></td>
-                                                            <td>{o.delivery_name || "-"}</td>
-                                                            <td className="product-cell">{o.items?.[0]?.product_name || "-"}</td>
-                                                            <td>{formatDate(o.delivery_date)}</td>
-                                                            <td><span className="urgent-badge">{daysLate} days</span></td>
-                                                            <td><span className={`status-badge ${normalizeOrderStatus(o.status)}`}>{getOrderStatusLabel(o.status)}</span></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div></div>
-                                </div>
-                            )}
-
-                            {/* 3. Inventory by Store */}
-                            <h3 className="admin-subsection-title">Inventory Quantity & Value by Store</h3>
-                            {enhancedInventoryStats.storeProducts.length > 0 ? (
-                                <div className="admin-table-wrapper" style={{ marginBottom: 20 }}><div className="admin-table-container">
-                                    <table className="admin-table">
-                                        <thead><tr><th>Store</th><th>Products</th><th>Total Inventory</th></tr></thead>
-                                        <tbody>
-                                            {enhancedInventoryStats.storeProducts.map((s, i) => (
-                                                <tr key={i}><td style={{ fontWeight: 500 }}>{s.name}</td><td>{s.count}</td><td>{formatIndianNumber(s.totalInventory)}</td></tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div></div>
-                            ) : null}
-
-                            {/* Product Inventory Table (existing) */}
-                            <h3 className="admin-subsection-title">Product Inventory Management</h3>
-                            <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: 10 }}>
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search by name or SKU..." value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="admin-search-input" />
-                                    {inventorySearch && <button className="search-clear" onClick={() => setInventorySearch("")}>×</button>}
-                                </div>
-                                <div className="cmo-filters-right" style={{ gap: 8 }}>
-                                    <select className="cmo-compare-select" value={inventoryStockFilter} onChange={(e) => setInventoryStockFilter(e.target.value)}>
-                                        <option value="all">All Stock</option>
-                                        <option value="in_stock">In Stock (5+)</option>
-                                        <option value="low_stock">Low Stock (&lt;5)</option>
-                                        <option value="out_of_stock">Out of Stock</option>
-                                    </select>
-                                    <select className="cmo-compare-select" value={inventoryTypeFilter} onChange={(e) => setInventoryTypeFilter(e.target.value)}>
-                                        <option value="all">All Types</option>
-                                        <option value="lxrts">LXRTS Only</option>
-                                        <option value="regular">Regular Only</option>
-                                    </select>
-                                    <span className="showing-info">Showing {currentProducts.length} of {filteredProducts.length}</span>
-                                </div>
-                            </div>
-                            <div className="admin-table-wrapper"><div className="admin-table-container">
-                                <table className="admin-table">
-                                    <thead><tr><th>SKU</th><th>Product Name</th><th>Default Top</th><th>Default Bottom</th><th>Default Top-Bottom</th><th>Base Price</th><th>Inventory</th></tr></thead>
-                                    <tbody>
-                                        {currentProducts.map(product => (
-                                            <React.Fragment key={product.id}>
-                                                <tr className={isLxrtsProduct(product) ? "lxrts-row" : ""}>
-                                                    <td><span className="order-id">{product.sku_id || "-"}</span></td>
-                                                    <td className="product-cell">
-                                                        {isLxrtsProduct(product) && <span className="lxrts-badge">LXRTS</span>}
-                                                        {product.name}
-                                                        {isLxrtsProduct(product) && (
-                                                            <button className="expand-btn" onClick={() => handleExpandProduct(product)}>
-                                                                {expandedProduct === product.id ? "▲" : "▼"}
-                                                            </button>
-                                                        )}
-                                                    </td>
-                                                    <td>{product.default_top || "-"}</td>
-                                                    <td>{product.default_bottom || "-"}</td>
-                                                    <td>{product.default_color || "-"}</td>
-                                                    <td>₹{formatIndianNumber(product.base_price || 0)}</td>
-                                                    <td>
-                                                        {isLxrtsProduct(product) ? (
-                                                            <span className={getInventoryClass(getLxrtsTotalInventory(product.id))}>
-                                                                {lxrtsSyncLoading ? "..." : getLxrtsTotalInventory(product.id)}
-                                                            </span>
-                                                        ) : editingProductId === product.id ? (
-                                                            <div className="inline-edit">
-                                                                <input type="number" value={editInventoryValue} onChange={(e) => setEditInventoryValue(e.target.value)}
-                                                                    onKeyDown={(e) => { if (e.key === "Enter") handleInventoryUpdate(product.id); if (e.key === "Escape") setEditingProductId(null); }}
-                                                                    autoFocus className="inline-edit-input" />
-                                                                <button onClick={() => handleInventoryUpdate(product.id)} disabled={savingInventory} className="inline-save-btn">
-                                                                    {savingInventory ? "..." : "✓"}
-                                                                </button>
-                                                                <button onClick={() => setEditingProductId(null)} className="inline-cancel-btn">✗</button>
-                                                            </div>
-                                                        ) : (
-                                                            <span className={`editable-inventory ${getInventoryClass(product.inventory || 0)}`}
-                                                                onClick={() => { setEditingProductId(product.id); setEditInventoryValue(String(product.inventory || 0)); }}>
-                                                                {product.inventory || 0}
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                                {isLxrtsProduct(product) && expandedProduct === product.id && (
-                                                    <tr className="variant-row"><td colSpan="7">
-                                                        <div className="variant-grid">
-                                                            {getProductSizes(product.id).map(size => (
-                                                                <div key={size} className="variant-cell">
-                                                                    <span className="variant-size">{size}</span>
-                                                                    {editingVariant === `${product.id}-${size}` ? (
-                                                                        <div className="inline-edit compact">
-                                                                            <input type="number" value={variantEditValue} onChange={(e) => setVariantEditValue(e.target.value)}
-                                                                                onKeyDown={(e) => { if (e.key === "Enter") handleVariantInventoryUpdate(product.id, size); if (e.key === "Escape") setEditingVariant(null); }}
-                                                                                autoFocus className="inline-edit-input" />
-                                                                            <button onClick={() => handleVariantInventoryUpdate(product.id, size)} disabled={savingVariant} className="inline-save-btn">{savingVariant ? "..." : "✓"}</button>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className={`editable-inventory ${getInventoryClass(variantInventory[product.id]?.[size] || 0)}`}
-                                                                            onClick={() => { setEditingVariant(`${product.id}-${size}`); setVariantEditValue(String(variantInventory[product.id]?.[size] || 0)); }}>
-                                                                            {variantInventory[product.id]?.[size] ?? "..."}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </td></tr>
-                                                )}
-                                            </React.Fragment>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div></div>
-                            <Paginator page={inventoryPage} totalPages={inventoryTotalPages} onChange={setInventoryPage} />
-                        </div>
-                    )}
-
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 6: COST & EXPENDITURE */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "cost_expenditure" && (
-                        <div className="admin-dashboard-tab">
-                            <h2 className="admin-section-title">Cost & Expenditure</h2>
-
-                            {/* 1. Discounts Given */}
-                            <h3 className="admin-subsection-title">Discounts Given</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Discount</span>
-                                    <span className="stat-value">₹{formatIndianNumber(financialStats.totalDiscount.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Discount %</span>
-                                    <span className="stat-value">{financialStats.discountPercent}%</span>
-                                </div>
-                            </div>
-
-                            {/* Discount by Channel */}
-                            <div className="analytics-charts-grid" style={{ marginBottom: 20 }}>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Discounts by Channel</h3>
-                                    {financialStats.channelDiscounts.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={financialStats.channelDiscounts} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="name" tick={<WrappedAxisTick />} interval={0} axisLine={false} tickLine={false} height={50} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p><p className="cmo-chart-tooltip-row">Discount: ₹{formatIndianNumber(payload[0].value)}</p></div>);
-                                                }} />
-                                                <Bar dataKey="discount" name="Discount" fill="#d5b85a" radius={[6, 6, 0, 0]} barSize={36} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                                <div className="analytics-chart-card">
-                                    <h3 className="chart-title">Discount by Salesperson</h3>
-                                    {analyticsData.salesBySalesperson.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height={320}>
-                                            <BarChart data={analyticsData.salesBySalesperson} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                                <XAxis dataKey="name" interval={0} tick={<WrappedAxisTick />} axisLine={false} tickLine={false} height={50} />
-                                                <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <Tooltip content={({ active, payload, label }) => {
-                                                    if (!active || !payload?.length) return null;
-                                                    return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p>{payload.map((p, i) => (<p key={i} className="cmo-chart-tooltip-row"><span className="cmo-chart-tooltip-dot" style={{ background: p.fill }}></span>{p.name}: ₹{formatIndianNumber(p.value)}</p>))}</div>);
-                                                }} />
-                                                <Legend />
-                                                <Bar dataKey="sales" name="Sales" fill="#d5b85a" radius={[6, 6, 0, 0]} barSize={18} />
-                                                <Bar dataKey="discount" name="Discount" fill="#8B7355" radius={[6, 6, 0, 0]} barSize={18} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    ) : <div className="no-chart-data">No data available</div>}
-                                </div>
-                            </div>
-
-                            {/* 2. Refunds Value (Placeholder) */}
-                            <h3 className="admin-subsection-title">Refunds Value</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Refunds</span>
-                                    <span className="stat-value">₹0</span>
-                                    <PlaceholderBadge label="Refund data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refunds — Stores</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel refunds pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Refunds — B2B</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel refunds pending" />
-                                </div>
-                            </div>
-
-                            {/* 3. Returns Value (Placeholder) */}
-                            <h3 className="admin-subsection-title">Returns Value</h3>
-                            <div className="admin-stats-grid overview-grid">
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Total Returns</span>
-                                    <span className="stat-value">₹0</span>
-                                    <PlaceholderBadge label="Returns data pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Returns — Stores</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel returns pending" />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Returns — B2B</span>
-                                    <span className="stat-value">—</span>
-                                    <PlaceholderBadge label="Channel returns pending" />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 7: B2B & VENDOR OVERVIEW */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "b2b_vendor" && (
-                        <div className="admin-b2b-tab">
-                            <div className="cmo-tab-header">
-                                <h2 className="admin-section-title">B2B & Vendor Overview</h2>
-                                <PeriodFilter {...periodProps} variant="pills">
-                                    <select className="cmo-compare-select" value={b2bMerchandiserFilter} onChange={(e) => { setB2bMerchandiserFilter(e.target.value); setB2bPage(1); }}>
-                                        <option value="">All Merchandisers</option>
-                                        {b2bStats.merchandiserList.map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
-                                </PeriodFilter>
-                            </div>
-
-                            {/* Summary stat cards */}
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 20 }}>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">B2B Revenue</span>
-                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bRevenue.toFixed(0))}</span>
-                                    <GrowthIndicator value={b2bStats.revenueGrowth} />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">B2B Orders</span>
-                                    <span className="stat-value">{b2bStats.totalB2bOrders}</span>
-                                    <GrowthIndicator value={b2bStats.ordersGrowth} />
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">New Clients</span>
-                                    <span className="stat-value">{b2bStats.newClientsCount}</span>
-                                    <span className="stat-sub">this period</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Advance Collected</span>
-                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bAdvance.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card danger" style={{ borderLeft: '3px solid #c62828' }}>
-                                    <span className="stat-label">Balance Pending</span>
-                                    <span className="stat-value">₹{formatIndianNumber(b2bStats.totalB2bBalance.toFixed(0))}</span>
-                                </div>
-                            </div>
-
-                            {/* Buyout vs Consignment vs Client Order */}
-                            <h3 className="admin-subsection-title">Order Type Breakdown</h3>
-                            <div className="admin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: 20 }}>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Buyout Orders</span>
-                                    <span className="stat-value">{b2bStats.buyoutOrders}</span>
-                                    <span className="stat-sub">₹{formatIndianNumber(b2bStats.buyoutValue.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card">
-                                    <span className="stat-label">Client Orders</span>
-                                    <span className="stat-value">{b2bStats.clientOrderOrders}</span>
-                                    <span className="stat-sub">₹{formatIndianNumber(b2bStats.clientOrderValue.toFixed(0))}</span>
-                                </div>
-                                <div className="admin-stat-card overview-card" style={{ borderLeft: '3px solid #9c27b0' }}>
-                                    <span className="stat-label">Consignment</span>
-                                    <span className="stat-value" style={{ color: '#9c27b0' }}>{b2bStats.consignmentOrders}</span>
-                                    <span className="stat-sub" style={{ color: '#9c27b0' }}>₹{formatIndianNumber(b2bStats.consignmentValue.toFixed(0))}</span>
-                                </div>
-                            </div>
-
-                            {/* Buyout vs Consignment chart */}
-                            {(b2bStats.buyoutOrders + b2bStats.consignmentOrders + b2bStats.clientOrderOrders) > 0 && (
-                                <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
-                                    <h3 className="chart-title">Buyout vs Consignment Mix</h3>
-                                    <ResponsiveContainer width="100%" height={260}>
-                                        <BarChart data={[
-                                            { name: "Buyout", orders: b2bStats.buyoutOrders, value: Math.round(b2bStats.buyoutValue) },
-                                            { name: "Client Order", orders: b2bStats.clientOrderOrders, value: Math.round(b2bStats.clientOrderValue) },
-                                            { name: "Consignment", orders: b2bStats.consignmentOrders, value: Math.round(b2bStats.consignmentValue) },
-                                        ]} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                            <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                                            <YAxis tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                            <Tooltip formatter={(v, name) => [name === "value" ? `₹${formatIndianNumber(v)}` : v, name === "value" ? "Revenue" : "Orders"]} />
-                                            <Legend />
-                                            <Bar dataKey="value" name="Revenue" fill="#d5b85a" radius={[4, 4, 0, 0]} barSize={48} />
-                                            <Bar dataKey="orders" name="Orders" fill="#8B7355" radius={[4, 4, 0, 0]} barSize={48} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            )}
-
-                            {/* Client-wise Sales */}
-                            <h3 className="admin-subsection-title">Client-wise Sales</h3>
-                            <div className="admin-toolbar">
-                                <div className="admin-search-wrapper">
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search B2B client..." value={b2bSearch} onChange={(e) => { setB2bSearch(e.target.value); setB2bPage(1); }} className="admin-search-input" />
-                                    {b2bSearch && <button className="search-clear" onClick={() => setB2bSearch("")}>×</button>}
-                                </div>
-                            </div>
-                            <div className="admin-table-wrapper"><div className="admin-table-container">
-                                <table className="admin-table">
-                                    <thead><tr><th>#</th><th>Client Name</th><th>Orders</th><th className="amount">Total Sales</th><th className="amount">Advance Paid</th><th className="amount">Balance Pending</th></tr></thead>
-                                    <tbody>
-                                        {b2bStats.currentB2bClients.length === 0 ?
-                                            <tr><td colSpan="6" className="no-data">No B2B clients found</td></tr> :
-                                            b2bStats.currentB2bClients.map((c, idx) => (
-                                                <tr key={c.name + idx}>
-                                                    <td>{(b2bPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                                                    <td style={{ fontWeight: 500 }}>{c.name}</td>
-                                                    <td>{c.orders}</td>
-                                                    <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
-                                                    <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
-                                                    <td className="amount" style={{ color: c.balance > 0 ? '#c62828' : '#2e7d32', fontWeight: 600 }}>₹{formatIndianNumber(c.balance.toFixed(0))}</td>
-                                                </tr>
-                                            ))
-                                        }
-                                    </tbody>
-                                </table>
-                            </div></div>
-                            <Paginator page={b2bPage} totalPages={b2bStats.b2bTotalPages} onChange={setB2bPage} />
-
-                            {/* Top B2B Products */}
-                            {b2bStats.topB2bProducts.length > 0 && (
-                                <div style={{ marginTop: 24 }}>
-                                    <h3 className="admin-subsection-title">Product Analysis (B2B Sales)</h3>
-                                    <div className="analytics-chart-card">
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={b2bStats.topB2bProducts} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
-                                                <XAxis type="number" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                                <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: '#555' }} axisLine={false} tickLine={false}
-                                                    tickFormatter={(v) => v.length > 25 ? v.substring(0, 25) + "…" : v} />
-                                                <Tooltip formatter={(v, name) => [name === "revenue" ? `₹${formatIndianNumber(v)}` : v, name === "revenue" ? "Revenue" : "Qty"]} />
-                                                <Bar dataKey="revenue" name="revenue" fill="#d5b85a" radius={[0, 4, 4, 0]} barSize={18} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Advance Pending Clients */}
-                            {b2bStats.advancePending.length > 0 && (
-                                <div style={{ marginTop: 24 }}>
-                                    <h3 className="admin-subsection-title">⚠️ Advance Pending Clients</h3>
-                                    <div className="admin-table-wrapper"><div className="admin-table-container">
-                                        <table className="admin-table">
-                                            <thead><tr><th>Client</th><th className="amount">Total Sales</th><th className="amount">Advance Paid</th><th className="amount">Balance Due</th></tr></thead>
-                                            <tbody>
-                                                {b2bStats.advancePending.slice(0, 15).map((c, i) => (
-                                                    <tr key={i} className="urgent-row">
-                                                        <td style={{ fontWeight: 500 }}>{c.name}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.sales.toFixed(0))}</td>
-                                                        <td className="amount">₹{formatIndianNumber(c.advance.toFixed(0))}</td>
-                                                        <td className="amount" style={{ color: '#c62828', fontWeight: 700 }}>₹{formatIndianNumber(c.balance.toFixed(0))}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div></div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {/* TAB 8: TARGETS & GROWTH */}
-                    {/* ═══════════════════════════════════════════════════════════ */}
-                    {activeTab === "targets_growth" && (
-                        <div className="admin-targets-tab">
-                            <h2 className="admin-section-title">Targets & Growth</h2>
-
-                            {/* 1. Monthly Targets vs Achieved */}
-                            <div className="analytics-chart-card" style={{ marginBottom: 20 }}>
-                                <h3 className="chart-title">Monthly Targets vs Achieved ({new Date().getFullYear()})</h3>
-                                <p className="chart-subtitle"><PlaceholderBadge label="Targets not yet set — showing actual revenue only" /></p>
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={targetsData.monthlyData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
-                                        <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#666' }} axisLine={false} tickLine={false} />
-                                        <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} tick={{ fontSize: 11, fill: '#888' }} axisLine={false} tickLine={false} />
-                                        <Tooltip content={({ active, payload, label }) => {
-                                            if (!active || !payload?.length) return null;
-                                            return (<div className="cmo-chart-tooltip"><p className="cmo-chart-tooltip-label">{label}</p>{payload.map((p, i) => (<p key={i} className="cmo-chart-tooltip-row"><span className="cmo-chart-tooltip-dot" style={{ background: p.fill }}></span>{p.name}: ₹{formatIndianNumber(p.value)}</p>))}</div>);
-                                        }} />
-                                        <Legend />
-                                        <Bar dataKey="target" name="Target" fill="#e8e2d0" radius={[6, 6, 0, 0]} />
-                                        <Bar dataKey="achieved" name="Achieved" fill="#d5b85a" radius={[6, 6, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* 2. Store Growth % */}
-                            <h3 className="admin-subsection-title">Store Growth %</h3>
-                            <div className="admin-table-wrapper" style={{ marginBottom: 20 }}><div className="admin-table-container">
-                                <table className="admin-table">
-                                    <thead><tr><th>Store / Channel</th><th className="amount">Current Period</th><th className="amount">Previous Period</th><th>Growth %</th></tr></thead>
-                                    <tbody>
-                                        {targetsData.storeGrowthList.length === 0 ?
-                                            <tr><td colSpan="4" className="no-data">No data available</td></tr> :
-                                            targetsData.storeGrowthList.map((s, i) => {
-                                                const g = Number(s.growth);
-                                                return (
-                                                    <tr key={i}>
-                                                        <td style={{ fontWeight: 500 }}>{s.name}</td>
-                                                        <td className="amount">₹{formatIndianNumber(s.current.toFixed(0))}</td>
-                                                        <td className="amount">₹{formatIndianNumber(s.previous.toFixed(0))}</td>
-                                                        <td><span className={`growth-indicator ${g >= 0 ? 'positive' : 'negative'}`} style={{ display: 'inline-flex' }}>
-                                                            <span className="growth-arrow">{g >= 0 ? '↑' : '↓'}</span>{Math.abs(g).toFixed(1)}%
-                                                        </span></td>
-                                                    </tr>
-                                                );
-                                            })
-                                        }
-                                    </tbody>
-                                </table>
-                            </div></div>
-
-                            {/* 3. B2B Growth % */}
-                            <h3 className="admin-subsection-title">B2B Growth %</h3>
-                            <div className="admin-stats-grid overview-grid" style={{ marginBottom: 20 }}>
-                                {targetsData.storeGrowthList.filter(s => s.name.toLowerCase() === 'b2b').map((s, i) => {
-                                    const g = Number(s.growth);
-                                    return (
-                                        <div key={i} className="admin-stat-card overview-card">
-                                            <span className="stat-label">B2B Revenue</span>
-                                            <span className="stat-value">₹{formatIndianNumber(s.current.toFixed(0))}</span>
-                                            <span className={`growth-indicator ${g >= 0 ? 'positive' : 'negative'}`}>
-                                                <span className="growth-arrow">{g >= 0 ? '↑' : '↓'}</span>{Math.abs(g).toFixed(1)}%
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                                {targetsData.storeGrowthList.filter(s => s.name.toLowerCase() === 'b2b').length === 0 && (
-                                    <div className="admin-stat-card overview-card">
-                                        <span className="stat-label">B2B Growth</span>
-                                        <span className="stat-value">—</span>
-                                        <span className="stat-sub">No B2B data in period</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-
-                    {/* ═══════════ CEO: OPERATIONAL FLAGS ═══════════ */}
-                    {activeTab === "outstanding" && (
-                        <div>
-                            <h2 className="admin-section-title">Outstanding</h2>
-                            <OutstandingPanel onOpenOrder={(o) => navigate(`/order/${o.id}`)} />
-                        </div>
-                    )}
-                    {activeTab === "cancellations" && (
-                        <div>
-                            <h2 className="admin-section-title">Cancellations</h2>
-                            <CancellationsPanel />
-                        </div>
-                    )}
-                    {activeTab === "ops_flags" && (
-                        <div className="admin-dashboard-tab">
-                            <h2 className="admin-section-title">Operational Flags</h2>
-
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Orders Delayed</span><span className="stat-value" style={{ color: opsFlags.delayedCount > 0 ? '#c62828' : '#2e7d32' }}>{opsFlags.delayedCount}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">QC Failures</span><span className="stat-value" style={{ color: opsFlags.qcFailCount == null ? '#8a8a8a' : opsFlags.qcFailCount > 0 ? '#c62828' : '#2e7d32' }}>{opsFlags.qcFailCount == null ? "—" : opsFlags.qcFailCount}</span></div>{opsFlags.qcFailCount != null && <span className="stat-sublabel">{opsFlags.qcFailRate}% of {opsFlags.qcInspected} inspections</span>}</div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Production Backlog</span><span className="stat-value" style={{ color: opsFlags.backlogCount > 0 ? '#ef6c00' : '#2e7d32' }}>{opsFlags.backlogCount}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">In Production</span><span className="stat-value">{opsFlags.inProductionCount}</span></div></div>
-                            </div>
-
-                            {opsFlags.delayed.length > 0 && (<>
-                                <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>{"\u26A0\uFE0F"} Delayed Orders</h3>
-                                <div className="admin-table-wrapper"><div className="admin-table-container"><table className="admin-table">
-                                    <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Delivery Date</th><th>Days Overdue</th><th>Status</th><th>Store</th></tr></thead>
-                                    <tbody>{opsFlags.delayed.map(o => {
-                                        const overdue = Math.ceil((new Date() - new Date(o.delivery_date)) / (1000 * 60 * 60 * 24));
-                                        return (<tr key={o.id}><td><span className="order-id">{o.order_no || "-"}</span></td><td>{o.delivery_name || "-"}</td><td className="product-cell">{o.items?.[0]?.product_name || "-"}</td><td>{formatDate(o.delivery_date)}</td><td style={{ color: '#c62828', fontWeight: 600 }}>{overdue}d</td><td><span className={`status-badge ${normalizeOrderStatus(o.status)}`}>{getOrderStatusLabel(o.status)}</span></td><td>{o.salesperson_store || "-"}</td></tr>);
-                                    })}</tbody>
-                                </table></div></div>
-                            </>)}
-                        </div>
-                    )}
-
-                    {/* ═══════════ OPERATIONS: ORDERS ═══════════ */}
-                    {activeTab === "orders" && (
-                        <div className="admin-orders-tab">
-                            <h2 className="admin-section-title">Order Management</h2>
-                            <div className="admin-toolbar">
-                                <SearchByDropdown
-                                    fields={[
-                                        { value: "order_no", label: "Order Number" },
-                                        { value: "product_name", label: "Product Name" },
-                                        { value: "client_name", label: "Client Name" },
-                                        { value: "phone", label: "Phone" },
-                                        { value: "salesperson", label: "Salesperson" },
-                                    ]}
-                                    selectedField={orderSearchField}
-                                    onFieldChange={setOrderSearchField}
-                                    query={orderSearch}
-                                    onQueryChange={setOrderSearch}
-                                    placeholder="Type to search..."
-                                />
-                                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="admin-sort-select">
-                                    <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="delivery">Delivery Date</option><option value="amount_high">Amount: High to Low</option><option value="amount_low">Amount: Low to High</option>
-                                </select>
-                                <button className="admin-export-btn" onClick={handleExportCSV} title="Export filtered orders to CSV">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                                    Export CSV
-                                </button>
-                            </div>
-
-                            <div className="admin-status-tabs">
-                                {STATUS_TABS.map(tab => (
-                                    <button key={tab.value} className={`status-tab ${statusTab === tab.value ? "active" : ""}`} onClick={() => setStatusTab(tab.value)}>
-                                        {tab.label}<span className="tab-count">{orderTabCounts[tab.value]}</span>
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="admin-filter-bar" ref={dropdownRef}>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${ordersTimeline !== "all" ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range ▾</button>
-                                    {openDropdown === "date" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Select Period</div>
-                                            <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${(filters.minPrice > 0 || filters.maxPrice < 500000) ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")}>Price ▾</button>
-                                    {openDropdown === "price" && (
-                                        <div className="dropdown-panel price-panel">
-                                            <div className="dropdown-title">Order Value</div>
-                                            <div className="price-inputs">
-                                                <div className="price-input-wrap"><span>₹</span><input type="number" value={filters.minPrice} onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 1000) }))} /></div>
-                                                <span>to</span>
-                                                <div className="price-input-wrap"><span>₹</span><input type="number" value={filters.maxPrice} onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 1000) }))} /></div>
-                                            </div>
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${filters.payment.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}>Payment ▾</button>
-                                    {openDropdown === "payment" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Payment Status</div>
-                                            {["paid", "partial", "unpaid"].map(opt => (<label key={opt} className="checkbox-label"><input type="checkbox" checked={filters.payment.includes(opt)} onChange={() => toggleFilter("payment", opt)} /><span>{opt === "unpaid" ? "Unpaid (COD)" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span></label>))}
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${filters.priority.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "priority" ? null : "priority")}>Priority ▾</button>
-                                    {openDropdown === "priority" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Priority</div>
-                                            {["normal", "urgent"].map(opt => (<label key={opt} className="checkbox-label"><input type="checkbox" checked={filters.priority.includes(opt)} onChange={() => toggleFilter("priority", opt)} /><span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span></label>))}
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${filters.orderType.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "orderType" ? null : "orderType")}>Type ▾</button>
-                                    {openDropdown === "orderType" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Order Type</div>
-                                            {["standard", "custom", "alteration"].map(opt => (<label key={opt} className="checkbox-label"><input type="checkbox" checked={filters.orderType.includes(opt)} onChange={() => toggleFilter("orderType", opt)} /><span>{opt.charAt(0).toUpperCase() + opt.slice(1)}</span></label>))}
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${filters.store.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "store" ? null : "store")}>Store ▾</button>
-                                    {openDropdown === "store" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Store</div>
-                                            {["Delhi Store", "Ludhiana Store", "B2B"].map(opt => (<label key={opt} className="checkbox-label"><input type="checkbox" checked={filters.store.includes(opt)} onChange={() => toggleFilter("store", opt)} /><span>{opt}</span></label>))}
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <select className="filter-btn" style={{ cursor: 'pointer' }} value={filters.salesperson} onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}>
-                                        <option value="">All Salespersons</option>
-                                        {salespersons.map(sp => <option key={sp} value={sp}>{sp}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {appliedFilters.length > 0 && (
-                                <div className="admin-applied-filters">
-                                    <span className="applied-label">Applied:</span>
-                                    {appliedFilters.map((chip, i) => (<span key={i} className="filter-chip">{chip.label}<button onClick={() => removeFilter(chip.type, chip.value)}>×</button></span>))}
-                                    <button className="clear-all" onClick={clearAllFilters}>Clear All</button>
-                                </div>
-                            )}
-
-                            <div className="orders-count">Showing {filteredOrders.length} orders</div>
-
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container">
-                                    <table className="admin-table orders-table">
-                                        <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Status</th><th>Store</th><th>Date</th><th>Actions</th></tr></thead>
-                                        <tbody>
-                                            {currentOrders.length === 0 ? <tr><td colSpan="9" className="no-data">No orders found</td></tr> :
-                                                currentOrders.map(order => {
-                                                    const isUrgent = getPriority(order) === "urgent";
-                                                    return (
-                                                        <tr key={order.id} className={isUrgent ? "urgent-row" : ""}>
-                                                            <td><span className="order-id">{order.order_no || "-"}</span>{isUrgent && <span className="urgent-badge">URGENT</span>}</td>
-                                                            <td>{order.delivery_name || "-"}</td>
-                                                            <td className="product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                            <td>₹{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
-                                                            <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
-                                                            <td>
-                                                                <select className="status-select" value={normalizeOrderStatus(order.status)} onChange={(e) => updateOrderStatus(order.id, e.target.value)} disabled={statusUpdating === order.id}>
-                                                                    {ORDER_STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                                                </select>
-                                                            </td>
-                                                            <td>{order.salesperson_store || "-"}</td>
-                                                            <td>{formatDate(order.created_at)}</td>
-                                                            <td><div className="action-buttons"><button className="action-btn pdf" onClick={() => handleGeneratePdf(order, "customer")} disabled={pdfLoading === order.id}>{pdfLoading === order.id ? "..." : "PDF"}</button></div></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
-                        </div>
-                    )}
-
-                    {/* ACCOUNTS TAB */}
-
-                    {/* ═══════════ OPERATIONS: ACCOUNTS ═══════════ */}
-                    {activeTab === "accounts" && (
-                        <div className="admin-accounts-tab">
-                            <h2 className="admin-section-title">Accounts & Finance</h2>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Gross Value</span><span className="stat-value">₹{formatIndianNumber(accountsTotals.gross.toFixed(0))}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Discount</span><span className="stat-value">₹{formatIndianNumber(accountsTotals.discount.toFixed(0))}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total GST</span><span className="stat-value">₹{formatIndianNumber(accountsTotals.gst.toFixed(0))}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Invoice Value</span><span className="stat-value">₹{formatIndianNumber(accountsTotals.invoice.toFixed(0))}</span></div></div>
-                            </div>
-
-                            <div className="acc-filter-bar">
-                                <div className="admin-search-wrapper" style={{ flex: '0 0 auto', maxWidth: 280 }}>
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search Order, Customer..." value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} className="admin-search-input" />
-                                </div>
-                                {accountsPeriodControl}
-                                <select className="cmo-compare-select" value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
-                                    <option value="">All Status</option>
-                                    <option value="order_received">Order Received</option><option value="completed">Completed</option>
-                                    <option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option>
-                                </select>
-                                <select className="cmo-compare-select" value={accountsStore} onChange={(e) => setAccountsStore(e.target.value)}>
-                                    <option value="">All Stores</option>
-                                    {accountsStoreOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                                <select className="cmo-compare-select" value={accountsSA} onChange={(e) => setAccountsSA(e.target.value)}>
-                                    <option value="">All Salespersons</option>
-                                    {accountsSAOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                                {(accountsTimeline !== "all" || accountsStatus || accountsStore || accountsSA) && (
-                                    <button className="cmo-pill" onClick={() => { accountsPeriodProps.setTimeline("all"); accountsPeriodProps.setCustomFrom(""); accountsPeriodProps.setCustomTo(""); setAccountsStatus(""); setAccountsStore(""); setAccountsSA(""); }}
-                                        style={{ color: '#c62828', borderColor: '#c62828' }}>Clear</button>
-                                )}
-                            </div>
-
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container accounts-table-container">
-                                    <table className="admin-table accounts-table">
-                                        <thead><tr><th>SA Name</th><th>Order ID</th><th>Date</th><th>Customer</th><th>Product</th><th className="amount">Gross</th><th className="amount">Discount</th><th className="amount">Taxable</th><th className="amount">GST</th><th className="amount">Invoice</th><th>Qty</th><th>Status</th><th>Delivery Date</th></tr></thead>
-                                        <tbody>
-                                            {currentAccountItems.length === 0 ? <tr><td colSpan="13" className="no-data">No records found</td></tr> :
-                                                currentAccountItems.map(item => (
-                                                    <tr key={item.id}>
-                                                        <td>{item.sa_name}</td>
-                                                        <td><span className="order-id">{item.order_no}</span></td>
-                                                        <td>{formatDate(item.order_date)}</td>
-                                                        <td>{item.client_name}</td>
-                                                        <td className="product-cell">{item.product_name}</td>
-                                                        <td className="amount">₹{formatIndianNumber(item.gross_value)}</td>
-                                                        <td className="amount">₹{formatIndianNumber(item.discount)}</td>
-                                                        <td className="amount">₹{formatIndianNumber(item.taxable_value)}</td>
-                                                        <td className="amount">₹{formatIndianNumber(item.gst)}</td>
-                                                        <td className="amount invoice">₹{formatIndianNumber(item.invoice_value)}</td>
-                                                        <td>{item.quantity}</td>
-                                                        <td><span className={`status-badge ${normalizeOrderStatus(item.status)}`}>{getOrderStatusLabel(item.status)}</span></td>
-                                                        <td>{formatDate(item.delivery_date)}</td>
-                                                    </tr>
-                                                ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <Paginator page={accountsPage} totalPages={accountsTotalPages} onChange={setAccountsPage} />
-                        </div>
-                    )}
-
-                    {/* ═══════════════════════════════════════════════════ */}
-                    {/* CLIENTS TAB */}
-                    {/* ═══════════════════════════════════════════════════ */}
-
-                    {activeTab === "exhibition_approvals" && (
-                        <ExhibitionApprovals currentUserEmail={currentUserEmail} />
-                    )}
-
-                </main>
-            </div>
+            <CeoDetail stack={stack} setStack={setStack} ctx={ctx} />
         </div>
+        </>
     );
 }
