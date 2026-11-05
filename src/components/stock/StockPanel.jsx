@@ -51,7 +51,7 @@ function PoolRow({ label, count, percentage, color, note }) {
   );
 }
 
-export default function StockPanel({ pools = [] }) {
+export default function StockPanel({ pools = [], SelectComponent = null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
@@ -448,7 +448,14 @@ export default function StockPanel({ pools = [] }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            {productPools.length > 1 && (
+            {productPools.length > 1 && (SelectComponent ? (
+              <SelectComponent
+                label="Pool"
+                value={poolFilter}
+                onChange={setPoolFilter}
+                options={[{ value: "all", label: "All pools" }, ...productPools.map((p) => ({ value: p.key, label: p.label }))]}
+              />
+            ) : (
               <select
                 className="stkp-select"
                 value={poolFilter}
@@ -461,7 +468,7 @@ export default function StockPanel({ pools = [] }) {
                   </option>
                 ))}
               </select>
-            )}
+            ))}
           </div>
         </div>
 

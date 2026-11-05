@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 // NOTIFICATION TYPE DEFINITIONS
 // ==========================================
 export const NOTIFICATION_TYPES = {
+    CEO_ASSIGNMENT: "ceo_assignment",           // an item the CEO assigned from Today's Brief
     // Immediate triggers
     ORDER_PLACED: "order_placed",               // #13
     ORDER_ON_HOLD: "order_on_hold",             // #20
@@ -216,6 +217,11 @@ const RECIPIENT_MAP = {
 // NOTIFICATION TITLE & MESSAGE TEMPLATES
 // ==========================================
 const TEMPLATES = {
+    [NOTIFICATION_TYPES.CEO_ASSIGNMENT]: (meta) => ({
+        title: `${meta.assigned_by || "The CEO"} assigned this to you`,
+        message: [meta.item_title, meta.note].filter(Boolean).join(" Note: "),
+        priority: "high",
+    }),
     [NOTIFICATION_TYPES.ORDER_PLACED]: (meta) => {
         // Stock orders bypass the customer flow entirely (no real client), so the
         // trailing "client" suffix doesn't apply.
