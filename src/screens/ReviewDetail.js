@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { settleCreditUsedOnOrder } from "../utils/storeCredit";
 import { useAuth } from "../context/AuthContext";
 import SignatureCanvas from "react-signature-canvas";
 import Logo from "../images/logo.png";
@@ -604,6 +605,13 @@ export default function ReviewDetail() {
     if (insertError) {
       console.error("❌ Order insert error:", insertError);
       console.error("❌ Error details:", JSON.stringify(insertError, null, 2));
+      // The database refuses an order that uses more store credit than the client
+      // has (r31_01). That reason is shown as it is, so the team knows what to fix.
+      if (/store credit/i.test(insertError.message || "")) {
+        const shown = new Error(insertError.message);
+        shown.userFacing = true;
+        throw shown;
+      }
       throw insertError;
     }
 
@@ -615,6 +623,27 @@ export default function ReviewDetail() {
     // ✅ ORDER PERSISTED — from this point on, never allow another insert attempt
     // for this component instance. The lock will not be released by `finally` below.
     orderInsertSucceeded = true;
+
+    // 4.1 STORE CREDIT, straight after the order is saved
+    // The database takes the credit off in the same moment the order is saved
+    // (r31_01), so it can no longer be skipped by a closed page or a failed step
+    // below. This only confirms it, and does it the old way if r31_01 is not run.
+    // It used to save a balance remembered from when the form opened, which also
+    // went wrong when another change happened in between.
+    if (Number(order.store_credit_used) > 0) {
+      try {
+        await settleCreditUsedOnOrder(insertedOrder.id, order.user_id, order.store_credit_used);
+      } catch (err) {
+        console.error("❌ Store credit deduction error:", err);
+        showPopup({
+          title: "Store Credit Not Updated",
+          message: `Order ${insertedOrder.order_no} is placed, but the client's store credit balance could not be reduced. Please tell the admin team before the client uses it again.`,
+          type: "warning",
+          confirmText: "OK",
+        });
+      }
+    }
+
 
     // Clear the exhibition-order context so it doesn't leak into the next order.
     sessionStorage.removeItem("exhibitionOrder");
@@ -763,31 +792,6 @@ export default function ReviewDetail() {
         }
       } catch (err) {
         console.error("❌ Measurement save exception:", err);
-      }
-    } else {
-    }
-
-    // 5️⃣.2 DEDUCT STORE CREDIT
-    if (order.store_credit_used && order.store_credit_used > 0) {
-      try {
-        const updateData = {
-          store_credit: order.store_credit_remaining || 0,
-        };
-
-        if (!order.store_credit_remaining || order.store_credit_remaining <= 0) {
-          updateData.store_credit_expiry = null;
-        }
-
-        const { error: creditError } = await supabase
-          .from("profiles")
-          .update(updateData)
-          .eq("id", order.user_id);
-
-        if (creditError) {
-          console.error("❌ Store credit deduction error:", creditError);
-        }
-      } catch (err) {
-        console.error("❌ Store credit exception:", err);
       }
     } else {
     }
