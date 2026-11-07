@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import { getItemCategory } from "../utils/itemCategory";
 import "./OrderHistory.css";
 import { supabase } from "../lib/supabaseClient";
+import { creditExchangeDifference, returnForStoreCredit } from "../utils/storeCredit";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import Logo from "../images/logo.png";
@@ -840,28 +841,9 @@ export default function OrderHistory() {
       let creditMessage = "";
       if (order.is_gifting && valueDifference < 0) {
         const creditAmount = Math.abs(valueDifference);
-        const expiryDate = new Date();
-        expiryDate.setMonth(expiryDate.getMonth() + 12);
-
-        const currentCredit = Number(profile?.store_credit) || 0;
-        const newCredit = currentCredit + creditAmount;
-
-        const { error: creditErr } = await supabase.from("profiles").update({
-          store_credit: newCredit,
-          store_credit_expiry: expiryDate.toISOString().split('T')[0],
-        }).eq("id", order.user_id);
-        if (creditErr) throw creditErr;
-
-        const { error: creditFlagErr } = await supabase.from("orders").update({
-          exchange_credit_issued: creditAmount,
-        }).eq("id", order.id);
-        if (creditFlagErr) throw creditFlagErr;
-
-        setProfile(prev => ({
-          ...prev,
-          store_credit: newCredit,
-          store_credit_expiry: expiryDate.toISOString().split('T')[0],
-        }));
+        // Added to the client's real balance in the database, once for this order.
+        const { balance, expiry } = await creditExchangeDifference(order, creditAmount);
+        setProfile(prev => (prev && prev.id === order.user_id ? { ...prev, store_credit: balance, store_credit_expiry: expiry } : prev));
 
         creditMessage = `\n\n💳 ₹${formatIndianNumber(creditAmount)} store credit issued to original purchaser (balance from lower value exchange). Valid for 12 months.`;
       }
@@ -922,34 +904,15 @@ export default function OrderHistory() {
       // Calculate credit based on selected items only
       const creditAmount = getSelectedItemsValue(order, selectedReturnItems);
 
-      // Update order status
-      const { error: returnErr } = await supabase.from("orders").update({
+      // Status and credit change together in the database, once for this order,
+      // added to the client's real balance (not the one this page loaded with).
+      const { balance, expiry } = await returnForStoreCredit(order, {
+        amount: creditAmount,
         status: isPartialReturn ? "partial_return" : "return_store_credit",
-        return_reason: finalReason,
-        exchange_requested_at: new Date().toISOString(),
-        returned_items: isPartialReturn ? selectedReturnItems.map(idx => items[idx]) : null,
-      }).eq("id", order.id);
-      if (returnErr) throw returnErr;
-
-      // Add store credit to original purchaser's profile
-      const expiryDate = new Date();
-      expiryDate.setMonth(expiryDate.getMonth() + 12); // 12 months validity
-
-      const currentCredit = Number(profile?.store_credit) || 0;
-      const newCredit = currentCredit + creditAmount;
-
-      const { error: returnCreditErr } = await supabase.from("profiles").update({
-        store_credit: newCredit,
-        store_credit_expiry: expiryDate.toISOString().split('T')[0],
-      }).eq("id", order.user_id);
-      if (returnCreditErr) throw returnCreditErr;
-
-      // Update local profile state
-      setProfile(prev => ({
-        ...prev,
-        store_credit: newCredit,
-        store_credit_expiry: expiryDate.toISOString().split('T')[0],
-      }));
+        reason: finalReason,
+        returnedItems: isPartialReturn ? selectedReturnItems.map(idx => items[idx]) : null,
+      });
+      setProfile(prev => (prev && prev.id === order.user_id ? { ...prev, store_credit: balance, store_credit_expiry: expiry } : prev));
 
       const newStatus = isPartialReturn ? "partial_return" : "return_store_credit";
       setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus, return_reason: finalReason } : o));
