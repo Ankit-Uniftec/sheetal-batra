@@ -2,8 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import Logo from "../../images/logo.png";
-import LogoVideo from "../../images/logo.mp4";
-import LogoVideoWebm from "../../images/logo.webm";
+import LogoLoader from "../../components/LogoLoader";
 import NotificationBell from "../../components/NotificationBell";
 import { fetchAllExhibitions, totalNetSbRevenue } from "../../utils/exhibitionService";
 import useFilterParam from "../../hooks/useFilterParam";
@@ -1244,11 +1243,8 @@ export default function CEODashboard() {
         {PopupComponent}
         <div className={`ceo${navOpen ? " is-nav-open" : ""}`}>
             {welcome !== "off" && (
-                <div className={`ceo-welcome${welcome === "fading" ? " is-done" : ""}`} role="status">
-                    <video autoPlay muted playsInline loop poster={Logo} aria-hidden="true">
-                        <source src={LogoVideoWebm} type="video/webm" />
-                        <source src={LogoVideo} type="video/mp4" />
-                    </video>
+                <div className={`ceo-welcome${welcome === "fading" ? " is-done" : ""}`} role="status" onClick={() => { if (firstPaintDone) { setWelcome("fading"); try { sessionStorage.setItem("sb-ceo-welcomed", "1"); } catch { /* private window */ } setTimeout(() => setWelcome("off"), 600); } }}>
+                    <LogoLoader />
                     <div className="ceo-welcome-hello">Welcome back, {shortName}</div>
                     <p className="ceo-welcome-line">{welcomeLine}</p>
                     {firstPaintDone && (
@@ -1258,10 +1254,7 @@ export default function CEODashboard() {
             )}
             {welcome === "off" && loading && (
                 <div className="ceo-welcome" role="status">
-                    <video autoPlay muted playsInline loop poster={Logo} aria-hidden="true">
-                        <source src={LogoVideoWebm} type="video/webm" />
-                        <source src={LogoVideo} type="video/mp4" />
-                    </video>
+                    <LogoLoader />
                     <p className="ceo-welcome-state">Bringing your numbers together</p>
                 </div>
             )}
@@ -1309,7 +1302,7 @@ export default function CEODashboard() {
                             <span>{channelFilter || "All channels"} · {comparison === "none" ? "No comparison" : `vs ${compareName.toLowerCase()}`}</span>
                         </button>
                     )}
-                    <div className="ceo-top-end"><NotificationBell userEmail={currentUserEmail} /></div>
+                    <div className="ceo-top-end"><NotificationBell userEmail={currentUserEmail} look="soft" /></div>
                 </div>
                 {historyLoading && !loading && <div className="ceo-history">Loading older orders. All-time figures will update in a moment.</div>}
 

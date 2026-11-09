@@ -1,1633 +1,488 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import { isSaleOrder } from "../../utils/revenue";
-import "./GMDashboard.css";
-import formatIndianNumber from "../../utils/formatIndianNumber";
 import formatDate from "../../utils/formatDate";
 import { downloadCustomerPdf, downloadWarehousePdf } from "../../utils/pdfLazy";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
-import Paginator from "../../components/Paginator";
-import DashboardHeader from "../../components/DashboardHeader";
-import StockPanel from "../../components/stock/StockPanel";
-import { poolsForUser } from "../../utils/stockVisibility";
-import ExhibitionApprovals from "../../components/ExhibitionApprovals";
-import OverrideHistory from "../../components/OverrideHistory";
-import { totalNetSbRevenue } from "../../utils/exhibitionService";
-import SearchByDropdown from "../../components/SearchByDropdown";
-import config from "../../config/config";
-import { itemFinalAmount } from "../../utils/itemNetAmount";
-import { getOrderChannelLabel, normalizeOrderStatus, getOrderStatusLabel, getStageLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../utils/barcodeService";
-import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
-import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
-} from "recharts";
+import NotificationBell from "../../components/NotificationBell";
+import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import UpdatePaymentModal from "../../components/UpdatePaymentModal";
+import { b2bPaymentState, canUpdateB2bPayment, paymentRecordedPopup, recordPayment } from "../../utils/recordPayment";
+import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel, getStageLabel } from "../../utils/barcodeService";
+import { usePeriodFilter, comparisonPeriodRange, periodLabel, PERIOD_OPTIONS } from "../../components/PeriodFilter";
 import { startOrderMode } from "../../utils/orderMode";
 import { cleanMerchandiserName } from "../../utils/merchandiserName";
+import { loadLedger, loadSales, loadStockOrders, loadStockRoomCatalogue } from "../StockRoom/stockRoomData";
+import Logo from "../../images/logo.png";
+import LogoLoader from "../../components/LogoLoader";
+import { shortInr } from "../CeoDashboard/ceoInsights";
+import { CalendarIcon, Chips, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, Select, Thumb, fullInr } from "../CeoDashboard/CeoUi";
+import "../CeoDashboard/CeoMakeover.css";
+import "./GMDashboard.css";
+import "./GmMakeover.css";
+import {
+  AccountsPage, B2bPage, DeliveryPage, ExhibitionsPage, InventoryPage, OrdersList, OrdersPage, OutstandingPage,
+  OverridePage, ReturnsPage, StorePerformancePage, PaymentPill, Stat, journeyLine,
+} from "./GmPages";
 
-// Status options
-const ORDER_STATUS_OPTIONS = [
-    // The order lifecycle, in order. Deliberately excludes the dead statuses
-    // in_production / ready / prepared / confirmed / pending: ZERO orders carry
-    // them (they predate barcode tracking, which now derives the middle of the
-    // flow from components), and offering them let a human write bad data back.
-    { value: "order_received", label: "Order Received", color: "#ff9800" },
-    { value: "completed", label: "Completed", color: "#388e3c" },
-    { value: "dispatched", label: "Dispatched", color: "#9c27b0" },
-    { value: "delivered", label: "Delivered", color: "#2e7d32" },
-    { value: "cancelled", label: "Cancelled", color: "#f44336" },
-];
-
-const STATUS_TABS = [
-    { value: "all", label: "All Orders" },
-    { value: "unfulfilled", label: "Unfulfilled" },
-    { value: "prepared", label: "Prepared" },
-    { value: "delivered", label: "Delivered" },
-    { value: "cancelled", label: "Cancelled" },
-];
+// ============================================================
+// GM (Anushree) dashboard. Same pages and figures as before, drawn with the
+// building blocks of Sheetal's dashboard. Inventory Health reads Stock Room's
+// own tables, so its counts always match Stock Room.
+// ============================================================
 
 const COMPARISON_OPTIONS = [
-    { value: "none", label: "No comparison" },
-    { value: "previous_period", label: "Previous period" },
-    { value: "previous_year", label: "Previous year" },
+  { value: "none", label: "No comparison" },
+  { value: "previous_period", label: "Previous period" },
+  { value: "previous_year", label: "Previous year" },
 ];
 
-const ITEMS_PER_PAGE = 15;
-const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+// Icons the Stock Room set has no match for.
+const ApprovalIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1M9 13l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const DeliveryIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <path d="M2 7h11v9H2zM13 10h4l3 3v3h-7" strokeLinejoin="round" /><circle cx="6" cy="17.5" r="1.8" /><circle cx="16.5" cy="17.5" r="1.8" />
+  </svg>
+);
+const CUSTOM_ICONS = { approval: ApprovalIcon, delivery: DeliveryIcon };
 
-// Day buckets built from LOCAL parts — toISOString() is UTC and pushed
-// late-evening IST orders onto the previous day.
-const two = (n) => String(n).padStart(2, "0");
-const dayKey = (ts) => {
-    const d = new Date(ts);
-    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
-};
-const dayLabel = (ts) => {
-    const d = new Date(ts);
-    return `${d.getDate()}/${d.getMonth() + 1}`;
-};
-
-const CHART_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37", "#BDB76B", "#DAA520", "#B8860B", "#CD853F", "#DEB887"];
-const PIE_COLORS = ["#d5b85a", "#8B7355", "#C9A94E", "#A67C52", "#D4AF37"];
-
-const COLOR_NAME_MAP = {
-    "black": "#1a1a1a", "white": "#f5f5f5", "red": "#c62828", "blue": "#1565c0",
-    "navy": "#0d2137", "navy blue": "#0d2137", "green": "#2e7d32", "yellow": "#f9a825",
-    "pink": "#e91e8f", "baby pink": "#f8bbd0", "blush pink": "#f4a0b5", "dusty pink": "#d4919a",
-    "hot pink": "#ff1493", "purple": "#7b1fa2", "lavender": "#b39ddb", "orange": "#ef6c00",
-    "brown": "#5d4037", "beige": "#d7ccc8", "cream": "#fffdd0", "ivory": "#fffff0",
-    "grey": "#757575", "gray": "#757575", "silver": "#bdbdbd", "gold": "#d5b85a",
-    "maroon": "#6a1b29", "burgundy": "#800020", "wine": "#722f37", "rust": "#b7410e",
-    "teal": "#008080", "turquoise": "#40e0d0", "coral": "#ff7f50", "peach": "#ffdab9",
-    "sage": "#9caf88", "sage green": "#9caf88", "olive": "#6b8e23", "olive green": "#6b8e23",
-    "mint": "#98fb98", "mint green": "#98fb98", "forest green": "#228b22",
-    "sky blue": "#87ceeb", "royal blue": "#4169e1", "powder blue": "#b0c4de",
-    "taupe": "#8b8378", "tan": "#d2b48c", "camel": "#c19a6b", "khaki": "#c3b091",
-    "charcoal": "#36454f", "off white": "#faf0e6", "off-white": "#faf0e6",
-    "magenta": "#c2185b", "lilac": "#c8a2c8", "plum": "#8e4585", "mauve": "#e0b0ff",
-    "copper": "#b87333", "rose": "#e8a0bf", "rose gold": "#b76e79", "emerald": "#50c878",
-    "aqua": "#00bcd4", "indigo": "#3f51b5", "lemon": "#fff44f", "mustard": "#e1ad01",
-    "nude": "#e3bc9a", "champagne": "#f7e7ce", "sand": "#c2b280", "slate": "#708090",
-    "denim": "#1560bd", "cobalt": "#0047ab", "cerulean": "#007ba7", "fuchsia": "#ff00ff",
-    "scarlet": "#ff2400", "crimson": "#dc143c", "tangerine": "#ff9966", "apricot": "#fbceb1",
-    "sea green": "#2e8b57", "pistachio": "#93c572", "lime": "#a4c639", "moss": "#8a9a5b",
-};
-
-const getColorHex = (colorName) => {
-    if (!colorName) return "#d5b85a";
-    const lower = colorName.toLowerCase().trim();
-    if (COLOR_NAME_MAP[lower]) return COLOR_NAME_MAP[lower];
-    for (const [key, hex] of Object.entries(COLOR_NAME_MAP)) {
-        if (lower.includes(key) || key.includes(lower)) return hex;
-    }
-    let hash = 0;
-    for (let i = 0; i < lower.length; i++) hash = lower.charCodeAt(i) + ((hash << 5) - hash);
-    const h = Math.abs(hash) % 360;
-    return `hsl(${h}, 55%, 50%)`;
-};
-
-const ChartTooltip = ({ active, payload, label, prefix = "\u20B9", suffix = "" }) => {
-    if (!active || !payload?.length) return null;
-    return (
-        <div className="cmo-chart-tooltip">
-            <p className="cmo-chart-tooltip-label">{label}</p>
-            {payload.map((entry, i) => (
-                <p key={i} style={{ color: entry.color }}>
-                    {entry.name}: {prefix}{formatIndianNumber(Math.round(entry.value))}{suffix}
-                </p>
-            ))}
-        </div>
-    );
-};
+const NAV = [
+  {
+    group: "Dashboard",
+    items: [
+      { id: "store_performance", label: "Store Performance", icon: "overview" },
+      { id: "b2b_overview", label: "B2B Overview", icon: "transfer" },
+      { id: "outstanding", label: "Client Outstanding", icon: "inr" },
+      { id: "inventory", label: "Inventory Health", icon: "products" },
+      { id: "returns", label: "Returns & Analytics", icon: "receive" },
+    ],
+  },
+  {
+    group: "Operations",
+    items: [
+      { id: "orders", label: "Orders", icon: "orders" },
+      { id: "delivery_watch", label: "Delivery Watch", icon: "delivery" },
+      { id: "accounts", label: "Accounts", icon: "doc" },
+      { id: "exhibition_approvals", label: "Exhibition Approvals", icon: "approval" },
+      { id: "override_log", label: "Override Log", icon: "movements" },
+    ],
+  },
+];
+// Day-wise Sales is now part of Store Performance, and Stock part of Inventory
+// Health; old links to either still open the right page.
+const TAB_ALIASES = { day_sales: "store_performance", stock: "inventory" };
+const PERIOD_TABS = ["store_performance", "b2b_overview", "returns"];
+// Names that sit in the salesperson column but are not people.
+const NOT_PEOPLE = /^(exhibitions?|private( order)?|website|shopify|online|b2b|comms|stock|-|unknown)$/i;
 
 export default function GMDashboard() {
-    const navigate = useNavigate();
-    const { showPopup, PopupComponent } = usePopup();
-    const dropdownRef = useRef(null);
-
-    // Core state
-    const [loading, setLoading] = useState(true);
-    const [orders, setOrders] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [salespersonTable, setSalespersonTable] = useState([]);
-    const [vendors, setVendors] = useState([]);
-    const [consignmentInventory, setConsignmentInventory] = useState([]);
-    const [currentUserEmail, setCurrentUserEmail] = useState("");
-    const [currentUserName, setCurrentUserName] = useState("");
-    const [currentUserStore, setCurrentUserStore] = useState("");
-    // Logged-in GM's full salesperson row. Drives the gated Stock Order sidebar item.
-    const [currentUserProfile, setCurrentUserProfile] = useState(null);
-
-    // UI state
-    // Tab lives in the URL (?tab=...) — Back returns to the tab the user was on.
-    const [activeTab, setActiveTab] = useTabParam("store_performance");
-    const [showSidebar, setShowSidebar] = useState(false);
-    // Shared PeriodFilter drives every date-aware tab; comparison stays local.
-    const { inPeriod, range: periodRangeValue, props: periodProps } = usePeriodFilter("month", { variant: "pills" });
-    const [comparison, setComparison] = useState("none");
-
-    // Orders tab
-    const [orderSearch, setOrderSearch] = useState("");
-    const [orderSearchField, setOrderSearchField] = useState("order_no");
-    const [statusTab, setStatusTab] = useState("all");
-    const [ordersPage, setOrdersPage] = useState(1);
-    const [sortBy, setSortBy] = useState("newest");
-    const [filters, setFilters] = useState({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
-    // Order-date scope for the orders list — shared PeriodFilter (select),
-    // rendered inside the Date Range dropdown panel.
-    const {
-        timeline: ordersTimeline, inPeriod: inOrdersPeriod,
-        range: ordersPeriodRange, props: ordersPeriodProps,
-    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
-    const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
-    const [openDropdown, setOpenDropdown] = useState(null);
-    const [statusUpdating, setStatusUpdating] = useState(null);
-    const [pdfLoading, setPdfLoading] = useState(null);
-
-    // Store performance tab
-    const [storeFilter, setStoreFilter] = useState("all");
-    const [saFilter, setSaFilter] = useState("");
-
-    // Accounts tab
-    const [accountsSearch, setAccountsSearch] = useState("");
-    // Order-date scope for the accounts line items — shared PeriodFilter (select).
-    const {
-        control: accountsPeriodControl, timeline: accountsTimeline,
-        inPeriod: inAccountsPeriod, range: accountsPeriodRange, props: accountsPeriodProps,
-    } = usePeriodFilter("all", { variant: "select", label: "Order date:" });
-    const [accountsStatus, setAccountsStatus] = useState("");
-    const [accountsStore, setAccountsStore] = useState("");
-    const [accountsSA, setAccountsSA] = useState("");
-    const [accountsPage, setAccountsPage] = useState(1);
-
-    // B2B tab
-    const [b2bSearch, setB2bSearch] = useState("");
-    const [b2bPage, setB2bPage] = useState(1);
-
-    // Returns tab
-    const [returnsFilter, setReturnsFilter] = useState("all");
-
-    // Inventory
-    const [inventorySearch, setInventorySearch] = useState("");
-    const [inventoryStockFilter, setInventoryStockFilter] = useState("all");
-    const [inventoryTypeFilter, setInventoryTypeFilter] = useState("all");
-    const [inventoryPage, setInventoryPage] = useState(1);
-    const [variantInventory, setVariantInventory] = useState({});
-    const [expandedProduct, setExpandedProduct] = useState(null);
-    const [lxrtsSyncLoading, setLxrtsSyncLoading] = useState(false);
-
-    // Auth & fetch
-    useEffect(() => {
-        const checkAuthAndFetch = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) { navigate("/login", { replace: true }); return; }
-
-            const { data: userRecord } = await supabase
-                .from("salesperson")
-                .select("saleperson, role, email, phone, store_name, designation, can_place_stock_orders")
-                .eq("email", session.user.email?.toLowerCase())
-                .single();
-
-            if (!userRecord || userRecord.role !== "gm") {
-                await supabase.auth.signOut();
-                navigate("/login", { replace: true });
-                return;
-            }
-
-            setCurrentUserEmail(session.user.email?.toLowerCase() || "");
-            // No "Delhi Store" default — if a GM profile has no store_name, that's
-            // a data issue the admin needs to fix, not something to paper over.
-            setCurrentUserStore(userRecord.store_name || "");
-            setCurrentUserName(userRecord.saleperson || "");
-            setCurrentUserProfile(userRecord);
-            fetchAllData();
-        };
-        checkAuthAndFetch();
-    }, [navigate]);
-
-    // Stock-order entry — same flow as SA dashboard. Gated on
-    // salesperson.can_place_stock_orders.
-    const handleStartStockOrder = async () => {
-        if (!currentUserProfile) {
-            showPopup({
-                title: "Access Denied",
-                message: "User profile not loaded. Please refresh and try again.",
-                type: "error",
-                confirmText: "Ok",
-            });
-            return;
-        }
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) sessionStorage.setItem("associateSession", JSON.stringify({
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-            user: { email: session.user?.email },
-        }));
-        sessionStorage.setItem("returnToAssociate", "true");
-        // Route back to the GM dashboard after the order is placed.
-        // Without this, OrderPlaced.handleBackToDashboard defaults to
-        // /AssociateDashboard, whose role check fails and logs out non-SA users.
-        sessionStorage.setItem("returnDashboard", "/gm-dashboard");
-        sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
-        sessionStorage.setItem("currentSalesperson", JSON.stringify({
-            name: currentUserProfile.saleperson,
-            email: currentUserProfile.email,
-            phone: currentUserProfile.phone,
-            store: currentUserProfile.store_name,
-            designation: currentUserProfile.designation,
-        }));
-        // Exclusive: clears comms/exhibition flags and stale drafts too.
-        startOrderMode("stock");
-        navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
-    };
-
-    const fetchAllData = async () => {
-        setLoading(true);
-        try {
-            const [ordersRes, productsRes, spRes, vendorsRes, consignmentRes] = await Promise.all([
-                fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
-                // products_live, not products: reserved-but-unfilled barcode rows
-                // (name IS NULL) have NULL inventory, which reads as 0 and would
-                // inflate the out-of-stock count. See v2/74_reserve_sku_rows.sql.
-                fetchAllRows("products_live", (q) => q.select("*").order("name", { ascending: true })), // Paged past Supabase's 1000-row cap
-                supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
-                supabase.from("vendors").select("*"),
-                supabase.from("consignment_inventory").select("*"),
-            ]);
-            if (ordersRes.data) setOrders(ordersRes.data.filter(o => !o.is_comms));
-            if (productsRes.data) setProducts(productsRes.data);
-            if (spRes.data) setSalespersonTable(spRes.data);
-            if (vendorsRes.data) setVendors(vendorsRes.data);
-            if (consignmentRes.data) setConsignmentInventory(consignmentRes.data);
-        } catch (err) { console.error("Error fetching data:", err); }
-        finally { setLoading(false); }
-    };
-
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpenDropdown(null);
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
-
-    const fetchAllLxrtsInventory = async (lxrtsProducts) => {
-        setLxrtsSyncLoading(true);
-        const inventoryMap = {};
-        await Promise.allSettled(lxrtsProducts.map(async (product) => {
-            try {
-                const response = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-inventory`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` },
-                    body: JSON.stringify({ action: "fetch", product_id: product.id }),
-                });
-                const result = await response.json();
-                if (result.success && result.inventory) inventoryMap[product.id] = result.inventory;
-                else {
-                    const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
-                    if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
-                }
-            } catch (err) {
-                console.error(`Error syncing ${product.name}:`, err);
-                const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
-                if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
-            }
-        }));
-        setVariantInventory(inventoryMap);
-        setLxrtsSyncLoading(false);
-    };
-
-    // ═══════════════════════════════════════════════════════════
-    // HELPER FUNCTIONS
-    // ═══════════════════════════════════════════════════════════
-    const getPaymentStatus = (order) => {
-        const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0;
-        // total_paid = everything received. advance_payment is the order-time
-        // advance only and would under-report any balance collected later.
-        const paid = Number(order.total_paid ?? order.advance_payment) || 0;
-        if (paid >= total) return "paid";
-        if (paid > 0) return "partial";
-        return "unpaid";
-    };
-
-    const getPriority = (order) => {
-        if (order.is_urgent || order.order_flag === "Urgent" || order.alteration_status === "upcoming_occasion") return "urgent";
-        return "normal";
-    };
-
-    const getOrderType = (order) => {
-        if (order.is_alteration) return "alteration";
-        const item = order.items?.[0];
-        if (item?.order_type === "Custom" || item?.payment_order_type === "Custom") return "custom";
-        return "standard";
-    };
-
-    const isLxrtsOrder = (order) => order.items?.[0]?.sync_enabled === true;
-    const isLxrtsProduct = (product) => product.sync_enabled === true;
-
-    // Channel = the shared prefix-based classifier (LXRTS is a TYPE, not a
-    // channel — such orders report under the channel they were placed in).
-    const getOrderChannel = (order) => getOrderChannelLabel(order);
-
-    const getOrderSalesperson = (order) => {
-        if (order.is_b2b || (order.salesperson_store || "").toLowerCase() === "b2b") {
-            return cleanMerchandiserName(order.merchandiser_name || order.salesperson) || null;
-        }
-        return order.salesperson || null;
-    };
-
-    const knownStoreNames = useMemo(() => {
-        const stores = new Set();
-        orders.forEach(o => {
-            const s = (o.salesperson_store || "").trim();
-            if (s) stores.add(s);
-        });
-        return stores;
-    }, [orders]);
-
-    const isPersonName = (name) => {
-        if (!name || name === "-" || name === "Unknown") return false;
-        return !knownStoreNames.has(name);
-    };
-
-    const getLxrtsTotalInventory = (productId) => {
-        const variants = variantInventory[productId];
-        if (!variants) return 0;
-        return Object.values(variants).reduce((sum, qty) => sum + (qty || 0), 0);
-    };
-
-    const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
-    const getProductSizes = (productId) => {
-        const variants = variantInventory[productId];
-        if (!variants) return [];
-        const knownSizes = SIZE_ORDER.filter(s => variants[s] !== undefined);
-        const extraSizes = Object.keys(variants).filter(s => !SIZE_ORDER.includes(s)).sort();
-        return [...knownSizes, ...extraSizes];
-    };
-
-    const salespersons = useMemo(() => {
-        const spSet = new Set();
-        orders.forEach(o => {
-            const sp = getOrderSalesperson(o);
-            if (sp && isPersonName(sp)) spSet.add(sp);
-        });
-        return [...spSet].sort();
-    }, [orders, knownStoreNames]);
-
-    // ═══════════════════════════════════════════════════════════
-    // DATE RANGE HELPERS
-    // ═══════════════════════════════════════════════════════════
-    const calculateGrowth = (current, previous) => {
-        if (previous === 0) return current > 0 ? 100 : 0;
-        return ((current - previous) / previous) * 100;
-    };
-
-    // ═══════════════════════════════════════════════════════════
-    // STORE PERFORMANCE STATS
-    // ═══════════════════════════════════════════════════════════
-    const storePerformanceStats = useMemo(() => {
-        const compRange = comparisonPeriodRange(periodRangeValue, comparison);
-        // Sales only. The counts below (totalOrders, per-store orders/items,
-        // per-SA orders, staff productivity, AOV) were running over every row,
-        // so 0-value stock movements and alterations inflated them and dragged
-        // AOV down; the revenue sums were already guarded, which is why only
-        // the counts were wrong.
-        const currentOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at) && isSaleOrder(o));
-        const prevOrders = compRange ? orders.filter(o => !isLxrtsOrder(o) && inRange(compRange, o.created_at) && isSaleOrder(o)) : [];
-
-        const totalRevenue = currentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const netSbRev = totalNetSbRevenue(currentOrders);
-        const totalOrders = currentOrders.length;
-        const prevRevenue = prevOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-
-        // Store-wise breakdown
-        const storeMap = {};
-        currentOrders.forEach(o => {
-            const store = o.salesperson_store || "Other";
-            if (!storeMap[store]) storeMap[store] = { name: store, revenue: 0, orders: 0, items: 0 };
-            storeMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            storeMap[store].orders += 1;
-            storeMap[store].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
-        });
-        const storeBreakdown = Object.values(storeMap).sort((a, b) => b.revenue - a.revenue);
-
-        // SA-wise breakdown
-        const saMap = {};
-        currentOrders.forEach(o => {
-            const sp = getOrderSalesperson(o);
-            if (!sp || !isPersonName(sp)) return;
-            const store = o.salesperson_store || "Other";
-            if (!saMap[sp]) saMap[sp] = { name: sp, store, revenue: 0, orders: 0, items: 0, discount: 0 };
-            saMap[sp].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            saMap[sp].orders += 1;
-            saMap[sp].items += (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0);
-            saMap[sp].discount += Number(o.discount_amount || 0);
-        });
-        let saBreakdown = Object.values(saMap).sort((a, b) => b.revenue - a.revenue);
-        if (storeFilter !== "all") saBreakdown = saBreakdown.filter(s => s.store === storeFilter);
-
-        // Store growth comparison
-        const prevStoreMap = {};
-        prevOrders.forEach(o => {
-            const store = o.salesperson_store || "Other";
-            if (!prevStoreMap[store]) prevStoreMap[store] = { revenue: 0 };
-            prevStoreMap[store].revenue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-        });
-        const storeGrowth = storeBreakdown.map(s => ({
-            ...s,
-            prevRevenue: prevStoreMap[s.name]?.revenue || 0,
-            growth: calculateGrowth(s.revenue, prevStoreMap[s.name]?.revenue || 0),
-        }));
-
-        // Staff productivity (orders per SA per store)
-        const storeStaffCount = {};
-        salespersonTable.forEach(sp => {
-            const store = sp.store_name || "Other";
-            if (sp.role === "associate" || sp.role === "salesperson") {
-                if (!storeStaffCount[store]) storeStaffCount[store] = 0;
-                storeStaffCount[store] += 1;
-            }
-        });
-        const staffProductivity = storeBreakdown.map(s => ({
-            name: s.name,
-            orders: s.orders,
-            staff: storeStaffCount[s.name] || 1,
-            ordersPerStaff: Math.round(s.orders / (storeStaffCount[s.name] || 1)),
-        }));
-
-        return {
-            totalRevenue, netSbRev, totalOrders,
-            revenueGrowth: calculateGrowth(totalRevenue, prevRevenue),
-            ordersGrowth: calculateGrowth(totalOrders, prevOrders.length),
-            showComparison: comparison !== "none" && !!periodRangeValue,
-            storeBreakdown, storeGrowth, saBreakdown, staffProductivity,
-            aov: totalOrders > 0 ? totalRevenue / totalOrders : 0,
-        };
-    }, [orders, inPeriod, periodRangeValue, comparison, storeFilter, salespersonTable]);
-
-    // ═══════════════════════════════════════════════════════════
-    // DAY-WISE SALES
-    // ═══════════════════════════════════════════════════════════
-    const dayWiseSales = useMemo(() => {
-        // Sales only. This block used to count EVERY row against the day's
-        // order total while summing revenue from only the real ones, so a day
-        // with stock movements or cancellations reported more orders than it
-        // had sales.
-        const validOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at) && isSaleOrder(o));
-        const buckets = {};
-        validOrders.forEach(o => {
-            const key = dayKey(o.created_at);
-            if (!buckets[key]) buckets[key] = { date: dayLabel(o.created_at), fullDate: key, revenue: 0, orders: 0, delhiRevenue: 0, ludhianaRevenue: 0, b2bRevenue: 0 };
-            const amount = Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            buckets[key].revenue += amount;
-            buckets[key].orders += 1;
-            const store = (o.salesperson_store || "").toLowerCase();
-            if (store.includes("delhi") || store === "dlc") buckets[key].delhiRevenue += amount;
-            else if (store.includes("ludhiana") || store === "ldhc" || store === "llc") buckets[key].ludhianaRevenue += amount;
-            else if (store === "b2b") buckets[key].b2bRevenue += amount;
-        });
-        return Object.values(buckets).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-    }, [orders, inPeriod]);
-
-    // ═══════════════════════════════════════════════════════════
-    // B2B STATS
-    // ═══════════════════════════════════════════════════════════
-    const b2bStats = useMemo(() => {
-        // Real B2B sales only — a B2BSTOCK movement is an internal transfer.
-        const allB2bOrders = orders.filter(o => getOrderChannel(o) === "B2B" && isSaleOrder(o));
-        const currentB2b = allB2bOrders.filter(o => inPeriod(o.created_at));
-
-        const totalB2bRevenue = currentB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const totalAllRevenue = orders.filter(o => inPeriod(o.created_at) && isSaleOrder(o)).reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-        const b2bContribution = totalAllRevenue > 0 ? ((totalB2bRevenue / totalAllRevenue) * 100).toFixed(1) : 0;
-
-        const buyoutOrders = currentB2b.filter(o => o.b2b_order_type === "Buyout");
-        const consignmentOrders = currentB2b.filter(o => o.b2b_order_type === "Consignment");
-        const clientOrderOrders = currentB2b.filter(o => o.b2b_order_type === "Client Order");
-
-        const clientSales = {};
-        currentB2b.forEach(o => {
-            const vendorInfo = o.vendor_id ? vendors.find(v => v.id === o.vendor_id) : null;
-            const client = o.delivery_name || vendorInfo?.store_brand_name || "Unknown";
-            if (!clientSales[client]) clientSales[client] = { name: client, sales: 0, orders: 0, advance: 0, balance: 0 };
-            clientSales[client].sales += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-            clientSales[client].orders += 1;
-            // Collections, not the order-time advance — read total_paid.
-            clientSales[client].advance += Number(o.total_paid ?? o.advance_payment) || 0;
-            clientSales[client].balance += Math.max(0, Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0) - (Number(o.total_paid ?? o.advance_payment) || 0));
-        });
-        const allClientSales = Object.values(clientSales).sort((a, b) => b.sales - a.sales);
-
-        let filteredB2b = allClientSales;
-        if (b2bSearch.trim()) {
-            const q = b2bSearch.toLowerCase();
-            filteredB2b = filteredB2b.filter(c => c.name.toLowerCase().includes(q));
-        }
-        const b2bTotalPages = Math.ceil(filteredB2b.length / ITEMS_PER_PAGE);
-        const currentB2bClients = filteredB2b.slice((b2bPage - 1) * ITEMS_PER_PAGE, b2bPage * ITEMS_PER_PAGE);
-
-        // Product analysis (net of proportional order discount)
-        const productSales = {};
-        currentB2b.forEach(o => {
-            (o.items || []).forEach(item => {
-                const name = item.product_name || "Unknown";
-                if (!productSales[name]) productSales[name] = { name, qty: 0, revenue: 0 };
-                productSales[name].qty += Number(item.quantity || 1);
-                productSales[name].revenue += itemFinalAmount(o, item);
-            });
-        });
-        const topB2bProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
-
-        // Growth vs the immediately-preceding period (no growth figure on "All time").
-        const prevRange = comparisonPeriodRange(periodRangeValue, "previous_period");
-        const prevB2b = prevRange ? allB2bOrders.filter(o => inRange(prevRange, o.created_at)) : [];
-        const prevRevenue = prevB2b.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-
-        return {
-            totalB2bRevenue, totalB2bOrders: currentB2b.length, b2bContribution,
-            buyoutCount: buyoutOrders.length, buyoutValue: buyoutOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            consignmentCount: consignmentOrders.length, consignmentValue: consignmentOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            clientOrderCount: clientOrderOrders.length, clientOrderValue: clientOrderOrders.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            currentB2bClients, b2bTotalPages, allClientSales, topB2bProducts,
-            advancePending: allClientSales.filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance),
-            revenueGrowth: periodRangeValue ? calculateGrowth(totalB2bRevenue, prevRevenue) : 0,
-        };
-    }, [orders, inPeriod, periodRangeValue, b2bSearch, b2bPage, vendors]);
-
-    // ═══════════════════════════════════════════════════════════
-    // INVENTORY STATS
-    // ═══════════════════════════════════════════════════════════
-    const inventoryStats = useMemo(() => {
-        const total = products.length;
-        let totalInventory = 0, lowStock = 0, outOfStock = 0;
-        products.forEach(p => {
-            const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
-            totalInventory += qty;
-            if (qty === 0) outOfStock++;
-            else if (qty < 5) lowStock++;
-        });
-
-        // Consignment stats
-        const totalConsignmentPieces = consignmentInventory.reduce((s, c) => s + (c.quantity_sent || 0), 0);
-        const soldConsignment = consignmentInventory.reduce((s, c) => s + (c.quantity_sold || 0), 0);
-        const remainingConsignment = consignmentInventory.reduce((s, c) => s + (c.quantity_remaining || 0), 0);
-        const lostConsignment = consignmentInventory.reduce((s, c) => s + (c.quantity_lost || 0), 0);
-
-        // Stock vs Sales analysis
-        const recentOrders = orders.filter(o => !isLxrtsOrder(o) && inPeriod(o.created_at));
-        const soldQty = recentOrders.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
-
-        // Filtered products for table
-        let filtered = products;
-        if (inventorySearch) {
-            const q = inventorySearch.toLowerCase();
-            filtered = filtered.filter(p => p.name?.toLowerCase().includes(q) || p.sku_id?.toLowerCase().includes(q));
-        }
-        // Type filter (mirrors AdminDashboard inventory tab)
-        if (inventoryTypeFilter === "lxrts") filtered = filtered.filter(p => p.sync_enabled);
-        else if (inventoryTypeFilter === "regular") filtered = filtered.filter(p => !p.sync_enabled);
-        // Stock level filter (mirrors AdminDashboard thresholds)
-        if (inventoryStockFilter !== "all") {
-            filtered = filtered.filter(p => {
-                const inv = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
-                if (inventoryStockFilter === "out_of_stock") return inv === 0;
-                if (inventoryStockFilter === "low_stock") return inv > 0 && inv < 5;
-                return inv >= 5; // in_stock
-            });
-        }
-        const inventoryTotalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-        const currentProducts = filtered.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE);
-
-        return {
-            total, totalInventory, lowStock, outOfStock,
-            totalConsignmentPieces, soldConsignment, remainingConsignment, lostConsignment,
-            soldQty, currentProducts, inventoryTotalPages,
-        };
-    }, [products, consignmentInventory, orders, inPeriod, inventorySearch, inventoryStockFilter, inventoryTypeFilter, inventoryPage, variantInventory]);
-
-    // ═══════════════════════════════════════════════════════════
-    // RETURNS & ANALYTICS
-    // ═══════════════════════════════════════════════════════════
-    const returnsAnalytics = useMemo(() => {
-        const periodOrders = orders.filter(o => inPeriod(o.created_at));
-
-        const cancelled = periodOrders.filter(o => o.status === "cancelled");
-        const returned = periodOrders.filter(o => o.return_reason);
-        const refunded = periodOrders.filter(o => o.refund_reason);
-        const exchanged = periodOrders.filter(o => o.exchange_reason);
-        const revoked = periodOrders.filter(o => o.revoked_at);
-
-        // Reason analysis
-        const analyzeReasons = (items, reasonField) => {
-            const map = {};
-            items.forEach(o => {
-                const reason = o[reasonField] || "Not specified";
-                if (!map[reason]) map[reason] = 0;
-                map[reason]++;
-            });
-            return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-        };
-
-        // SA-wise breakdown for returns/cancellations
-        const saIssues = {};
-        [...cancelled, ...returned, ...refunded, ...exchanged, ...revoked].forEach(o => {
-            const sp = getOrderSalesperson(o);
-            if (!sp || !isPersonName(sp)) return;
-            if (!saIssues[sp]) saIssues[sp] = { name: sp, cancellations: 0, returns: 0, refunds: 0, exchanges: 0, revokes: 0, totalValue: 0 };
-            if (o.status === "cancelled") saIssues[sp].cancellations++;
-            if (o.return_reason) saIssues[sp].returns++;
-            if (o.refund_reason) saIssues[sp].refunds++;
-            if (o.exchange_reason) saIssues[sp].exchanges++;
-            if (o.revoked_at) saIssues[sp].revokes++;
-            saIssues[sp].totalValue += Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0);
-        });
-        const saIssuesList = Object.values(saIssues).sort((a, b) => (b.cancellations + b.returns + b.refunds + b.exchanges + b.revokes) - (a.cancellations + a.returns + a.refunds + a.exchanges + a.revokes));
-
-        const totalIssueValue = [...cancelled, ...returned, ...refunded, ...exchanged].reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0);
-
-        return {
-            cancelledCount: cancelled.length, cancelledValue: cancelled.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            returnedCount: returned.length, returnedValue: returned.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            refundedCount: refunded.length, refundedValue: refunded.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            exchangedCount: exchanged.length, exchangedValue: exchanged.reduce((s, o) => s + Number(o.net_total ?? o.grand_total_after_discount ?? o.grand_total ?? 0), 0),
-            revokedCount: revoked.length,
-            totalIssueValue,
-            cancellationReasons: analyzeReasons(cancelled, "cancellation_reason"),
-            returnReasons: analyzeReasons(returned, "return_reason"),
-            refundReasons: analyzeReasons(refunded, "refund_reason"),
-            exchangeReasons: analyzeReasons(exchanged, "exchange_reason"),
-            saIssuesList,
-        };
-    }, [orders, inPeriod]);
-
-    // ═══════════════════════════════════════════════════════════
-    // ACCOUNTS (line items)
-    // ═══════════════════════════════════════════════════════════
-    const accountsLineItems = useMemo(() => {
-        const items = [];
-        const GST_RATE = 0.05;
-        orders.forEach(order => {
-            if (isLxrtsOrder(order)) return;
-            const orderItems = order.items || [];
-            // Allocate discount proportionally by GST-inclusive item gross.
-            const orderGrossSum = orderItems.reduce(
-                (s, it) => s + Number(it.price || 0) * Number(it.quantity || 1), 0
-            );
-            const orderDiscount = Number(order.discount_amount || 0);
-            orderItems.forEach((item, idx) => {
-                const productPrice = Number(item.price || 0);
-                const quantity = Number(item.quantity || 1);
-                const grossValue = productPrice * quantity;
-                const discountRatio = orderGrossSum > 0 ? grossValue / orderGrossSum : 0;
-                const productDiscount = Math.min(grossValue, orderDiscount * discountRatio);
-                const invoiceValue = Math.max(0, grossValue - productDiscount);
-                const taxableValue = invoiceValue / (1 + GST_RATE);
-                const gst = invoiceValue - taxableValue;
-                items.push({
-                    id: `${order.id}-${idx}`, order_no: order.order_no, order_date: order.created_at,
-                    sa_name: getOrderSalesperson(order) || "-", client_name: order.delivery_name || "-",
-                    product_name: item.product_name || "-",
-                    gross_value: Math.round(grossValue * 100) / 100, discount: Math.round(productDiscount * 100) / 100,
-                    taxable_value: Math.round(taxableValue * 100) / 100, gst: Math.round(gst * 100) / 100,
-                    invoice_value: Math.round(invoiceValue * 100) / 100, quantity,
-                    status: order.status || "order_received", delivery_date: item.delivery_date || order.delivery_date,
-                    store: order.salesperson_store || "-", payment_mode: order.payment_mode || "-",
-                });
-            });
-        });
-        return items;
-    }, [orders]);
-
-    const filteredAccountItems = useMemo(() => {
-        let result = accountsLineItems;
-        if (accountsSearch.trim()) {
-            const q = accountsSearch.toLowerCase();
-            result = result.filter(item => item.order_no?.toLowerCase().includes(q) || item.client_name?.toLowerCase().includes(q) ||
-                item.product_name?.toLowerCase().includes(q) || item.sa_name?.toLowerCase().includes(q));
-        }
-        if (accountsPeriodRange) result = result.filter(item => inAccountsPeriod(item.order_date));
-        if (accountsStatus) result = result.filter(item => (item.status === "pending" ? "order_received" : item.status) === accountsStatus);
-        if (accountsStore) result = result.filter(item => item.store === accountsStore);
-        if (accountsSA) result = result.filter(item => item.sa_name === accountsSA);
-        return result;
-    }, [accountsLineItems, accountsSearch, accountsPeriodRange, inAccountsPeriod, accountsStatus, accountsStore, accountsSA]);
-
-    const accountsStoreOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.store).filter(s => s && s !== "-"))].sort(), [accountsLineItems]);
-    const accountsSAOptions = useMemo(() => [...new Set(accountsLineItems.map(i => i.sa_name).filter(s => s && s !== "-" && isPersonName(s)))].sort(), [accountsLineItems, knownStoreNames]);
-    const accountsTotalPages = Math.ceil(filteredAccountItems.length / 20);
-    const currentAccountItems = useMemo(() => filteredAccountItems.slice((accountsPage - 1) * 20, accountsPage * 20), [filteredAccountItems, accountsPage]);
-    const accountsTotals = useMemo(() => ({
-        gross: filteredAccountItems.reduce((sum, i) => sum + i.gross_value, 0),
-        discount: filteredAccountItems.reduce((sum, i) => sum + i.discount, 0),
-        taxable: filteredAccountItems.reduce((sum, i) => sum + i.taxable_value, 0),
-        gst: filteredAccountItems.reduce((sum, i) => sum + i.gst, 0),
-        invoice: filteredAccountItems.reduce((sum, i) => sum + i.invoice_value, 0),
-    }), [filteredAccountItems]);
-
-    // ═══════════════════════════════════════════════════════════
-    // ORDERS TAB LOGIC
-    // ═══════════════════════════════════════════════════════════
-    const filteredByStatus = useMemo(() => {
-        return orders.filter(o => {
-            if (isLxrtsOrder(o)) return false;
-            const status = o.status?.toLowerCase();
-            switch (statusTab) {
-                case "unfulfilled": return status !== "completed" && status !== "delivered" && status !== "cancelled";
-                case "prepared": return status === "completed";
-                case "delivered": return status === "delivered";
-                case "cancelled": return status === "cancelled";
-                default: return true;
-            }
-        });
-    }, [orders, statusTab]);
-
-    const filteredOrders = useMemo(() => {
-        let result = filteredByStatus;
-        if (orderSearch.trim()) {
-            const q = orderSearch.trim().toLowerCase();
-            result = result.filter(order => {
-                switch (orderSearchField) {
-                    case "product_name":
-                        return (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q));
-                    case "client_name":
-                        return order.delivery_name?.toLowerCase().includes(q);
-                    case "phone":
-                        return (order.delivery_phone || "").includes(q);
-                    case "salesperson":
-                        return (getOrderSalesperson(order) || "").toLowerCase().includes(q);
-                    case "order_no":
-                    default:
-                        return order.order_no?.toLowerCase().includes(q);
-                }
-            });
-        }
-        if (ordersPeriodRange) result = result.filter(order => inOrdersPeriod(order.created_at));
-        if (filters.minPrice > 0 || filters.maxPrice < 500000) {
-            result = result.filter(order => { const total = order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0; return total >= filters.minPrice && total <= filters.maxPrice; });
-        }
-        if (filters.payment.length > 0) result = result.filter(order => filters.payment.includes(getPaymentStatus(order)));
-        if (filters.priority.length > 0) result = result.filter(order => filters.priority.includes(getPriority(order)));
-        if (filters.orderType.length > 0) result = result.filter(order => filters.orderType.includes(getOrderType(order)));
-        if (filters.store.length > 0) result = result.filter(order => filters.store.includes(order.salesperson_store));
-        if (filters.salesperson) result = result.filter(order => getOrderSalesperson(order) === filters.salesperson);
-
-        const getOrderNum = (no) => {
-            const clean = (no || "").replace(/-[A-Z]\d*$/, "");
-            const match = clean.match(/(\d{2})(\d{2})-(\d{6})$/);
-            if (!match) return 0;
-            return parseInt(match[2] + match[1] + match[3]);
-        };
-        result = [...result].sort((a, b) => {
-            switch (sortBy) {
-                case "oldest": return getOrderNum(a.order_no) - getOrderNum(b.order_no);
-                case "delivery": return new Date(a.delivery_date || 0) - new Date(b.delivery_date || 0);
-                case "amount_high": return (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0) - (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0);
-                case "amount_low": return (a.net_total ?? a.grand_total_after_discount ?? a.grand_total ?? 0) - (b.net_total ?? b.grand_total_after_discount ?? b.grand_total ?? 0);
-                default: return getOrderNum(b.order_no) - getOrderNum(a.order_no);
-            }
-        });
-        return result;
-    }, [filteredByStatus, orderSearch, orderSearchField, filters, sortBy, ordersPeriodRange, inOrdersPeriod]);
-
-    const orderTabCounts = useMemo(() => {
-        const valid = orders.filter(o => !isLxrtsOrder(o));
-        return {
-            all: valid.length,
-            unfulfilled: valid.filter(o => { const s = o.status?.toLowerCase(); return s !== "completed" && s !== "delivered" && s !== "cancelled"; }).length,
-            prepared: valid.filter(o => o.status?.toLowerCase() === "completed").length,
-            delivered: valid.filter(o => o.status?.toLowerCase() === "delivered").length,
-            cancelled: valid.filter(o => o.status?.toLowerCase() === "cancelled").length,
-        };
-    }, [orders]);
-
-    const ordersTotalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-    const currentOrders = useMemo(() => filteredOrders.slice((ordersPage - 1) * ITEMS_PER_PAGE, ordersPage * ITEMS_PER_PAGE), [filteredOrders, ordersPage]);
-
-    const appliedFilters = useMemo(() => {
-        const chips = [];
-        if (ordersTimeline !== "all") chips.push({ type: "date", label: periodLabel(ordersTimeline) });
-        if (filters.minPrice > 0 || filters.maxPrice < 500000) chips.push({ type: "price", label: `\u20B9${(filters.minPrice / 1000).toFixed(0)}K - \u20B9${(filters.maxPrice / 1000).toFixed(0)}K` });
-        filters.payment.forEach(p => chips.push({ type: "payment", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
-        filters.priority.forEach(p => chips.push({ type: "priority", value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
-        filters.orderType.forEach(t => chips.push({ type: "orderType", value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }));
-        filters.store.forEach(s => chips.push({ type: "store", value: s, label: s }));
-        if (filters.salesperson) chips.push({ type: "salesperson", label: filters.salesperson });
-        return chips;
-    }, [filters, ordersTimeline]);
-
-    const removeFilter = (type, value) => {
-        if (type === "date") clearOrdersPeriod();
-        else if (type === "price") setFilters(prev => ({ ...prev, minPrice: 0, maxPrice: 500000 }));
-        else if (type === "salesperson") setFilters(prev => ({ ...prev, salesperson: "" }));
-        else setFilters(prev => ({ ...prev, [type]: prev[type].filter(v => v !== value) }));
-    };
-
-    const clearAllFilters = () => {
-        setFilters({ minPrice: 0, maxPrice: 500000, payment: [], priority: [], orderType: [], store: [], salesperson: "" });
-        clearOrdersPeriod();
-    };
-    const toggleFilter = (category, value) => setFilters(prev => ({ ...prev, [category]: prev[category].includes(value) ? prev[category].filter(v => v !== value) : [...prev[category], value] }));
-
-    const handleExportCSV = () => {
-        if (filteredOrders.length === 0) return;
-        const headers = ["Order No", "Product Name", "Customer Name", "Customer Number", "Size", "Amount", "SA Name", "Store", "Status", "Order Date", "Delivery Date"];
-        const rows = filteredOrders.map(order => {
-            const item = order.items?.[0] || {};
-            return [order.order_no || "", item.product_name || "", order.delivery_name || "", order.delivery_phone || "",
-            item.size || "", order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0, order.salesperson || "", order.salesperson_store || "",
-            order.status || "", order.created_at ? new Date(order.created_at).toLocaleDateString("en-GB") : "",
-            order.delivery_date ? new Date(order.delivery_date).toLocaleDateString("en-GB") : ""].map(v => `"${String(v).replace(/"/g, '""')}"`);
-        });
-        const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = `gm_orders_export_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
-        URL.revokeObjectURL(url);
-    };
-
-    const handleGeneratePdf = async (order, type = "customer") => {
-        setPdfLoading(order.id);
-        try {
-            if (type === "warehouse") await downloadWarehousePdf(order, null, true);
-            else await downloadCustomerPdf(order);
-        } catch (error) { console.error("PDF generation failed:", error); }
-        finally { setPdfLoading(null); }
-    };
-
-    // Reset pages on filter change
-    useEffect(() => { setOrdersPage(1); }, [orderSearch, orderSearchField, statusTab, filters, sortBy, ordersPeriodRange]);
-    useEffect(() => { setAccountsPage(1); }, [accountsSearch, accountsPeriodRange, accountsStatus, accountsStore, accountsSA]);
-    useEffect(() => { setB2bPage(1); }, [b2bSearch]);
-    useEffect(() => { setInventoryPage(1); }, [inventorySearch, inventoryStockFilter, inventoryTypeFilter]);
-    useEffect(() => {
-        if (activeTab === "inventory") {
-            const lxrtsProducts = products.filter(p => p.sync_enabled);
-            if (lxrtsProducts.length > 0 && Object.keys(variantInventory).length === 0) fetchAllLxrtsInventory(lxrtsProducts);
-        }
-    }, [activeTab, products]);
-
-    // ═══════════════════════════════════════════════════════════
-    // RENDER
-    // ═══════════════════════════════════════════════════════════
-    if (loading) {
-        return (
-            <div className="admin-page">
-                <div className="admin-loading"><div className="admin-spinner"></div><p>Loading GM Dashboard...</p></div>
-            </div>
-        );
+  const navigate = useNavigate();
+  const { showPopup, PopupComponent } = usePopup();
+
+  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState([]);
+  const [salespersonTable, setSalespersonTable] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [consignment, setConsignment] = useState([]);
+  const [monthlyTargets, setMonthlyTargets] = useState([]);
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
+  const [syncedAt, setSyncedAt] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [rawTab, setActiveTab] = useTabParam("store_performance");
+  const activeTab = TAB_ALIASES[rawTab] || rawTab;
+  const [navOpen, setNavOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const { range, inPeriod, timeline, props: periodProps } = usePeriodFilter("month");
+  const [comparison, setComparison] = useState("none");
+
+  const [stack, setStack] = useState([]); // drawers: { type: "order" | "orders", ... }
+  const [journey, setJourney] = useState(null); // { orderNo, components } | { loading }
+  const [paymentOrder, setPaymentOrder] = useState(null);
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(null);
+  const [stockRoom, setStockRoom] = useState({ data: null, error: null, started: false });
+
+  const fetchAllData = useCallback(async () => {
+    try {
+      const [ordersRes, spRes, vendorsRes, consignmentRes, targetsRes] = await Promise.all([
+        fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false })),
+        supabase.from("salesperson").select("saleperson, role, email, phone, store_name, sales_target, designation"),
+        supabase.from("vendors").select("*"),
+        supabase.from("consignment_inventory").select("*"),
+        supabase.from("sa_monthly_targets").select("salesperson_email, target_amount, year, month"),
+      ]);
+      if (targetsRes?.data) setMonthlyTargets(targetsRes.data);
+      if (ordersRes.data) setOrders(ordersRes.data.filter((o) => !o.is_comms));
+      if (spRes.data) setSalespersonTable(spRes.data);
+      if (vendorsRes.data) setVendors(vendorsRes.data);
+      if (consignmentRes.data) setConsignment(consignmentRes.data);
+      setSyncedAt(new Date());
+    } catch (err) { console.error("Error fetching data:", err); }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { navigate("/login", { replace: true }); return; }
+      const { data: userRecord } = await supabase
+        .from("salesperson")
+        .select("saleperson, role, email, phone, store_name, designation, can_place_stock_orders")
+        .eq("email", session.user.email?.toLowerCase())
+        .single();
+      if (!userRecord || userRecord.role !== "gm") {
+        await supabase.auth.signOut();
+        navigate("/login", { replace: true });
+        return;
+      }
+      setCurrentUserEmail(session.user.email?.toLowerCase() || "");
+      setCurrentUserProfile(userRecord);
+      await fetchAllData();
+      setLoading(false);
+    })();
+  }, [navigate, fetchAllData]);
+
+  // Stock Room's catalogue, stock orders, locations and 90 days of sales: loaded
+  // the first time Inventory Health or Stock opens, the same reads Stock Room makes.
+  useEffect(() => {
+    if (activeTab !== "inventory" || stockRoom.started) return;
+    setStockRoom((s) => ({ ...s, started: true }));
+    (async () => {
+      try {
+        const [catalogue, stockOrders, ledger] = await Promise.all([
+          loadStockRoomCatalogue(), loadStockOrders(),
+          loadLedger().catch((err) => { console.error("Stock Room locations failed:", err); return { installed: false }; }),
+        ]);
+        setStockRoom({ started: true, error: null, ledger, data: { ...catalogue, stockOrders, recentOrders: [], ordersReady: true, salesReady: false } });
+        const recent = await loadSales(90);
+        setStockRoom((s) => ({ ...s, data: { ...s.data, recentOrders: recent, salesReady: true } }));
+      } catch (err) {
+        console.error("Stock Room data failed:", err);
+        setStockRoom({ started: true, data: null, error: err.message || "unknown error" });
+      }
+    })();
+  }, [activeTab, stockRoom.started]);
+
+  const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+  const refresh = async () => {
+    setRefreshing(true);
+    await fetchAllData();
+    setStockRoom({ data: null, error: null, started: false });
+    setRefreshing(false);
+  };
+
+  const saveAssociateSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) sessionStorage.setItem("associateSession", JSON.stringify({ access_token: session.access_token, refresh_token: session.refresh_token, user: { email: session.user?.email } }));
+  };
+
+  // Stock-order entry, same flow as the SA dashboard. Gated on can_place_stock_orders.
+  const handleStartStockOrder = async () => {
+    if (!currentUserProfile) {
+      showPopup({ title: "Access Denied", message: "User profile not loaded. Please refresh and try again.", type: "error", confirmText: "Ok" });
+      return;
     }
+    await saveAssociateSession();
+    sessionStorage.setItem("returnToAssociate", "true");
+    // Back to the GM dashboard after the order: OrderPlaced otherwise goes to
+    // /AssociateDashboard, whose role check logs out non-SA users.
+    sessionStorage.setItem("returnDashboard", "/gm-dashboard");
+    sessionStorage.setItem("requirePasswordVerificationOnReturn", "true");
+    sessionStorage.setItem("currentSalesperson", JSON.stringify({
+      name: currentUserProfile.saleperson, email: currentUserProfile.email, phone: currentUserProfile.phone,
+      store: currentUserProfile.store_name, designation: currentUserProfile.designation,
+    }));
+    startOrderMode("stock");
+    navigate("/product", { state: { fromAssociate: true, isStockOrder: true } });
+  };
 
-    return (
-        <div className="admin-page">
-            {PopupComponent}
+  const startPlaceOrder = async () => {
+    await saveAssociateSession();
+    // The resolved store, verbatim. ReviewDetail.js refuses the write if it is empty.
+    sessionStorage.setItem("currentSalesperson", JSON.stringify({ store: currentUserProfile?.store_name || "", name: currentUserProfile?.saleperson || "", email: currentUserEmail }));
+    sessionStorage.setItem("returnDashboard", "/gm-dashboard");
+    // A regular client order: drop any stale stock/comms/exhibition flag.
+    startOrderMode("client");
+    navigate("/buyerVerification");
+  };
 
-            {/* HEADER */}
-            <DashboardHeader
-                title="GM Dashboard"
-                onHome={() => setActiveTab("store_performance")}
-                onMenuToggle={() => setShowSidebar(!showSidebar)}
-                userEmail={currentUserEmail}
-                onLogout={handleLogout}
-            />
+  // ---------------------------------------------------------- shared rules
+  const vendorById = useMemo(() => Object.fromEntries(vendors.map((v) => [v.id, v])), [vendors]);
+  const vendorName = useCallback((o) => vendorById[o.vendor_id]?.store_brand_name || o.delivery_name || "Unknown partner", [vendorById]);
+  // B2B orders carry no delivery name: the partner is the client there.
+  const clientOf = useCallback((o) => {
+    if (o.is_b2b) return vendorById[o.vendor_id]?.store_brand_name || o.delivery_name || "B2B partner";
+    return o.delivery_name || o.billing_name || "–";
+  }, [vendorById]);
+  const personOf = useCallback((o) => {
+    if (o.is_b2b || String(o.salesperson_store || "").toLowerCase() === "b2b") return cleanMerchandiserName(o.merchandiser_name || o.salesperson) || null;
+    return o.salesperson || null;
+  }, []);
+  const storeNames = useMemo(() => new Set(orders.map((o) => String(o.salesperson_store || "").trim()).filter(Boolean)), [orders]);
+  const isPerson = useCallback((name) => !!name && !storeNames.has(String(name).trim()) && !NOT_PEOPLE.test(String(name).trim()), [storeNames]);
 
-            <div className="admin-layout">
-                {/* SIDEBAR */}
-                <aside className={`admin-sidebar ${showSidebar ? "open" : ""}`}>
-                    <nav className="admin-nav">
-                        <span className="nav-section-label">Dashboard</span>
-                        <button className={`admin-nav-item ${activeTab === "store_performance" ? "active" : ""}`} onClick={() => { setActiveTab("store_performance"); setShowSidebar(false); }}>Store Performance</button>
-                        <button className={`admin-nav-item ${activeTab === "day_sales" ? "active" : ""}`} onClick={() => { setActiveTab("day_sales"); setShowSidebar(false); }}>Day-wise Sales</button>
-                        <button className={`admin-nav-item ${activeTab === "b2b_overview" ? "active" : ""}`} onClick={() => { setActiveTab("b2b_overview"); setShowSidebar(false); }}>B2B Overview</button>
-                        <button className={`admin-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory Health</button>
-                        <button className={`admin-nav-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</button>
-                        <button className={`admin-nav-item ${activeTab === "returns" ? "active" : ""}`} onClick={() => { setActiveTab("returns"); setShowSidebar(false); }}>Returns & Analytics</button>
-                        <span className="nav-section-label" style={{ marginTop: '12px' }}>Operations</span>
-                        <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
-                        <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
-                        <button className={`admin-nav-item ${activeTab === "exhibition_approvals" ? "active" : ""}`} onClick={() => { setActiveTab("exhibition_approvals"); setShowSidebar(false); }}>Exhibition Approvals</button>
-                        <button className={`admin-nav-item ${activeTab === "override_log" ? "active" : ""}`} onClick={() => { setActiveTab("override_log"); setShowSidebar(false); }}>Override Log</button>
-                        {currentUserProfile?.can_place_stock_orders && (
-                            <button
-                                className="admin-nav-item"
-                                onClick={() => { setShowSidebar(false); handleStartStockOrder(); }}
-                            >Stock Order</button>
-                        )}
-                    </nav>
-                </aside>
+  const prevRange = useMemo(() => comparisonPeriodRange(range, "previous_period"), [range]);
+  const compRange = useMemo(() => comparisonPeriodRange(range, comparison), [range, comparison]);
+  const sales = useMemo(() => orders.filter((o) => isSaleOrder(o) && inPeriod(o.created_at)), [orders, inPeriod]);
+  const prevSales = useMemo(() => (compRange ? orders.filter((o) => {
+    if (!isSaleOrder(o) || !o.created_at) return false;
+    const t = new Date(o.created_at);
+    return t >= compRange.start && t <= compRange.end;
+  }) : []), [orders, compRange]);
+  const periodName = timeline === "custom" && range ? `${formatDate(range.start)} to ${formatDate(range.end)}` : periodLabel(timeline);
+  const compareName = comparison !== "none" && range ? COMPARISON_OPTIONS.find((c) => c.value === comparison)?.label : "";
 
-                <main className="admin-main">
+  // ---------------------------------------------------------- actions
+  const open = (layer) => setStack((s) => [...s, layer]);
+  const openOrder = (order) => open({ type: "order", id: order.id });
+  const openOrders = ({ title, sub, orders: list, b2b }) => open({ type: "orders", title, sub, ids: list.map((o) => o.id), b2b });
 
-                    {/* ═══════════ TIMELINE CONTROLS (shown on dashboard tabs) ═══════════ */}
-                    {["store_performance", "day_sales", "b2b_overview", "inventory", "returns"].includes(activeTab) && (
-                        <PeriodFilter {...periodProps} variant="pills">
-                            {activeTab === "store_performance" && (
-                                <select className="cmo-compare-select" value={comparison} onChange={(e) => setComparison(e.target.value)}>
-                                    {COMPARISON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                                </select>
-                            )}
-                        </PeriodFilter>
-                    )}
+  const makePdf = async (order, type) => {
+    setPdfBusy(order.id);
+    try {
+      if (type === "warehouse") await downloadWarehousePdf(order, null, true);
+      else await downloadCustomerPdf(order);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      showPopup({ title: "PDF Not Created", message: "The PDF could not be made. Please try again.", type: "error", confirmText: "Ok" });
+    } finally { setPdfBusy(null); }
+  };
 
-                    {/* ═══════════ TAB 1: STORE PERFORMANCE ═══════════ */}
-                    {activeTab === "store_performance" && (
-                        <div>
-                            <h2 className="admin-section-title">Overall Store Performance</h2>
+  // Each piece's own journey, the same view the production dashboards show.
+  const openJourney = async (order) => {
+    setJourney({ loading: true, orderNo: order.order_no });
+    // The same columns the B2B merchandiser's journey view reads.
+    const { data, error } = await supabase
+      .from("order_components")
+      .select("id, order_id, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, re_journey_count, stage_pass_counts")
+      .eq("order_id", order.id)
+      .order("created_at", { ascending: true });
+    if (error) {
+      setJourney(null);
+      showPopup({ title: "Journey Not Loaded", message: error.message, type: "error", confirmText: "Ok" });
+      return;
+    }
+    if (!data?.length) {
+      setJourney(null);
+      showPopup({ title: "No Pieces Yet", message: `${order.order_no} has no barcoded pieces yet, so there is no production journey to show.${order.is_b2b && order.approval_status !== "approved" ? " B2B pieces are created when the order is approved." : ""}`, type: "info", confirmText: "Ok" });
+      return;
+    }
+    setJourney({ orderNo: order.order_no, components: await enrichComponentsWithMovements(data) });
+  };
 
-                            {/* Summary cards */}
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(storePerformanceStats.totalRevenue))}</span></div>
-                                    {storePerformanceStats.showComparison && <span className={`stat-growth ${storePerformanceStats.revenueGrowth >= 0 ? "positive" : "negative"}`}>{storePerformanceStats.revenueGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(storePerformanceStats.revenueGrowth).toFixed(1)}%</span>}</div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Net SB Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(storePerformanceStats.netSbRev))}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Orders</span><span className="stat-value">{storePerformanceStats.totalOrders}</span></div>
-                                    {storePerformanceStats.showComparison && <span className={`stat-growth ${storePerformanceStats.ordersGrowth >= 0 ? "positive" : "negative"}`}>{storePerformanceStats.ordersGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(storePerformanceStats.ordersGrowth).toFixed(1)}%</span>}</div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">AOV</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(storePerformanceStats.aov))}</span></div></div>
-                            </div>
+  const handleB2bPayment = async (payment) => {
+    if (!paymentOrder) return;
+    setPaymentSaving(true);
+    try {
+      const result = await recordPayment(paymentOrder, payment, currentUserEmail || null);
+      if (result.fresh) setOrders((prev) => prev.map((o) => (o.id === result.fresh.id ? { ...o, ...result.fresh } : o)));
+      setPaymentOrder(null);
+      showPopup({ ...paymentRecordedPopup(result), confirmText: "Ok" });
+    } catch (err) {
+      console.error("B2B payment failed:", err);
+      showPopup({ title: "Payment Not Recorded", message: err?.message || "The payment could not be saved. Nothing was recorded.", type: "error", confirmText: "Ok" });
+    } finally { setPaymentSaving(false); }
+  };
 
-                            {/* Store-wise sales chart */}
-                            <h3 className="admin-subsection-title">Store-wise Revenue & Growth</h3>
-                            {storePerformanceStats.storeGrowth.length > 0 ? (
-                                <div className="admin-chart-container">
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={storePerformanceStats.storeGrowth}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                                            <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `\u20B9${(v / 1000).toFixed(0)}K`} />
-                                            <Tooltip content={<ChartTooltip />} />
-                                            <Bar dataKey="revenue" fill="#d5b85a" name="Revenue" radius={[4, 4, 0, 0]} />
-                                            {storePerformanceStats.showComparison && <Bar dataKey="prevRevenue" fill="#BDB76B" name="Previous" radius={[4, 4, 0, 0]} />}
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            ) : <p className="no-data">No store data available</p>}
+  const go = (id) => { setActiveTab(id); setNavOpen(false); setStack([]); };
+  const pages = NAV.flatMap((g) => g.items);
+  const ctx = {
+    orders, sales, prevSales, inPeriod, range, prevRange, periodName, compareName,
+    salespersonTable, monthlyTargets, consignment, currentUserProfile, currentUserEmail, stockRoom,
+    channelOf: getOrderChannelLabel, personOf, isPerson, clientOf, vendorName,
+    openOrder, openOrders, openJourney, makePdf, pdfBusy, payB2b: setPaymentOrder, startPlaceOrder, navigate,
+  };
 
-                            {/* SA-wise breakdown */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>SA-wise Performance</h3>
-                            <div style={{ marginBottom: 12 }}>
-                                <select className="cmo-compare-select" value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)}>
-                                    <option value="all">All Stores</option>
-                                    {storePerformanceStats.storeBreakdown.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container">
-                                    <table className="admin-table">
-                                        <thead><tr><th>Product</th><th>SKU</th><th>Type</th><th>Stock</th></tr></thead>
-                                        <tbody>
-                                            {inventoryStats.currentProducts.length === 0 ? <tr><td colSpan="4" className="no-data">No products found</td></tr> :
-                                                inventoryStats.currentProducts.map(p => {
-                                                    const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
-                                                    return (
-                                                        <React.Fragment key={p.id}>
-                                                            <tr className={p.sync_enabled ? "lxrts-row" : ""}>
-                                                                <td className="product-cell">
-                                                                    {p.sync_enabled && <span className="lxrts-badge">LXRTS</span>}
-                                                                    {p.name || "-"}
-                                                                    {p.sync_enabled && (
-                                                                        <button className="expand-btn" onClick={() => setExpandedProduct(expandedProduct === p.id ? null : p.id)}>
-                                                                            {expandedProduct === p.id ? "\u25B2" : "\u25BC"}
-                                                                        </button>
-                                                                    )}
-                                                                </td>
-                                                                <td>{p.sku_id || "-"}</td>
-                                                                <td>{p.sync_enabled ? "LXRTS" : (p.inventory === 9999 ? "MTO" : "Regular")}</td>
-                                                                <td><span className={qty === 0 ? "admin-stock-out" : qty < 5 ? "admin-stock-low" : "admin-stock-ok"}>{qty === 9999 ? "MTO" : qty}</span></td>
-                                                            </tr>
-                                                            {p.sync_enabled && expandedProduct === p.id && (
-                                                                <tr className="variant-row"><td colSpan="4">
-                                                                    <div className="variant-grid">
-                                                                        {getProductSizes(p.id).map(size => (
-                                                                            <div key={size} className="variant-cell">
-                                                                                <span className="variant-size">{size}</span>
-                                                                                <span className={`${(variantInventory[p.id]?.[size] || 0) === 0 ? "admin-stock-out" : (variantInventory[p.id]?.[size] || 0) < 5 ? "admin-stock-low" : "admin-stock-ok"}`}>
-                                                                                    {variantInventory[p.id]?.[size] ?? "..."}
-                                                                                </span>
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                </td></tr>
-                                                            )}
-                                                        </React.Fragment>
-                                                    );
-                                                })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+  const userName = currentUserProfile?.saleperson || "";
+  const initials = (userName || "GM").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+  const top = stack[stack.length - 1];
+  const ordersById = useMemo(() => Object.fromEntries(orders.map((o) => [o.id, o])), [orders]);
 
-                            {/* Staff Productivity */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Staff Productivity (Orders per Store)</h3>
-                            <div className="admin-stats-grid">
-                                {storePerformanceStats.staffProductivity.map(sp => (
-                                    <div className="admin-stat-card" key={sp.name}>
-                                        <div className="stat-info">
-                                            <span className="stat-label">{sp.name}</span>
-                                            <span className="stat-value">{sp.ordersPerStaff} orders/SA</span>
-                                        </div>
-                                        <span className="stat-sublabel">{sp.orders} orders {"\u00B7"} {sp.staff} staff</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+  return (
+    <>
+      {PopupComponent}
+      <div className={`ceo gm${navOpen ? " is-nav-open" : ""}`}>
+        {loading && (
+          <div className="ceo-welcome" role="status">
+            <LogoLoader />
+            <p className="ceo-welcome-state">Bringing your numbers together</p>
+          </div>
+        )}
 
-                    {/* ═══════════ TAB 2: DAY-WISE SALES ═══════════ */}
-                    {activeTab === "day_sales" && (
-                        <div>
-                            <h2 className="admin-section-title">Day-wise Sales</h2>
-
-                            {dayWiseSales.length > 0 ? (
-                                <>
-                                    <div className="admin-chart-container">
-                                        <ResponsiveContainer width="100%" height={350}>
-                                            <AreaChart data={dayWiseSales}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `\u20B9${(v / 1000).toFixed(0)}K`} />
-                                                <Tooltip content={<ChartTooltip />} />
-                                                <Legend />
-                                                <Area type="monotone" dataKey="revenue" stroke="#d5b85a" fill="#d5b85a" fillOpacity={0.15} name="Total Revenue" />
-                                                <Area type="monotone" dataKey="delhiRevenue" stroke="#1565c0" fill="#1565c0" fillOpacity={0.1} name="Delhi" />
-                                                <Area type="monotone" dataKey="ludhianaRevenue" stroke="#2e7d32" fill="#2e7d32" fillOpacity={0.1} name="Ludhiana" />
-                                                <Area type="monotone" dataKey="b2bRevenue" stroke="#7b1fa2" fill="#7b1fa2" fillOpacity={0.1} name="B2B" />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
-                                    </div>
-
-                                    {/* Day-wise table */}
-                                    <div className="admin-table-wrapper" style={{ marginTop: 20 }}>
-                                        <div className="admin-table-container">
-                                            <table className="admin-table">
-                                                <thead><tr><th>Date</th><th className="amount">Total Revenue</th><th>Orders</th><th className="amount">Delhi</th><th className="amount">Ludhiana</th><th className="amount">B2B</th><th className="amount">AOV</th></tr></thead>
-                                                <tbody>
-                                                    {dayWiseSales.map(d => (
-                                                        <tr key={d.fullDate}>
-                                                            <td>{d.date}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(d.revenue))}</td>
-                                                            <td>{d.orders}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(d.delhiRevenue))}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(d.ludhianaRevenue))}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(d.b2bRevenue))}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(d.orders > 0 ? Math.round(d.revenue / d.orders) : 0)}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </>
-                            ) : <p className="no-data">No sales data for this period</p>}
-                        </div>
-                    )}
-
-                    {/* ═══════════ TAB 3: B2B OVERVIEW ═══════════ */}
-                    {activeTab === "b2b_overview" && (
-                        <div>
-                            <h2 className="admin-section-title">B2B Overview</h2>
-
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">B2B Revenue</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(Math.round(b2bStats.totalB2bRevenue))}</span></div>
-                                    <span className={`stat-growth ${b2bStats.revenueGrowth >= 0 ? "positive" : "negative"}`}>{b2bStats.revenueGrowth >= 0 ? "\u25B2" : "\u25BC"} {Math.abs(b2bStats.revenueGrowth).toFixed(1)}%</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">B2B Orders</span><span className="stat-value">{b2bStats.totalB2bOrders}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">B2B Contribution</span><span className="stat-value">{b2bStats.b2bContribution}%</span></div></div>
-                            </div>
-
-                            {/* Order type breakdown */}
-                            <h3 className="admin-subsection-title">Buyout vs Consignment Split</h3>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Buyout</span><span className="stat-value">{b2bStats.buyoutCount} orders</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(b2bStats.buyoutValue))}</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Consignment</span><span className="stat-value">{b2bStats.consignmentCount} orders</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(b2bStats.consignmentValue))}</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Client Order</span><span className="stat-value">{b2bStats.clientOrderCount} orders</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(b2bStats.clientOrderValue))}</span></div>
-                            </div>
-
-                            {/* Client sales */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Client-wise Sales</h3>
-                            <div className="admin-search-wrapper" style={{ maxWidth: 300, marginBottom: 12 }}>
-                                <input type="text" placeholder="Search client..." value={b2bSearch} onChange={(e) => setB2bSearch(e.target.value)} className="admin-search-input" />
-                            </div>
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container">
-                                    <table className="admin-table">
-                                        <thead><tr><th>Client</th><th className="amount">Sales</th><th>Orders</th><th className="amount">Advance</th><th className="amount">Balance</th></tr></thead>
-                                        <tbody>
-                                            {b2bStats.currentB2bClients.length === 0 ? <tr><td colSpan="5" className="no-data">No B2B clients found</td></tr> :
-                                                b2bStats.currentB2bClients.map(c => (
-                                                    <tr key={c.name}>
-                                                        <td>{c.name}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.sales))}</td>
-                                                        <td>{c.orders}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.advance))}</td>
-                                                        <td className="amount" style={{ color: c.balance > 0 ? '#c62828' : '#2e7d32' }}>{"\u20B9"}{formatIndianNumber(Math.round(c.balance))}</td>
-                                                    </tr>
-                                                ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <Paginator page={b2bPage} totalPages={b2bStats.b2bTotalPages} onChange={setB2bPage} />
-
-                            {/* Top B2B products */}
-                            {b2bStats.topB2bProducts.length > 0 && (
-                                <>
-                                    <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Top B2B Products</h3>
-                                    <div className="admin-chart-container">
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={b2bStats.topB2bProducts} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `\u20B9${(v / 1000).toFixed(0)}K`} />
-                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={150} />
-                                                <Tooltip content={<ChartTooltip />} />
-                                                <Bar dataKey="revenue" fill="#d5b85a" name="Revenue" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* Advance pending */}
-                            {b2bStats.advancePending.length > 0 && (
-                                <>
-                                    <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>{"\u26A0\uFE0F"} Advance Pending Clients</h3>
-                                    <div className="admin-table-wrapper">
-                                        <div className="admin-table-container">
-                                            <table className="admin-table">
-                                                <thead><tr><th>Client</th><th className="amount">Total Sales</th><th className="amount">Advance Paid</th><th className="amount">Balance Due</th></tr></thead>
-                                                <tbody>
-                                                    {b2bStats.advancePending.slice(0, 10).map(c => (
-                                                        <tr key={c.name}>
-                                                            <td>{c.name}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.sales))}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(c.advance))}</td>
-                                                            <td className="amount" style={{ color: '#c62828', fontWeight: 600 }}>{"\u20B9"}{formatIndianNumber(Math.round(c.balance))}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ═══════════ TAB 4: INVENTORY HEALTH ═══════════ */}
-                    {/* Where stock physically sits, per pool. Distinct from
-                        Inventory Health above, which asks how much and how old.
-                        Mounted only when open so it costs nothing until used. */}
-                    {activeTab === "stock" && (
-                        <div>
-                            <h2 className="admin-section-title">Stock</h2>
-                            <StockPanel pools={poolsForUser(currentUserProfile)} />
-                        </div>
-                    )}
-
-                    {activeTab === "inventory" && (
-                        <div>
-                            <h2 className="admin-section-title">Inventory Health</h2>
-
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Products</span><span className="stat-value">{inventoryStats.total}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Stock</span><span className="stat-value">{formatIndianNumber(inventoryStats.totalInventory)}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Low Stock</span><span className="stat-value" style={{ color: '#ef6c00' }}>{inventoryStats.lowStock}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Out of Stock</span><span className="stat-value" style={{ color: '#c62828' }}>{inventoryStats.outOfStock}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Active LXRTS</span><span className="stat-value">{products.filter(p => p.sync_enabled).length}</span></div></div>
-                            </div>
-
-                            {/* Stock vs Sales */}
-                            <h3 className="admin-subsection-title">Stock vs Sales (Period)</h3>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Current Stock</span><span className="stat-value">{formatIndianNumber(inventoryStats.totalInventory)} pcs</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Sold (Period)</span><span className="stat-value">{formatIndianNumber(inventoryStats.soldQty)} pcs</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Stock-to-Sales Ratio</span><span className="stat-value">{inventoryStats.soldQty > 0 ? (inventoryStats.totalInventory / inventoryStats.soldQty).toFixed(1) : "\u221E"}x</span></div></div>
-                            </div>
-
-                            {/* Consignment */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Consignment Inventory</h3>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Sent</span><span className="stat-value">{inventoryStats.totalConsignmentPieces}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Sold</span><span className="stat-value" style={{ color: '#2e7d32' }}>{inventoryStats.soldConsignment}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Remaining</span><span className="stat-value">{inventoryStats.remainingConsignment}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Lost</span><span className="stat-value" style={{ color: '#c62828' }}>{inventoryStats.lostConsignment}</span></div></div>
-                            </div>
-
-                            {/* Product list */}
-                            <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Product Inventory</h3>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
-                                <div className="admin-search-wrapper" style={{ maxWidth: 300 }}>
-                                    <input type="text" placeholder="Search product or SKU..." value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="admin-search-input" />
-                                </div>
-                                <select className="cmo-compare-select" value={inventoryStockFilter} onChange={(e) => setInventoryStockFilter(e.target.value)}>
-                                    <option value="all">All Stock</option>
-                                    <option value="in_stock">In Stock (5+)</option>
-                                    <option value="low_stock">Low Stock (&lt;5)</option>
-                                    <option value="out_of_stock">Out of Stock</option>
-                                </select>
-                                <select className="cmo-compare-select" value={inventoryTypeFilter} onChange={(e) => setInventoryTypeFilter(e.target.value)}>
-                                    <option value="all">All Types</option>
-                                    <option value="lxrts">LXRTS Only</option>
-                                    <option value="regular">Regular Only</option>
-                                </select>
-                            </div>
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container">
-                                    <table className="admin-table">
-                                        <thead><tr><th>Product</th><th>SKU</th><th>Type</th><th>Stock</th></tr></thead>
-                                        <tbody>
-                                            {inventoryStats.currentProducts.length === 0 ? <tr><td colSpan="4" className="no-data">{products.length === 0 ? "No products yet" : "No products match the search/filters"}</td></tr> :
-                                                inventoryStats.currentProducts.map(p => {
-                                                    const qty = p.sync_enabled ? getLxrtsTotalInventory(p.id) : (p.inventory || 0);
-                                                    return (
-                                                        <tr key={p.id}>
-                                                            <td>{p.name || "-"}</td>
-                                                            <td>{p.sku_id || "-"}</td>
-                                                            <td>{p.sync_enabled ? "LXRTS" : (p.inventory === 9999 ? "MTO" : "Regular")}</td>
-                                                            <td><span className={qty === 0 ? "admin-stock-out" : qty < 5 ? "admin-stock-low" : "admin-stock-ok"}>{qty === 9999 ? "MTO" : qty}</span></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <Paginator page={inventoryPage} totalPages={inventoryStats.inventoryTotalPages} onChange={setInventoryPage} />
-                        </div>
-                    )}
-
-                    {/* ═══════════ TAB 5: RETURNS & ANALYTICS ═══════════ */}
-                    {activeTab === "returns" && (
-                        <div>
-                            <h2 className="admin-section-title">Returns, Cancellations & Analytics</h2>
-
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Cancellations</span><span className="stat-value">{returnsAnalytics.cancelledCount}</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(returnsAnalytics.cancelledValue))}</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Returns</span><span className="stat-value">{returnsAnalytics.returnedCount}</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(returnsAnalytics.returnedValue))}</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Refunds</span><span className="stat-value">{returnsAnalytics.refundedCount}</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(returnsAnalytics.refundedValue))}</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Exchanges</span><span className="stat-value">{returnsAnalytics.exchangedCount}</span></div><span className="stat-sublabel">{"\u20B9"}{formatIndianNumber(Math.round(returnsAnalytics.exchangedValue))}</span></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Revoked</span><span className="stat-value">{returnsAnalytics.revokedCount}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Issue Value</span><span className="stat-value" style={{ color: '#c62828' }}>{"\u20B9"}{formatIndianNumber(Math.round(returnsAnalytics.totalIssueValue))}</span></div></div>
-                            </div>
-
-                            {/* Reason charts */}
-                            {returnsAnalytics.cancellationReasons.length > 0 && (
-                                <>
-                                    <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Cancellation Reasons</h3>
-                                    <div className="admin-chart-container">
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={returnsAnalytics.cancellationReasons.slice(0, 8)} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                <XAxis type="number" />
-                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={180} />
-                                                <Tooltip />
-                                                <Bar dataKey="value" fill="#f44336" name="Count" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </>
-                            )}
-
-                            {returnsAnalytics.returnReasons.length > 0 && (
-                                <>
-                                    <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Return Reasons</h3>
-                                    <div className="admin-chart-container">
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={returnsAnalytics.returnReasons.slice(0, 8)} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                <XAxis type="number" />
-                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={180} />
-                                                <Tooltip />
-                                                <Bar dataKey="value" fill="#ff9800" name="Count" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </>
-                            )}
-
-                            {returnsAnalytics.refundReasons.length > 0 && (
-                                <>
-                                    <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Refund Reasons</h3>
-                                    <div className="admin-chart-container">
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={returnsAnalytics.refundReasons.slice(0, 8)} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                <XAxis type="number" />
-                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={180} />
-                                                <Tooltip />
-                                                <Bar dataKey="value" fill="#9c27b0" name="Count" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </>
-                            )}
-
-                            {returnsAnalytics.exchangeReasons.length > 0 && (
-                                <>
-                                    <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>Exchange Reasons</h3>
-                                    <div className="admin-chart-container">
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={returnsAnalytics.exchangeReasons.slice(0, 8)} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                                                <XAxis type="number" />
-                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={180} />
-                                                <Tooltip />
-                                                <Bar dataKey="value" fill="#1565c0" name="Count" radius={[0, 4, 4, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* SA-wise issues */}
-                            {returnsAnalytics.saIssuesList.length > 0 && (
-                                <>
-                                    <h3 className="admin-subsection-title" style={{ marginTop: 24 }}>SA-wise Issue Breakdown</h3>
-                                    <div className="admin-table-wrapper">
-                                        <div className="admin-table-container">
-                                            <table className="admin-table">
-                                                <thead><tr><th>SA Name</th><th>Cancellations</th><th>Returns</th><th>Refunds</th><th>Exchanges</th><th>Revokes</th><th className="amount">Value</th></tr></thead>
-                                                <tbody>
-                                                    {returnsAnalytics.saIssuesList.map(sa => (
-                                                        <tr key={sa.name}>
-                                                            <td>{sa.name}</td>
-                                                            <td>{sa.cancellations || 0}</td>
-                                                            <td>{sa.returns || 0}</td>
-                                                            <td>{sa.refunds || 0}</td>
-                                                            <td>{sa.exchanges || 0}</td>
-                                                            <td>{sa.revokes || 0}</td>
-                                                            <td className="amount">{"\u20B9"}{formatIndianNumber(Math.round(sa.totalValue))}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ═══════════ TAB 6: ORDERS ═══════════ */}
-                    {activeTab === "orders" && (
-                        <div className="admin-orders-tab">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                                <h2 className="admin-section-title">Order Management</h2>
-                                <button className="admin-export-btn" onClick={async () => {
-                                    const { data: { session } } = await supabase.auth.getSession();
-                                    if (session) {
-                                        sessionStorage.setItem("associateSession", JSON.stringify({
-                                            access_token: session.access_token,
-                                            refresh_token: session.refresh_token,
-                                            user: { email: session.user?.email },
-                                        }));
-                                    }
-                                    sessionStorage.setItem("currentSalesperson", JSON.stringify({
-                                        // Pass the resolved store verbatim. The order-flow guard
-                                        // (ReviewDetail.js) will refuse the write if it's empty.
-                                        store: currentUserStore,
-                                        name: currentUserName,
-                                        email: currentUserEmail,
-                                    }));
-                                    sessionStorage.setItem("returnDashboard", "/gm-dashboard");
-                                    // Regular client order — drop any stale stock/comms/exhibition
-                                    // flag from an abandoned flow, which would otherwise misroute
-                                    // ProductForm and zero this order's pricing.
-                                    startOrderMode("client");
-                                    navigate("/buyerVerification");
-                                }} style={{ background: '#d5b85a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>
-                                    + Place Order
-                                </button>
-                            </div>
-
-                            <div className="admin-toolbar">
-                                <SearchByDropdown
-                                    fields={[
-                                        { value: "order_no", label: "Order Number" },
-                                        { value: "product_name", label: "Product Name" },
-                                        { value: "client_name", label: "Client Name" },
-                                        { value: "phone", label: "Phone" },
-                                        { value: "salesperson", label: "Salesperson" },
-                                    ]}
-                                    selectedField={orderSearchField}
-                                    onFieldChange={setOrderSearchField}
-                                    query={orderSearch}
-                                    onQueryChange={setOrderSearch}
-                                    placeholder="Type to search..."
-                                />
-                                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="admin-sort-select">
-                                    <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="delivery">Delivery Date</option><option value="amount_high">Amount: High to Low</option><option value="amount_low">Amount: Low to High</option>
-                                </select>
-                                <button className="admin-export-btn" onClick={handleExportCSV} title="Export CSV">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                                    Export CSV
-                                </button>
-                            </div>
-
-                            <div className="admin-status-tabs">
-                                {STATUS_TABS.map(tab => (
-                                    <button key={tab.value} className={`status-tab ${statusTab === tab.value ? "active" : ""}`} onClick={() => setStatusTab(tab.value)}>
-                                        {tab.label}<span className="tab-count">{orderTabCounts[tab.value]}</span>
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="admin-filter-bar" ref={dropdownRef}>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${ordersTimeline !== "all" ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}>Date Range {"\u25BE"}</button>
-                                    {openDropdown === "date" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Select Period</div>
-                                            <PeriodFilter {...ordersPeriodProps} variant="select" label="Order date:" />
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${filters.payment.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")}>Payment {"\u25BE"}</button>
-                                    {openDropdown === "payment" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Payment Status</div>
-                                            {["paid", "partial", "unpaid"].map(opt => (<label key={opt} className="checkbox-label"><input type="checkbox" checked={filters.payment.includes(opt)} onChange={() => toggleFilter("payment", opt)} /><span>{opt === "unpaid" ? "Unpaid (COD)" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span></label>))}
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <button className={`filter-btn ${filters.store.length > 0 ? "active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "store" ? null : "store")}>Store {"\u25BE"}</button>
-                                    {openDropdown === "store" && (
-                                        <div className="dropdown-panel">
-                                            <div className="dropdown-title">Store</div>
-                                            {["Delhi Store", "Ludhiana Store", "B2B"].map(opt => (<label key={opt} className="checkbox-label"><input type="checkbox" checked={filters.store.includes(opt)} onChange={() => toggleFilter("store", opt)} /><span>{opt}</span></label>))}
-                                            <button className="dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="filter-dropdown">
-                                    <select className="filter-btn" style={{ cursor: 'pointer' }} value={filters.salesperson} onChange={(e) => setFilters(prev => ({ ...prev, salesperson: e.target.value }))}>
-                                        <option value="">All Salespersons</option>
-                                        {salespersons.map(sp => <option key={sp} value={sp}>{sp}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {appliedFilters.length > 0 && (
-                                <div className="admin-applied-filters">
-                                    <span className="applied-label">Applied:</span>
-                                    {appliedFilters.map((chip, i) => (<span key={i} className="filter-chip">{chip.label}<button onClick={() => removeFilter(chip.type, chip.value)}>{"\u00D7"}</button></span>))}
-                                    <button className="clear-all" onClick={clearAllFilters}>Clear All</button>
-                                </div>
-                            )}
-
-                            <div className="orders-count">Showing {filteredOrders.length} orders</div>
-
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container">
-                                    <table className="admin-table orders-table">
-                                        <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th><th>Status</th><th>SA</th><th>Store</th><th>Date</th><th>Journey</th><th>Actions</th></tr></thead>
-                                        <tbody>
-                                            {currentOrders.length === 0 ? <tr><td colSpan="11" className="no-data">No orders found</td></tr> :
-                                                currentOrders.map(order => {
-                                                    const isUrgent = getPriority(order) === "urgent";
-                                                    return (
-                                                        <tr key={order.id} className={isUrgent ? "urgent-row" : ""}>
-                                                            <td><span className="order-id">{order.order_no || "-"}</span>{isUrgent && <span className="urgent-badge">URGENT</span>}</td>
-                                                            <td>{order.delivery_name || "-"}</td>
-                                                            <td className="product-cell">{order.items?.[0]?.product_name || "-"}</td>
-                                                            <td>{"\u20B9"}{formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
-                                                            <td><span className={`payment-badge ${getPaymentStatus(order)}`}>{getPaymentStatus(order).charAt(0).toUpperCase() + getPaymentStatus(order).slice(1)}</span></td>
-                                                            <td><span className={`status-badge ${getOrderProgressStatusKey(getOrderProgressStatus(order))}`}>{getOrderProgressStatus(order)}</span></td>
-                                                            <td>{getOrderSalesperson(order) || "-"}</td>
-                                                            <td>{order.salesperson_store || "-"}</td>
-                                                            <td>{formatDate(order.created_at)}</td>
-                                                            <td>
-                                                                {/* orders.in_production_at / ready_for_dispatch_at are dead
-                                                                    columns no RPC writes, so those two lines never rendered and
-                                                                    the cell fell through to a literal "Pending" for every order.
-                                                                    warehouse_stage_updated_at is stamped on every scan, so it is
-                                                                    the real "last moved" signal. */}
-                                                                <div style={{ fontSize: 11, lineHeight: 1.4 }}>
-                                                                    {order.warehouse_stage && order.warehouse_stage !== "order_received" && (
-                                                                        <div>{"\u2705"} {getStageLabel(order.warehouse_stage) || order.warehouse_stage}
-                                                                            {order.warehouse_stage_updated_at ? `: ${formatDate(order.warehouse_stage_updated_at)}` : ""}</div>
-                                                                    )}
-                                                                    {order.dispatched_at && <div>{"\u2705"} Dispatched: {formatDate(order.dispatched_at)}</div>}
-                                                                    {order.delivered_at && <div>{"\u2705"} Delivered: {formatDate(order.delivered_at)}</div>}
-                                                                    {(!order.warehouse_stage || order.warehouse_stage === "order_received") && !order.dispatched_at && !order.delivered_at && (
-                                                                        <span style={{ color: '#999' }}>Not started</span>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                            <td><div className="action-buttons"><button className="action-btn pdf" onClick={() => handleGeneratePdf(order, "customer")} disabled={pdfLoading === order.id}>{pdfLoading === order.id ? "..." : "PDF"}</button></div></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <Paginator page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
-                        </div>
-                    )}
-
-                    {/* ═══════════ TAB 7: ACCOUNTS ═══════════ */}
-                    {activeTab === "accounts" && (
-                        <div className="admin-accounts-tab">
-                            <h2 className="admin-section-title">Accounts & Finance</h2>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Gross Value</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(accountsTotals.gross.toFixed(0))}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total Discount</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(accountsTotals.discount.toFixed(0))}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Total GST</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(accountsTotals.gst.toFixed(0))}</span></div></div>
-                                <div className="admin-stat-card"><div className="stat-info"><span className="stat-label">Invoice Value</span><span className="stat-value">{"\u20B9"}{formatIndianNumber(accountsTotals.invoice.toFixed(0))}</span></div></div>
-                            </div>
-
-                            <div className="acc-filter-bar">
-                                <div className="admin-search-wrapper" style={{ flex: '0 0 auto', maxWidth: 280 }}>
-                                    <span className="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg></span>
-                                    <input type="text" placeholder="Search Order, Customer..." value={accountsSearch} onChange={(e) => setAccountsSearch(e.target.value)} className="admin-search-input" />
-                                </div>
-                                {accountsPeriodControl}
-                                <select className="cmo-compare-select" value={accountsStatus} onChange={(e) => setAccountsStatus(e.target.value)}>
-                                    <option value="">All Status</option>
-                                    <option value="order_received">Order Received</option><option value="in_production">In Production</option><option value="ready">Ready</option>
-                                    <option value="dispatched">Dispatched</option><option value="delivered">Delivered</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
-                                </select>
-                                <select className="cmo-compare-select" value={accountsStore} onChange={(e) => setAccountsStore(e.target.value)}>
-                                    <option value="">All Stores</option>
-                                    {accountsStoreOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                                <select className="cmo-compare-select" value={accountsSA} onChange={(e) => setAccountsSA(e.target.value)}>
-                                    <option value="">All Salespersons</option>
-                                    {accountsSAOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                                {(accountsTimeline !== "all" || accountsStatus || accountsStore || accountsSA) && (
-                                    <button className="cmo-pill" onClick={() => { accountsPeriodProps.setTimeline("all"); accountsPeriodProps.setCustomFrom(""); accountsPeriodProps.setCustomTo(""); setAccountsStatus(""); setAccountsStore(""); setAccountsSA(""); }}
-                                        style={{ color: '#c62828', borderColor: '#c62828' }}>Clear</button>
-                                )}
-                            </div>
-
-                            <div className="admin-table-wrapper">
-                                <div className="admin-table-container accounts-table-container">
-                                    <table className="admin-table accounts-table">
-                                        <thead><tr><th>SA Name</th><th>Order ID</th><th>Date</th><th>Customer</th><th>Product</th><th className="amount">Gross</th><th className="amount">Discount</th><th className="amount">Taxable</th><th className="amount">GST</th><th className="amount">Invoice</th><th>Qty</th><th>Status</th><th>Delivery Date</th></tr></thead>
-                                        <tbody>
-                                            {currentAccountItems.length === 0 ? <tr><td colSpan="13" className="no-data">No records found</td></tr> :
-                                                currentAccountItems.map(item => (
-                                                    <tr key={item.id}>
-                                                        <td>{item.sa_name}</td>
-                                                        <td><span className="order-id">{item.order_no}</span></td>
-                                                        <td>{formatDate(item.order_date)}</td>
-                                                        <td>{item.client_name}</td>
-                                                        <td className="product-cell">{item.product_name}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(item.gross_value)}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(item.discount)}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(item.taxable_value)}</td>
-                                                        <td className="amount">{"\u20B9"}{formatIndianNumber(item.gst)}</td>
-                                                        <td className="amount invoice">{"\u20B9"}{formatIndianNumber(item.invoice_value)}</td>
-                                                        <td>{item.quantity}</td>
-                                                        <td><span className={`status-badge ${normalizeOrderStatus(item.status)}`}>{getOrderStatusLabel(item.status)}</span></td>
-                                                        <td>{formatDate(item.delivery_date)}</td>
-                                                    </tr>
-                                                ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <Paginator page={accountsPage} totalPages={accountsTotalPages} onChange={setAccountsPage} />
-                        </div>
-                    )}
-
-                    {activeTab === "exhibition_approvals" && (
-                        <ExhibitionApprovals currentUserEmail={currentUserEmail} />
-                    )}
-
-                    {/* Audit of every production override — read-only here;
-                        overrides themselves are performed on the PM dashboard. */}
-                    {activeTab === "override_log" && <OverrideHistory />}
-
-                </main>
+        <button type="button" className="ceo-nav-veil" aria-label="Close menu" onClick={() => setNavOpen(false)} />
+        <nav className="ceo-nav" aria-label="GM dashboard">
+          <button type="button" className="ceo-logo" onClick={() => go("store_performance")} aria-label="Home"><img src={Logo} alt="Sheetal Batra" /></button>
+          {NAV.map((g) => (
+            <div className="ceo-nav-group" key={g.group}>
+              <span className="ceo-label ceo-nav-title">{g.group}</span>
+              {g.items.map((item) => (
+                <button key={item.id} type="button" className="ceo-nav-item" aria-current={activeTab === item.id ? "page" : undefined} onClick={() => go(item.id)}>
+                  {CUSTOM_ICONS[item.icon] ? React.createElement(CUSTOM_ICONS[item.icon]) : <Icon name={item.icon} />}{item.label}
+                </button>
+              ))}
+              {g.group === "Operations" && currentUserProfile?.can_place_stock_orders && (
+                <button type="button" className="ceo-nav-item" onClick={() => { setNavOpen(false); handleStartStockOrder(); }}><Icon name="plus" />Stock Order</button>
+              )}
             </div>
-        </div>
-    );
+          ))}
+          <div className="ceo-nav-foot">
+            <div className="ceo-who">
+              <span className="ceo-avatar">{initials}</span>
+              <span><b title={userName}>{userName || currentUserEmail}</b><small>{syncedAt ? `Data updated ${syncedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : "General Manager"}</small></span>
+            </div>
+            <div className="ceo-foot-actions">
+              <button type="button" className="ceo-btn" onClick={refresh} disabled={refreshing}><Icon name="refresh" />{refreshing ? "Updating" : "Refresh"}</button>
+              <button type="button" className="ceo-btn" onClick={handleLogout}><Icon name="logout" />Log out</button>
+            </div>
+          </div>
+        </nav>
+
+        <main className="ceo-main">
+          <div className="ceo-top">
+            <button type="button" className="ceo-icon-btn ceo-menu-btn" aria-label="Open menu" onClick={() => setNavOpen(true)}><MenuIcon /></button>
+            <GlobalSearch pages={pages} orders={orders} products={[]} clients={[]} onPage={go} onOrder={openOrder} onClient={() => {}} onDesign={() => {}} />
+            {PERIOD_TABS.includes(activeTab) && (
+              <button type="button" className="ceo-view" onClick={() => setViewOpen(true)}>
+                <CalendarIcon />
+                <b>{periodName}</b>
+                <span>{compareName ? `vs ${compareName.toLowerCase()}` : "No comparison"}</span>
+              </button>
+            )}
+            <div className="ceo-top-end"><NotificationBell userEmail={currentUserEmail} look="soft" /></div>
+          </div>
+
+          <div className="ceo-scroll">
+            {!loading && (
+              <>
+                {activeTab === "store_performance" && <StorePerformancePage ctx={ctx} />}
+                {activeTab === "b2b_overview" && <B2bPage ctx={ctx} />}
+                {activeTab === "outstanding" && <OutstandingPage ctx={ctx} />}
+                {activeTab === "inventory" && <InventoryPage ctx={ctx} />}
+                {activeTab === "returns" && <ReturnsPage ctx={ctx} />}
+                {activeTab === "orders" && <OrdersPage ctx={ctx} />}
+                {activeTab === "delivery_watch" && <DeliveryPage ctx={ctx} />}
+                {activeTab === "accounts" && <AccountsPage ctx={ctx} />}
+                {activeTab === "exhibition_approvals" && <ExhibitionsPage ctx={ctx} />}
+                {activeTab === "override_log" && <OverridePage />}
+              </>
+            )}
+          </div>
+
+          <div className="ceo-tabbar">
+            {[["store_performance", "Stores", "overview"], ["b2b_overview", "B2B", "transfer"], ["orders", "Orders", "orders"], ["inventory", "Inventory", "products"]].map(([id, label, icon]) => (
+              <button key={id} type="button" aria-current={activeTab === id ? "page" : undefined} onClick={() => go(id)}><Icon name={icon} />{label}</button>
+            ))}
+            <button type="button" onClick={() => setNavOpen(true)}><MenuIcon />More</button>
+          </div>
+        </main>
+
+        {viewOpen && (
+          <Drawer
+            title="Dashboard Filters"
+            sub="Store Performance, B2B Overview and Returns follow these choices"
+            onClose={() => setViewOpen(false)}
+            footer={(
+              <>
+                <button type="button" className="ceo-btn" onClick={() => { periodProps.setTimeline("month"); periodProps.setCustomFrom(""); periodProps.setCustomTo(""); setComparison("none"); }}>Reset Filters</button>
+                <button type="button" className="ceo-btn is-primary" onClick={() => setViewOpen(false)}>Done</button>
+              </>
+            )}
+          >
+            <FilterGroup label="Period">
+              <Chips options={PERIOD_OPTIONS.map((o) => ({ value: o.value, label: o.value === "custom" ? "Choose dates" : o.label }))} value={timeline} onChange={(v) => periodProps.setTimeline(v || "month")} />
+              {timeline === "custom" && <DateRange from={periodProps.customFrom} to={periodProps.customTo} onChange={(a, b) => { periodProps.setCustomFrom(a); periodProps.setCustomTo(b); }} />}
+            </FilterGroup>
+            <FilterGroup label="Compare With">
+              <Select label="Compare with" value={comparison} onChange={setComparison} options={COMPARISON_OPTIONS} search={false} />
+            </FilterGroup>
+          </Drawer>
+        )}
+
+        {top && top.type === "orders" && (
+          <Drawer wide title={top.title} sub={top.sub} onClose={() => setStack([])} onBack={stack.length > 1 ? () => setStack((s) => s.slice(0, -1)) : undefined}>
+            <OrdersList ctx={ctx} title={top.title} b2b={top.b2b} orders={top.ids.map((id) => ordersById[id]).filter(Boolean)} />
+          </Drawer>
+        )}
+        {top && top.type === "order" && ordersById[top.id] && (
+          <OrderDrawer
+            order={ordersById[top.id]}
+            ctx={ctx}
+            onClose={() => setStack([])}
+            onBack={stack.length > 1 ? () => setStack((s) => s.slice(0, -1)) : undefined}
+          />
+        )}
+      </div>
+
+      {journey && !journey.loading && createPortal(
+        <ComponentJourneyModal orderNo={journey.orderNo} components={journey.components} onClose={() => setJourney(null)} />,
+        document.body,
+      )}
+      {paymentOrder && createPortal(
+        <UpdatePaymentModal order={paymentOrder} saving={paymentSaving} onCancel={() => { if (!paymentSaving) setPaymentOrder(null); }} onConfirm={handleB2bPayment} />,
+        document.body,
+      )}
+    </>
+  );
+}
+
+function OrderDrawer({ order: o, ctx, onClose, onBack }) {
+  const pay = b2bPaymentState(o);
+  const balance = o.is_b2b ? pay.balance : Math.max(0, Number(o.remaining_payment) || 0);
+  const person = ctx.personOf(o);
+  const warehouseReady = !o.is_b2b || o.approval_status === "approved";
+  return (
+    <Drawer title={o.order_no} sub={ctx.clientOf(o)} onClose={onClose} onBack={onBack}>
+      <div className="ceo-dstats">
+        <Stat label="Order Value" info="The order's value after discounts."><b title={fullInr(pay.total)}>{shortInr(pay.total)}</b></Stat>
+        <Stat label="Amount Received" info="Money received so far, including any advance."><b title={fullInr(pay.received)}>{shortInr(pay.received)}</b></Stat>
+        <Stat label="Balance Due" info="Money still owed on this order."><b className={balance > 0 ? "is-warn" : undefined} title={fullInr(balance)}>{shortInr(balance)}</b></Stat>
+      </div>
+      <div className="gm-actions">
+        <button type="button" className="ceo-btn" onClick={() => ctx.openJourney(o)}><Icon name="movements" />View Journey</button>
+        <button type="button" className="ceo-btn" onClick={() => ctx.makePdf(o, "customer")} disabled={ctx.pdfBusy === o.id}><Icon name="doc" />{ctx.pdfBusy === o.id ? "Making PDF" : "Customer PDF"}</button>
+        {warehouseReady && <button type="button" className="ceo-btn" onClick={() => ctx.makePdf(o, "warehouse")} disabled={ctx.pdfBusy === o.id}><Icon name="warehouse" />Warehouse PDF</button>}
+        {canUpdateB2bPayment(o) && <button type="button" className="ceo-btn is-primary" onClick={() => ctx.payB2b(o)}><Icon name="inr" />Update Payment</button>}
+      </div>
+      <div className="ceo-ditems">
+        {(o.items || []).map((it, i) => (
+          <div key={`${it.product_name}-${i}`} className="gm-item">
+            <Thumb src={it.image_url} alt={it.product_name} />
+            <span>
+              <b>{it.product_name || "–"}</b>
+              <small>{[it.size && `Size ${it.size}`, it.top_color?.name || it.color?.name, Number(it.quantity) > 1 && `Qty ${it.quantity}`].filter(Boolean).join(" · ")}</small>
+            </span>
+          </div>
+        ))}
+      </div>
+      <dl className="ceo-dl">
+        <dt>{o.is_b2b ? "Partner" : "Client"}</dt><dd><button type="button" className="ceo-inline" onClick={() => ctx.openOrders(o.is_b2b
+          ? { title: ctx.clientOf(o), sub: "Every B2B order from this partner", orders: ctx.orders.filter((x) => x.is_b2b && ctx.clientOf(x) === ctx.clientOf(o)), b2b: true }
+          : { title: ctx.clientOf(o), sub: "Every order from this client", orders: ctx.orders.filter((x) => (o.delivery_phone ? x.delivery_phone === o.delivery_phone : x.id === o.id)) })}>{ctx.clientOf(o)}</button></dd>
+        {o.delivery_phone && <><dt>Phone</dt><dd>{o.delivery_phone}</dd></>}
+        <dt>Sales Channel</dt><dd><button type="button" className="ceo-inline" onClick={() => ctx.openOrders({ title: ctx.channelOf(o), sub: `Sales, ${ctx.periodName}`, orders: ctx.sales.filter((x) => ctx.channelOf(x) === ctx.channelOf(o)) })}>{ctx.channelOf(o)}</button></dd>
+        {person && <><dt>{o.is_b2b ? "Merchandiser" : "Sales Associate"}</dt><dd><button type="button" className="ceo-inline" onClick={() => ctx.openOrders({ title: person, sub: `Sales, ${ctx.periodName}`, orders: ctx.sales.filter((x) => ctx.personOf(x) === person), b2b: !!o.is_b2b })}>{person}</button></dd></>}
+        {o.salesperson_store && <><dt>Store</dt><dd>{o.salesperson_store}</dd></>}
+        {o.is_b2b && o.b2b_order_type && <><dt>B2B Order Type</dt><dd>{o.b2b_order_type}</dd></>}
+        {o.is_b2b && o.po_number && <><dt>PO Number</dt><dd>{o.po_number}</dd></>}
+        <dt>Status</dt><dd>{getOrderStatusLabel(o.status)}</dd>
+        <dt>Payment</dt><dd><PaymentPill order={o} /></dd>
+        <dt>Production</dt><dd>{journeyLine(o)}</dd>
+        {o.warehouse_stage && <><dt>Production Stage</dt><dd>{getStageLabel(o.warehouse_stage)}</dd></>}
+        <dt>Order Date</dt><dd>{formatDate(o.created_at)}</dd>
+        {o.delivery_date && <><dt>Delivery Date</dt><dd>{formatDate(o.delivery_date)}</dd></>}
+        {Number(o.discount_amount) > 0 && <><dt>Discount</dt><dd>{fullInr(o.discount_amount)}</dd></>}
+        {o.cancellation_reason && <><dt>Cancellation Reason</dt><dd>{o.cancellation_reason}</dd></>}
+      </dl>
+      <button type="button" className="ceo-btn is-primary is-block" onClick={() => ctx.navigate(o.is_b2b ? `/b2b-order-view/${o.id}` : `/order/${o.id}`)}>Open Full Order</button>
+    </Drawer>
+  );
 }

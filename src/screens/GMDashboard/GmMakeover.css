@@ -1,0 +1,14 @@
+/* GM dashboard extras on top of the CEO dashboard's .ceo styles. */
+.ceo.gm .gm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
+.ceo.gm .gm-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--ceo-line); }
+.ceo.gm .gm-item:last-child { border-bottom: 0; }
+.ceo.gm .gm-item b { display: block; font-weight: 500; }
+.ceo.gm .gm-item small { color: var(--ceo-ink-3); font-size: 12.5px; }
+.ceo.gm .ceo-table .ceo-page-actions { display: inline-flex; gap: 6px; justify-content: flex-end; flex-wrap: nowrap; }
+.ceo.gm .ceo-cell-sub { display: block; color: var(--ceo-ink-3); font-size: 12.5px; }
+.ceo.gm .ceo-insight b { font-weight: 600; }
+
+/* Exhibition Approvals and the Override Log are shared components with their
+   own layout: give them room inside a plain card. */
+.ceo.gm .gm-classic { overflow-x: auto; }
+.ceo.gm .gm-classic h2:first-child { display: none; }

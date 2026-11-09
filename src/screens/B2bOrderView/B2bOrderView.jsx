@@ -63,7 +63,8 @@ export default function B2bOrderView() {
 
                 const { data: profile } = await supabase.from("salesperson").select("role").eq("email", user.email?.toLowerCase()).maybeSingle();
 
-                const allowedRoles = ["executive", "merchandiser", "production"];
+                // GM (Anushree) opens B2B orders from her dashboard: view only.
+                const allowedRoles = ["executive", "merchandiser", "production", "gm"];
                 if (!profile?.role || !allowedRoles.includes(profile.role)) {
                     await supabase.auth.signOut();
                     navigate("/login", { replace: true });
@@ -117,6 +118,7 @@ export default function B2bOrderView() {
 
     const canEdit = () => {
         if (!order) return false;
+        if (userRole === "gm") return false; // view only
         const status = order.approval_status?.toLowerCase();
         // Rejected orders — always editable
         if (status === "rejected") return true;
@@ -221,7 +223,7 @@ export default function B2bOrderView() {
                             <strong>Order Rejected</strong>
                             {order.rejection_reason && <p className="b2bov-rejection-reason">{order.rejection_reason}</p>}
                             {order.approved_by && <p className="b2bov-rejection-by">Rejected by: {order.approved_by} {order.approved_at ? `on ${formatDate(order.approved_at)}` : ""}</p>}
-                            {userRole !== "production" && (
+                            {userRole !== "production" && userRole !== "gm" && (
                                 <button className="b2bov-edit-inline-btn" onClick={handleEdit}>{"\u270E"} Edit & Resubmit</button>
                             )}
                         </div>
@@ -229,7 +231,7 @@ export default function B2bOrderView() {
                 )}
 
                 {/* Edit Window Notice */}
-                {order.approval_status?.toLowerCase() === "pending" && getHoursSinceSubmission() <= 30 && userRole !== "production" && (
+                {order.approval_status?.toLowerCase() === "pending" && getHoursSinceSubmission() <= 30 && userRole !== "production" && userRole !== "gm" && (
                     <div className="b2bov-edit-notice">
                         Edit window: {Math.max(0, Math.ceil(30 - getHoursSinceSubmission()))} hours remaining
                     </div>
