@@ -251,15 +251,6 @@
 .ceo.pm .pmb-go:hover { background: var(--ceo-gold-soft); }
 .ceo.pm .pmb-go svg { width: 13px; height: 13px; }
 
-/* ---------- Questions This Answers ---------- */
-.ceo.pm .pmb-qs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.ceo.pm .pmb-q { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 14px 16px; background: #fff; border: 1px solid var(--ceo-line); border-radius: 14px; }
-.ceo.pm .pmb-q-mark { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--ceo-gold-soft); color: var(--ceo-gold-deep) !important; font-family: var(--ceo-serif) !important; font-size: 16px; }
-.ceo.pm .pmb-q-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.ceo.pm .pmb-q-body b { font-weight: 600; font-size: 14px; color: var(--ceo-ink) !important; }
-.ceo.pm .pmb-q-body p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ceo-ink-2) !important; }
-.ceo.pm .pmb-q-body .pmb-go { margin-left: -10px; }
-@media (max-width: 900px) { .ceo.pm .pmb-qs { grid-template-columns: 1fr; } }
 @media (max-width: 640px) {
   .ceo.pm .pmb-line { grid-template-columns: 30px 1fr; padding: 11px 12px; }
   .ceo.pm .pmb-line .pmb-go { grid-column: 2; justify-self: start; margin-left: -10px; }
@@ -272,3 +263,20 @@
 /* ---------- Stock ---------- */
 .ceo.pm .pms-photo { margin: 0 0 14px; }
 .ceo.pm .pms-photo img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; background: #faf7ef; }
+
+/* ---------- Action Points: one sentence each, most pressing first ---------- */
+.ceo.pm .pmb-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ceo.pm .pmb-act { display: grid; grid-template-columns: 38px 1fr; gap: 12px; padding: 14px 16px; background: #fff; border: 1px solid var(--ceo-line); border-radius: 14px; }
+.ceo.pm .pmb-act .pmb-ico { width: 38px; height: 38px; border-radius: 11px; }
+.ceo.pm .pmb-act.is-crit .pmb-ico { background: #f7ebe4; color: #a5553a !important; }
+.ceo.pm .pmb-act.is-warn .pmb-ico { background: #f6eedb; color: #8a6510 !important; }
+.ceo.pm .pmb-act.is-gold .pmb-ico { background: var(--ceo-gold-soft); color: var(--ceo-gold-deep) !important; }
+.ceo.pm .pmb-act.is-ok .pmb-ico { background: #eef4ea; color: #4c7a3a !important; }
+.ceo.pm .pmb-act.is-ok { background: #fcfdfb; }
+.ceo.pm .pmb-act-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.ceo.pm .pmb-act-tag { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ceo-ink-3) !important; }
+.ceo.pm .pmb-act.is-crit .pmb-act-tag { color: #a5553a !important; }
+.ceo.pm .pmb-act-body p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ceo-ink-2) !important; }
+.ceo.pm .pmb-act-body p b { font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmb-act-body .pmb-go { margin-left: -10px; }
+@media (max-width: 900px) { .ceo.pm .pmb-acts { grid-template-columns: 1fr; } }

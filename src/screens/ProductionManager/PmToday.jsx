@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import formatDate from "../../utils/formatDate";
 import { Columns, Empty, Icon, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
 import { Card, DueCell, OrderCell, Table, Tile } from "./PmCommon";
-import { BriefingCard, QuestionsCard, useInsights } from "./PmBriefing";
+import { ActionsCard, BriefingCard, useInsights } from "./PmBriefing";
 import {
   FLOOR_STEPS, atVendor, atWh2, channelOf, dayKey, daysLeft, floorKey, hasPromise, isDormant, isLate, isOwnTrip, isRunning, isStuck, isUrgent, pct, pieceState,
   plural, todayStart,
@@ -272,7 +272,7 @@ export default function TodayPage({ ctx }) {
           )}
         </Card>
 
-        <QuestionsCard ctx={ctx} ins={ins} />
+        <ActionsCard ctx={ctx} ins={ins} />
 
         <Card span={6} md={12} title="Daily Throughput" sub="Pieces finished each day, last 8 days. Click a day to see the pieces.">
           {!days ? <Empty text="Loading…" /> : (
