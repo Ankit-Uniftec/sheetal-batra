@@ -714,7 +714,8 @@
 .ceo.pm .pmc-pieces-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .ceo.pm .pmc-pieces-head b { font-size: 12.5px; font-weight: 600; color: var(--ceo-ink) !important; }
 .ceo.pm .pmc-bar { display: block; width: 100%; }
-.ceo.pm .pmc-pieces .pmo-chip { width: 100%; min-width: 0; grid-template-columns: 80px minmax(0, 1fr); }
+.ceo.pm .pmc-pieces .pmo-chip { width: 100%; min-width: 0; grid-template-columns: minmax(70px, max-content) minmax(0, 1fr); }
+.ceo.pm .pmc-pieces .pmo-chip b { white-space: normal; overflow: visible; }
 .ceo.pm .pmc-pieces .pmo-chip span { white-space: normal; }
 .ceo.pm .pmc-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; padding: 10px 18px; background: #fcfaf4; border-top: 1px solid #f1ebdc; }
 .ceo.pm .pmc-foot-note { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: #8c8476 !important; }
@@ -736,30 +737,13 @@
   .ceo.pm .pmc-actions { width: 100%; justify-content: flex-start; }
 }
 
-/* Order cards: measurements, piece stage tracks, notes */
-.ceo.pm .pmc-mrow { grid-column: 2 / -1; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; padding-top: 8px; border-top: 1px dashed #f1ebdc; }
-.ceo.pm .pmc-measures { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.ceo.pm .pmc-mgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; }
-.ceo.pm .pmc-mgroup b { font-size: 11.5px; font-weight: 600; color: var(--ceo-ink-2) !important; margin-right: 4px; }
-.ceo.pm .pmc-mgroup i { font-style: normal; display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 8px; border-radius: 7px; background: #faf6ea; font-size: 12px; font-weight: 600; color: var(--ceo-ink) !important; font-variant-numeric: tabular-nums; }
-.ceo.pm .pmc-mgroup i small { font-size: 10.5px; font-weight: 400; color: #8c8476 !important; }
-.ceo.pm .pmc-ptracks { display: flex; flex-direction: column; gap: 10px; }
-.ceo.pm .pmc-ptrack { display: grid; grid-template-columns: minmax(64px, auto) minmax(0, 1fr); grid-template-areas: "name dots" "name where"; gap: 3px 12px; align-items: center; }
-.ceo.pm .pmc-pname { grid-area: name; font-size: 12.5px; font-weight: 600; color: var(--ceo-ink) !important; align-self: start; padding-top: 1px; }
-.ceo.pm .pmc-dots { grid-area: dots; display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); align-items: center; position: relative; }
-.ceo.pm .pmc-dots::before { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; transform: translateY(-50%); background: #efe7d3; }
-.ceo.pm .pmc-dots i { position: relative; justify-self: center; width: 9px; height: 9px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 1.5px #e3d9c1; }
-.ceo.pm .pmc-dots i.is-done { background: #d4ae55; box-shadow: none; }
-.ceo.pm .pmc-dots i.is-now { width: 13px; height: 13px; background: #fdf1d6; box-shadow: inset 0 0 0 2px #b98a24, 0 0 0 3px #fbf1d9; }
-.ceo.pm .pmc-ptrack.is-at_vendor .pmc-dots i.is-now { background: #f9ebdf; box-shadow: inset 0 0 0 2px #c9874b, 0 0 0 3px #fbefe4; }
-.ceo.pm .pmc-ptrack.is-finished .pmc-dots i { background: #d4ae55; box-shadow: none; }
-.ceo.pm .pmc-where { grid-area: where; font-size: 11.5px; color: var(--ceo-ink-2) !important; line-height: 1.35; }
-.ceo.pm .pmc-ptrack.is-at_vendor .pmc-where { color: #8f5a2e !important; }
-.ceo.pm .pmc-ptrack.is-finished .pmc-where { color: #7e5f10 !important; font-weight: 600; }
-.ceo.pm .pmc-ptrack.is-not_started .pmc-where, .ceo.pm .pmc-ptrack.is-removed .pmc-where { color: #8c8476 !important; }
-.ceo.pm .pmc-ptrack.is-disposed .pmc-where { color: #a5553a !important; font-weight: 600; }
+/* Order cards: each piece with its measurements, notes */
+.ceo.pm .pmc-plist { display: flex; flex-direction: column; gap: 10px; }
+.ceo.pm .pmc-piece { display: flex; flex-direction: column; gap: 6px; }
+.ceo.pm .pmc-mchips { display: flex; flex-wrap: wrap; gap: 4px 5px; padding-left: 2px; }
+.ceo.pm .pmc-mchips i { font-style: normal; display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 7px; border-radius: 6px; background: #fff; border: 1px solid #f1ebdc; font-size: 11.5px; font-weight: 600; color: var(--ceo-ink) !important; font-variant-numeric: tabular-nums; }
+.ceo.pm .pmc-mchips i small { font-size: 10px; font-weight: 400; color: #8c8476 !important; }
 .ceo.pm .pmc-note { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
-  .ceo.pm .pmc-mrow { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); }
   .ceo.pm .pmc-note { max-width: 100%; }
 }
