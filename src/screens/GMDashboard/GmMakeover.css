@@ -18,3 +18,17 @@
 @media (min-width: 1200px) {
   .ceo.gm .ceo-tiles:has(> .ceo-tile:nth-child(5):last-child) > .ceo-tile { flex-basis: calc(20% - 15px); }
 }
+
+/* Header: the search box sits on the same centre line as the other header
+   buttons (its wrapper was 6px taller than the box), and create buttons
+   (New Comms Order, Place Order, New Event) live in the header too. */
+.ceo.gm .ceo-global { display: flex; align-items: center; height: 40px; }
+/* A site-wide label style adds a 6px bottom margin; the search boxes are labels. */
+.ceo.gm .ceo-search { margin: 0 !important; }
+.ceo.gm .ceo-top-end { display: inline-flex; align-items: center; gap: 10px; }
+.ceo.gm .gm-top-actions { display: inline-flex; align-items: center; gap: 8px; }
+.ceo.gm .gm-top-actions .ceo-btn { height: 40px; white-space: nowrap; }
+@media (max-width: 640px) {
+  .ceo.gm .gm-top-actions .ceo-btn span { display: none; }
+  .ceo.gm .gm-top-actions .ceo-btn { width: 40px; padding: 0; justify-content: center; }
+}

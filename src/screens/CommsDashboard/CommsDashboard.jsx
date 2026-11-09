@@ -83,6 +83,7 @@ export default function CommsDashboard() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [pdfBusy, setPdfBusy] = useState(null);
+  const [eventSignal, setEventSignal] = useState(0); // the header's New Event button
   const [stockRoom, setStockRoom] = useState({ data: null, ledger: null, error: null, started: false });
 
   const loadOrders = useCallback(async () => {
@@ -205,7 +206,7 @@ export default function CommsDashboard() {
   const ctx = {
     orders, ordersById, componentsByOrder, prRecords, setPrRecords, profile, stockRoom,
     inPeriod, range, periodName,
-    openOrder, openOrders, openJourney, makePdf, pdfBusy, replaceOrder, showPopup, navigate,
+    openOrder, openOrders, openJourney, makePdf, pdfBusy, replaceOrder, showPopup, navigate, eventSignal,
     newOrder: () => navigate("/comms-order-form"),
   };
   const userName = profile?.saleperson || "";
@@ -263,7 +264,13 @@ export default function CommsDashboard() {
                 <span>Order date</span>
               </button>
             )}
-            <div className="ceo-top-end"><NotificationBell userEmail={profile?.email} look="soft" /></div>
+            <div className="ceo-top-end">
+              <span className="gm-top-actions">
+                {activeTab === "calendar" && <button type="button" className="ceo-btn" onClick={() => setEventSignal((n) => n + 1)} aria-label="New event"><Icon name="plus" /><span>New Event</span></button>}
+                <button type="button" className="ceo-btn is-primary" onClick={() => navigate("/comms-order-form")} aria-label="New Comms order"><Icon name="plus" /><span>New Comms Order</span></button>
+              </span>
+              <NotificationBell userEmail={profile?.email} look="soft" />
+            </div>
           </div>
 
           <div className="ceo-scroll">

@@ -448,6 +448,8 @@ export function CalendarPage({ ctx }) {
   const [events, setEvents] = useState([]);
   const [modal, setModal] = useState(null);
   const [eventsOpen, setEventsOpen] = useState(false);
+  // The header's New Event button opens the same form.
+  useEffect(() => { if (ctx.eventSignal) setModal({ mode: "create" }); }, [ctx.eventSignal]);
 
   useEffect(() => {
     let dead = false;
@@ -589,19 +591,68 @@ export function CalendarPage({ ctx }) {
 }
 
 // ------------------------------------------------------------ INVENTORY
+// Read from the same tables as Stock Room, through Stock Room's own view, so
+// every count matches it. Designs holding stock (LXRTS by size, custom pieces as
+// a total) and made-to-order designs (no stock) are shown apart.
 const STOCK_LEVELS = [{ value: "ok", label: "In Stock" }, { value: "low", label: "Low Stock" }, { value: "out", label: "Out of Stock" }];
-const statusText = (r) => (r.type === TYPE_MTO ? "Made to order" : ({ ok: "In stock", low: "Low", out: "Out" }[r.status] || r.status));
+const STOCKED_TYPES = [{ value: TYPE_LXRTS, label: TYPE_LABELS[TYPE_LXRTS] }, { value: "custom", label: TYPE_LABELS.custom }];
+const LEVEL_PILL = { ok: ["ok", "In stock"], low: ["warn", "Low"], out: ["crit", "Out"] };
+const sizeLine = (r) => {
+  const by = r.stock.bySize;
+  if (!by || !Object.keys(by).length) return r.type === TYPE_LXRTS ? "No sizes set up" : "One total, no sizes";
+  return (r.stock.sizes || Object.keys(by)).map((s) => `${s} ${by[s] ?? 0}`).join(" · ");
+};
+const pcs = (r) => (r.stock.tracked && !r.stock.unlimited ? r.stock.total : 0);
+
+/** The designs behind a figure, in a side panel, with their own download. */
+function DesignListDrawer({ list, onPick, onClose }) {
+  const [page, setPage] = useState(1);
+  const total = list.rows.reduce((a, r) => a + pcs(r), 0);
+  return (
+    <Drawer wide title={list.title} sub={list.sub} onClose={onClose}>
+      <div className="ceo-dstats">
+        <Stat label="Designs" info="The number of designs in this list."><b>{num(list.rows.length)}</b></Stat>
+        {!list.mto && <Stat label="Pieces" info="Pieces on hand across these designs."><b>{num(total)}</b></Stat>}
+      </div>
+      <div className="gm-actions"><CsvButton disabled={!list.rows.length} onClick={() => downloadCsv({
+        filename: `comms_${slug(list.title)}`,
+        headers: ["SKU", "Design", "Type", "Pieces", "Sizes", "Status", "List Price"],
+        rows: list.rows.map((r) => [r.product.sku_id || "", r.product.name, TYPE_LABELS[r.type] || "", list.mto ? "" : pcs(r), list.mto ? "" : sizeLine(r), list.mto ? "Made to order" : (LEVEL_PILL[r.status] || ["", r.status])[1], Math.round(r.price)]),
+      })} /></div>
+      <Table
+        rowKey={(r) => r.id}
+        rows={list.rows.slice((page - 1) * 12, page * 12)}
+        onRow={onPick}
+        empty="No designs."
+        columns={[
+          { key: "name", label: "Design", render: (r) => <span className="ceo-ocell"><Thumb src={r.product.image_url} alt="" /><span><b>{r.product.name}</b><small>{r.product.sku_id || "–"}</small></span></span> },
+          ...(list.mto
+            ? [{ key: "price", label: "List Price", right: true, render: (r) => fullInr(r.price) }]
+            : [{ key: "pieces", label: "Pieces", right: true, render: (r) => num(pcs(r)) }]),
+        ]}
+      />
+      <Pager page={page} pages={Math.ceil(list.rows.length / 12)} onChange={setPage} />
+    </Drawer>
+  );
+}
+
 export function InventoryPage({ ctx }) {
-  const { stockRoom, profile, showPopup, navigate } = ctx;
+  const { stockRoom, profile, showPopup } = ctx;
   const view = useStockRoomView(stockRoom.data, 90, null);
   const [blocks, setBlocks] = useState([]);
+  const [blocksOpen, setBlocksOpen] = useState(false);
+  const [list, setList] = useState(null);
+  const [design, setDesign] = useState(null);
+  const [blocking, setBlocking] = useState(null); // { row, variant }
+  // Stocked designs list
   const [search, setSearch] = useState("");
   const [level, setLevel] = useState("");
   const [type, setType] = useState("");
   const [drawer, setDrawer] = useState(false);
   const [page, setPage] = useState(1);
-  const [blocking, setBlocking] = useState(null); // { row, variant }
-  const [design, setDesign] = useState(null);
+  // Made-to-order list
+  const [mtoSearch, setMtoSearch] = useState("");
+  const [mtoPage, setMtoPage] = useState(1);
 
   useEffect(() => {
     supabase.from("comms_inventory_blocks").select("*").eq("status", "active")
@@ -611,13 +662,27 @@ export function InventoryPage({ ctx }) {
   const live = blocks.filter((b) => b.end_date >= today);
   const variantsById = useMemo(() => Object.fromEntries((stockRoom.data?.variants || []).map((v) => [v.id, v])), [stockRoom.data]);
   const blockedIds = useMemo(() => new Set(live.map((b) => b.product_id || variantsById[b.variant_id]?.product_id).filter(Boolean)), [live, variantsById]);
-  const rows = useMemo(() => {
-    if (!view) return [];
+
+  const groups = useMemo(() => {
+    if (!view) return null;
+    const stocked = view.rows.filter((r) => r.type !== TYPE_MTO);
+    const mto = view.rows.filter((r) => r.type === TYPE_MTO);
+    return { stocked, mto, withStock: stocked.filter((r) => pcs(r) > 0).sort((a, b) => pcs(b) - pcs(a)) };
+  }, [view]);
+  const stockedRows = useMemo(() => {
+    if (!groups) return [];
     const q = search.trim().toLowerCase();
-    return view.rows.filter((r) => (!q || String(r.product.name || "").toLowerCase().includes(q) || String(r.product.sku_id || "").toLowerCase().includes(q))
-      && (!level || r.status === level) && (!type || r.type === type));
-  }, [view, search, level, type]);
+    return groups.stocked.filter((r) => (!q || String(r.product.name || "").toLowerCase().includes(q) || String(r.product.sku_id || "").toLowerCase().includes(q))
+      && (!level || r.status === level) && (!type || r.type === type))
+      .sort((a, b) => pcs(b) - pcs(a) || String(a.product.name).localeCompare(String(b.product.name)));
+  }, [groups, search, level, type]);
+  const mtoRows = useMemo(() => {
+    if (!groups) return [];
+    const q = mtoSearch.trim().toLowerCase();
+    return groups.mto.filter((r) => !q || String(r.product.name || "").toLowerCase().includes(q) || String(r.product.sku_id || "").toLowerCase().includes(q));
+  }, [groups, mtoSearch]);
   useEffect(() => { setPage(1); }, [search, level, type]);
+  useEffect(() => { setMtoPage(1); }, [mtoSearch]);
 
   const release = async (b) => {
     try { await releaseCommsBlock(b); setBlocks((prev) => prev.filter((x) => x.id !== b.id)); }
@@ -625,73 +690,103 @@ export function InventoryPage({ ctx }) {
   };
   const nameOfBlock = (b) => {
     const v = b.variant_id ? variantsById[b.variant_id] : null;
-    const pid = b.product_id || v?.product_id;
-    const row = view?.rowsById[pid];
+    const row = view?.rowsById[b.product_id || v?.product_id];
     return `${row?.product.name || "Design"}${v ? ` (size ${v.size})` : ""}`;
   };
+  const blockButton = (r) => <button type="button" className="ceo-btn is-small" onClick={(e) => { e.stopPropagation(); setBlocking({ row: r, variant: null }); }}>Block</button>;
+  const reserved = (r) => (blockedIds.has(r.id) ? <i className="ceo-pill is-warn"> Reserved</i> : null);
 
   if (stockRoom.error) return <div className="ceo-page"><PageHead title="Inventory" /><Card><Empty text={`Stock could not be loaded: ${stockRoom.error}`} /></Card></div>;
-  if (!view) return <div className="ceo-page"><PageHead title="Inventory" /><Card><Empty text="Loading stock from Stock Room…" /></Card></div>;
+  if (!view || !groups) return <div className="ceo-page"><PageHead title="Inventory" /><Card><Empty text="Loading stock…" /></Card></div>;
   const t = view.totals;
+  const lowOrOut = (s) => groups.stocked.filter((r) => r.status === s).sort((a, b) => b.sold90 - a.sold90);
 
   return (
     <div className="ceo-page">
-      <PageHead title="Inventory" desc="Stock read from Stock Room, so it always matches. Block a design to reserve it for a shoot, event or sourcing; stores cannot sell it on those dates.">
-        <button type="button" className="ceo-btn" onClick={() => navigate("/stock-room")}><Icon name="stock" />Open Stock Room</button>
-      </PageHead>
+      <PageHead title="Inventory" desc="Live stock from the same records Stock Room uses. Designs that hold stock and made-to-order designs are shown separately. Block a design to reserve it for a shoot, event or sourcing." />
       <div className="ceo-tiles">
-        <Tile icon="products" label="Designs" value={num(t.designs)} note={`${num(t.lxrts)} LXRTS · ${num(t.custom)} custom · ${num(t.mto)} made to order`} onClick={() => { setLevel(""); setType(""); }} />
-        <Tile icon="stock" label="Pieces in Stock" value={num(t.trackedUnits)} note={`${num(t.lxrtsUnits)} LXRTS · ${num(t.customUnits)} custom`} />
-        <Tile icon="pin" label="Active Blocks" value={num(live.length)} note="Reserved right now" />
-        <Tile icon="alert" tone="warn" label="Out of Stock" value={num(t.out)} onClick={() => setLevel("out")} />
+        <Tile icon="stock" label="Pieces in Stock" value={num(t.trackedUnits)} note={`${num(groups.withStock.length)} designs · ${num(t.lxrtsUnits)} LXRTS · ${num(t.customUnits)} custom`} onClick={() => setList({ title: "Pieces in Stock", sub: "Designs holding stock, most pieces first", rows: groups.withStock })} />
+        <Tile icon="alert" tone={t.low ? "warn" : undefined} label="Low Stock" value={num(t.low)} note="1 to 4 pieces left" onClick={() => setList({ title: "Low Stock", sub: "Designs with 1 to 4 pieces left", rows: lowOrOut("low") })} />
+        <Tile icon="alert" tone={t.out ? "warn" : undefined} label="Out of Stock" value={num(t.out)} note="Stocked designs at 0" onClick={() => setList({ title: "Out of Stock", sub: "Designs that hold stock but have none left", rows: lowOrOut("out") })} />
+        <Tile icon="products" label="Made to Order" value={num(t.mto)} note="Made after each order, no stock" onClick={() => setList({ title: "Made to Order", sub: "Designs made after each order; they hold no stock", rows: groups.mto, mto: true })} />
+        <Tile icon="pin" label="Active Blocks" value={num(live.length)} note="Reserved right now" onClick={() => setBlocksOpen(true)} />
       </div>
       <div className="ceo-grid">
-        <Card span={12} title="Active Blocks" sub={blocks.length > live.length ? "Blocks whose dates have passed no longer stop sales, but stay listed until released." : undefined}>
-          <Table rowKey={(r) => r.id} rows={blocks} empty="No design is reserved right now." columns={[
-            { key: "design", label: "Design", render: (b) => <b>{nameOfBlock(b)}</b> },
-            { key: "for", label: "Reserved For", render: (b) => `${b.purpose || "–"}${b.recipient_name ? ` for ${b.recipient_name}` : ""}` },
-            { key: "from", label: "From", hide: true, render: (b) => formatDate(b.start_date) },
-            { key: "to", label: "Until", right: true, render: (b) => (b.end_date < today ? <span>{formatDate(b.end_date)} <i className="ceo-pill is-warn">Ended, still open</i></span> : formatDate(b.end_date)) },
-            { key: "act", label: "", right: true, render: (b) => <button type="button" className="ceo-btn is-small" onClick={() => release(b)}>Release</button> },
-          ]} />
-        </Card>
-        <Card span={12} title="Design Stock">
-          <ListTools search={search} onSearch={setSearch} placeholder="Search design or SKU" filters={(level ? 1 : 0) + (type ? 1 : 0)} onFilters={() => setDrawer(true)} exportDisabled={!rows.length} onExport={() => downloadCsv({
-            filename: "comms_inventory",
-            headers: ["SKU", "Design", "Type", "Pieces", "Status", "List Price", "Blocked"],
-            rows: rows.map((r) => [r.product.sku_id || "", r.product.name, TYPE_LABELS[r.type] || "", r.stock.tracked && !r.stock.unlimited ? r.stock.total : "", statusText(r), Math.round(r.price), blockedIds.has(r.id) ? "Yes" : "No"]),
+        <Card span={12} title="Designs in Stock" sub={`LXRTS designs counted by size and custom pieces counted as a total: ${num(groups.stocked.length)} designs, ${num(t.trackedUnits)} pieces. Click a design to see its sizes.`}>
+          <ListTools search={search} onSearch={setSearch} placeholder="Search design or SKU" filters={(level ? 1 : 0) + (type ? 1 : 0)} onFilters={() => setDrawer(true)} exportDisabled={!stockedRows.length} onExport={() => downloadCsv({
+            filename: "comms_designs_in_stock",
+            headers: ["SKU", "Design", "Type", "Pieces", "Sizes", "Status", "List Price", "Reserved"],
+            rows: stockedRows.map((r) => [r.product.sku_id || "", r.product.name, TYPE_LABELS[r.type] || "", pcs(r), sizeLine(r), (LEVEL_PILL[r.status] || ["", r.status])[1], Math.round(r.price), blockedIds.has(r.id) ? "Yes" : "No"]),
           })} />
           <Table
             rowKey={(r) => r.id}
-            rows={rows.slice((page - 1) * PAGE, page * PAGE)}
+            rows={stockedRows.slice((page - 1) * PAGE, page * PAGE)}
             onRow={setDesign}
             empty="No designs match."
             columns={[
-              { key: "name", label: "Design", render: (r) => <span className="ceo-ocell"><Thumb src={r.product.image_url} alt="" /><span><b>{r.product.name}</b><small>{r.product.sku_id || "–"}{blockedIds.has(r.id) ? " · Reserved" : ""}</small></span></span> },
-              { key: "type", label: "Type", hide: true, render: (r) => TYPE_LABELS[r.type] || "–" },
-              { key: "stock", label: "Pieces", right: true, render: (r) => (r.stock.tracked && !r.stock.unlimited ? num(r.stock.total) : "–") },
-              { key: "status", label: "Status", right: true, hide: true, render: (r) => statusText(r) },
-              { key: "act", label: "", right: true, render: (r) => <button type="button" className="ceo-btn is-small" onClick={(e) => { e.stopPropagation(); setBlocking({ row: r, variant: null }); }}>Block</button> },
+              { key: "name", label: "Design", render: (r) => <span className="ceo-ocell"><Thumb src={r.product.image_url} alt="" /><span><b>{r.product.name}</b><small>{r.product.sku_id || "–"} · {TYPE_LABELS[r.type]}{reserved(r)}</small></span></span> },
+              { key: "sizes", label: "Sizes", hide: true, lap: true, render: (r) => <small className="ceo-muted">{sizeLine(r)}</small> },
+              { key: "stock", label: "Pieces", right: true, render: (r) => <b>{num(pcs(r))}</b> },
+              { key: "status", label: "Status", right: true, hide: true, render: (r) => { const [tone, label] = LEVEL_PILL[r.status] || ["gold", r.status]; return <i className={`ceo-pill is-${tone}`}>{label}</i>; } },
+              { key: "act", label: "", right: true, render: blockButton },
             ]}
           />
-          <Pager page={page} pages={Math.ceil(rows.length / PAGE)} onChange={setPage} />
+          <Pager page={page} pages={Math.ceil(stockedRows.length / PAGE)} onChange={setPage} />
+        </Card>
+        <Card span={12} title="Made to Order" sub={`${num(groups.mto.length)} designs made after each order. They hold no stock, so they can always be ordered.`}>
+          <ListTools search={mtoSearch} onSearch={setMtoSearch} placeholder="Search design or SKU" exportDisabled={!mtoRows.length} onExport={() => downloadCsv({
+            filename: "comms_made_to_order",
+            headers: ["SKU", "Design", "List Price", "Reserved"],
+            rows: mtoRows.map((r) => [r.product.sku_id || "", r.product.name, Math.round(r.price), blockedIds.has(r.id) ? "Yes" : "No"]),
+          })} />
+          <Table
+            rowKey={(r) => r.id}
+            rows={mtoRows.slice((mtoPage - 1) * PAGE, mtoPage * PAGE)}
+            onRow={setDesign}
+            empty="No designs match."
+            columns={[
+              { key: "name", label: "Design", render: (r) => <span className="ceo-ocell"><Thumb src={r.product.image_url} alt="" /><span><b>{r.product.name}</b><small>{r.product.sku_id || "–"}{reserved(r)}</small></span></span> },
+              { key: "price", label: "List Price", right: true, hide: true, render: (r) => fullInr(r.price) },
+              { key: "kind", label: "Stock", right: true, render: () => <i className="ceo-pill">Made after order</i> },
+              { key: "act", label: "", right: true, render: blockButton },
+            ]}
+          />
+          <Pager page={mtoPage} pages={Math.ceil(mtoRows.length / PAGE)} onChange={setMtoPage} />
         </Card>
       </div>
-      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setLevel(""); setType(""); }} count={rows.length} noun="designs" sub="Narrow the design list">
+      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setLevel(""); setType(""); }} count={stockedRows.length} noun="designs" sub="Narrow the designs in stock">
         <FilterGroup label="Stock Level"><Chips options={STOCK_LEVELS} value={level} onChange={setLevel} /></FilterGroup>
-        <FilterGroup label="Type"><Chips options={Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label }))} value={type} onChange={setType} /></FilterGroup>
+        <FilterGroup label="Type"><Chips options={STOCKED_TYPES} value={type} onChange={setType} /></FilterGroup>
       </FilterDrawer>
+      {list && <DesignListDrawer list={list} onPick={setDesign} onClose={() => setList(null)} />}
+      {blocksOpen && (
+        <Drawer wide title="Active Blocks" sub={blocks.length > live.length ? "Blocks whose dates have passed no longer stop sales, but stay listed until released." : "Designs reserved right now"} onClose={() => setBlocksOpen(false)}>
+          <div className="gm-actions"><CsvButton disabled={!blocks.length} onClick={() => downloadCsv({
+            filename: "comms_blocks",
+            headers: ["Design", "Reserved For", "Recipient", "From", "Until", "Still Active"],
+            rows: blocks.map((b) => [nameOfBlock(b), b.purpose || "", b.recipient_name || "", formatDate(b.start_date), formatDate(b.end_date), b.end_date >= today ? "Yes" : "Ended, not released"]),
+          })} /></div>
+          <Table rowKey={(r) => r.id} rows={blocks} empty="No design is reserved right now." columns={[
+            { key: "design", label: "Design", render: (b) => <b>{nameOfBlock(b)}</b> },
+            { key: "for", label: "Reserved For", render: (b) => `${b.purpose || "–"}${b.recipient_name ? ` for ${b.recipient_name}` : ""}` },
+            { key: "to", label: "Until", right: true, render: (b) => (b.end_date < today ? <span>{formatDate(b.end_date)} <i className="ceo-pill is-warn">Ended, still open</i></span> : formatDate(b.end_date)) },
+            { key: "act", label: "", right: true, render: (b) => <button type="button" className="ceo-btn is-small" onClick={() => release(b)}>Release</button> },
+          ]} />
+        </Drawer>
+      )}
       {design && (
         <Drawer title={design.product.name} sub={`${design.product.sku_id || ""} · ${TYPE_LABELS[design.type] || ""}`} onClose={() => setDesign(null)}>
           <div className="ceo-dstats">
-            <Stat label="Pieces" info="Pieces on hand, all sizes."><b>{design.stock.tracked && !design.stock.unlimited ? num(design.stock.total) : "Made to order"}</b></Stat>
+            <Stat label="Pieces" info="Pieces on hand, all sizes."><b>{design.type === TYPE_MTO ? "Made to order" : num(pcs(design))}</b></Stat>
             <Stat label="List Price" info="The design's price in the catalogue."><b>{fullInr(design.price)}</b></Stat>
           </div>
           <div className="gm-actions"><button type="button" className="ceo-btn is-primary" onClick={() => setBlocking({ row: design, variant: null })}><Icon name="pin" />Block This Design</button></div>
+          {design.type === TYPE_MTO && <Empty text="Made after each order, so there is no stock to count." />}
+          {design.type === "custom" && <Empty text={`${num(pcs(design))} pieces on hand, counted as one total without sizes.`} />}
           {design.type === TYPE_LXRTS && (view.variantsByProduct[design.id] || []).length > 0 && (
             <Table rowKey={(v) => v.id} rows={view.variantsByProduct[design.id]} columns={[
               { key: "size", label: "Size", render: (v) => <b>{v.size}</b> },
-              { key: "qty", label: "Pieces", right: true, render: (v) => num(v.inventory) },
+              { key: "qty", label: "Pieces", right: true, render: (v) => <span className={Number(v.inventory) === 0 ? "ceo-text-crit" : undefined}>{num(v.inventory)}</span> },
               { key: "act", label: "", right: true, render: (v) => <button type="button" className="ceo-btn is-small" onClick={() => setBlocking({ row: design, variant: v })}>Block Size</button> },
             ]} />
           )}
@@ -701,7 +796,7 @@ export function InventoryPage({ ctx }) {
         <BlockModal
           product={blocking.row.product}
           variant={blocking.variant}
-          currentStock={blocking.variant ? blocking.variant.inventory : blocking.row.stock.tracked && !blocking.row.stock.unlimited ? blocking.row.stock.total : "Made to order"}
+          currentStock={blocking.variant ? blocking.variant.inventory : blocking.row.type === TYPE_MTO ? "Made to order" : pcs(blocking.row)}
           profile={profile}
           showPopup={showPopup}
           onClose={() => setBlocking(null)}
@@ -725,7 +820,12 @@ export function ReportsPage({ ctx }) {
       <PageHead title="Reports" desc="The three monthly Comms reports, as CSV files.">
         <Select label="Month" value={r.selectedMonth} onChange={r.setSelectedMonth} options={r.monthOptions} search={false} />
       </PageHead>
-      <p className="ceo-muted">{num(r.ordersInPeriod.length)} Comms {r.ordersInPeriod.length === 1 ? "order" : "orders"} in this period.</p>
+      <p className="ceo-muted">
+        <button type="button" className="ceo-inline" onClick={() => ctx.openOrders({ title: "Orders in This Report", sub: r.monthOptions.find((m) => m.value === r.selectedMonth)?.label || "", orders: r.ordersInPeriod })}>
+          {num(r.ordersInPeriod.length)} Comms {r.ordersInPeriod.length === 1 ? "order" : "orders"} in this period
+        </button>
+        , the orders these reports are built from.
+      </p>
       <div className="ceo-grid">
         {reports.map((rep) => (
           <Card key={rep.title} span={4} md={12} title={rep.title} sub={rep.desc}>

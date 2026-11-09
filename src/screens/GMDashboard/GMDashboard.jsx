@@ -357,7 +357,13 @@ export default function GMDashboard() {
                 <span>{compareName ? `vs ${compareName.toLowerCase()}` : "No comparison"}</span>
               </button>
             )}
-            <div className="ceo-top-end"><NotificationBell userEmail={currentUserEmail} look="soft" /></div>
+            <div className="ceo-top-end">
+              <span className="gm-top-actions">
+                {currentUserProfile?.can_place_stock_orders && <button type="button" className="ceo-btn" onClick={handleStartStockOrder} aria-label="Stock order"><Icon name="plus" /><span>Stock Order</span></button>}
+                <button type="button" className="ceo-btn is-primary" onClick={startPlaceOrder} aria-label="Place order"><Icon name="plus" /><span>Place Order</span></button>
+              </span>
+              <NotificationBell userEmail={currentUserEmail} look="soft" />
+            </div>
           </div>
 
           <div className="ceo-scroll">

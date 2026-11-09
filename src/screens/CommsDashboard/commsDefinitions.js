@@ -20,9 +20,11 @@ export const TILE_INFO = {
 
   // Inventory
   "Designs": "Every live design in the catalogue.",
-  "Pieces in Stock": "Finished pieces on hand, as counted in Stock Room. Made-to-order designs are not included because they are made only after an order.",
+  "Pieces in Stock": "Finished pieces on hand, from the same records Stock Room uses. Made-to-order designs are not included because they are made only after an order.",
   "Active Blocks": "Designs currently reserved for a shoot, event or sourcing. Stores cannot sell them on those dates.",
   "Out of Stock": "Designs that hold stock but have no pieces left right now.",
+  "Low Stock": "Designs that hold stock and are running low, with only 1 to 4 pieces left.",
+  "Made to Order": "Designs made only after an order is placed. They hold no stock, so they can always be ordered.",
 
   // PR Performance
   "PR-Eligible Orders": "Barter, gifting and sourcing orders that are approved. Personal orders are paid orders, so they are not tracked for PR.",
@@ -46,6 +48,8 @@ export const CARD_INFO = {
   "Recent Orders": "The latest Comms orders placed in the period.",
   "Active Blocks": "Designs currently reserved. Release a block to make the design available to stores again.",
   "Design Stock": "Every design with its pieces on hand and stock status. Block a design to reserve it for a shoot, event or sourcing.",
+  "Designs in Stock": "Designs that hold finished pieces: LXRTS designs counted by size and custom pieces counted as a total. Click a design to see its sizes.",
+  "Made to Order": "Designs made only after an order is placed. They hold no stock.",
   "Monthly Report — Agency & Individual": "Barter, gifting and sourcing orders for the chosen month, one row per piece.",
   "Monthly Report — Personal Orders": "Personal orders for the chosen month, with price, discount, advance and dispatch details.",
   "PR Performance Report": "Totals from the PR records: orders tracked, engagement split, outfits used, impact, reach and impressions.",
@@ -61,7 +65,10 @@ export const COLUMN_INFO = {
   "Days": "Days past the return date, or days left until it.",
   "Condition": "The condition recorded when the outfit came back.",
   "New Location": "Where the returned outfit was placed.",
-  "Pieces": "Pieces on hand. A dash means the design is made to order, so no stock is held.",
+  "Pieces": "Pieces on hand, all sizes together.",
+  "Sizes": "Pieces on hand in each size.",
+  "List Price": "The design's price in the catalogue.",
+  "Stock": "Made-to-order designs are made after each order, so they hold no stock.",
   "Reserved For": "Why the design is reserved.",
   "Outfit Used": "Whether the recipient used the outfit.",
   "Impact": "The PR outcome recorded for the order.",
