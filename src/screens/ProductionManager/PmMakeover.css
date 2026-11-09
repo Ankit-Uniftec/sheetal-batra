@@ -918,3 +918,14 @@
 .ceo.pm .pm-list-top .pm-count-line { margin: 0; }
 .ceo.pm .pm-list-top .ceo-pager { margin: 0; }
 .ceo.pm .pm-orders-list { scroll-margin-top: 12px; }
+
+/* Stock: channels inside the stock-on-the-floor card. */
+.ceo.pm .pm-stock-channels { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed #f1ebdc; }
+.ceo.pm .pm-stock-channels .pm-dsection { margin: 0 6px 0 0; }
+.ceo.pm .pm-stock-chan { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 12px; border: 1px solid #ece5d2; border-radius: 10px; background: #fff; cursor: pointer; font: inherit; }
+.ceo.pm .pm-stock-chan:hover { border-color: #c9a23e; }
+.ceo.pm .pm-stock-chan b { font-size: 12.5px; font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pm-stock-chan span { font-size: 11.5px; color: #8c8476 !important; }
+
+/* QC Inspectors: a summary above the bars, so the card sits level with Manual Moves. */
+.ceo.pm .pm-qc-sum { margin-bottom: 14px; }

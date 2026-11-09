@@ -294,8 +294,8 @@ export default function TodayPage({ ctx }) {
         </Card>
 
         <Card span={7} md={12} title="Due Next 7 Days" sub="Soonest first. Click an order to open it.">
-          <Table rowKey={(r) => r.id} rows={dueWeek.slice(0, 8)} onRow={ctx.openOrder} empty="Nothing due in the next 7 days." columns={orderColumns(ctx)} />
-          {dueWeek.length > 8 && <button type="button" className="ceo-link pm-more" onClick={() => openOrders({ title: "Due This Week", sub: "Due in the next 7 days, still in production", orders: dueWeek })}>See all {num(dueWeek.length)}<Icon name="chevron" /></button>}
+          <Table rowKey={(r) => r.id} rows={dueWeek.slice(0, 5)} onRow={ctx.openOrder} empty="Nothing due in the next 7 days." columns={orderColumns(ctx)} />
+          {dueWeek.length > 5 && <button type="button" className="ceo-link pm-more" onClick={() => openOrders({ title: "Due This Week", sub: "Due in the next 7 days, still in production", orders: dueWeek })}>See all {num(dueWeek.length)}<Icon name="chevron" /></button>}
         </Card>
       </div>
 

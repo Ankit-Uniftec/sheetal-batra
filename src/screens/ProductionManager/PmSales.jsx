@@ -82,7 +82,7 @@ export function OrderTotals({ ctx, children }) {
             onRow={(r) => openOrders({ title: `Orders: ${r.name}`, sub: "Every order placed in this channel", orders: r.list })} />
         </Card>
         <Card span={7} md={12} title="All vs Late Orders by Channel" sub="Every order against the running orders past their due date. Click a bar to see the orders.">
-          <StackBars data={chart} series={LATE_SERIES} stacked={false} height={280}
+          <StackBars data={chart} series={LATE_SERIES} stacked={false} height={470}
             onPick={(row, key) => {
               const r = chart.find((x) => x.name === row?.name);
               if (!r) return;

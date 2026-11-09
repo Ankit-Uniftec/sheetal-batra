@@ -268,12 +268,12 @@ export default function QualityPage({ ctx }) {
             </Card>
 
             <Card span={6} md={12} title="Why Pieces Fail" sub="The reasons as written. Click one to see its pieces">
-              <RankBars rows={data.reasons} limit={10} format={(v) => plural(v, "failure")} sub={(r) => `${pct(r.value, data.fails.length)}% of failures`}
+              <RankBars rows={data.reasons} limit={6} format={(v) => plural(v, "failure")} sub={(r) => `${pct(r.value, data.fails.length)}% of failures`}
                 onRow={(r) => openRows(`Failed: ${r.name}`, label, r.rows)} />
             </Card>
 
             <Card span={6} md={12} title="Where Failed Pieces Went Back To" sub="The stage each failed piece was sent back to">
-              <RankBars rows={data.backTo} limit={10} format={(v) => plural(v, "piece")} sub={(r) => `${pct(r.value, data.backTo.reduce((s, x) => s + x.value, 0))}% of re-work`}
+              <RankBars rows={data.backTo} limit={6} format={(v) => plural(v, "piece")} sub={(r) => `${pct(r.value, data.backTo.reduce((s, x) => s + x.value, 0))}% of re-work`}
                 onRow={(r) => openRows(`Sent Back to ${r.name}`, label, r.rows)} />
             </Card>
 
