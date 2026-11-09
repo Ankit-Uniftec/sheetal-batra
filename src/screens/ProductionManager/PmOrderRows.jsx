@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { fmtDate as formatDate } from "./pmModel";
 import { supabase } from "../../lib/supabaseClient";
 import { getItemCategory } from "../../utils/itemCategory";
+import { STAGE_GROUPS, getStageGroupKey } from "../../utils/barcodeService";
 import { Empty, Icon, InfoTip, Thumb } from "../CeoDashboard/CeoUi";
 import { orderStatus } from "./PmCommon";
 import {
-  channelOf, clientOf, daysLeft, dueDay, hasPromise, isDormant, isLate, isRunning, isUrgent, pieceName, pieceState, plural, stageName,
+  channelOf, clientOf, daysLeft, dueDay, floorKey, hasPromise, isDormant, isLate, isRunning, isUrgent, pieceName, pieceState, plural, stageName,
 } from "./pmModel";
 
 // ============================================================
@@ -109,6 +110,48 @@ function RowMenu({ items }) {
 }
 
 
+// ---- measurements and the pieces' stage tracks
+const MEASURE_LABELS = {
+  KurtaChogaKaftan: "Kurta / Choga / Kaftan", Blouse: "Blouse", Anarkali: "Anarkali", SalwarDhoti: "Salwar / Dhoti",
+  ChuridaarTrouserPantsPlazo: "Churidaar / Trouser / Pants / Plazo", ShararaGharara: "Sharara / Gharara", Lehenga: "Lehenga",
+};
+/** The client's measurements on a product, by garment, in inches. */
+function Measures({ m }) {
+  const groups = Object.entries(m || {}).filter(([, f]) => f && typeof f === "object" && Object.values(f).some((v) => v !== "" && v != null));
+  if (!groups.length) return <span className="pm-muted">Standard size, no measurements</span>;
+  return (
+    <span className="pmc-measures">
+      {groups.map(([k, f]) => (
+        <span key={k} className="pmc-mgroup">
+          <b>{MEASURE_LABELS[k] || k}</b>
+          {Object.entries(f).filter(([, v]) => v !== "" && v != null).map(([name, v]) => <i key={name}><small>{name}</small>{v}</i>)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// The production stages a piece moves through (Order Received is the start, not a step).
+const TRACK = STAGE_GROUPS.filter((g) => g.key !== "order_received");
+/** One piece: its name, a dot per stage (done, now, to come) and where it is. */
+function PieceTrack({ c }) {
+  const st = pieceState(c);
+  const key = floorKey(c) || getStageGroupKey(c.current_stage);
+  const at = st === "finished" ? TRACK.length : st === "not_started" || st === "removed" ? -1 : TRACK.findIndex((g) => g.key === key);
+  const where = st === "at_vendor" ? `${stageName(c).replace(/ In-Progress$/, "")} · at ${c.vendor_name || "a vendor"}`
+    : st === "at_wh2" ? `${stageName(c)} · Delhi (2)` : st === "not_started" ? "Not started" : st === "finished" ? "Finished"
+      : st === "disposed" ? "Disposed" : st === "removed" ? "Cancelled" : stageName(c);
+  return (
+    <div className={`pmc-ptrack is-${st}`} title={c.barcode}>
+      <b className="pmc-pname">{pieceName(c)}</b>
+      <span className="pmc-dots" aria-label={where}>
+        {TRACK.map((g, i) => <i key={g.key} title={g.label} className={i < at ? "is-done" : i === at ? "is-now" : undefined} />)}
+      </span>
+      <span className="pmc-where">{where}</span>
+    </div>
+  );
+}
+
 /** A label over a value, for the card header. */
 const HeadItem = ({ label, children, sub, tone }) => (
   <div className="pmc-hitem">
@@ -190,6 +233,7 @@ export default function OrderRows({ ctx, rows }) {
                         </Line>
                       )}
                     </div>
+                    <div className="pmc-mrow"><span className="pmc-label">Measurements</span><Measures m={it.measurements} /></div>
                   </div>
                 ))}
                 {items.length > MAX_PRODUCTS && <p className="pmc-more">+{plural(items.length - MAX_PRODUCTS, "more product")} · open the order to see all</p>}
@@ -201,14 +245,10 @@ export default function OrderRows({ ctx, rows }) {
                   {live.length ? <b>{done} of {live.length} finished</b> : <span className="pm-muted">No pieces yet</span>}
                 </div>
                 {live.length > 0 && <span className="pm-mini-bar pmc-bar"><i style={{ width: `${(done / live.length) * 100}%` }} /></span>}
-                <span className="pmo-chips">
-                  {comps.slice(0, 6).map((c) => {
-                    const st = pieceState(c);
-                    const where = st === "at_vendor" ? `At ${c.vendor_name || "vendor"}` : st === "at_wh2" ? `${stageName(c)} · Delhi (2)` : st === "not_started" ? "Not started" : st === "finished" ? "Finished" : st === "disposed" ? "Disposed" : st === "removed" ? "Cancelled" : stageName(c);
-                    return <span key={c.id} className={`pmo-chip is-${st}`} title={c.barcode}><b>{pieceName(c)}</b><span>{where}</span></span>;
-                  })}
-                  {comps.length > 6 && <small className="pm-muted">+{comps.length - 6} more</small>}
-                </span>
+                <div className="pmc-ptracks">
+                  {comps.slice(0, 6).map((c) => <PieceTrack key={c.id} c={c} />)}
+                  {comps.length > 6 && <small className="pm-muted">+{comps.length - 6} more pieces</small>}
+                </div>
               </div>
             </div>
 
@@ -216,6 +256,7 @@ export default function OrderRows({ ctx, rows }) {
               <span className="pmc-foot-note">
                 {o.mode_of_delivery ? <>Delivery: <b>{o.mode_of_delivery}</b></> : null}
                 {items.length > 1 ? <span>{plural(items.length, "product")}</span> : null}
+                {o.notes ? <span className="pmc-note" title={o.notes}>Note: <b>{o.notes}</b></span> : null}
               </span>
               <span className="pmo-btns pmc-actions" onClick={(e) => e.stopPropagation()} role="presentation">
                 <button type="button" className="ceo-btn is-small" onClick={stop(() => ctx.openJourney(o))} disabled={!comps.length}><Icon name="movements" />View Journey</button>
