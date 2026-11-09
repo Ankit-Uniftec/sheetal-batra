@@ -37,6 +37,7 @@ const B2bMerchandiserDashboard = lazy(() => import("./screens/B2bMerchandiserDas
 const B2bVendorOrders = lazy(() => import("./screens/B2bVendorOrders/B2bVendorOrders"));
 const B2bProductionDashboard = lazy(() => import("./screens/B2bProductionDashboard/B2bProductionDashboard"));
 const ProductionManagerDashboard = lazy(() => import("./components/B2B/ProductionManagerDashboard/ProductionManagerDashboard"));
+const PmDashboard = lazy(() => import("./screens/ProductionManager/PmDashboard"));
 const GMDashboard = lazy(() => import("./screens/GMDashboard/GMDashboard"));
 const RetailManagerDashboard = lazy(() => import("./screens/RetailDashboard/RetailManagerDashboard"));
 const COODashboard = lazy(() => import("./screens/COODashboard/COODashboard"));
@@ -108,7 +109,8 @@ function App() {
         <Route path="/b2b-merchandiser-dashboard" element={<PrivateRoute><B2bMerchandiserDashboard /></PrivateRoute>} />
         <Route path="/b2b-vendor-orders/:vendorId" element={<PrivateRoute><B2bVendorOrders /></PrivateRoute>} />
         <Route path="/b2b-production-dashboard" element={<PrivateRoute><B2bProductionDashboard /></PrivateRoute>} />
-        <Route path="/production-manager-dashboard" element={<PrivateRoute><ProductionManagerDashboard /></PrivateRoute>} />
+        <Route path="/production-manager-dashboard" element={<PrivateRoute><PmDashboard /></PrivateRoute>} />
+        <Route path="/production-manager-dashboard/classic" element={<PrivateRoute><ProductionManagerDashboard /></PrivateRoute>} />
         <Route path="/gm-dashboard" element={<PrivateRoute><GMDashboard /></PrivateRoute>} />
         <Route path="/retail-manager-dashboard" element={<PrivateRoute><RetailManagerDashboard /></PrivateRoute>} />
         <Route path="/coo-dashboard" element={<PrivateRoute><COODashboard /></PrivateRoute>} />

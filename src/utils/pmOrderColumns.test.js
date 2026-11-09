@@ -1,4 +1,4 @@
-import { PM_ORDER_COLUMNS } from "./pmOrderColumns";
+import { PM_LIST_COLUMNS, PM_ORDER_COLUMNS } from "./pmOrderColumns";
 
 const fs = require("fs");
 const path = require("path");
@@ -17,6 +17,15 @@ const SCANNED_FILES = [
   "src/utils/vendorDelays.js", "src/components/ComponentJourneyModal.jsx",
   "src/components/stock/StockPanel.jsx", "src/utils/stockVisibility.js",
   "src/components/ProductionOverrides.jsx", "src/utils/itemCategory.js", "src/utils/scanReport.js",
+  // The new Production Manager dashboard (src/screens/ProductionManager).
+  "src/screens/ProductionManager/PmDashboard.jsx", "src/screens/ProductionManager/pmModel.js",
+  "src/screens/ProductionManager/PmCommon.jsx", "src/screens/ProductionManager/PmToday.jsx",
+  "src/screens/ProductionManager/PmOrders.jsx", "src/screens/ProductionManager/PmFloor.jsx",
+  "src/screens/ProductionManager/PmPlanning.jsx", "src/screens/ProductionManager/PmQuality.jsx",
+  "src/screens/ProductionManager/PmVendors.jsx", "src/screens/ProductionManager/PmDispatch.jsx",
+  "src/screens/ProductionManager/PmPeople.jsx", "src/screens/ProductionManager/PmApprovals.jsx",
+  "src/screens/ProductionManager/PmMore.jsx", "src/screens/ProductionManager/PmBriefing.jsx",
+  "src/screens/ProductionManager/PmStock.jsx", "src/screens/ProductionManager/PmOrderRows.jsx", "src/screens/ProductionManager/PmRecords.jsx", "src/screens/ProductionManager/PmVendorTools.jsx", "src/screens/ProductionManager/PmOverrides.jsx",
 ];
 
 // Named in those files but deliberately NOT loaded (only mentioned in comments
@@ -38,4 +47,21 @@ test("only real order columns are listed, once each", () => {
   expect(PM_ORDER_COLUMNS.filter((c) => !ALL_ORDER_COLUMNS.includes(c))).toEqual([]);
   expect(new Set(PM_ORDER_COLUMNS).size).toBe(PM_ORDER_COLUMNS.length);
   expect(PM_ORDER_COLUMNS).not.toContain("shopify_raw");
+});
+
+// The new dashboard loads PM_LIST_COLUMNS only (no money, no client contact).
+// Every order column its files, and the modules it hands orders to, read must
+// be in that list, and none of the money or contact columns may be.
+const NEW_DASHBOARD_FILES = SCANNED_FILES.filter((f) => !f.includes("/B2B/ProductionManagerDashboard/") && !f.includes("ProductionOverrides") && !f.includes("StockPanel") && !f.includes("stockVisibility") && !f.includes("scanReport") && !f.includes("itemCategory") && !f.includes("ComponentJourneyModal"));
+const NEVER_IN_NEW = ["delivery_phone", "delivery_address", "delivery_city", "delivery_state", "delivery_pincode", "grand_total", "grand_total_after_discount", "net_total", "advance_payment", "total_paid"];
+
+test("every order column the new Production Manager dashboard reads is loaded", () => {
+  const words = new Set();
+  NEW_DASHBOARD_FILES.forEach((f) => {
+    const src = fs.readFileSync(path.join(process.cwd(), f), "utf8");
+    (src.match(/[a-z][a-z0-9_]*/g) || []).forEach((w) => words.add(w));
+  });
+  const referenced = ALL_ORDER_COLUMNS.filter((c) => words.has(c) && !NEVER_LOADED.has(c) && !NEVER_IN_NEW.includes(c));
+  expect(referenced.filter((c) => !PM_LIST_COLUMNS.includes(c))).toEqual([]);
+  expect(PM_LIST_COLUMNS.filter((c) => NEVER_IN_NEW.includes(c))).toEqual([]);
 });

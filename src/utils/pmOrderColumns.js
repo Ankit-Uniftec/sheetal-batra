@@ -34,6 +34,25 @@ export const PM_ORDER_COLUMNS = [
 
 export const PM_ORDER_SELECT = PM_ORDER_COLUMNS.join(",");
 
+// The new Production Manager dashboard (src/screens/ProductionManager) reads
+// fewer columns: no money and no client phone or address, so none of it is
+// downloaded at all. pmOrderColumns.test.js checks every column those files
+// read is in this list. Edit, Cancel and the warehouse PDF load the full row
+// with fetchFullOrder() as before.
+export const PM_LIST_COLUMNS = [
+  "id", "order_no", "items", "status", "created_at", "updated_at",
+  "mode_of_delivery", "delivery_date", "delivered_at",
+  "salesperson", "salesperson_email", "salesperson_store", "delivery_name",
+  "warehouse_url", "warehouse_urls",
+  "cancellation_reason", "cancelled_at", "revoked_at", "exchange_reason", "return_reason", "refund_reason", "refund_status",
+  "is_alteration", "is_b2b", "vendor_id", "po_number", "approval_status", "approved_by",
+  "is_private_order", "is_stock_order", "is_comms", "is_rework",
+  "production_status", "in_production_at", "ready_for_dispatch_at", "dispatched_at",
+  "priority", "notes", "warehouse_stage", "warehouse_stage_updated_at", "qc_fail_reason",
+  "shopify_order_id", "shopify_order_name", "web_order_status",
+];
+export const PM_LIST_SELECT = PM_LIST_COLUMNS.join(",");
+
 let fullColumns = null;
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import FactoryBadge from "./FactoryBadge";
 import {
@@ -24,7 +24,9 @@ import formatDate from "../utils/formatDate";
 import { applyStageOverride, OVERRIDE_KINDS } from "../utils/stageOverride";
 import StageRequestsPanel from "./StageRequestsPanel";
 
-const ProductionOverrides = ({ currentUserEmail }) => {
+// initialOrder ({ id, order_no }): open straight on that order, with no search
+// and no requests list (used from an order's own actions). Off by default.
+const ProductionOverrides = ({ currentUserEmail, initialOrder = null }) => {
   const [searchBarcode, setSearchBarcode] = useState("");
   const [searchOrderNo, setSearchOrderNo] = useState("");
   // Several orders matched the order search: listed for the PM to pick one.
@@ -100,6 +102,15 @@ const ProductionOverrides = ({ currentUserEmail }) => {
       setActionResult({ success: false, message: `${order.order_no} has no barcodes yet, so there is nothing to override.` });
     }
   };
+
+  // Opened from an order's own actions: load that order straight away.
+  useEffect(() => {
+    if (!initialOrder?.id) return;
+    setLoading(true);
+    openOrder(initialOrder)
+      .catch((err) => setActionResult({ success: false, message: err.message }))
+      .finally(() => setLoading(false));
+  }, [initialOrder?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Search by our order number OR Shopify's (meeting point 15).
   //
@@ -333,17 +344,20 @@ const ProductionOverrides = ({ currentUserEmail }) => {
 
   return (
     <div className="pm-override-section">
-      <h2 className="pm-tab-title">Scan & Overrides</h2>
+      {!initialOrder && <h2 className="pm-tab-title">Scan & Overrides</h2>}
 
       {/* Skip / advance requests from production heads (meeting point 5) —
           here in Overrides, as asked, rather than a menu item of its own.
           An approval moves pieces, so whatever order is open below reloads. */}
+      {!initialOrder && (
       <StageRequestsPanel
         currentUserEmail={currentUserEmail}
         onApplied={() => { if (component?.order_id) loadOrderComponents(component.order_id).catch(() => {}); }}
       />
+      )}
 
       {/* Search Section */}
+      {!initialOrder && (
       <div className="pm-override-search">
         <div className="pm-override-search-row">
           <div className="pm-override-search-group">
@@ -375,6 +389,7 @@ const ProductionOverrides = ({ currentUserEmail }) => {
           </div>
         </div>
       </div>
+      )}
 
       {loading && <p style={{ textAlign: "center", color: "#999", padding: 20 }}>Loading...</p>}
 

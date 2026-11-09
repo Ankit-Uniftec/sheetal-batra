@@ -41,7 +41,8 @@ const PAGE_SIZE = 25;
  *                                               stays user-editable; changing it later is not
  *                                               overridden, but a NEW drill-down re-applies.
  */
-export default function QcHistoryPanel({ records = [], loading, showInspectorFilter = true, showChannelFilter = true, showOrderNo = true, onOrderClick, onScopeChange, initialResult = "" }) {
+// hideMoney: leave the scrap loss amount out of the CSV (production dashboards show no money).
+export default function QcHistoryPanel({ records = [], loading, showInspectorFilter = true, showChannelFilter = true, showOrderNo = true, onOrderClick, onScopeChange, initialResult = "", hideMoney = false }) {
   // Time scope via the shared PeriodFilter (by inspection time, created_at).
   const {
     control: periodControl, timeline, inPeriod, range: periodRange, props: periodProps,
@@ -102,7 +103,7 @@ export default function QcHistoryPanel({ records = [], loading, showInspectorFil
       filename: "qc_history",
       headers: [
         "Order No", "Barcode", "Channel", "QC Stage", "Result",
-        "Fail Reason", "Outcome", "Re-journey #", "Scrap Loss", "Scrap Location",
+        "Fail Reason", "Outcome", "Re-journey #", ...(hideMoney ? [] : ["Scrap Loss"]), "Scrap Location",
         "Inspected By", "Inspected At",
       ],
       rows: filtered.map((r) => [
@@ -116,7 +117,7 @@ export default function QcHistoryPanel({ records = [], loading, showInspectorFil
         r.fail_reason || "",
         r.outcome || "",
         r.rejourney_number ?? "",
-        r.scrap_loss_amount ?? "",
+        ...(hideMoney ? [] : [r.scrap_loss_amount ?? ""]),
         r.scrap_location || "",
         r.is_override ? (r.overridden_by || r.inspected_by || "") : (r.inspected_by || ""),
         r.created_at ? new Date(r.created_at).toLocaleString("en-GB") : "",

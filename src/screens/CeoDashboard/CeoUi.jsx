@@ -199,6 +199,83 @@ export const barValueLabel = (format = num) => ({ x, y, width, value }) => (
     ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{format(value)}</text>
     : null
 );
+/**
+ * Every bar's number, always. It sits flat above the bar when it fits the bar's
+ * width; on thin bars (many bars, or a small screen) it stands upright above
+ * the bar instead, so no number is dropped and none overlap.
+ * Pass the chart's values so every label in one chart turns the same way.
+ * Give the chart labelRoom(...) as its top margin so upright numbers fit.
+ */
+export const fitBarLabel = (format = num, values = []) => {
+  const longest = Math.max(1, ...(values || []).map((v) => (v ? String(format(v)).length : 0)));
+  return ({ x, y, width, value }) => {
+  if (!value) return null;
+  const text = String(format(value));
+  const cx = x + width / 2;
+  if (width >= Math.max(longest, text.length) * 6.2) {
+    return <text x={cx} y={y - 6} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{text}</text>;
+  }
+  const size = width < 8 ? 8.5 : 9.5;
+  return (
+    <text x={cx} y={y - 4} transform={`rotate(-90 ${cx} ${y - 4})`} dy="0.35em" textAnchor="start" fontSize={size} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{text}</text>
+  );
+  };
+};
+/** Top margin for a bar chart labelled with fitBarLabel: room for the longest number standing upright. */
+export const labelRoom = (values, format = num) => {
+  if ((values || []).length <= 8) return 22;
+  const longest = Math.max(1, ...values.map((v) => (v ? String(format(v)).length : 0)));
+  return Math.min(52, 12 + longest * 6.2);
+};
+/**
+ * An x-axis label that wraps onto two lines and is shortened to fit its slot,
+ * so category names (vendors, stages, ranges) never run into each other.
+ */
+export function WrapTick({ x, y, payload, width, visibleTicksCount }) {
+  const band = (width || 300) / Math.max(1, visibleTicksCount || 1);
+  const max = Math.max(3, Math.floor((band - 6) / 5.8));
+  const lines = [];
+  let cur = "";
+  String(payload?.value ?? "").split(/\s+/).forEach((w) => {
+    const next = cur ? `${cur} ${w}` : w;
+    if (next.length <= max || !cur) cur = next;
+    else { lines.push(cur); cur = w; }
+  });
+  if (cur) lines.push(cur);
+  const shown = lines.slice(0, 2).map((l, i) => {
+    const more = i === 1 && lines.length > 2;
+    return l.length > max || more ? `${l.slice(0, Math.max(1, max - 1))}…` : l;
+  });
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="middle" fontSize={11} fill="#8a8478">
+        {shown.map((l, i) => <tspan key={i} x={0} dy={i === 0 ? 11 : 13}>{l}</tspan>)}
+      </text>
+    </g>
+  );
+}
+/** The x-axis set-up for a bar chart: every category name (wrapped) up to 12 bars; past that, dates thinned to fit. */
+export const barAxis = (count) => (count > 12
+  ? { interval: "preserveStartEnd", minTickGap: 10, tick: axis, height: 30, tickMargin: 6 }
+  : { interval: 0, tick: <WrapTick />, height: 42, tickMargin: 6 });
+/**
+ * The least width a bar chart needs so every bar keeps room for its number:
+ * on a phone a long chart (a month of days) scrolls sideways inside its card
+ * instead of squeezing the numbers together. Wrap the chart in
+ * <div className="ceo-chart-scroll"> and give its box this minWidth.
+ */
+export const barMinWidth = (count) => (count > 12 ? count * 17 + 48 : undefined);
+/** Bar labels when there are too many bars for every number to fit: the highest
+ *  and the latest bar still show theirs (the same rule as point labels). */
+export const sparseBarLabel = (data, valueKey, format = num) => {
+  const vals = (data || []).map((d) => Number(d[valueKey]) || 0);
+  const maxIdx = vals.indexOf(Math.max(...vals));
+  const last = vals.length - 1;
+  return ({ x, y, width, value, index }) => {
+    if (!value || (index !== maxIdx && index !== last)) return null;
+    return <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{format(value)}</text>;
+  };
+};
 /** Point labels on a line: every point up to 12, otherwise the highest and the latest. */
 export const pointValueLabel = (data, valueKey, format = num) => {
   const vals = (data || []).map((d) => Number(d[valueKey]) || 0);
@@ -310,19 +387,21 @@ export function RankBars({ rows, valueKey = "value", format = shortInr, sub, lim
 export function Columns({ data, valueKey = "value", labelKey = "name", name = "Revenue", height = 240, money = true, highlight, onPick }) {
   if (!data?.length) return <Empty />;
   return (
-    <div style={{ width: "100%", height, cursor: onPick ? "pointer" : undefined }}>
+    <div className="ceo-chart-scroll">
+    <div style={{ width: "100%", minWidth: barMinWidth(data.length), height, cursor: onPick ? "pointer" : undefined }}>
       <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
-        <BarChart data={data} margin={{ top: 22, right: 4, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
+        <BarChart data={data} margin={{ top: labelRoom(data.map((d) => d[valueKey]), money ? shortInr : num), right: 4, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
           <CartesianGrid stroke="#f1ede2" vertical={false} />
-          <XAxis dataKey={labelKey} tick={axis} axisLine={false} tickLine={false} minTickGap={6} />
+          <XAxis dataKey={labelKey} axisLine={false} tickLine={false} {...barAxis(data.length)} />
           <YAxis tickFormatter={(v) => (money ? shortInr(v).replace("₹", "") : v)} tick={axis} axisLine={false} tickLine={false} width={44} />
           <Tooltip content={<ChartTip money={money} />} cursor={{ fill: "rgba(184,146,46,.07)" }} />
           <Bar dataKey={valueKey} name={name} radius={[6, 6, 0, 0]} maxBarSize={44} isAnimationActive={false}>
             {data.map((d, i) => <Cell key={i} fill={highlight && highlight(d) ? "#a9821f" : "#e4d3a0"} />)}
-            <LabelList dataKey={valueKey} content={barValueLabel(money ? shortInr : num)} />
+            <LabelList dataKey={valueKey} content={fitBarLabel(money ? shortInr : num, data.map((d) => d[valueKey]))} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+    </div>
     </div>
   );
 }
@@ -709,7 +788,8 @@ export function FilterButton({ count = 0, onClick, label = "Filters" }) {
 const norm = (s) => String(s || "").toLowerCase();
 
 /** Find anything from one box: a page, an order, a client or a design. Press / to jump to it. */
-export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder, onClient, onDesign }) {
+/** `extra`: more things to find, each { key, kind, label, meta, text, go } (for example piece barcodes). */
+export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder, onClient, onDesign, extra, placeholder = "Search orders, clients or designs" }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -739,8 +819,27 @@ export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder
       .forEach((c) => out.push({ key: `c${c.phone}`, kind: "Client", label: c.name, meta: shortInr(c.totalSpend), go: () => onClient(c) }));
     (products || []).filter((p) => norm(p.name).includes(t) || norm(p.sku_id).includes(t)).slice(0, 4)
       .forEach((p) => out.push({ key: `d${p.id}`, kind: "Design", label: p.name, meta: p.sku_id || "", go: () => onDesign(p) }));
+    // Extra results: up to 4 of each kind (Client, Product, Piece, Vendor…). Best
+    // matches first: the text starting with what was typed, then a word starting
+    // with it, then anywhere in it. Kinds with the best match come first.
+    const score = (x) => {
+      const v = norm(x.text);
+      if (v.startsWith(t)) return 0;
+      if (v.includes(` ${t}`) || v.includes(`-${t}`) || v.includes(`(${t}`)) return 1;
+      return v.includes(t) ? 2 : -1;
+    };
+    const groups = {};
+    (extra || []).forEach((x, i) => {
+      const sc = score(x);
+      if (sc < 0) return;
+      (groups[x.kind] || (groups[x.kind] = [])).push({ x, sc, i });
+    });
+    Object.values(groups)
+      .map((list) => list.sort((a, b) => a.sc - b.sc || a.i - b.i).slice(0, 4))
+      .sort((a, b) => a[0].sc - b[0].sc || a[0].i - b[0].i)
+      .forEach((list) => list.forEach(({ x }) => out.push(x)));
     return out;
-  }, [q, pages, orders, products, clients, onPage, onOrder, onClient, onDesign]);
+  }, [q, pages, orders, products, clients, onPage, onOrder, onClient, onDesign, extra]);
 
   return (
     <div className="ceo-global" ref={box}>
@@ -750,7 +849,7 @@ export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder
           ref={input}
           type="text"
           value={q}
-          placeholder="Search orders, clients or designs"
+          placeholder={placeholder}
           aria-label="Find an order, client, design or page"
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}

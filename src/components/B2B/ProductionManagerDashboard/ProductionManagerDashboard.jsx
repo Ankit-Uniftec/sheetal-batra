@@ -889,7 +889,7 @@ export default function ProductionManagerDashboard() {
 
     const handleExportCSV = () => {
         if (filteredOrders.length === 0) return;
-        const headers = ["Order No", "Product Name", "Customer Name", "Size", "Amount", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Priority", "Notes", "Order Date", "Warehouse Date (T-2)"];
+        const headers = ["Order No", "Product Name", "Customer Name", "Size", "Top Color", "Bottom Color", "SA Name", "Store", "Status", "Priority", "Notes", "Order Date", "Warehouse Date (T-2)"];
         const rows = filteredOrders.map(order => {
             const item = order.items?.[0] || {};
             return [
@@ -897,7 +897,6 @@ export default function ProductionManagerDashboard() {
                 item.product_name || "",
                 getClientName(order) || "",
                 item.size || "",
-                order.grand_total || 0,
                 item.top_color?.name || "",
                 item.bottom_color?.name || "",
                 order.salesperson || "",
@@ -1095,7 +1094,6 @@ export default function ProductionManagerDashboard() {
     // period + channel). There is no unscoped copy — nothing renders one.
 
     // Human label for the current Overview period (used in the revenue card etc.).
-    const overviewPeriodLabel = periodLabel(overviewTimeline);
 
     // Per-stage component counts. Source of truth: order_components.current_stage
     // (advanced live by the warehouse Scan Station). One row per top/bottom/
@@ -2269,15 +2267,7 @@ export default function ProductionManagerDashboard() {
                             </div>
                             <div className="pm-edit-row">
                                 <div className="pm-edit-field"><label>Client Name</label><input type="text" value={editFormData.delivery_name} onChange={(e) => setEditFormData({ ...editFormData, delivery_name: e.target.value })} /></div>
-                                <div className="pm-edit-field"><label>Client Phone</label><input type="text" value={editFormData.delivery_phone} onChange={(e) => setEditFormData({ ...editFormData, delivery_phone: e.target.value })} /></div>
                             </div>
-                            <div className="pm-edit-field pm-edit-full"><label>Delivery Address</label><input type="text" value={editFormData.delivery_address} onChange={(e) => setEditFormData({ ...editFormData, delivery_address: e.target.value })} /></div>
-                            <div className="pm-edit-row">
-                                <div className="pm-edit-field"><label>City</label><input type="text" value={editFormData.delivery_city} onChange={(e) => setEditFormData({ ...editFormData, delivery_city: e.target.value })} /></div>
-                                <div className="pm-edit-field"><label>State</label><input type="text" value={editFormData.delivery_state} onChange={(e) => setEditFormData({ ...editFormData, delivery_state: e.target.value })} /></div>
-                                <div className="pm-edit-field"><label>Pincode</label><input type="text" value={editFormData.delivery_pincode} onChange={(e) => setEditFormData({ ...editFormData, delivery_pincode: e.target.value })} /></div>
-                            </div>
-
                             {/* ===== MEASUREMENTS SECTION ===== */}
                             <p className="pm-edit-section-title">Custom Measurements (in)</p>
                             <div className="pm-measure-container">
@@ -2381,6 +2371,7 @@ export default function ProductionManagerDashboard() {
                 <div className={`pm-grid-layout ${showSidebar ? "pm-sidebar-open" : ""}`}>
                     <aside className={`pm-sidebar ${showSidebar ? "pm-open" : ""}`}>
                         <nav className="pm-menu">
+                            <a className="pm-menu-item pm-menu-new" onClick={() => navigate("/production-manager-dashboard")}>Open the new dashboard</a>
                             <a className={`pm-menu-item ${activeTab === "overview" ? "active" : ""}`} onClick={() => { setActiveTab("overview"); setShowSidebar(false); }}>Overview</a>
                             <a className={`pm-menu-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>All Orders <span className="pm-badge-count">{orders.length}</span></a>
                             <a className={`pm-menu-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</a>
@@ -2419,13 +2410,6 @@ export default function ProductionManagerDashboard() {
                                 <p className="pm-card-title" style={{ margin: "4px 0 10px 2px", color: "#8B7355" }}>Business Performance</p>
                                 <div className="pm-stats-row-3">
                                     <StatCard
-                                        title={`Revenue (${overviewPeriodLabel})`}
-                                        value={`\u20B9${formatIndianNumber(Math.round(salesMetrics.revenuePeriod))}`}
-                                        subtitle={`${overviewOrders.length} order${overviewOrders.length === 1 ? "" : "s"} placed`}
-                                        highlight={true}
-                                        icon={Icons.rupee}
-                                    />
-                                    <StatCard
                                         title="Top Product"
                                         value={salesMetrics.topProduct.count > 0 ? `${salesMetrics.topProduct.count} pcs` : "\u2014"}
                                         subtitle={salesMetrics.topProduct.name}
@@ -2447,12 +2431,6 @@ export default function ProductionManagerDashboard() {
                                         subtitle={`${salesMetrics.returnCount} returns \u00B7 ${salesMetrics.exchangeCount} exchanges`}
                                         highlight={Number(salesMetrics.returnRate) > 5}
                                         icon={Icons.rotate}
-                                    />
-                                    <StatCard
-                                        title="Refunded Amount"
-                                        value={`\u20B9${formatIndianNumber(Math.round(salesMetrics.refundedAmount))}`}
-                                        subtitle="Total processed refunds"
-                                        icon={Icons.wallet}
                                     />
                                     <StatCard
                                         title="Disposed"
@@ -2637,7 +2615,7 @@ export default function ProductionManagerDashboard() {
                                         <div className="pm-recent-list">
                                             {recentOrdersOv.length === 0 ? <p className="pm-muted">No orders yet</p> : recentOrdersOv.map(order => {
                                                 const sl = getStatusLabel(order);
-                                                return (<div className="pm-recent-item" key={order.id} onClick={() => viewOrderDetails(order)} style={{ cursor: "pointer" }}><div className="pm-recent-top"><span className="pm-recent-orderno">{order.order_no || "—"}</span><span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span></div><div className="pm-recent-bottom"><span className="pm-recent-amount">₹{formatIndianNumber(order.grand_total || 0)}</span><span className={`pm-recent-status ${getStatusClass(sl)}`}>{sl}</span></div></div>);
+                                                return (<div className="pm-recent-item" key={order.id} onClick={() => viewOrderDetails(order)} style={{ cursor: "pointer" }}><div className="pm-recent-top"><span className="pm-recent-orderno">{order.order_no || "—"}</span><span className={`pm-channel-tag ${getChannelClass(order)}`}>{getChannelLabel(order)}</span></div><div className="pm-recent-bottom"><span className={`pm-recent-status ${getStatusClass(sl)}`}>{sl}</span></div></div>);
                                             })}
                                         </div>
                                     </div>
@@ -2674,7 +2652,6 @@ export default function ProductionManagerDashboard() {
                                                 { value: "order_no", label: "Order Number" },
                                                 { value: "product_name", label: "Product Name" },
                                                 { value: "client_name", label: "Client Name" },
-                                                { value: "phone", label: "Phone" },
                                                 { value: "po_number", label: "PO Number" },
                                                 { value: "shopify_order_name", label: "Shopify Order No" },
                                             ]}
@@ -2699,8 +2676,6 @@ export default function ProductionManagerDashboard() {
                                         <option value="newest">Newest First</option>
                                         <option value="oldest">Oldest First</option>
                                         <option value="delivery">Delivery Date</option>
-                                        <option value="amount_high">Amount: High to Low</option>
-                                        <option value="amount_low">Amount: Low to High</option>
                                     </select>
                                 </div>
 
@@ -2719,39 +2694,6 @@ export default function ProductionManagerDashboard() {
                                         "Custom range" reveals the two date inputs inline. */}
                                     <div className={`pm-period-inline ${ordersTimeline !== "all" ? "pm-filter-active" : ""}`}>
                                         <PeriodFilter {...ordersPeriodProps} variant="select" label="Date Range:" />
-                                    </div>
-
-                                    {/* Price */}
-                                    <div style={{ position: "relative" }}>
-                                        <button className={`pm-filter-select ${(filters.minPrice > 0 || filters.maxPrice < 500000) ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")} style={{ cursor: "pointer" }}>Price {"\u25BE"}</button>
-                                        {openDropdown === "price" && (
-                                            <div className="pm-dropdown-panel">
-                                                <div className="pm-dropdown-title">Order Value</div>
-                                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: 4, border: "1px solid #ddd", borderRadius: 6, padding: "4px 8px" }}><span style={{ color: "#888" }}>{"₹"}</span><input type="number" value={filters.minPrice} onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Math.min(Number(e.target.value), prev.maxPrice - 1000) }))} style={{ width: 80, border: "none", outline: "none", fontSize: 13 }} /></div>
-                                                    <span>to</span>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: 4, border: "1px solid #ddd", borderRadius: 6, padding: "4px 8px" }}><span style={{ color: "#888" }}>{"₹"}</span><input type="number" value={filters.maxPrice} onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Math.max(Number(e.target.value), prev.minPrice + 1000) }))} style={{ width: 80, border: "none", outline: "none", fontSize: 13 }} /></div>
-                                                </div>
-                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Payment */}
-                                    <div style={{ position: "relative" }}>
-                                        <button className={`pm-filter-select ${filters.payment.length > 0 ? "pm-filter-active" : ""}`} onClick={() => setOpenDropdown(openDropdown === "payment" ? null : "payment")} style={{ cursor: "pointer" }}>Payment {"\u25BE"}</button>
-                                        {openDropdown === "payment" && (
-                                            <div className="pm-dropdown-panel">
-                                                <div className="pm-dropdown-title">Payment Status</div>
-                                                {["paid", "partial", "unpaid"].map(opt => (
-                                                    <label key={opt} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13 }}>
-                                                        <input type="checkbox" checked={filters.payment.includes(opt)} onChange={() => toggleFilter("payment", opt)} />
-                                                        <span>{opt === "unpaid" ? "Unpaid (COD)" : opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
-                                                    </label>
-                                                ))}
-                                                <button className="pm-dropdown-apply" onClick={() => setOpenDropdown(null)}>Apply</button>
-                                            </div>
-                                        )}
                                     </div>
 
                                     {/* Priority */}
@@ -2880,7 +2822,6 @@ export default function ProductionManagerDashboard() {
                                                             row rendered "Shopify (Shopify)". */}
                                                         <div className="pm-product-name"><span className="pm-order-label">SA Name:</span><span className="pm-ovalue">{order.salesperson || "—"}{order.salesperson_store && order.salesperson_store !== order.salesperson ? ` (${order.salesperson_store})` : ""}</span></div>
                                                         <div className="pm-odetails-grid">
-                                                            <div className="pm-odetail-item"><span className="pm-order-label">Amount:</span><span className="pm-ovalue">₹{formatIndianNumber(order.grand_total || 0)}</span></div>
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Qty:</span><span className="pm-ovalue">{order.total_quantity || 1}</span></div>
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Top:</span><span className="pm-ovalue">{item.top || "—"}{item.top_color?.hex && (<><span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: item.top_color.hex, borderRadius: "50%", marginLeft: 6, border: "1px solid #ccc", verticalAlign: "middle" }} /><span style={{ marginLeft: 4 }}>{item.top_color.name}</span></>)}</span></div>
                                                             <div className="pm-odetail-item"><span className="pm-order-label">Bottom:</span><span className="pm-ovalue">{item.bottom || "—"}{item.bottom_color?.hex && (<><span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: item.bottom_color.hex, borderRadius: "50%", marginLeft: 6, border: "1px solid #ccc", verticalAlign: "middle" }} /><span style={{ marginLeft: 4 }}>{item.bottom_color.name}</span></>)}</span></div>
@@ -3204,7 +3145,7 @@ export default function ProductionManagerDashboard() {
                                         <span className="pm-muted" style={{ fontSize: 12, fontWeight: 400 }}> · {QC_RESULT_SUFFIX[qcScope.result]}</span>
                                     )}
                                 </p>
-                                <QcHistoryPanel records={qcHistory} loading={qcHistoryLoading} onOrderClick={goToOrder} onScopeChange={setQcScope} initialResult={qcResultFilter} />
+                                <QcHistoryPanel hideMoney records={qcHistory} loading={qcHistoryLoading} onOrderClick={goToOrder} onScopeChange={setQcScope} initialResult={qcResultFilter} />
                             </>
                         )}
 
@@ -3840,7 +3781,7 @@ export default function ProductionManagerDashboard() {
                                     showPopup({ type: "info", title: "Nothing to export", message: "No orders match the current filters." });
                                     return;
                                 }
-                                const headers = ["Order No", "Type", "Customer", "SA Name", "Store", "Channel", "Product", "Size", "Amount", "Order Date", "Promised Date", "Actual Delivery", "Days Late", "Bucket", "Status"];
+                                const headers = ["Order No", "Type", "Customer", "SA Name", "Store", "Channel", "Product", "Size", "Order Date", "Promised Date", "Actual Delivery", "Days Late", "Bucket", "Status"];
                                 const csvRows = rows.map(r => {
                                     const o = r.order;
                                     const item = o.items?.[0] || {};
@@ -3853,7 +3794,6 @@ export default function ProductionManagerDashboard() {
                                         getChannelLabel(o),
                                         item.product_name || "",
                                         item.size || "",
-                                        o.grand_total || 0,
                                         o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "",
                                         getWarehouseDate(o.delivery_date, o.created_at, ""),
                                         r.actualDelivery ? r.actualDelivery.toLocaleDateString("en-GB") : (r.isOpen ? "Not yet delivered" : "No completion date recorded"),
@@ -4275,7 +4215,7 @@ export default function ProductionManagerDashboard() {
                                     filename: `delivery_calendar_${selectedCalendarDate || `${monthNames[month]}_${year}`}`,
                                     dated: false,
                                     headers: [
-                                        "Order No", "Customer", "SA", "Store", "Channel", "Product", "Size", "Amount",
+                                        "Order No", "Customer", "SA", "Store", "Channel", "Product", "Size",
                                         "Delivery Date", "Dispatch By", "Current Stage", "Status", "Priority",
                                     ],
                                     rows: listOrders.map((o) => {
@@ -4288,7 +4228,6 @@ export default function ProductionManagerDashboard() {
                                             getChannelLabel(o),
                                             it.product_name || "",
                                             it.size || "",
-                                            o.grand_total || 0,
                                             formatDate(o.delivery_date) || "",
                                             getWarehouseDate(o.delivery_date, o.created_at, ""),
                                             getStageLabel(o.warehouse_stage) || o.warehouse_stage || "Order Received",
@@ -4525,14 +4464,14 @@ export default function ProductionManagerDashboard() {
                         {activeTab === "cancellations" && (
                             <div className="pm-orders-tab">
                                 <h2 className="pm-tab-title">Cancellations</h2>
-                                <CancellationsPanel />
+                                <CancellationsPanel hideMoney />
                             </div>
                         )}
                         {/* Dispatch report (open point #11): every box dispatched, printable. */}
                         {activeTab === "dispatch_report" && (
                             <div className="pm-orders-tab">
                                 <h2 className="pm-tab-title">Dispatch Report</h2>
-                                <DispatchReport />
+                                <DispatchReport hideMoney />
                             </div>
                         )}
                         {activeTab === "vendor_delays" && (
@@ -4548,7 +4487,7 @@ export default function ProductionManagerDashboard() {
                         )}
                         {activeTab === "replacements" && (
                             <div className="pm-orders-tab">
-                                <ReplacementApprovals currentUserEmail={currentUserEmail} />
+                                <ReplacementApprovals currentUserEmail={currentUserEmail} hideMoney />
                             </div>
                         )}
                         {/* ===== STAFF TAB (no DB tables yet) ===== */}

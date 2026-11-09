@@ -15,7 +15,8 @@ import "./ReplacementApprovals.css";
  * to Cloth Issue, the cost is booked as a loss, and the Vendor Failure Ledger
  * is updated.
  */
-const ReplacementApprovals = ({ currentUserEmail }) => {
+// hideMoney: production dashboards show no money, so the cost is left off the card.
+const ReplacementApprovals = ({ currentUserEmail, hideMoney = false }) => {
   const { showPopup, PopupComponent } = usePopup();
   const [pending, setPending] = useState([]);
   const [busyId, setBusyId] = useState(null);
@@ -121,7 +122,7 @@ const ReplacementApprovals = ({ currentUserEmail }) => {
                 <div className="rpa-line"><span className="rpa-bc">{r.barcode}</span><Badge variant="warning">{r.failure_type}</Badge></div>
                 <div className="rpa-meta">Order {r.order_no} · Vendor: {r.vendor_name || "—"}</div>
                 <div className="rpa-meta">Reason: {r.reason}</div>
-                <div className="rpa-meta">Cost loss: ₹{Number(r.cost_loss || 0).toLocaleString("en-IN")} · Requested by {r.requested_by}</div>
+                <div className="rpa-meta">{hideMoney ? "" : `Cost loss: ₹${Number(r.cost_loss || 0).toLocaleString("en-IN")} · `}Requested by {r.requested_by}</div>
               </div>
               <div className="rpa-actions">
                 <button className="rpa-approve" disabled={busyId === r.id} onClick={() => doApprove(r)}>{busyId === r.id ? "…" : "Approve"}</button>

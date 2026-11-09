@@ -1,4 +1,5 @@
 import React from "react";
+import "./ComponentStageBadge.css";
 import { factoryBadge, WH2 } from "../utils/factory2";
 
 /**
@@ -7,10 +8,14 @@ import { factoryBadge, WH2 } from "../utils/factory2";
  * scanner's login at scan time; older rows were back-filled from the logins'
  * assignment. Renders nothing for an unassigned login (PH, PM).
  */
-export default function FactoryBadge({ factory }) {
+export default function FactoryBadge({ factory, look }) {
   const text = factoryBadge(factory);
   if (!text) return null;
   const two = factory === WH2;
+  // The brand look: a quiet neutral tag (the older dashboards keep blue / purple).
+  if (look === "brand") {
+    return <span className={`sb-wh-tag${two ? " is-two" : ""}`}>{text}</span>;
+  }
   return (
     <span
       style={{

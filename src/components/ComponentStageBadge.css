@@ -1,0 +1,21 @@
+/* Brand-look pills (look="brand"): stage, scan kind and warehouse.
+   Colours carry !important so they hold against the app-wide text rule. */
+.sb-stage-pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px;
+  font-family: inherit; font-size: 11.5px; font-weight: 600; line-height: 1.5; white-space: nowrap; letter-spacing: .01em;
+}
+.sb-stage-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.sb-stage-pill.is-done    { background: #f6ecce !important; color: #7e5f10 !important; }
+.sb-stage-pill.is-done::before { content: "¹3"; width: auto; height: auto; background: none; font-size: 10.5px; }
+.sb-stage-pill.is-active  { background: #fdf3df !important; color: #9a6a12 !important; }
+.sb-stage-pill.is-vendor  { background: #f9ebdf !important; color: #8f5a2e !important; }
+.sb-stage-pill.is-waiting { background: #f4f0e6 !important; color: #7a7366 !important; }
+.sb-stage-pill.is-problem { background: #fcece8 !important; color: #b0442c !important; }
+.sb-kind-tag, .sb-wh-tag {
+  display: inline-block; font-size: 10px; font-weight: 600; line-height: 1; letter-spacing: .04em;
+  padding: 4px 8px; border-radius: 99px; text-transform: uppercase; white-space: nowrap;
+}
+.sb-kind-tag.is-internal { background: #fbf4e0 !important; color: #8a6a1a !important; }
+.sb-kind-tag.is-external { background: #f9ebdf !important; color: #8f5a2e !important; }
+.sb-wh-tag { margin-left: 6px; text-transform: none; letter-spacing: 0; font-size: 10.5px; background: #f7f1e1 !important; color: #7e5f10 !important; }
+.sb-wh-tag.is-two { background: #f3e6c2 !important; }
