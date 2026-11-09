@@ -847,8 +847,8 @@
 .ceo.pm .pmc-kv > b { font-size: 13px; font-weight: 600; color: var(--ceo-ink) !important; }
 .ceo.pm .pmc-pmain .pmc-piece, .ceo.pm .pm-product .pmc-piece { background: transparent !important; border: 1px solid #ece5d2; gap: 7px; }
 .ceo.pm .pmc-piece-name { font-size: 13.5px; font-weight: 600; color: var(--ceo-ink) !important; }
-.ceo.pm .pmc-piece .pmo-colour { font-size: 13px; font-weight: 500; padding: 3px 12px 3px 4px; gap: 9px; background: #faf6ec; }
-.ceo.pm .pmc-piece .pmo-colour i { width: 22px; height: 22px; }
+.ceo.pm .pmc-piece .pmo-colour { font-size: 11.5px; padding: 2px 8px 2px 3px; gap: 6px; }
+.ceo.pm .pmc-piece .pmo-colour i { width: 14px; height: 14px; }
 .ceo.pm .pmc-piece .pmc-mchips { padding-top: 1px; }
 @media (max-width: 760px) {
   /* phones: photo beside the title, the pieces across the full card width */
