@@ -35,6 +35,7 @@ import { OrdersTable, PiecesTable, orderStatus, piecesLine } from "./PmCommon";
 import { DEFAULT_PERIOD, PM_PERIODS, pmPeriod } from "./pmPeriod";
 import { PmCancelModal, PmEditOrderModal, PmPriorityModal } from "./PmModals";
 import { HalfMadeButton, PmCompletePicker } from "./PmPicker";
+import { PhotoView, PieceRow, useColourHex } from "./PmOrderRows";
 import TodayPage from "./PmToday";
 import OrdersPage from "./PmOrders";
 import FloorPage from "./PmFloor";
@@ -673,27 +674,6 @@ export default function PmDashboard() {
   );
 }
 
-const MEASURE_LABELS = {
-  KurtaChogaKaftan: "Kurta / Choga / Kaftan", Blouse: "Blouse", Anarkali: "Anarkali", SalwarDhoti: "Salwar / Dhoti",
-  ChuridaarTrouserPantsPlazo: "Churidaar / Trouser / Pants / Plazo", ShararaGharara: "Sharara / Gharara", Lehenga: "Lehenga",
-};
-/** The client's measurements on a product, grouped by garment, in inches. */
-function Measurements({ m }) {
-  const groups = Object.entries(m || {}).filter(([, f]) => f && typeof f === "object" && Object.values(f).some((v) => v !== "" && v != null));
-  if (!groups.length) return <small className="pm-muted">No measurements recorded (standard size).</small>;
-  return (
-    <div className="pm-measure">
-      {groups.map(([k, f]) => (
-        <div key={k} className="pm-measure-group">
-          <span>{MEASURE_LABELS[k] || k} (in)</span>
-          <div className="pm-measure-chips">
-            {Object.entries(f).filter(([, v]) => v !== "" && v != null).map(([name, v]) => <i key={name}><small>{name}</small>{v}</i>)}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /** This order's own requests waiting for a decision, and its QC checks. */
 function OrderChecks({ order: o, ctx }) {
@@ -744,6 +724,8 @@ function OrderChecks({ order: o, ctx }) {
 
 /** One order in the side panel: where it stands, its pieces, and every action. */
 function OrderDrawer({ order: o, ctx, onClose, onBack }) {
+  const hexOf = useColourHex();
+  const [photo, setPhoto] = useState(null);
   const comps = ctx.componentsByOrder[o.id] || [];
   const live = comps.filter((c) => !c.cancelled_at);
   const finished = live.filter((c) => pieceState(c) === "finished").length;
@@ -827,19 +809,25 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
       <div className="pm-od-col">
       <p className="pm-dsection">Products</p>
       <div className="pm-products">
-        {(o.items || []).map((it, i) => (
-          <div key={`${it.product_name}-${i}`} className="pm-product">
-            <Thumb src={it.image_url} alt={it.product_name} large />
-            <div className="pm-product-body">
-              <b>{it.product_name || "–"}</b>
-              <small>{[it.top && `${it.top}${it.top_color?.name ? ` (${it.top_color.name})` : ""}`, it.bottom && `${it.bottom}${it.bottom_color?.name ? ` (${it.bottom_color.name})` : ""}`, it.size && `Size ${it.size}`, Number(it.quantity) > 1 && `Qty ${it.quantity}`].filter(Boolean).join(" · ")}</small>
-              {it.dupatta_color && <small>Dupatta: {typeof it.dupatta_color === "object" ? it.dupatta_color.name : it.dupatta_color}</small>}
-              {Array.isArray(it.extras) && it.extras.length > 0 && <small>Extras: {it.extras.map((e) => `${e.name}${e.color?.name ? ` (${e.color.name})` : ""}`).join(", ")}</small>}
-              {it.notes && <small>Note: {it.notes}</small>}
-              <Measurements m={it.measurements} />
+        {photo && <PhotoView photo={photo} onClose={() => setPhoto(null)} />}
+        {(o.items || []).map((it, i) => {
+          const mine = comps.filter((c) => (c.item_index ?? 0) === i);
+          return (
+            <div key={`${it.product_name}-${i}`} className="pm-product">
+              {it.image_url
+                ? <button type="button" className="pm-photo-btn" aria-label="View the photo larger" onClick={() => setPhoto({ src: it.image_url, name: it.product_name })}><Thumb src={it.image_url} alt={it.product_name} large /></button>
+                : <Thumb src={it.image_url} alt={it.product_name} large />}
+              <div className="pm-product-body">
+                <b>{it.product_name || "–"}</b>
+                <small>{[it.size && `Size ${it.size}`, `Qty ${Number(it.quantity) || 1}`].filter(Boolean).join(" · ")}</small>
+                {it.notes && <small>Note: {it.notes}</small>}
+                {mine.length
+                  ? <div className="pmc-plist">{mine.map((c) => <PieceRow key={c.id} c={c} item={it} hexOf={hexOf} />)}</div>
+                  : <small className="pm-muted">No pieces yet</small>}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       </div>
       </div>

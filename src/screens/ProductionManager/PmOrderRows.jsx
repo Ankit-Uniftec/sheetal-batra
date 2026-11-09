@@ -6,7 +6,7 @@ import { getItemCategory } from "../../utils/itemCategory";
 import { Empty, Icon, InfoTip, Thumb } from "../CeoDashboard/CeoUi";
 import { orderStatus } from "./PmCommon";
 import {
-  channelOf, clientOf, daysLeft, dueDay, hasPromise, isDormant, isLate, isRunning, isUrgent, pieceName, pieceState, plural, stageName,
+  channelOf, clientOf, daysLeft, dueDay, hasPromise, isDormant, isLate, isRunning, isUrgent, pieceState, plural, stageName,
 } from "./pmModel";
 
 // ============================================================
@@ -22,7 +22,7 @@ const MAX_PRODUCTS = 3;
 
 // Colour names → hex, for items that stored a name only. Loaded once.
 let colourCache = null;
-function useColourHex() {
+export function useColourHex() {
   const [map, setMap] = useState(colourCache || {});
   useEffect(() => {
     if (colourCache) return;
@@ -35,7 +35,7 @@ function useColourHex() {
 }
 
 /** A colour as a swatch with its name. */
-function Colour({ value, hexOf }) {
+export function Colour({ value, hexOf }) {
   const name = value && typeof value === "object" ? value.name : value;
   if (!name) return null;
   const hex = (value && typeof value === "object" && value.hex) || hexOf[String(name).toLowerCase()] || null;
@@ -47,16 +47,6 @@ function Colour({ value, hexOf }) {
   );
 }
 
-/** A garment and its colour in one cell. */
-function Garment({ name, colour, hexOf }) {
-  if (!name && !colour) return <span className="pm-muted">–</span>;
-  return (
-    <span className="pmo-garment">
-      {name && <b>{name}</b>}
-      <Colour value={colour} hexOf={hexOf} />
-    </span>
-  );
-}
 
 /** The "More" menu on a row, drawn over the page so the table never clips it. */
 function RowMenu({ items }) {
@@ -131,30 +121,48 @@ function measuresFor(c, item) {
   const k = kinds.find((x) => filled(m[x]));
   return k ? m[k] : null;
 }
-/** A piece: its status chip (name and where it is) and its measurements under it. */
-function PieceRow({ c, item }) {
+/** The garment a piece is made as and its colour, from the order line. */
+export function garmentOf(c, item = {}) {
+  const t = c.component_type;
+  if (t === "top") return { name: c.component_label || item.top || "Top", colour: item.top_color };
+  if (t === "bottom") return { name: c.component_label || item.bottom || "Bottom", colour: item.bottom_color };
+  if (t === "dupatta") return { name: c.component_label || "Dupatta", colour: item.dupatta_color };
+  const extras = Array.isArray(item.extras) ? item.extras : [];
+  const label = String(c.component_label || "").toLowerCase();
+  const byName = extras.find((x) => x?.name && label.includes(String(x.name).toLowerCase()));
+  const n = Number((String(c.barcode || "").match(/EX(\d+)$/i) || [])[1]);
+  const byIndex = n ? extras[n - 1] : null;
+  const x = byName || byIndex || (extras.length === 1 ? extras[0] : null);
+  return { name: c.component_label || x?.name || "Extra", colour: x?.color };
+}
+const whereOf = (c, st) => (st === "at_vendor" ? `At ${c.vendor_name || "vendor"}` : st === "at_wh2" ? `${stageName(c)} · Delhi (2)` : st === "not_started" ? "Not started"
+  : st === "finished" ? "Finished" : st === "disposed" ? "Disposed" : st === "removed" ? "Cancelled" : stageName(c));
+/** A piece: the garment and its colour, where it is now, and its measurements. */
+export function PieceRow({ c, item, hexOf }) {
   const st = pieceState(c);
-  const where = st === "at_vendor" ? `At ${c.vendor_name || "vendor"}` : st === "at_wh2" ? `${stageName(c)} · Delhi (2)` : st === "not_started" ? "Not started"
-    : st === "finished" ? "Finished" : st === "disposed" ? "Disposed" : st === "removed" ? "Cancelled" : stageName(c);
+  const g = garmentOf(c, item);
   const m = measuresFor(c, item);
   return (
-    <div className="pmc-piece">
-      <span className={`pmo-chip is-${st}`} title={c.barcode}><b>{pieceName(c)}</b><span>{where}</span></span>
+    <div className={`pmc-piece is-${st}`} title={c.barcode}>
+      <b className="pmc-piece-name">{g.name}</b>
+      {g.colour ? <span className="pmc-kv"><span className="pmc-k">Colour</span><Colour value={g.colour} hexOf={hexOf || {}} /></span> : null}
+      <span className="pmc-kv"><span className="pmc-k">Status</span><span className={`pmc-pstatus is-${st}`}>{whereOf(c, st)}</span></span>
       {m && (
-        <span className="pmc-mchips">
+        <span className="pmc-kv is-top"><span className="pmc-k">Measurements</span><span className="pmc-mchips">
           {Object.entries(m).filter(([, v]) => v !== "" && v != null).map(([k, v]) => <i key={k}><small>{k}</small>{v}</i>)}
-        </span>
+        </span></span>
       )}
     </div>
   );
 }
 
 /** A product photo shown large over the page; click anywhere or press Escape to close. */
-function PhotoView({ photo, onClose }) {
+export function PhotoView({ photo, onClose }) {
   useEffect(() => {
-    const onKey = (ev) => { if (ev.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Escape closes only the photo, not the panel underneath (caught first, then stopped).
+    const onKey = (ev) => { if (ev.key === "Escape") { ev.stopImmediatePropagation(); ev.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
   return createPortal(
     <div className="pmc-lightbox" role="dialog" aria-modal="true" aria-label={photo.name || "Product photo"} onClick={onClose}>
@@ -175,10 +183,6 @@ const HeadItem = ({ label, children, sub, tone }) => (
     <span className="pmc-hvalue">{children}</span>
     {sub && <small className={tone ? `is-${tone}` : undefined}>{sub}</small>}
   </div>
-);
-/** A label beside a value, for the card body. */
-const Line = ({ label, children }) => (
-  <div className="pmc-line"><span className="pmc-label">{label}</span><span className="pmc-value">{children}</span></div>
 );
 
 export default function OrderRows({ ctx, rows }) {
@@ -240,30 +244,20 @@ export default function OrderRows({ ctx, rows }) {
                     {it.image_url ? (
                       <button type="button" className="pmc-thumb-btn" aria-label="View the photo larger"
                         onClick={(ev) => { ev.stopPropagation(); setPhoto({ src: it.image_url, name: it.product_name }); }}>
-                        <Thumb src={it.image_url} alt={it.product_name || ""} className="pmc-thumb" />
+                        <Thumb src={it.image_url} alt={it.product_name || ""} large />
                       </button>
-                    ) : <Thumb src={it.image_url} alt="" className="pmc-thumb" />}
-                    <div className="pmc-pinfo">
-                      <Line label="Product">{it.product_name || "–"}</Line>
-                      <Line label="Category">{it.product_name ? getItemCategory(it) : "–"}</Line>
-                      <Line label="Size">{it.size ? <span className="pmo-size-pill">{it.size}</span> : "–"}<span className="pmc-qty">Qty <b>{Number(it.quantity) || 1}</b></span></Line>
-                    </div>
-                    <div className="pmc-garments">
-                      <Line label="Top"><Garment name={it.top} colour={it.top_color} hexOf={hexOf} /></Line>
-                      <Line label="Bottom"><Garment name={it.bottom} colour={it.bottom_color} hexOf={hexOf} /></Line>
-                      {(it.dupatta_color || (Array.isArray(it.extras) && it.extras.length > 0)) && (
-                        <Line label="Extras">
-                          <span className="pmo-extras">
-                            {it.dupatta_color && <span className="pmo-garment"><b>Dupatta</b><Colour value={it.dupatta_color} hexOf={hexOf} /></span>}
-                            {(it.extras || []).map((x, k) => <span key={k} className="pmo-garment"><b>{x.name || "Extra"}</b><Colour value={x.color} hexOf={hexOf} /></span>)}
-                          </span>
-                        </Line>
-                      )}
-                    </div>
-                    <div className="pmc-ppieces">
-                      <span className="pmc-label">Pieces</span>
+                    ) : <Thumb src={it.image_url} alt="" large />}
+                    <div className="pmc-pmain">
+                      <div className="pmc-ptitle">
+                        <b>{it.product_name || "–"}</b>
+                        <span className="pmc-pmeta">
+                          {it.product_name && <span className="pmc-kv"><span className="pmc-k">Category</span><b>{getItemCategory(it)}</b></span>}
+                          <span className="pmc-kv"><span className="pmc-k">Size</span>{it.size ? <span className="pmo-size-pill">{it.size}</span> : <b>–</b>}</span>
+                          <span className="pmc-kv"><span className="pmc-k">Qty</span><b>{Number(it.quantity) || 1}</b></span>
+                        </span>
+                      </div>
                       {piecesOf(i).length
-                        ? <div className="pmc-plist">{piecesOf(i).map((c) => <PieceRow key={c.id} c={c} item={items[c.item_index ?? 0]} />)}</div>
+                        ? <div className="pmc-plist">{piecesOf(i).map((c) => <PieceRow key={c.id} c={c} item={items[c.item_index ?? 0]} hexOf={hexOf} />)}</div>
                         : <span className="pm-muted">No pieces yet</span>}
                     </div>
                   </div>

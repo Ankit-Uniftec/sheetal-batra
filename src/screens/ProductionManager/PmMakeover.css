@@ -800,3 +800,61 @@
 .pmc-lightbox figcaption { font-family: "Futura", "Jost", sans-serif !important; font-size: 14px; color: #f6efd9 !important; text-align: center; max-width: 80vw; }
 .pmc-lightbox-x { position: fixed; top: 16px; right: 18px; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, .35); background: rgba(255, 255, 255, .12); color: #fff !important; font-size: 26px; line-height: 1; cursor: pointer; }
 .pmc-lightbox-x:hover { background: rgba(255, 255, 255, .22); }
+
+/* Order cards, compact: big photo | product name and meta, then piece cards
+   (garment and colour, where it is, measurements). */
+.ceo.pm .pmc-product { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 16px; align-items: start; }
+.ceo.pm .pmc-thumb { width: 132px; height: 168px; border-radius: 12px; }
+.ceo.pm .pmc-pmain { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ceo.pm .pmc-ptitle { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+.ceo.pm .pmc-ptitle > b { font-size: 14.5px; font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmc-pmeta { display: inline-flex; align-items: center; gap: 12px; font-size: 12.5px; color: #8c8476 !important; }
+.ceo.pm .pmc-pmeta b { color: var(--ceo-ink) !important; font-weight: 600; }
+.ceo.pm .pmc-pmeta .pmo-size-pill { height: 26px; min-width: 34px; font-size: 12px; }
+.ceo.pm .pmc-pmain .pmc-plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.ceo.pm .pmc-pmain .pmc-piece { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; border: 1px solid #f1ebdc; border-radius: 10px; background: #fffdf8; }
+.ceo.pm .pmc-piece-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.ceo.pm .pmc-piece-top > b { font-size: 13px; font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmc-piece-top .pmo-colour { font-size: 11.5px; padding: 2px 8px 2px 3px; }
+.ceo.pm .pmc-piece-top .pmo-colour i { width: 14px; height: 14px; }
+.ceo.pm .pmc-pstatus { align-self: flex-start; font-size: 11.5px; font-weight: 500; padding: 2px 9px; border-radius: 99px; background: #fdf3df; color: #9a6a12 !important; }
+.ceo.pm .pmc-pstatus.is-finished { background: #f6ecce; color: #7e5f10 !important; }
+.ceo.pm .pmc-pstatus.is-at_vendor { background: #f9ebdf; color: #8f5a2e !important; }
+.ceo.pm .pmc-pstatus.is-not_started, .ceo.pm .pmc-pstatus.is-removed { background: #f4f0e6; color: #7a7366 !important; }
+.ceo.pm .pmc-pstatus.is-disposed { background: #fcece8; color: #b0442c !important; }
+.ceo.pm .pmc-pmain .pmc-mchips { padding-left: 0; }
+@media (max-width: 760px) {
+  .ceo.pm .pmc-product { grid-template-columns: 96px minmax(0, 1fr); gap: 12px; }
+  .ceo.pm .pmc-thumb { width: 96px; height: 124px; }
+  .ceo.pm .pmc-pmain .pmc-plist { grid-template-columns: minmax(0, 1fr); }
+}
+/* The order panel's products: same piece cards, photo opens full size. */
+.ceo.pm .pm-product .pmc-plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 4px; }
+.ceo.pm .pm-product .pmc-piece { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; border: 1px solid #f1ebdc; border-radius: 10px; background: #fffdf8; }
+.ceo.pm .pm-product .pmc-mchips { padding-left: 0; }
+.ceo.pm .pm-photo-btn { padding: 0; border: 0; background: none; cursor: zoom-in; line-height: 0; border-radius: 12px; flex-shrink: 0; }
+.ceo.pm .pmc-product .ceo-thumb { width: 132px; height: 168px; border-radius: 12px; object-fit: cover; object-position: top; border: 1px solid #f1ebdc; }
+@media (max-width: 760px) { .ceo.pm .pmc-product .ceo-thumb { width: 96px; height: 124px; } }
+
+/* Product details together under the name, every value labelled; pieces without a fill. */
+.ceo.pm .pmc-ptitle { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ceo.pm .pmc-ptitle > b { font-size: 15px; }
+.ceo.pm .pmc-pmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; }
+.ceo.pm .pmc-kv { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.ceo.pm .pmc-kv.is-top { align-items: flex-start; }
+.ceo.pm .pmc-k { font-size: 11px; color: #8c8476 !important; white-space: nowrap; }
+.ceo.pm .pmc-piece .pmc-k { min-width: 82px; }
+.ceo.pm .pmc-kv > b { font-size: 13px; font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmc-pmain .pmc-piece, .ceo.pm .pm-product .pmc-piece { background: transparent !important; border: 1px solid #ece5d2; gap: 7px; }
+.ceo.pm .pmc-piece-name { font-size: 13.5px; font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmc-piece .pmo-colour { font-size: 13px; font-weight: 500; padding: 3px 12px 3px 4px; gap: 9px; background: #faf6ec; }
+.ceo.pm .pmc-piece .pmo-colour i { width: 22px; height: 22px; }
+.ceo.pm .pmc-piece .pmc-mchips { padding-top: 1px; }
+@media (max-width: 760px) {
+  /* phones: photo beside the title, the pieces across the full card width */
+  .ceo.pm .pmc-pmain { display: contents; }
+  .ceo.pm .pmc-pmain > .pmc-plist, .ceo.pm .pmc-pmain > .pm-muted { grid-column: 1 / -1; }
+  .ceo.pm .pmc-piece .pmc-k { min-width: 74px; }
+  .ceo.pm .pmc-kv { flex-wrap: wrap; }
+  .ceo.pm .pmc-piece .pmo-colour { max-width: 100%; }
+}
