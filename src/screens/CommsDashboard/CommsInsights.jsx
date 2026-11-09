@@ -161,9 +161,9 @@ export function TrendCard({ ctx }) {
     if (row?.list) openOrders({ title: row.label, sub: `Comms orders placed in ${row.label}`, orders: row.list });
   };
   return (
-    <Card span={7} title="Monthly Trend" sub="Comms orders placed each month, by engagement. Click a month to see its orders.">
+    <Card span={7} className="comms-trend-card" title="Monthly Trend" sub="Comms orders placed each month, by engagement. Click a month to see its orders.">
       {!months.length ? <Empty /> : (
-        <div style={{ width: "100%", height: 260, cursor: "pointer" }}>
+        <div className="comms-trend-chart">
           <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
             <BarChart data={months} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#f1ede2" vertical={false} />

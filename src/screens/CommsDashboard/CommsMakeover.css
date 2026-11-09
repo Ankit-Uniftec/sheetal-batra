@@ -87,3 +87,8 @@
 .ceo.comms .comms-gap-text { font-size: 13px; line-height: 1.4; }
 .ceo.comms .comms-gap-text b { font-weight: 600; }
 .ceo.comms .comms-gap:hover .comms-gap-text { color: var(--ceo-gold-deep) !important; }
+
+/* Monthly Trend fills its card's full height, so it lines up with the taller
+   Orders by Engagement card beside it instead of leaving space below. */
+.ceo.comms .comms-trend-card { display: flex; flex-direction: column; }
+.ceo.comms .comms-trend-chart { flex: 1; min-height: 260px; width: 100%; cursor: pointer; }
