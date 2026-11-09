@@ -737,6 +737,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
   const who = clientOf(o, ctx.vendorMap);
   return (
     <Drawer wide title={o.order_no} sub={[who, channelOf(o)].filter(Boolean).join(" · ")} onClose={onClose} onBack={onBack}>
+      <div className="pm-od">
       <div className="ceo-dstats">
         <Stat label="Status" info="Where the order stands, worked out from its pieces."><b>{status}</b></Stat>
         <Stat label="Due Date" info="The warehouse date: two days before the client's delivery date.">
@@ -771,19 +772,21 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
       <div className="pm-od-col">
       <p className="pm-dsection">Order Details</p>
 
-      <dl className="ceo-dl">
-        <dt>Channel</dt><dd>{channelOf(o)}</dd>
-        {who && <><dt>Client</dt><dd>{who}</dd></>}
-        <dt>Order Date</dt><dd>{formatDate(o.created_at)}</dd>
-        {o.delivery_date && <><dt>Client Delivery Date</dt><dd>{formatDate(o.delivery_date)}</dd></>}
-        {o.mode_of_delivery && <><dt>Delivery Mode</dt><dd>{o.mode_of_delivery}</dd></>}
-        <dt>Priority</dt><dd>{isUrgent(o) ? "Urgent" : "Normal"}</dd>
-        {o.salesperson && <><dt>Salesperson</dt><dd>{o.salesperson}</dd></>}
-        {o.po_number && <><dt>PO Number</dt><dd>{o.po_number}</dd></>}
-        {o.notes && <><dt>Production Notes</dt><dd>{o.notes}</dd></>}
-        {o.cancellation_reason && <><dt>Cancellation Reason</dt><dd>{o.cancellation_reason}</dd></>}
-        <dt>Pieces</dt><dd>{piecesLine(comps)}</dd>
-      </dl>
+      <div className="pm-od-details">
+        {[
+          ["Channel", channelOf(o)],
+          ["Client", who],
+          ["Order Date", formatDate(o.created_at)],
+          ["Client Delivery Date", o.delivery_date ? formatDate(o.delivery_date) : null],
+          ["Delivery Mode", o.mode_of_delivery],
+          ["Priority", isUrgent(o) ? "Urgent" : "Normal"],
+          ["Salesperson", o.salesperson],
+          ["PO Number", o.po_number],
+          ["Pieces", piecesLine(comps)],
+        ].filter(([, v]) => v).map(([k, v]) => <div key={k} className="pm-od-item"><span>{k}</span><b>{v}</b></div>)}
+        {o.notes && <div className="pm-od-item is-wide"><span>Production Notes</span><b>{o.notes}</b></div>}
+        {o.cancellation_reason && <div className="pm-od-item is-wide"><span>Cancellation Reason</span><b>{o.cancellation_reason}</b></div>}
+      </div>
 
       <p className="pm-dsection">Products</p>
       <small className="pm-od-hint">Click a piece to open its journey.</small>
@@ -809,7 +812,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         })}
       </div>
       </div>
-
+      </div>
       </div>
     </Drawer>
   );

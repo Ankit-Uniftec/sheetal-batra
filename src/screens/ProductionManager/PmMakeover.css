@@ -898,3 +898,17 @@
 .ceo.pm .pmc-piece.is-link:hover, .ceo.pm .pmc-piece.is-link:focus-visible { border-color: #c9a23e; box-shadow: 0 6px 14px -10px rgba(70, 52, 12, .45); outline: none; }
 .ceo.pm .pmc-piece-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .ceo.pm .pmc-piece-id .pm-code { font-size: 11px; color: #8c8476 !important; font-weight: 500; }
+
+/* Order panel, compact: tighter spacing; order details in a 3-column grid. */
+.ceo.pm .pm-od { display: flex; flex-direction: column; gap: 10px; }
+.ceo.pm .pm-od > * { margin-top: 0; margin-bottom: 0; }
+.ceo.pm .pm-od .ceo-dstats, .ceo.pm .pm-od .pm-progress, .ceo.pm .pm-od .gm-actions { margin: 0; }
+.ceo.pm .pm-od .pm-dsection { margin: 6px 0; }
+.ceo.pm .pm-od .pm-od-hint { margin: -4px 0 6px; }
+.ceo.pm .pm-od .pm-products { gap: 10px; }
+.ceo.pm .pm-od-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; padding: 12px 14px; border: 1px solid #ece5d2; border-radius: 12px; background: #fff; }
+.ceo.pm .pm-od-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ceo.pm .pm-od-item span { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: #8c8476 !important; }
+.ceo.pm .pm-od-item b { font-size: 13px; font-weight: 500; color: var(--ceo-ink) !important; line-height: 1.4; overflow-wrap: anywhere; }
+.ceo.pm .pm-od-item.is-wide { grid-column: 1 / -1; }
+@media (max-width: 640px) { .ceo.pm .pm-od-details { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
