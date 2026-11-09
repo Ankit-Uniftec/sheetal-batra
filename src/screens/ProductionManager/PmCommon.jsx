@@ -24,7 +24,29 @@ export function csvFromObjects(title, list) {
 // Nothing here shows money or client contact details.
 // ============================================================
 
-export const { Tile, Card, Table } = defineKit({ tiles: TILE_INFO, cards: CARD_INFO, columns: COLUMN_INFO });
+const kit = defineKit({ tiles: TILE_INFO, cards: CARD_INFO, columns: COLUMN_INFO });
+export const { Tile, Card } = kit;
+
+// How each column's text flows, by what the column holds:
+//   one line  numbers, dates, codes and short labels (order no, barcode, box,
+//             dates, counts, days, %, money, status, result)
+//   long      free text that wraps at a readable width (products, reasons,
+//             notes, client, vendor and person names, stations, stage moves)
+//   free      anything else: wraps only if it must
+// A column can say so itself with `flow: "one" | "long" | "free"`.
+const ONE_LINE = /^(order|order no|shopify no|po no|barcode|box|awb|qty|size|status|result|check|type|days|times|trips|scans|orders|late|on time|out now|returned|overdue|failed|passed|overridden|waiting|total|in stock|being made|sold|penalt|₹|promised days|days late|vs previous|repeat sends|trips sent|over limit|at stage|pieces done|worst|overall|late %)|date|since|scan$|^sent$|sent out|return by|came back|dispatched|ordered|cancelled|requested on|deadline|due|%|count|rate|time| on$/i;
+const LONG_TEXT = /product|reason|note|station|client|vendor|person|by$|location|where|move|kind|design|piece|colour|from|sizes|work|request|what happened|salesperson|channel|sent for|now at|stage|mode/i;
+const flowOf = (c) => c.flow || (c.right || ONE_LINE.test(c.label || "") ? "one" : LONG_TEXT.test(c.label || "") ? "long" : "free");
+/** The framed table, with each column's text flowing by its kind (see above). */
+export const Table = ({ columns, ...rest }) => (
+  <kit.Table
+    {...rest}
+    columns={columns.map((c) => {
+      const flow = flowOf(c);
+      return { ...c, render: (r, i) => <span className={`pm-fit is-${flow}`}>{c.render ? c.render(r, i) : r[c.key]}</span> };
+    })}
+  />
+);
 
 /** Three dots that pulse in turn: something is loading. Use instead of a static "…". */
 export const Dots = () => <span className="pm-dots" role="status" aria-label="Loading"><i /><i /><i /></span>;
@@ -314,7 +336,7 @@ export function PiecesTable({ ctx, pieces: all, title, stats = true, empty = "No
           { key: "bc", label: "Barcode", render: (c) => <span className="pm-code">{c.barcode || "–"}</span> },
           { key: "order", label: "Order", render: (c) => c.order_no || ctx.ordersById[c.order_id]?.order_no || "–" },
           { key: "client", label: "Client", render: (c) => muted(clientOf(ctx.ordersById[c.order_id] || {}, ctx.vendorMap)) },
-          { key: "stage", label: "Stage", render: (c) => <span className="ceo-keep"><ComponentStageBadge comp={c} /></span> },
+          { key: "stage", label: "Stage", flow: "one", render: (c) => <span className="ceo-keep"><ComponentStageBadge comp={c} /></span> },
           { key: "where", label: "Where", render: (c) => WHERE[pieceState(c)] && pieceState(c) === "at_vendor" ? `At ${c.vendor_name || "a vendor"}` : (WHERE[pieceState(c)] || "–") },
           { key: "age", label: "At Stage", right: true, render: (c) => { const at = daysAtStage(c); return at == null ? "–" : plural(at, "day"); } },
           { key: "over", label: "Over Limit", right: true, render: (c) => { const od = overBy(c); return od > 0 ? <span className="pm-late">{plural(od, "day")}</span> : <span className="pm-muted">–</span>; } },
