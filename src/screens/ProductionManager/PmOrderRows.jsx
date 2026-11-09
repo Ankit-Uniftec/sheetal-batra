@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { fmtDate as formatDate } from "./pmModel";
 import { supabase } from "../../lib/supabaseClient";
+import { getItemCategory } from "../../utils/itemCategory";
 import { Empty, Icon, InfoTip, Thumb } from "../CeoDashboard/CeoUi";
 import { orderStatus } from "./PmCommon";
 import {
@@ -9,34 +10,14 @@ import {
 } from "./pmModel";
 
 // ============================================================
-// The order table: one value per column, so every column reads the same way
-// down the page. An order with several products takes one line per product;
-// the order's own columns (dates, status, actions…) span those lines.
-// Colours show as a swatch with their name. The table scrolls sideways on
-// smaller screens; nothing is pinned. No money and no client contact details.
+// The orders as cards (the Stock Room look): a header band with the order's
+// number, dates, client and people, its status and tags; one line per
+// product with the photo, category, size, quantity and each garment's colour;
+// a pieces panel with progress and where each piece is; and a footer with the
+// delivery mode and the actions. Clicking a card opens the order's side
+// panel. No money and no client contact details.
 // ============================================================
 
-const COLS = [
-  { key: "order", label: "Order", level: "order" },
-  { key: "product", label: "Product", level: "item" },
-  { key: "status", label: "Status", level: "order", info: "Where the order stands, worked out from its pieces." },
-  { key: "ordered", label: "Order Date", level: "order" },
-  { key: "due", label: "Due Date", level: "order", info: "The warehouse date: two days before the client's delivery date (the real date when the order had less than two days to run)." },
-  { key: "done", label: "Pieces Done", level: "order", info: "Pieces finished out of all the order's pieces." },
-  { key: "now", label: "Pieces Status", level: "order", info: "Each piece of the order and the stage it is at right now." },
-  { key: "act", label: "Actions", level: "order" },
-  { key: "top", label: "Top", level: "item" },
-  { key: "bottom", label: "Bottom", level: "item" },
-  { key: "dupatta", label: "Dupatta & Extras", level: "item" },
-  { key: "size", label: "Size", level: "item" },
-  { key: "qty", label: "Qty", level: "item" },
-  { key: "delivery", label: "Delivery Date", level: "order", info: "The date promised to the client." },
-  { key: "mode", label: "Delivery Mode", level: "order" },
-  { key: "client", label: "Client", level: "order" },
-  { key: "po", label: "PO No", level: "order" },
-  { key: "sales", label: "Salesperson", level: "order" },
-];
-const ITEM_COLS = COLS.filter((c) => c.level === "item").length;
 const MAX_PRODUCTS = 3;
 
 // Colour names → hex, for items that stored a name only. Loaded once.
@@ -127,12 +108,18 @@ function RowMenu({ items }) {
   );
 }
 
-/** A date with a small note under it. */
-const DateCell = ({ date, note, tone }) => (
-  <span className="pmo-date">
-    <b>{date ? formatDate(date) : "–"}</b>
-    {note && <small className={tone ? `is-${tone}` : undefined}>{note}</small>}
-  </span>
+
+/** A label over a value, for the card header. */
+const HeadItem = ({ label, children, sub, tone }) => (
+  <div className="pmc-hitem">
+    <span className="pmc-hlabel">{label}</span>
+    <span className="pmc-hvalue">{children}</span>
+    {sub && <small className={tone ? `is-${tone}` : undefined}>{sub}</small>}
+  </div>
+);
+/** A label beside a value, for the card body. */
+const Line = ({ label, children }) => (
+  <div className="pmc-line"><span className="pmc-label">{label}</span><span className="pmc-value">{children}</span></div>
 );
 
 export default function OrderRows({ ctx, rows }) {
@@ -141,69 +128,98 @@ export default function OrderRows({ ctx, rows }) {
   if (!rows.length) return <Empty text="No orders match." />;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   return (
-    <div className="ceo-table-wrap pmo-wrap">
-      <table className="ceo-table pmo-table">
-        <thead>
-          <tr>{COLS.map((c) => <th key={c.key} className={`pmo-${c.key}`}>{c.info ? <InfoTip text={c.info}>{c.label}</InfoTip> : c.label}</th>)}</tr>
-        </thead>
-        {rows.map((o, idx) => {
-          const comps = componentsByOrder[o.id] || [];
-          const live = comps.filter((c) => !c.cancelled_at);
-          const done = live.filter((c) => pieceState(c) === "finished").length;
-          const items = (o.items || []).length ? o.items : [{}];
-          const shownItems = items.slice(0, MAX_PRODUCTS);
-          const span = shownItems.length + (items.length > MAX_PRODUCTS ? 1 : 0);
-          const running = isRunning(o);
-          const quiet = running && isDormant(o, comps);
-          const left = daysLeft(o);
-          const late = isLate(o);
-          const busy = (k) => actions.busy === `${o.id}-${k}`;
-          const status = orderStatus(o, comps);
-          const ageDays = Math.max(0, Math.round((Date.now() - new Date(o.created_at)) / 864e5));
-          const dueNote = !running || left == null ? null
-            : left < 0 ? (hasPromise(o) ? `${plural(-left, "day")} late` : `${plural(-left, "day")} past`)
-              : left === 0 ? "Due today" : `In ${plural(left, "day")}`;
-          const dueTone = late ? "late" : running && hasPromise(o) && left != null && left <= 2 ? "soon" : null;
-          const open = () => ctx.openOrder(o);
-          const R = { rowSpan: span };
+    <div className="pmc-list">
+      {rows.map((o) => {
+        const comps = componentsByOrder[o.id] || [];
+        const live = comps.filter((c) => !c.cancelled_at);
+        const done = live.filter((c) => pieceState(c) === "finished").length;
+        const items = (o.items || []).filter((it) => it && !it.is_charge);
+        const shownItems = (items.length ? items : [{}]).slice(0, MAX_PRODUCTS);
+        const running = isRunning(o);
+        const quiet = running && isDormant(o, comps);
+        const left = daysLeft(o);
+        const late = isLate(o);
+        const busy = (k) => actions.busy === `${o.id}-${k}`;
+        const status = orderStatus(o, comps);
+        const ageDays = Math.max(0, Math.round((Date.now() - new Date(o.created_at)) / 864e5));
+        const dueNote = !running || left == null ? null
+          : left < 0 ? (hasPromise(o) ? `${plural(-left, "day")} late` : `${plural(-left, "day")} past`)
+            : left === 0 ? "Due today" : `In ${plural(left, "day")}`;
+        const dueTone = late ? "late" : running && hasPromise(o) && left != null && left <= 2 ? "soon" : null;
+        const open = () => ctx.openOrder(o);
+        const client = clientOf(o, ctx.vendorMap);
+        return (
+          <article key={o.id} className={`pmc-card${late ? " is-late" : ""}`} onClick={open} role="button" tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter") open(); }} aria-label={`Order ${o.order_no}`}>
+            <header className="pmc-head">
+              <HeadItem label="Order No" sub={channelOf(o)}>{o.order_no}</HeadItem>
+              <HeadItem label="Order Date" sub={ageDays === 0 ? "Today" : `${plural(ageDays, "day")} ago`}>{formatDate(o.created_at)}</HeadItem>
+              <HeadItem label={<InfoTip text="The warehouse date: two days before the client's delivery date.">Due Date</InfoTip>} sub={dueNote} tone={dueTone}>{dueDay(o) ? formatDate(dueDay(o)) : "–"}</HeadItem>
+              <HeadItem label="Delivery">{o.delivery_date ? formatDate(o.delivery_date) : "–"}</HeadItem>
+              <HeadItem label="Client">{client || "–"}</HeadItem>
+              <HeadItem label="SA" sub={o.salesperson_store && o.salesperson_store !== o.salesperson ? o.salesperson_store : null}>{o.salesperson || "–"}</HeadItem>
+              {o.po_number && <HeadItem label="PO No">{o.po_number}</HeadItem>}
+              <div className="pmc-tags">
+                <b className={`pmo-pill is-${status.toLowerCase().replace(/\s+/g, "-")}`}>{status}</b>
+                {isUrgent(o) && <i className="pm-tag is-urgent">Urgent</i>}
+                {late && <i className="pm-tag is-urgent">Late</i>}
+                {quiet && <i className="pm-tag">Quiet 30+ days</i>}
+                {o.is_alteration && <i className="pm-tag">Alteration</i>}
+              </div>
+            </header>
 
-          // The order's own cells (spanning its product lines) and each product line's cells.
-          const orderCells = {
-            order: (
-              <span className="pmo-ordercell">
-                <b>{o.order_no}</b>
-                <small>{channelOf(o)}</small>
-                <span className="pmo-tags">
-                  {isUrgent(o) && <i className="pm-tag is-urgent">Urgent</i>}
-                  {late && <i className="pm-tag is-urgent">Late</i>}
-                  {quiet && <i className="pm-tag">Quiet 30+ days</i>}
-                  {o.is_alteration && <i className="pm-tag">Alteration</i>}
+            <div className="pmc-body">
+              <div className="pmc-products">
+                {shownItems.map((it, i) => (
+                  <div key={i} className="pmc-product">
+                    <Thumb src={it.image_url} alt={it.product_name || ""} className="pmc-thumb" />
+                    <div className="pmc-pinfo">
+                      <Line label="Product">{it.product_name || "–"}</Line>
+                      <Line label="Category">{it.product_name ? getItemCategory(it) : "–"}</Line>
+                      <Line label="Size">{it.size ? <span className="pmo-size-pill">{it.size}</span> : "–"}<span className="pmc-qty">Qty <b>{Number(it.quantity) || 1}</b></span></Line>
+                    </div>
+                    <div className="pmc-garments">
+                      <Line label="Top"><Garment name={it.top} colour={it.top_color} hexOf={hexOf} /></Line>
+                      <Line label="Bottom"><Garment name={it.bottom} colour={it.bottom_color} hexOf={hexOf} /></Line>
+                      {(it.dupatta_color || (Array.isArray(it.extras) && it.extras.length > 0)) && (
+                        <Line label="Extras">
+                          <span className="pmo-extras">
+                            {it.dupatta_color && <span className="pmo-garment"><b>Dupatta</b><Colour value={it.dupatta_color} hexOf={hexOf} /></span>}
+                            {(it.extras || []).map((x, k) => <span key={k} className="pmo-garment"><b>{x.name || "Extra"}</b><Colour value={x.color} hexOf={hexOf} /></span>)}
+                          </span>
+                        </Line>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {items.length > MAX_PRODUCTS && <p className="pmc-more">+{plural(items.length - MAX_PRODUCTS, "more product")} · open the order to see all</p>}
+              </div>
+
+              <div className="pmc-pieces">
+                <div className="pmc-pieces-head">
+                  <span className="pmc-hlabel">Pieces</span>
+                  {live.length ? <b>{done} of {live.length} finished</b> : <span className="pm-muted">No pieces yet</span>}
+                </div>
+                {live.length > 0 && <span className="pm-mini-bar pmc-bar"><i style={{ width: `${(done / live.length) * 100}%` }} /></span>}
+                <span className="pmo-chips">
+                  {comps.slice(0, 6).map((c) => {
+                    const st = pieceState(c);
+                    const where = st === "at_vendor" ? `At ${c.vendor_name || "vendor"}` : st === "at_wh2" ? `${stageName(c)} · Delhi (2)` : st === "not_started" ? "Not started" : st === "finished" ? "Finished" : st === "disposed" ? "Disposed" : st === "removed" ? "Cancelled" : stageName(c);
+                    return <span key={c.id} className={`pmo-chip is-${st}`} title={c.barcode}><b>{pieceName(c)}</b><span>{where}</span></span>;
+                  })}
+                  {comps.length > 6 && <small className="pm-muted">+{comps.length - 6} more</small>}
                 </span>
+              </div>
+            </div>
+
+            <footer className="pmc-foot">
+              <span className="pmc-foot-note">
+                {o.mode_of_delivery ? <>Delivery: <b>{o.mode_of_delivery}</b></> : null}
+                {items.length > 1 ? <span>{plural(items.length, "product")}</span> : null}
               </span>
-            ),
-            status: <b className={`pmo-pill is-${status.toLowerCase().replace(/\s+/g, "-")}`}>{status}</b>,
-            due: <DateCell date={dueDay(o)} note={dueNote} tone={dueTone} />,
-            done: live.length ? (
-              <span className="pmo-done-cell">
-                <b>{done} / {live.length}</b>
-                <span className="pm-mini-bar"><i style={{ width: `${(done / live.length) * 100}%` }} /></span>
-              </span>
-            ) : <span className="pm-muted">No pieces yet</span>,
-            now: (
-              <span className="pmo-chips">
-                {comps.slice(0, 5).map((c) => {
-                  const st = pieceState(c);
-                  const where = st === "at_vendor" ? `At ${c.vendor_name || "vendor"}` : st === "at_wh2" ? `${stageName(c)} · Delhi (2)` : st === "not_started" ? "Not started" : st === "finished" ? "Finished" : st === "disposed" ? "Disposed" : st === "removed" ? "Cancelled" : stageName(c);
-                  return <span key={c.id} className={`pmo-chip is-${st}`} title={c.barcode}><b>{pieceName(c)}</b><span>{where}</span></span>;
-                })}
-                {comps.length > 5 && <small className="pm-muted">+{comps.length - 5} more</small>}
-                {!comps.length && <span className="pm-muted">–</span>}
-              </span>
-            ),
-            act: (
-              <span className="pmo-btns">
-                <button type="button" className="ceo-btn is-small" onClick={stop(() => ctx.openJourney(o))} disabled={!comps.length}><Icon name="movements" />Journey</button>
-                <button type="button" className="ceo-btn is-small" onClick={stop(() => actions.warehousePdf(o))} disabled={busy("pdf")}><Icon name="download" />{busy("pdf") ? "Opening" : "PDF"}</button>
+              <span className="pmo-btns pmc-actions" onClick={(e) => e.stopPropagation()} role="presentation">
+                <button type="button" className="ceo-btn is-small" onClick={stop(() => ctx.openJourney(o))} disabled={!comps.length}><Icon name="movements" />View Journey</button>
+                <button type="button" className="ceo-btn is-small" onClick={stop(() => actions.warehousePdf(o))} disabled={busy("pdf")}><Icon name="download" />{busy("pdf") ? "Opening" : "Warehouse PDF"}</button>
                 <RowMenu items={[
                   { label: "Open order", icon: "orders", onClick: open },
                   { label: "Edit order", icon: "edit", onClick: () => actions.edit(o) },
@@ -213,61 +229,10 @@ export default function OrderRows({ ctx, rows }) {
                   running && { label: "Cancel order", icon: "close", danger: true, onClick: () => actions.cancel(o) },
                 ]} />
               </span>
-            ),
-            delivery: <DateCell date={o.delivery_date} />,
-            mode: o.mode_of_delivery || <span className="pm-muted">–</span>,
-            client: clientOf(o, ctx.vendorMap) || <span className="pm-muted">–</span>,
-            po: o.po_number || <span className="pm-muted">–</span>,
-            sales: <span className="pmo-two"><b>{o.salesperson || "–"}</b>{o.salesperson_store && o.salesperson_store !== o.salesperson && <small>{o.salesperson_store}</small>}</span>,
-            ordered: <DateCell date={o.created_at} note={ageDays === 0 ? "Today" : `${plural(ageDays, "day")} ago`} />,
-          };
-          const itemCells = (it) => ({
-            product: (
-              <span className="pmo-productcell">
-                <Thumb src={it.image_url} alt={it.product_name || ""} />
-                <span className="pmo-pname">{it.product_name || "–"}</span>
-              </span>
-            ),
-            top: <Garment name={it.top} colour={it.top_color} hexOf={hexOf} />,
-            bottom: <Garment name={it.bottom} colour={it.bottom_color} hexOf={hexOf} />,
-            dupatta: (it.dupatta_color || (Array.isArray(it.extras) && it.extras.length > 0)) ? (
-              <span className="pmo-extras">
-                {it.dupatta_color && <span className="pmo-garment"><b>Dupatta</b><Colour value={it.dupatta_color} hexOf={hexOf} /></span>}
-                {(it.extras || []).map((e, k) => <span key={k} className="pmo-garment"><b>{e.name || "Extra"}</b><Colour value={e.color} hexOf={hexOf} /></span>)}
-              </span>
-            ) : <span className="pm-muted">–</span>,
-            size: it.size ? <span className="pmo-size-pill">{it.size}</span> : <span className="pm-muted">–</span>,
-            qty: Number(it.quantity) || 1,
-          });
-
-          return (
-            <tbody key={o.id} className={`pmo-group${idx % 2 ? " is-alt" : ""}`} onClick={open}>
-              {shownItems.map((it, i) => {
-                const ic = itemCells(it);
-                return (
-                  <tr key={i} className="is-link">
-                    {COLS.map((c) => {
-                      if (c.level === "item") return <td key={c.key} className={`pmo-${c.key}`}>{ic[c.key]}</td>;
-                      if (i !== 0) return null; // spanned by the first line
-                      return (
-                        <td key={c.key} {...R} className={`pmo-${c.key}`} onClick={c.key === "act" ? (e) => e.stopPropagation() : undefined}>
-                          {orderCells[c.key]}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-              {items.length > MAX_PRODUCTS && (
-                <tr className="is-link">
-                  <td className="pmo-moreprod">+{plural(items.length - MAX_PRODUCTS, "more product")} · open the order to see all</td>
-                  {Array.from({ length: ITEM_COLS - 1 }, (_, k) => <td key={k} />)}
-                </tr>
-              )}
-            </tbody>
-          );
-        })}
-      </table>
+            </footer>
+          </article>
+        );
+      })}
     </div>
   );
 }

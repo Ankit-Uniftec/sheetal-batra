@@ -680,3 +680,59 @@
 .ceo.pm .ceo-keep .sb-stage-pill { font-size: 11.5px; }
 /* "Good" changes and states use the dark neutral, not green. */
 .ceo.pm { --ceo-ok: #6a4f0c; --ceo-ok-bg: #efe3bf; }
+
+/* ============================================================
+   Order cards (the Stock Room look) */
+.ceo.pm .pmc-list { display: flex; flex-direction: column; gap: 14px; }
+.ceo.pm .pmc-card { background: #fff; border: 1px solid #ece5d2; border-radius: 14px; overflow: hidden; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.ceo.pm .pmc-card:hover, .ceo.pm .pmc-card:focus-visible { border-color: #dcc88f; box-shadow: 0 10px 24px -18px rgba(70, 52, 12, .45); outline: none; }
+.ceo.pm .pmc-head { display: flex; align-items: flex-start; gap: 10px 26px; flex-wrap: wrap; padding: 12px 18px; background: #fcfaf4; border-bottom: 1px solid #f1ebdc; }
+.ceo.pm .pmc-hitem { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ceo.pm .pmc-hlabel { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; color: #8c8476 !important; }
+.ceo.pm .pmc-hvalue { font-size: 13.5px; font-weight: 500; color: var(--ceo-ink) !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ceo.pm .pmc-hitem small { font-size: 11px; color: #8c8476 !important; white-space: nowrap; }
+.ceo.pm .pmc-hitem small.is-late { color: #a5553a !important; font-weight: 600; }
+.ceo.pm .pmc-hitem small.is-soon { color: #9a6a12 !important; font-weight: 600; }
+.ceo.pm .pmc-tags { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-self: center; }
+.ceo.pm .pmc-body { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(240px, 1fr); }
+.ceo.pm .pmc-products { padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ceo.pm .pmc-product { display: grid; grid-template-columns: 64px minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px 18px; align-items: start; }
+.ceo.pm .pmc-product + .pmc-product { padding-top: 12px; border-top: 1px dashed #efe6cf; }
+.ceo.pm .pmc-thumb { width: 64px; height: 82px; border-radius: 10px; object-fit: cover; border: 1px solid #f1ebdc; }
+.ceo.pm .pmc-pinfo, .ceo.pm .pmc-garments { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ceo.pm .pmc-garments { padding-left: 18px; border-left: 1px solid #f1ebdc; }
+.ceo.pm .pmc-line { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.ceo.pm .pmc-label { font-size: 11.5px; color: #8c8476 !important; }
+.ceo.pm .pmc-value { font-size: 13px; font-weight: 500; color: var(--ceo-ink) !important; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; line-height: 1.4; }
+.ceo.pm .pmc-pinfo .pmc-line:first-child .pmc-value { font-weight: 600; }
+.ceo.pm .pmc-value .pmo-garment { flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ceo.pm .pmc-value .pmo-extras { gap: 6px; }
+.ceo.pm .pmc-qty { font-size: 12px; color: #8c8476 !important; }
+.ceo.pm .pmc-qty b { color: var(--ceo-ink) !important; font-weight: 600; margin-left: 3px; }
+.ceo.pm .pmc-more { margin: 0; font-size: 12px; color: #8c8476 !important; }
+.ceo.pm .pmc-pieces { padding: 14px 18px; background: #fffdf8; border-left: 1px solid #f1ebdc; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ceo.pm .pmc-pieces-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ceo.pm .pmc-pieces-head b { font-size: 12.5px; font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmc-bar { display: block; width: 100%; }
+.ceo.pm .pmc-pieces .pmo-chip { width: 100%; min-width: 0; grid-template-columns: 80px minmax(0, 1fr); }
+.ceo.pm .pmc-pieces .pmo-chip span { white-space: normal; }
+.ceo.pm .pmc-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; padding: 10px 18px; background: #fcfaf4; border-top: 1px solid #f1ebdc; }
+.ceo.pm .pmc-foot-note { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: #8c8476 !important; }
+.ceo.pm .pmc-foot-note b { color: var(--ceo-ink-2) !important; font-weight: 500; }
+.ceo.pm .pmc-actions { display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; width: auto; }
+.ceo.pm .pmc-actions .ceo-btn { width: auto; height: 34px; }
+.ceo.pm .pmc-card.is-late .pmc-head { background: #fdf8f5; }
+@media (max-width: 1100px) {
+  .ceo.pm .pmc-body { grid-template-columns: minmax(0, 1fr); }
+  .ceo.pm .pmc-pieces { border-left: 0; border-top: 1px solid #f1ebdc; }
+}
+@media (max-width: 760px) {
+  .ceo.pm .pmc-head { gap: 10px 18px; padding: 12px 14px; }
+  .ceo.pm .pmc-tags { margin-left: 0; justify-content: flex-start; width: 100%; }
+  .ceo.pm .pmc-products, .ceo.pm .pmc-pieces { padding: 12px 14px; }
+  .ceo.pm .pmc-product { grid-template-columns: 52px minmax(0, 1fr); }
+  .ceo.pm .pmc-thumb { width: 52px; height: 68px; }
+  .ceo.pm .pmc-garments { grid-column: 1 / -1; padding-left: 0; border-left: 0; padding-top: 8px; border-top: 1px dashed #f1ebdc; }
+  .ceo.pm .pmc-foot { padding: 10px 14px; }
+  .ceo.pm .pmc-actions { width: 100%; justify-content: flex-start; }
+}
