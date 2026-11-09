@@ -1,12 +1,12 @@
 /* The stage pill in the brand look (ComponentStageBadge look="brand"). */
 .sb-stage-pill {
   display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px;
-  font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; letter-spacing: .01em;
+  font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap; letter-spacing: .01em;
 }
 .sb-stage-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.sb-stage-pill.is-done    { background: #ecebe6 !important; color: #34312a !important; }
+.sb-stage-pill.is-done    { background: #efe3bf !important; color: #6a4f0c !important; }
 .sb-stage-pill.is-done::before { content: "\2713"; width: auto; height: auto; background: none; font-size: 11px; }
-.sb-stage-pill.is-active  { background: #f6efdf !important; color: #7a5c14 !important; }
-.sb-stage-pill.is-vendor  { background: #f4ebe2 !important; color: #85582d !important; }
-.sb-stage-pill.is-waiting { background: #f2f1ed !important; color: #6f6a61 !important; }
-.sb-stage-pill.is-problem { background: #f8ece7 !important; color: #a5553a !important; }
+.sb-stage-pill.is-active  { background: #fdf1dc !important; color: #9a5a00 !important; }
+.sb-stage-pill.is-vendor  { background: #f9e7d9 !important; color: #8a4b22 !important; }
+.sb-stage-pill.is-waiting { background: #f3efe4 !important; color: #736c5e !important; }
+.sb-stage-pill.is-problem { background: #fcebe7 !important; color: #b0442c !important; }

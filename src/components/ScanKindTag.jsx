@@ -9,7 +9,7 @@ export default function ScanKindTag({ kind, look }) {
   const external = kind === "external";
   if (look === "brand") {
     return (
-      <span style={{ display: "inline-block", fontSize: "10.5px", fontWeight: 600, lineHeight: 1, letterSpacing: "0.03em", padding: "4px 8px", borderRadius: "999px", textTransform: "uppercase", whiteSpace: "nowrap", color: external ? "#85582d" : "#5a5448", backgroundColor: external ? "#f4ebe2" : "#f2f1ed" }}>
+      <span style={{ display: "inline-block", fontSize: "10.5px", fontWeight: 600, lineHeight: 1, letterSpacing: "0.03em", padding: "4px 8px", borderRadius: "999px", textTransform: "uppercase", whiteSpace: "nowrap", color: external ? "#8a4b22" : "#7e5f10", backgroundColor: external ? "#f9e7d9" : "#fbf4e0" }}>
         {external ? "External / Vendor" : "Internal Scan"}
       </span>
     );

@@ -14,7 +14,7 @@ export default function FactoryBadge({ factory, look }) {
   // The brand look: a quiet neutral tag (the older dashboards keep blue / purple).
   if (look === "brand") {
     return (
-      <span style={{ display: "inline-block", marginLeft: 6, padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap", background: two ? "#efe9dc" : "#f1f0ec", color: "#5a5448" }}>
+      <span style={{ display: "inline-block", marginLeft: 6, padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap", background: two ? "#efe3bf" : "#f6efdf", color: "#6a4f0c" }}>
         {text}
       </span>
     );

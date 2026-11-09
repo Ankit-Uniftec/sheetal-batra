@@ -87,6 +87,8 @@ const getVendorTagInfo = (comp, movements = []) => {
 // vendor tag rule and the Half Made actions are unchanged.
 
 const DONE_STAGES = new Set(["production_complete", "packaging_dispatch", "dispatched"]);
+// Shorter names for the two longest stages on the journey line (full name on hover).
+const SHORT_STEP = { "Production Completed": "Completed", "Production Complete": "Completed", "Packaging & Dispatch": "Packing & Dispatch" };
 const STOPPED_STAGES = new Set(["disposed", "scrapped"]);
 const STEP_LIST = STAGE_GROUPS; // ordered: Order Received … Packaging & Dispatch
 
@@ -400,16 +402,25 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                   const sinceStart = firstScan ? dayCount(firstScan, finishedAt || new Date()) : null;
                   return (
                     <>
+                      {/* The piece, where it is, and what can be done with it */}
                       <div className="cjm-comp-head">
                         <div className="cjm-comp-id">
                           <span className="cjm-comp-name">{c.component_label || c.component_type}</span>
                           <span className="cjm-comp-bc">{c.barcode}</span>
                         </div>
-                        {/* Shared badge so the stage text (and the re-journey
-                            pass number) matches every dashboard. */}
-                        <ComponentStageBadge comp={badgeComp} look="brand" />
-                        {st.vendor && (
-                          <span className={`cjm-vendor-now ${st.vendor.overdue ? "cjm-overdue" : ""}`}>{st.vendor.text}</span>
+                        <div className="cjm-comp-tags">
+                          {/* Shared badge so the stage text (and the re-journey pass number) matches every dashboard. */}
+                          <ComponentStageBadge comp={badgeComp} look="brand" />
+                          {st.vendor && <span className={`cjm-vendor-now ${st.vendor.overdue ? "cjm-overdue" : ""}`}>{st.vendor.text}</span>}
+                        </div>
+                        {/* Half Made Inventory (Release 15): production only. */}
+                        {isProductionRole(me.role) && !c.cancelled_at && c.current_stage !== "dispatched" && (
+                          <div className="cjm-hm-actions">
+                            <button type="button" className="cjm-hm-btn" onClick={() => openHalfMade("move", c)}>Move to Half Made</button>
+                            {c.current_stage === "order_received" && !c.is_active && (
+                              <button type="button" className="cjm-hm-btn is-primary" onClick={() => openHalfMade("use", c)}>Use Half Made piece</button>
+                            )}
+                          </div>
                         )}
                       </div>
 
@@ -424,17 +435,46 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         </div>
                       )}
 
-                      {/* The stage map: every step in order, each saying whether
-                          it is done (with the date and the time spent), where the
-                          piece is now, not needed, or still to come. */}
-                      <section className="cjm-section cjm-section-first">
+                      {/* Key numbers */}
+                      <div className="cjm-facts">
+                        <div className="cjm-fact">
+                          <span>{st.done ? "Took" : "Since First Scan"}</span>
+                          <b>{sinceStart == null ? "Not started" : plural(sinceStart, "day")}</b>
+                          <small>{firstScan ? `Started ${formatDate(firstScan)}` : "\u00a0"}</small>
+                        </div>
+                        <div className="cjm-fact">
+                          <span>At This Stage</span>
+                          <b>{st.done || st.stopped || !stageSince ? "—" : fmtSpan(new Date() - new Date(stageSince))}</b>
+                          <small>{!st.done && !st.stopped && stageSince ? `Since ${formatDate(stageSince)}` : st.done ? "Finished" : "\u00a0"}</small>
+                        </div>
+                        <div className="cjm-fact">
+                          <span>Progress</span>
+                          <b>{st.stopped ? "—" : `${st.pct}%`}</b>
+                          <small>{st.label}</small>
+                        </div>
+                        <div className="cjm-fact">
+                          <span>Vendor Trips</span>
+                          <b>{movements.length}</b>
+                          <small>{movements.length ? `${movements.filter((m) => m.status === "returned").length} returned` : "None"}</small>
+                        </div>
+                        <div className="cjm-fact">
+                          <span>Re-work Passes</span>
+                          <b>{rework}</b>
+                          <small>{plural(transitions.length, "scan")}{manual ? ` · ${manual} manual` : ""}</small>
+                        </div>
+                      </div>
+
+                      {/* The journey line: every stage in order as a node on one
+                          line, saying whether it is done (with the date and the
+                          time spent), where the piece is now, not needed, or to come. */}
+                      <section className="cjm-section cjm-journey">
                         <div className="cjm-section-row">
-                          <p className="cjm-section-title">Stages</p>
+                          <p className="cjm-section-title">Journey</p>
                           <span className="cjm-legend">
-                            <span><i className="is-done" />Done</span><span><i className="is-current" />Now</span><span><i className="is-skipped" />Not needed</span><span><i className="is-todo" />To come</span>
+                            <span><i className="is-done" />Done</span><span><i className="is-current" />Now</span><span><i className="is-skipped" />Skipped (not needed)</span><span><i className="is-todo" />To come</span>
                           </span>
                         </div>
-                        <ol className="cjm-map">
+                        <ol className="cjm-track" style={{ "--steps": STEP_LIST.length }}>
                           {(() => {
                             const stats = stageStats(transitions, movements, c);
                             let nextMarked = false;
@@ -445,70 +485,26 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                               const state = isCurrent ? "current" : isDone ? (skipped ? "skipped" : "done") : "todo";
                               const isNext = state === "todo" && !nextMarked && !st.stopped;
                               if (isNext) nextMarked = true;
+                              const finished = state === "current" && st.done;
                               const info = stats[i];
-                              const word = state === "current" ? (st.done ? "Finished" : c.is_outside_wh ? "Now · at vendor" : "Now")
-                                : state === "done" ? "Done" : state === "skipped" ? "Not needed" : isNext ? "Up next" : "To come";
+                              const word = state === "current" ? (finished ? "Finished" : c.is_outside_wh ? "At vendor" : "Now")
+                                : state === "done" ? "Done" : state === "skipped" ? "Skipped" : isNext ? "Up next" : "To come";
+                              const foot = state === "done" && info?.firstAt ? `${shortDate(info.firstAt)}${info.ms >= 60000 ? ` · ${fmtSpan(info.ms)}` : ""}`
+                                : state === "current" ? (finished ? (info?.firstAt ? shortDate(info.firstAt) : "") : st.notStarted ? "Waiting to start" : info?.ms >= 60000 ? `Here ${fmtSpan(info.ms)}` : "Just arrived")
+                                  : "";
                               return (
-                                <li key={g.key} className={`cjm-stop is-${state}${isNext ? " is-next" : ""}${state === "current" && st.done ? " is-finished" : ""}`}>
-                                  <span className="cjm-stop-top">
-                                    <span className="cjm-stop-num">{state === "done" ? "✓" : i === 0 ? "•" : i}</span>
-                                    <span className="cjm-stop-word">{word}</span>
-                                  </span>
-                                  <span className="cjm-stop-name">{g.label}</span>
-                                  <span className="cjm-stop-foot">
-                                    {state === "done" && info?.firstAt && <>{shortDate(info.firstAt)}{info.ms >= 60000 ? ` · ${fmtSpan(info.ms)}` : ""}</>}
-                                    {state === "current" && (st.done
-                                      ? (info?.firstAt ? `Finished ${shortDate(info.firstAt)}` : "Finished")
-                                      : st.notStarted ? "Waiting to start"
-                                      : info?.ms >= 60000 ? `Here ${fmtSpan(info.ms)}` : "Just arrived")}
-                                    {state === "skipped" && "Skipped for this piece"}
-                                    {state === "todo" && "\u00a0"}
-                                  </span>
-                                  {info?.vendor && (state === "done" || state === "current") && <span className="cjm-stop-vendor">{info.vendor}</span>}
+                                <li key={g.key} className={`cjm-node is-${state}${isNext ? " is-next" : ""}${finished ? " is-finished" : ""}`}>
+                                  <span className="cjm-node-dot">{state === "done" || finished ? "✓" : state === "skipped" ? "–" : i + 1}</span>
+                                  <span className="cjm-node-name" title={g.label}>{SHORT_STEP[g.label] || g.label}</span>
+                                  <span className="cjm-node-word">{word}</span>
+                                  {foot && <span className="cjm-node-foot">{foot}</span>}
+                                  {info?.vendor && (state === "done" || state === "current") && <span className="cjm-node-vendor">{info.vendor}</span>}
                                 </li>
                               );
                             });
                           })()}
                         </ol>
                       </section>
-
-                      {/* Key facts */}
-                      <div className="cjm-facts">
-                        <div className="cjm-fact">
-                          <span>{st.done ? "Took" : "Since First Scan"}</span>
-                          <b>{sinceStart == null ? "Not started" : plural(sinceStart, "day")}</b>
-                          {firstScan && <small>Started {formatDate(firstScan)}</small>}
-                        </div>
-                        <div className="cjm-fact">
-                          <span>At This Stage</span>
-                          <b>{st.done || st.stopped || !stageSince ? "—" : fmtSpan(new Date() - new Date(stageSince))}</b>
-                          {!st.done && !st.stopped && stageSince && <small>Since {formatDate(stageSince)}</small>}
-                        </div>
-                        <div className="cjm-fact">
-                          <span>Vendor Trips</span>
-                          <b>{movements.length}</b>
-                          {movements.length > 0 && <small>{movements.filter((m) => m.status === "returned").length} returned</small>}
-                        </div>
-                        <div className="cjm-fact">
-                          <span>Re-work Passes</span>
-                          <b>{rework}</b>
-                          <small>{plural(transitions.length, "scan")}{manual ? ` · ${manual} manual` : ""}</small>
-                        </div>
-                      </div>
-
-                      {/* Half Made Inventory (Release 15) — production only. */}
-                      {isProductionRole(me.role) && !c.cancelled_at && c.current_stage !== "dispatched" && (
-                        <div className="cjm-hm-actions">
-                          <button type="button" className="cjm-hm-btn" onClick={() => openHalfMade("move", c)}>
-                            Move to Half Made
-                          </button>
-                          {c.current_stage === "order_received" && !c.is_active && (
-                            <button type="button" className="cjm-hm-btn" onClick={() => openHalfMade("use", c)}>
-                              Use Half Made piece
-                            </button>
-                          )}
-                        </div>
-                      )}
 
                       {/* Vendor trips — every time this piece left the warehouse */}
                       {movements.length > 0 && (
