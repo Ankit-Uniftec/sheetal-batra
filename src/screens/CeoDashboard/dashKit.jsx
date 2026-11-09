@@ -18,9 +18,9 @@ import {
 /** A file-name-safe version of a title. */
 export const slug = (t) => String(t || "export").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
-/** A small download button. */
+/** The download button. Same size as Filters and every other toolbar control. */
 export const CsvButton = ({ onClick, disabled, label = "Export CSV" }) => (
-  <button type="button" className="ceo-btn is-small" onClick={onClick} disabled={disabled}><Icon name="download" />{label}</button>
+  <button type="button" className="ceo-btn" onClick={onClick} disabled={disabled}><Icon name="download" />{label}</button>
 );
 
 /** A small figure in a drawer, with its definition. */

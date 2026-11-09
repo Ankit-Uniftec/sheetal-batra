@@ -645,3 +645,12 @@
 .ceo .dash-tools .dash-tools-end { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .ceo .dash-tools .dash-tools-end:empty { display: none; }
 @media (max-width: 640px) { .ceo .dash-tools .dash-tools-end { margin-left: 0; } }
+
+/* One control height everywhere: buttons, dropdowns, status tabs and search
+   boxes are all 40px, so a toolbar never mixes sizes. Small buttons stay for
+   actions inside table rows. */
+.ceo .ceo-btn:not(.is-small), .ceo-pop-root .ceo-btn:not(.is-small) { height: 40px; }
+.ceo .ceo-select { height: 40px; }
+.ceo .ceo-seg { height: 40px; align-items: stretch; }
+.ceo .ceo-seg button { padding-top: 0; padding-bottom: 0; }
+.ceo .ceo-top .ceo-icon-btn, .ceo .comms-cal-head .ceo-icon-btn { width: 40px; height: 40px; }
