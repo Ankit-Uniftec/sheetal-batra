@@ -251,12 +251,14 @@ export default function PeoplePage({ ctx }) {
             <Table rowKey={(r) => r.name} rows={data.everyone.slice((page - 1) * 15, page * 15)} empty="No scans in this period."
               onRow={(r) => openPieces({ title: `Scanned by ${r.name}`, sub: periodName, pieces: piecesOf(r.pieces) })}
               columns={[
-                { key: "name", label: "Person", render: (r) => <span className="pm-cell"><b>{r.name}</b><small>{[...r.stations].join(", ") || "No station"}</small></span> },
+                { key: "name", label: "Person", render: (r) => <b>{r.name}</b> },
+                { key: "st", label: "Stations", render: (r) => <span className="pm-wrap">{[...r.stations].join(", ") || "No station"}</span> },
                 { key: "scans", label: "Scans", right: true, render: (r) => num(r.value) },
                 { key: "pieces", label: "Pieces", right: true, hide: true, render: (r) => num(r.pieces.size) },
                 { key: "ontime", label: "On Time", right: true, render: (r) => (r.timed ? `${pct(r.onTime, r.timed)}%` : "–") },
                 { key: "manual", label: "Manual", right: true, hide: true, render: (r) => num(r.manual) },
-                { key: "last", label: "Last Scan", right: true, lap: true, render: (r) => (r.last ? (days === 1 ? new Date(r.last).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : formatDate(r.last)) : "–") },
+                { key: "first", label: "First Scan", right: true, render: (r) => (r.first !== Infinity ? (days === 1 ? new Date(r.first).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : formatDate(r.first)) : "–") },
+                { key: "last", label: "Last Scan", right: true, render: (r) => (r.last ? (days === 1 ? new Date(r.last).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : formatDate(r.last)) : "–") },
               ]} />
             <Pager page={page} pages={Math.ceil(data.people.length / 15)} onChange={setPage} />
           </Card>

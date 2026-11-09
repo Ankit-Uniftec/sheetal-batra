@@ -3,7 +3,7 @@ import { fmtDate as formatDate } from "./pmModel";
 import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, Pager, num } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
-import { Dots, DueCell, exportOrders, OrderCell } from "./PmCommon";
+import { Dots, exportOrders, orderColumns } from "./PmCommon";
 import { DAY, channelOf, dueDay, hasPromise, isUrgent, localDay, pct, plural, readyToDispatch } from "./pmModel";
 import { GOLD, StackBars } from "./PmQuality";
 import { BoxesList } from "./PmRecords";
@@ -162,11 +162,10 @@ export default function DispatchPage({ ctx }) {
         </Card>
 
         <Card span={12} title="Dispatch Queue" sub={`${QUEUE_SORTS.find((s) => s.value === sort).label} first. Click an order to open it.`}>
-          <Table rowKey={(r) => r.o.id} rows={data.ready.slice((page - 1) * PAGE, page * PAGE)} onRow={(r) => openOrder(r.o)} empty="Nothing is waiting to be dispatched." columns={[
-            { key: "order", label: "Order", render: (r) => <OrderCell o={r.o} ctx={ctx} /> },
-            { key: "wait", label: "Waiting", right: true, render: (r) => <span className="pm-cell is-right"><b className={r.waitDays >= 2 ? "pm-late" : undefined}>{r.waitDays ? plural(r.waitDays, "day") : "Today"}</b><small>{r.partial ? "Part already sent" : `Ready since ${formatDate(new Date(r.since))}`}</small></span> },
-            { key: "due", label: "Due Date", right: true, hide: true, render: (r) => <DueCell o={r.o} /> },
-          ]} />
+          <Table rowKey={(r) => r.o.id} rows={data.ready.slice((page - 1) * PAGE, page * PAGE)} onRow={(r) => openOrder(r.o)} empty="Nothing is waiting to be dispatched." columns={orderColumns(ctx, [
+            { key: "wait", label: "Waiting", right: true, render: (r) => <b className={r.waitDays >= 2 ? "pm-late" : undefined}>{r.waitDays ? plural(r.waitDays, "day") : "Today"}</b> },
+            { key: "since", label: "Ready Since", right: true, render: (r) => (r.partial ? "Part already sent" : formatDate(new Date(r.since))) },
+          ], (r) => r.o)} />
           <Pager page={page} pages={Math.ceil(data.ready.length / PAGE)} onChange={setPage} />
           {data.ready.length > 0 && <div className="gm-actions pmv-under"><button type="button" className="ceo-btn" onClick={() => exportOrders("dispatch queue", readyOrders, ctx)}>Export CSV</button></div>}
         </Card>

@@ -209,10 +209,13 @@ export default function VendorsPage({ ctx }) {
 
             <Card span={12} title="Overdue Right Now" sub="Longest overdue first. Click a row to open the order.">
               <Table rowKey={(m) => m.id} rows={data.overdue.slice(0, 10)} onRow={(m) => onOrderClick(m.order_id)} empty="Nothing is overdue at a vendor." columns={[
-                { key: "piece", label: "Piece", render: (m) => <span className="pm-cell"><b><span className="pm-code">{m.barcode || "–"}</span></b><small>{m.order_no}</small></span> },
-                { key: "vendor", label: "Vendor", render: (m) => <span className="pm-cell"><b>{vendorOf(m)}</b><small>{m.stageLabel}</small></span> },
-                { key: "sent", label: "Sent", right: true, hide: true, render: (m) => (m.exit_scan_at ? formatDate(m.exit_scan_at) : "–") },
-                { key: "due", label: "Overdue", right: true, render: (m) => <span className="pm-cell is-right"><b className="pm-late">{plural(m.daysOverdue || 0, "day")}</b><small>Due {m.return_date ? formatDate(m.return_date) : "–"}</small></span> },
+                { key: "bc", label: "Barcode", render: (m) => <span className="pm-code">{m.barcode || "–"}</span> },
+                { key: "order", label: "Order", render: (m) => m.order_no || "–" },
+                { key: "vendor", label: "Vendor", render: (m) => <b>{vendorOf(m)}</b> },
+                { key: "for", label: "Sent For", render: (m) => m.stageLabel || "–" },
+                { key: "sent", label: "Sent", right: true, render: (m) => (m.exit_scan_at ? formatDate(m.exit_scan_at) : "–") },
+                { key: "by", label: "Return By", right: true, render: (m) => (m.return_date ? formatDate(m.return_date) : "–") },
+                { key: "due", label: "Overdue", right: true, render: (m) => <b className="pm-late">{plural(m.daysOverdue || 0, "day")}</b> },
               ]} />
               {data.overdue.length > 0 && (
                 <div className="gm-actions pmv-under">

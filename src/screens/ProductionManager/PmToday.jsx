@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { fmtDate as formatDate } from "./pmModel";
 import { Columns, Empty, Icon, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
-import { Card, Dots, DueCell, Loading, OrderCell, Table, Tile } from "./PmCommon";
+import { Card, Dots, Loading, orderColumns, Table, Tile } from "./PmCommon";
 import { ActionsCard, BriefingCard, useInsights } from "./PmBriefing";
 import {
   FLOOR_STEPS, atVendor, atWh2, channelOf, dayKey, daysLeft, floorKey, hasPromise, isDormant, isLate, isOwnTrip, isRunning, isStuck, isUrgent, pct, pieceState,
@@ -293,10 +293,7 @@ export default function TodayPage({ ctx }) {
         </Card>
 
         <Card span={7} md={12} title="Due Next 7 Days" sub="Soonest first. Click an order to open it.">
-          <Table rowKey={(r) => r.id} rows={dueWeek.slice(0, 8)} onRow={ctx.openOrder} empty="Nothing due in the next 7 days." columns={[
-            { key: "order", label: "Order", render: (o) => <OrderCell o={o} ctx={ctx} /> },
-            { key: "due", label: "Due Date", right: true, render: (o) => <DueCell o={o} /> },
-          ]} />
+          <Table rowKey={(r) => r.id} rows={dueWeek.slice(0, 8)} onRow={ctx.openOrder} empty="Nothing due in the next 7 days." columns={orderColumns(ctx)} />
           {dueWeek.length > 8 && <button type="button" className="ceo-link pm-more" onClick={() => openOrders({ title: "Due This Week", sub: "Due in the next 7 days, still in production", orders: dueWeek })}>See all {num(dueWeek.length)}<Icon name="chevron" /></button>}
         </Card>
       </div>

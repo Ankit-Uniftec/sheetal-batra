@@ -638,3 +638,23 @@
   .ceo.pm .pmo-find { grid-template-columns: 1fr; }
   .ceo.pm .pmo-pieces { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   Every table on this dashboard reads like the Orders table: one line per
+   cell, every column shown on every screen, and a visible scroll bar when the
+   table is wider than its card. Long text (reasons, products) keeps to two
+   lines at most. */
+.ceo.pm .ceo-table-wrap, .ceo.pm .pmo-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #cfae4e #f7f1e3; }
+.ceo.pm .ceo-table-wrap::-webkit-scrollbar, .ceo.pm .pmo-wrap::-webkit-scrollbar { height: 10px; }
+.ceo.pm .ceo-table-wrap::-webkit-scrollbar-track, .ceo.pm .pmo-wrap::-webkit-scrollbar-track { background: #f7f1e3; border-radius: 0 0 13px 13px; }
+.ceo.pm .ceo-table-wrap::-webkit-scrollbar-thumb, .ceo.pm .pmo-wrap::-webkit-scrollbar-thumb { background: #d9c27e; border-radius: 10px; border: 2px solid #f7f1e3; }
+.ceo.pm .ceo-table-wrap::-webkit-scrollbar-thumb:hover, .ceo.pm .pmo-wrap::-webkit-scrollbar-thumb:hover { background: #b8922e; }
+.ceo.pm .ceo-table-wrap .ceo-table { min-width: 100%; width: max-content; }
+.ceo.pm .ceo-table-wrap .ceo-table th { padding: 11px 14px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #8a7a55 !important; background: #f8f2e2; white-space: nowrap !important; }
+.ceo.pm .ceo-table-wrap .ceo-table td { padding: 12px 14px; white-space: nowrap; }
+.ceo.pm .ceo-table-wrap .ceo-table .pm-cell b, .ceo.pm .ceo-table-wrap .ceo-table .pm-cell small { white-space: nowrap; }
+.ceo.pm .ceo-table .ceo-hide-sm, .ceo.pm .ceo-table .ceo-hide-lap, .ceo.pm .ceo-table .ceo-hide-tab { display: table-cell; }
+.ceo.pm .ceo-table .pm-wrap { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; min-width: 200px; max-width: 300px; line-height: 1.4; }
+@media (max-width: 640px) {
+  .ceo.pm .ceo-table-wrap .ceo-table td, .ceo.pm .ceo-table-wrap .ceo-table th { padding-left: 11px; padding-right: 11px; }
+}

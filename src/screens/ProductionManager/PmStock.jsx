@@ -235,9 +235,14 @@ export default function StockPage({ ctx }) {
         <Card span={12} title="Half Made Pieces" sub={halfMade ? `${num(hmOpen.length)} waiting to be finished · ${num((halfMade || []).length)} recorded in all` : undefined}>
           {!halfMade ? <Loading /> : !(halfMade || []).length ? <Empty text="No Half Made pieces recorded yet." /> : (
             <Table rowKey={(h) => h.id} rows={halfMade.slice(0, 10)} empty="None." columns={[
-              { key: "p", label: "Piece", render: (h) => <span className="pm-cell"><b>{h.product_name || "–"} · {h.component_label || h.component_type}</b><small>{[h.size && `Size ${h.size}`, h.colors, h.source_order_no && `From ${h.source_order_no}`].filter(Boolean).join(" · ")}</small></span> },
-              { key: "r", label: "Reason", hide: true, render: (h) => h.reason || "–" },
-              { key: "s", label: "Status", right: true, render: (h) => <span className="pm-cell is-right"><b>{String(h.status || "").replace(/_/g, " ").replace(/^./, (x) => x.toUpperCase())}</b><small>{h.used_order_no ? `Used for ${h.used_order_no}` : h.location || ""}</small></span> },
+              { key: "prod", label: "Product", render: (h) => <b>{h.product_name || "–"}</b> },
+              { key: "p", label: "Piece", render: (h) => h.component_label || h.component_type || "–" },
+              { key: "size", label: "Size", render: (h) => h.size || "–" },
+              { key: "col", label: "Colour", render: (h) => h.colors || "–" },
+              { key: "from", label: "From Order", render: (h) => h.source_order_no || "–" },
+              { key: "r", label: "Reason", render: (h) => <span className="pm-wrap">{h.reason || "–"}</span> },
+              { key: "s", label: "Status", render: (h) => String(h.status || "").replace(/_/g, " ").replace(/^./, (x) => x.toUpperCase()) || "–" },
+              { key: "loc", label: "Where / Used For", render: (h) => (h.used_order_no ? `Used for ${h.used_order_no}` : h.location || "–") },
             ]} />
           )}
         </Card>

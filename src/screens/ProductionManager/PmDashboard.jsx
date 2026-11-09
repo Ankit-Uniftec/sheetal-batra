@@ -22,7 +22,7 @@ import { loadLedger, loadSales, loadStockOrders, loadStockRoomCatalogue } from "
 import { getStagesOutsideLabel } from "../../utils/barcodeService";
 import { fetchAllRowsParallel } from "../../utils/fetchAllRowsParallel";
 import Logo from "../../images/logo.png";
-import { CalendarIcon, Chips, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, Thumb, num } from "../CeoDashboard/CeoUi";
+import { CalendarIcon, Chips, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, PageHead, Thumb, num } from "../CeoDashboard/CeoUi";
 import { Stat } from "../CeoDashboard/dashKit";
 import "../CeoDashboard/CeoMakeover.css";
 import "../GMDashboard/GmMakeover.css";
@@ -58,7 +58,8 @@ import StockPage from "./PmStock";
 
 // Every order action (journey, PDF, edit, priority, overrides, complete,
 // cancel) lives on the order itself, so the menu holds pages to read only.
-// Requests & Overrides and the Profile open as side panels over any page.
+// Requests & Overrides is a page of its own (under Decide); the Profile opens
+// as a side panel over any page.
 const NAV = [
   {
     group: "Run the Floor",
@@ -85,9 +86,10 @@ const NAV = [
 const TAB_ALIASES = {
   overview: "today", production: "floor", qc_history: "quality", rejourneys: "quality", delivery_report: "dispatch",
   dispatch_report: "dispatch", vendor_delays: "vendors", calendar: "planning", staff: "people", cancellations: "orders",
-  approvals: "today", overrides: "today", override_log: "today", replacements: "today", profile: "today",
+  approvals: "requests", overrides: "requests", override_log: "requests", replacements: "requests", profile: "today",
 };
-const PANEL_TABS = { approvals: "overrides", overrides: "overrides", override_log: "log", replacements: "replacements" };
+// Which part of Requests & Overrides an old link opens on.
+const REQUEST_VIEWS = { approvals: "overrides", overrides: "overrides", override_log: "log", replacements: "replacements" };
 const CalIcon = () => <CalendarIcon />;
 
 // The slower data sets Today reads, kept in the snapshot so it opens complete.
@@ -162,7 +164,7 @@ export default function PmDashboard() {
   const [prioritising, setPrioritising] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [busy, setBusy] = useState(null);
-  const [requests, setRequests] = useState(null);   // { view } when the Requests & Overrides panel is open
+  const [requestsView, setRequestsView] = useState(() => REQUEST_VIEWS[rawTab] || "overrides"); // the part of Requests & Overrides to show
   const [overriding, setOverriding] = useState(null); // the order whose pieces are being moved
   const [overrideLog, setOverrideLog] = useState(null); // the order whose override history is open
   const [profileOpen, setProfileOpen] = useState(false);
@@ -177,10 +179,10 @@ export default function PmDashboard() {
     setPeriodSel(v);
     try { sessionStorage.setItem(PERIOD_KEY, JSON.stringify(v)); } catch { /* storage blocked */ }
   };
-  // Old links to Approvals, Overrides or Profile open their panel over Today;
-  // an old Cancellations link opens Orders on the Cancelled tab.
+  // Old links to Approvals or Overrides open that part of Requests & Overrides;
+  // Profile opens its panel over Today; Cancellations opens Orders on the Cancelled tab.
   useEffect(() => {
-    if (PANEL_TABS[rawTab]) setRequests({ view: PANEL_TABS[rawTab] });
+    if (REQUEST_VIEWS[rawTab]) setRequestsView(REQUEST_VIEWS[rawTab]);
     if (rawTab === "profile") setProfileOpen(true);
     if (rawTab === "cancellations") setOrdersTab("cancelled");
   }, [rawTab]);
@@ -261,11 +263,17 @@ export default function PmDashboard() {
   // Today needs the requests, the vendor trips and a week of scans.
   useEffect(() => { if (!loading) { need("waiting"); need("movements"); need("scans8"); need("qc8"); need("designs"); } }, [loading, need]);
 
-  const openRequests = useCallback((view = "overrides") => setRequests({ view }), []);
+  const openRequests = useCallback((view = "overrides") => { setRequestsView(view); setActiveTab("requests"); setNavOpen(false); setStack([]); }, [setActiveTab]);
   /** Re-read what is waiting for a decision (after the Requests panel closes). */
   const refreshWaiting = useCallback(() => {
     loadWaiting().then((rows) => setLazy((st) => ({ ...st, waiting: { loading: false, rows } }))).catch(() => {});
   }, []);
+  // Leaving Requests & Overrides refreshes the waiting counts in the menu.
+  const wasRequests = useRef(false);
+  useEffect(() => {
+    if (wasRequests.current && activeTab !== "requests") refreshWaiting();
+    wasRequests.current = activeTab === "requests";
+  }, [activeTab, refreshWaiting]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -393,7 +401,7 @@ export default function PmDashboard() {
 
   const handleLogout = async () => { await clearSnapshots(); await supabase.auth.signOut(); navigate("/login"); };
 
-  const pages = NAV.flatMap((g) => g.items);
+  const pages = [...NAV.flatMap((g) => g.items), { id: "requests", label: "Requests & Overrides", icon: "edit" }];
   const ctx = {
     profile, email: profile?.email || "", orders, ordersById, components, componentsByOrder, piecesById, vendorMap, halfMade,
     lazy, need, syncedAt, period,
@@ -506,7 +514,7 @@ export default function PmDashboard() {
           ))}
           <div className="ceo-nav-group">
             <span className="ceo-label ceo-nav-title">Decide</span>
-            <button type="button" className="ceo-nav-item" onClick={() => { setNavOpen(false); setRequests({ view: "overrides" }); }}>
+            <button type="button" className="ceo-nav-item" aria-current={activeTab === "requests" ? "page" : undefined} onClick={() => openRequests("overrides")}>
               <Icon name="edit" />Requests &amp; Overrides{waitingCount > 0 && <b className="pm-nav-count">{num(waitingCount)}</b>}
             </button>
           </div>
@@ -566,6 +574,12 @@ export default function PmDashboard() {
                 {activeTab === "dispatch" && <DispatchPage ctx={ctx} />}
                 {activeTab === "people" && <PeoplePage ctx={ctx} />}
                 {activeTab === "stock" && <StockPage ctx={ctx} />}
+                {activeTab === "requests" && (
+                  <div className="ceo-page">
+                    <PageHead title="Requests & Overrides" desc="Stage change requests from the floor, replacement requests, moving pieces by override, and the record of every override." />
+                    <RequestsPanel key={requestsView} ctx={ctx} initialView={requestsView} />
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -590,11 +604,6 @@ export default function PmDashboard() {
         )}
         {top && top.type === "order" && ordersById[top.id] && (
           <OrderDrawer order={ordersById[top.id]} ctx={ctx} onClose={closeAll} onBack={back} />
-        )}
-        {requests && (
-          <Drawer wide title="Requests & Overrides" sub="Stage change requests, replacements, moving pieces by override, and the record of every override" onClose={() => { setRequests(null); refreshWaiting(); }}>
-            <RequestsPanel ctx={ctx} initialView={requests.view} />
-          </Drawer>
         )}
         {overriding && (
           <Drawer wide title="Move or Override Pieces" sub={`${overriding.order_no} · choose a piece, then the override`} onClose={() => { const id = overriding.id; setOverriding(null); reloadOrder(id); }}>

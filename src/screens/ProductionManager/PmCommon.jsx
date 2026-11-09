@@ -31,6 +31,30 @@ export const Dots = () => <span className="pm-dots" role="status" aria-label="Lo
 /** A loading message with the moving dots, where a list or chart will appear. */
 export const Loading = ({ text = "Loading" }) => <div className="ceo-empty pm-loading" role="status"><span>{text}</span><Dots /></div>;
 
+/** The order number with an Urgent tag (the client and products have their own columns). */
+export const OrderNo = ({ o }) => <span className="pm-cell"><b>{o.order_no}{isUrgent(o) && <i className="pm-tag is-urgent">Urgent</i>}</b></span>;
+const mode = (o) => { const m = String(o.mode_of_delivery || "").trim(); return m ? m.replace(/\b\w/g, (x) => x.toUpperCase()) : "–"; };
+const muted = (v) => v || <span className="pm-muted">–</span>;
+
+/**
+ * The columns every order list shares, so they all read the same:
+ * order, client, products, channel, status, pieces, order date, due date,
+ * client delivery date and delivery mode. `extra` columns go after Status.
+ */
+export const orderColumns = (ctx, extra = [], pick = (r) => r) => [
+  { key: "order", label: "Order", render: (r) => <OrderNo o={pick(r)} /> },
+  { key: "client", label: "Client", render: (r) => muted(clientOf(pick(r), ctx.vendorMap)) },
+  { key: "prod", label: "Products", render: (r) => <span className="pm-wrap">{muted(productsOf(pick(r)))}</span> },
+  { key: "status", label: "Status", render: (r) => orderStatus(pick(r), ctx.componentsByOrder[pick(r).id]) },
+  ...extra,
+  { key: "pieces", label: "Pieces", render: (r) => piecesLine(ctx.componentsByOrder[pick(r).id]) },
+  { key: "chan", label: "Channel", render: (r) => channelOf(pick(r)) },
+  { key: "od", label: "Order Date", right: true, render: (r) => formatDate(pick(r).created_at) },
+  { key: "due", label: "Due Date", right: true, render: (r) => <DueCell o={pick(r)} /> },
+  { key: "dd", label: "Delivery Date", right: true, render: (r) => (pick(r).delivery_date ? formatDate(pick(r).delivery_date) : "–") },
+  { key: "mode", label: "Delivery Mode", render: (r) => mode(pick(r)) },
+];
+
 /** Order number with the client and products under it. */
 export function OrderCell({ o, ctx }) {
   const who = clientOf(o, ctx?.vendorMap);
@@ -205,11 +229,7 @@ export function OrdersTable({ ctx, orders, title, stats = true, sort = "due", em
         rows={sorted.slice((page - 1) * PAGE, page * PAGE)}
         onRow={ctx.openOrder}
         empty={orders.length ? "No orders match these filters." : empty}
-        columns={[
-          { key: "order", label: "Order", render: (o) => <OrderCell o={o} ctx={ctx} /> },
-          { key: "status", label: "Status", hide: true, render: (o) => <span className="pm-cell"><b>{orderStatus(o, ctx.componentsByOrder[o.id])}</b><small>{piecesLine(ctx.componentsByOrder[o.id])}</small></span> },
-          { key: "due", label: "Due Date", right: true, render: (o) => <DueCell o={o} /> },
-        ]}
+        columns={orderColumns(ctx)}
       />
       <Pager page={page} pages={Math.ceil(sorted.length / PAGE)} onChange={setPage} />
     </>
@@ -290,15 +310,16 @@ export function PiecesTable({ ctx, pieces: all, title, stats = true, empty = "No
         onRow={(c) => ctx.ordersById[c.order_id] && ctx.openOrder(ctx.ordersById[c.order_id])}
         empty={all.length ? "No pieces match these filters." : empty}
         columns={[
-          { key: "piece", label: "Piece", render: (c) => <span className="pm-cell"><b>{pieceName(c)} <span className="pm-code">{c.barcode}</span></b><small>{clientOf(ctx.ordersById[c.order_id] || {}, ctx.vendorMap) || c.order_no}</small></span> },
-          { key: "stage", label: "Stage", hide: true, render: (c) => <span className="ceo-keep"><ComponentStageBadge comp={c} /></span> },
-          {
-            key: "age", label: "At Stage", right: true, render: (c) => {
-              const od = overBy(c);
-              const at = daysAtStage(c);
-              return <span className="pm-cell is-right"><b>{at == null ? "–" : plural(at, "day")}</b>{od > 0 && <small className="pm-late">{plural(od, "day")} over limit</small>}</span>;
-            },
-          },
+          { key: "piece", label: "Piece", render: (c) => <b>{pieceName(c)}</b> },
+          { key: "bc", label: "Barcode", render: (c) => <span className="pm-code">{c.barcode || "–"}</span> },
+          { key: "order", label: "Order", render: (c) => c.order_no || ctx.ordersById[c.order_id]?.order_no || "–" },
+          { key: "client", label: "Client", render: (c) => muted(clientOf(ctx.ordersById[c.order_id] || {}, ctx.vendorMap)) },
+          { key: "stage", label: "Stage", render: (c) => <span className="ceo-keep"><ComponentStageBadge comp={c} /></span> },
+          { key: "where", label: "Where", render: (c) => WHERE[pieceState(c)] && pieceState(c) === "at_vendor" ? `At ${c.vendor_name || "a vendor"}` : (WHERE[pieceState(c)] || "–") },
+          { key: "age", label: "At Stage", right: true, render: (c) => { const at = daysAtStage(c); return at == null ? "–" : plural(at, "day"); } },
+          { key: "over", label: "Over Limit", right: true, render: (c) => { const od = overBy(c); return od > 0 ? <span className="pm-late">{plural(od, "day")}</span> : <span className="pm-muted">–</span>; } },
+          { key: "due", label: "Due Date", right: true, render: (c) => { const o = ctx.ordersById[c.order_id]; return o ? <DueCell o={o} /> : "–"; } },
+          { key: "chan", label: "Channel", render: (c) => { const o = ctx.ordersById[c.order_id]; return o ? channelOf(o) : "–"; } },
         ]}
       />
       <Pager page={page} pages={Math.ceil(pieces.length / PAGE)} onChange={setPage} />
