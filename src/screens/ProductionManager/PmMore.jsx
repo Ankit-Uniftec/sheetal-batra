@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
-import CancellationsPanel from "../../components/CancellationsPanel";
 import { Icon, Insight, num } from "../CeoDashboard/CeoUi";
 import { DAY, channelOf, pieceState, plural } from "./pmModel";
+import { CancellationList } from "./PmRecords";
 
 // ============================================================
 // Cancellations (shown on the Orders page's Cancelled tab, with the full
@@ -56,7 +56,7 @@ export function CancellationInsights({ ctx, onReport }) {
 }
 
 /** The full cancellation report (trend, reasons, stages, list), for a side panel. */
-export const CancellationReport = () => <div className="pm-classic ceo-keep"><CancellationsPanel hideMoney /></div>;
+export const CancellationReport = ({ ctx }) => <div className="pm-records"><CancellationList ctx={ctx} /></div>;
 
 export function ProfileBody({ ctx }) {
   const p = ctx.profile || {};

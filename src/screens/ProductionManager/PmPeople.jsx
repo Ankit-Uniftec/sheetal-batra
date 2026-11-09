@@ -4,8 +4,8 @@ import { fmtDate as formatDate } from "./pmModel";
 import { Chips, Columns, Drawer, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, Pager, RankBars, barAxis, barMinWidth, fitBarLabel, labelRoom, num, textOn } from "../CeoDashboard/CeoUi";
 import { ScanReport } from "./PmApprovals";
 import { CsvButton, FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
-import { csvFromObjects } from "./PmCommon";
-import { DAY, pct, plural, todayStart } from "./pmModel";
+import { csvFromObjects, Dots, Loading } from "./PmCommon";
+import { pct, plural } from "./pmModel";
 import { coverKey, periodSteps, stepOf } from "./pmPeriod";
 
 // ============================================================
@@ -173,17 +173,17 @@ export default function PeoplePage({ ctx }) {
         </Drawer>
       )}
       <div className="ceo-tiles">
-        <Tile icon="trend" label="Active Scanners" value={loading ? "…" : num(data.people.length)} note={periodName}
+        <Tile icon="trend" label="Active Scanners" value={loading ? <Dots /> : num(data.people.length)} note={periodName}
           onClick={loading ? undefined : () => openPieces({ title: "Pieces Scanned", sub: periodName, pieces: piecesOf(data.allPieces) })} />
-        <Tile icon="movements" label="Scans" value={loading ? "…" : num(data.list.length)} note={loading ? "" : `${num(Math.round(data.list.length / days))} a day on average`}
+        <Tile icon="movements" label="Scans" value={loading ? <Dots /> : num(data.list.length)} note={loading ? "" : `${num(Math.round(data.list.length / days))} a day on average`}
           onClick={loading ? undefined : () => openPieces({ title: "Pieces Scanned", sub: periodName, pieces: piecesOf(data.allPieces) })} />
-        <Tile icon="sale" label="On-Time Scans" value={loading ? "…" : data.timed ? `${pct(data.onTime, data.timed)}%` : "–"} note={loading ? "" : `${num(data.onTime)} of ${num(data.timed)} timed scans`}
+        <Tile icon="sale" label="On-Time Scans" value={loading ? <Dots /> : data.timed ? `${pct(data.onTime, data.timed)}%` : "–"} note={loading ? "" : `${num(data.onTime)} of ${num(data.timed)} timed scans`}
           onClick={loading || !data.latePieces.size ? undefined : () => openPieces({ title: "Moved On Late", sub: `Pieces with a scan past the stage's time limit, ${periodName.toLowerCase()}`, pieces: piecesOf(data.latePieces) })} />
-        <Tile icon="edit" tone={!loading && data.manual ? "warn" : undefined} label="Manual Moves" value={loading ? "…" : num(data.manual)} note={loading ? "" : `${pct(data.manual, data.list.length)}% of scans`}
+        <Tile icon="edit" tone={!loading && data.manual ? "warn" : undefined} label="Manual Moves" value={loading ? <Dots /> : num(data.manual)} note={loading ? "" : `${pct(data.manual, data.list.length)}% of scans`}
           onClick={loading || !data.manual ? undefined : () => openPieces({ title: "Moved by Manual Override", sub: periodName, pieces: piecesOf(new Set(data.manualPeople.flatMap((p) => [...p.manualPieces]))) })} />
       </div>
 
-      {loading ? <section className="ceo-card"><Empty text="Loading the scans…" /></section> : (
+      {loading ? <section className="ceo-card"><Loading text="Loading the scans" /></section> : (
         <div className="ceo-grid">
           <Card span={12} title="What This Says">
             <div className="pmq-insights">
@@ -230,7 +230,7 @@ export default function PeoplePage({ ctx }) {
           </Card>
 
           <Card span={6} md={12} title="QC Inspectors" sub={`Checks and failures, ${periodName.toLowerCase()}`}>
-            {!inspectors ? <Empty text="Loading the QC checks…" /> : (
+            {!inspectors ? <Loading text="Loading the QC checks" /> : (
               <RankBars rows={inspectors} limit={10} format={(v) => plural(v, "check")}
                 sub={(r) => `${num(r.fails)} failed · ${pct(r.fails, r.value)}% fail rate`}
                 onRow={(r) => openPieces({ title: `Checked by ${r.name}`, sub: periodName, pieces: piecesOf(r.pieces) })} />

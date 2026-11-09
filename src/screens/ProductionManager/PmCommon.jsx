@@ -26,6 +26,11 @@ export function csvFromObjects(title, list) {
 
 export const { Tile, Card, Table } = defineKit({ tiles: TILE_INFO, cards: CARD_INFO, columns: COLUMN_INFO });
 
+/** Three dots that pulse in turn: something is loading. Use instead of a static "…". */
+export const Dots = () => <span className="pm-dots" role="status" aria-label="Loading"><i /><i /><i /></span>;
+/** A loading message with the moving dots, where a list or chart will appear. */
+export const Loading = ({ text = "Loading" }) => <div className="ceo-empty pm-loading" role="status"><span>{text}</span><Dots /></div>;
+
 /** Order number with the client and products under it. */
 export function OrderCell({ o, ctx }) {
   const who = clientOf(o, ctx?.vendorMap);

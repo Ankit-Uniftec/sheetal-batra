@@ -4,7 +4,7 @@ import { TYPE_CUSTOM, TYPE_LABELS, TYPE_LXRTS, TYPE_MTO, sizeLabel, sortSizes } 
 import { getOrderChannelKey, CHANNEL_KEY_LABELS } from "../../utils/barcodeService";
 import { Chips, Columns, Drawer, Empty, FilterGroup, Insight, PageHead, Pager, RankBars, Thumb, num } from "../CeoDashboard/CeoUi";
 import { CsvButton, FilterDrawer, ListTools, Stat, defineKit } from "../CeoDashboard/dashKit";
-import { csvFromObjects } from "./PmCommon";
+import { csvFromObjects, Loading } from "./PmCommon";
 import { FloorBars } from "./PmToday";
 import { isDormant, isRunning, pieceState, plural } from "./pmModel";
 
@@ -144,7 +144,7 @@ export default function StockPage({ ctx }) {
   const hmOpen = (halfMade || []).filter((h) => !["used", "written_off"].includes(String(h.status || "").toLowerCase()));
 
   if (lazy.stockRoom?.error) return <div className="ceo-page"><PageHead title="Stock" /><section className="ceo-card"><Empty text={`Stock could not be loaded: ${lazy.stockRoom.error}`} /></section></div>;
-  if (!view || !data) return <div className="ceo-page"><PageHead title="Stock" /><section className="ceo-card"><Empty text="Loading stock from Stock Room…" /></section></div>;
+  if (!view || !data) return <div className="ceo-page"><PageHead title="Stock" /><section className="ceo-card"><Loading text="Loading stock from Stock Room" /></section></div>;
   const t = view.totals;
   const exportList = () => csvFromObjects("designs in stock", list.map((r) => ({
     SKU: r.product.sku_id || "", Design: r.product.name, Type: TYPE_LABELS[r.type] || "", Pieces: pcs(r), Sizes: sizeLine(r),
@@ -232,8 +232,8 @@ export default function StockPage({ ctx }) {
           <p className="pm-count-line">{plural(list.length, "design")} · {num(list.reduce((s, r) => s + pcs(r), 0))} pieces</p>
         </Card>
 
-        <Card span={12} title="Half Made Pieces" sub={halfMade ? `${num(hmOpen.length)} waiting to be finished · ${num((halfMade || []).length)} recorded in all` : "Loading…"}>
-          {!halfMade ? <Empty text="Loading…" /> : !(halfMade || []).length ? <Empty text="No Half Made pieces recorded yet." /> : (
+        <Card span={12} title="Half Made Pieces" sub={halfMade ? `${num(hmOpen.length)} waiting to be finished · ${num((halfMade || []).length)} recorded in all` : undefined}>
+          {!halfMade ? <Loading /> : !(halfMade || []).length ? <Empty text="No Half Made pieces recorded yet." /> : (
             <Table rowKey={(h) => h.id} rows={halfMade.slice(0, 10)} empty="None." columns={[
               { key: "p", label: "Piece", render: (h) => <span className="pm-cell"><b>{h.product_name || "–"} · {h.component_label || h.component_type}</b><small>{[h.size && `Size ${h.size}`, h.colors, h.source_order_no && `From ${h.source_order_no}`].filter(Boolean).join(" · ")}</small></span> },
               { key: "r", label: "Reason", hide: true, render: (h) => h.reason || "–" },

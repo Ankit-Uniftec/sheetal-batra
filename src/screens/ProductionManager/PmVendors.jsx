@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import ExternalVendorsPanel from "../../components/ExternalVendorsPanel";
 import VendorDelaysTab from "../../components/VendorDelays/VendorDelaysTab";
 import VendorRequest from "../../components/VendorRequest";
 import { fmtDate as formatDate } from "./pmModel";
 import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, Seg, num } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
-import { csvFromObjects } from "./PmCommon";
+import { csvFromObjects, Loading } from "./PmCommon";
 import { DAY, isOwnTrip, localDay, pct, plural } from "./pmModel";
+import { VendorTripsList } from "./PmRecords";
 import { GOLD, StackBars } from "./PmQuality";
 
 // ============================================================
@@ -157,7 +157,7 @@ export default function VendorsPage({ ctx }) {
         <FilterGroup label="Sent For"><Chips options={choices.stages} value={stageF} onChange={setStageF} /></FilterGroup>
         <FilterGroup label="Vendor"><Chips options={choices.vendors} value={vendorF} onChange={setVendorF} /></FilterGroup>
       </FilterDrawer>
-      {!data ? <section className="ceo-card"><Empty text={lazy.movements?.error ? `Vendor trips could not be loaded: ${lazy.movements.error}` : "Loading vendor trips…"} /></section> : (
+      {!data ? <section className="ceo-card">{lazy.movements?.error ? <Empty text={`Vendor trips could not be loaded: ${lazy.movements.error}`} /> : <Loading text="Loading vendor trips" />}</section> : (
         <>
           <div className="ceo-tiles">
             <Tile icon="warehouse" label="At Vendors Now" value={num(data.outPieces)} note={`Outside vendors · ${num(data.ownOut)} more at our Delhi (2)`} onClick={() => openTrips("At Vendors Now", "Out with an outside vendor", data.outNow)} />
@@ -229,14 +229,14 @@ export default function VendorsPage({ ctx }) {
       <div className="pm-tabs-scroll pmq-tabs">
         <Seg label="Vendor records" value={view} onChange={setView} options={[{ value: "out", label: "Trips" }, { value: "delays", label: "Delays & Penalties" }, { value: "directory", label: "Directory" }]} />
       </div>
-      <section className="ceo-card pm-classic ceo-keep">
-        {view === "out" && <ExternalVendorsPanel rows={moves || []} loading={!moves} onOrderClick={onOrderClick} />}
+      {view === "out" && <section className="ceo-card pm-records"><VendorTripsList ctx={ctx} rows={moves} loading={!moves} /></section>}
+      {view !== "out" && <section className="ceo-card pm-classic ceo-keep">
         {view === "delays" && (
           <VendorDelaysTab movements={moves || []} loading={!moves} orders={ctx.orders} onOrderClick={onOrderClick}
             canPenalise={(ctx.profile?.role || "").toLowerCase() === "production_manager"} />
         )}
         {view === "directory" && <VendorRequest currentUserEmail={ctx.email} />}
-      </section>
+      </section>}
     </div>
   );
 }

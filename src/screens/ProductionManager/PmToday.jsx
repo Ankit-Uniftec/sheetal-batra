@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { fmtDate as formatDate } from "./pmModel";
 import { Columns, Empty, Icon, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
-import { Card, DueCell, OrderCell, Table, Tile } from "./PmCommon";
+import { Card, Dots, DueCell, Loading, OrderCell, Table, Tile } from "./PmCommon";
 import { ActionsCard, BriefingCard, useInsights } from "./PmBriefing";
 import {
   FLOOR_STEPS, atVendor, atWh2, channelOf, dayKey, daysLeft, floorKey, hasPromise, isDormant, isLate, isOwnTrip, isRunning, isStuck, isUrgent, pct, pieceState,
@@ -217,7 +217,7 @@ export default function TodayPage({ ctx }) {
         <Tile icon="alert" tone={floor.late.length ? "warn" : undefined} label="Late Orders" value={num(floor.late.length)} note={`${num(floor.lateActive.length)} still moving · ${pct(floor.late.length, floor.running.filter(hasPromise).length)}% of dated orders`} onClick={() => openOrders({ title: "Late Orders", sub: "Past the due date (T-2), still in production", orders: floor.late })} />
         <Tile icon="bell" label="Due This Week" value={num(dueWeek.length)} note="Next 7 days" onClick={() => openOrders({ title: "Due This Week", sub: "Due in the next 7 days, still in production", orders: dueWeek })} />
         <Tile icon="movements" label="Pieces on the Floor" value={num(floor.inHouse.length)} note={`${num(floor.wh2.length)} at Delhi (2) · ${num(floor.atVendor.length)} at vendors`} onClick={() => openPieces({ title: "Pieces on the Floor", sub: "Being worked on in the warehouse", pieces: floor.inHouse })} />
-        <Tile icon="trend" label="Scans Today" value={todayRow ? num(todayRow.scans) : "…"} delta={todayRow?.scans ? vs(todayRow.scans, scansAvg) : null} note={todayRow && !todayRow.scans ? (lastScan ? `None yet · last ${lastScan}` : "None yet today") : "vs 7-day average"} onClick={() => go("people")} />
+        <Tile icon="trend" label="Scans Today" value={todayRow ? num(todayRow.scans) : <Dots />} delta={todayRow?.scans ? vs(todayRow.scans, scansAvg) : null} note={todayRow && !todayRow.scans ? (lastScan ? `None yet · last ${lastScan}` : "None yet today") : "vs 7-day average"} onClick={() => go("people")} />
       </div>
 
       <div className="ceo-grid">
@@ -231,7 +231,7 @@ export default function TodayPage({ ctx }) {
                     <span className={`pm-action-ico is-${a.tone}`}><Icon name={a.icon} /></span>
                     <span className="pm-action-when">{TAG[a.tone]}</span>
                   </span>
-                  <b className="pm-action-num">{a.loading ? "…" : num(a.count)}</b>
+                  <b className="pm-action-num">{a.loading ? <Dots /> : num(a.count)}</b>
                   <span className="pm-action-text">{a.label}</span>
                   <span className="pm-action-go">{a.cta || "See the list"}<Icon name="chevron" /></span>
                 </button>
@@ -245,7 +245,7 @@ export default function TodayPage({ ctx }) {
         </Card>
 
         <Card span={5} md={12} title="Today vs Last 7 Days" sub={quietDay ? `No scans yet today${lastScan ? `; the last scan was ${lastScan}` : ""}. The bars fill in as the floor scans.` : "Today so far against the daily average of the 7 days before"}>
-          {!days ? <Empty text="Loading the week's scans…" /> : (
+          {!days ? <Loading text="Loading the week's scans" /> : (
             <div className="pm-compare">
               {[
                 { label: "Scans", today: todayRow.scans, avg: scansAvg, fmt: num },
@@ -275,7 +275,7 @@ export default function TodayPage({ ctx }) {
         <ActionsCard ctx={ctx} ins={ins} />
 
         <Card span={6} md={12} title="Daily Throughput" sub="Pieces finished each day, last 8 days. Click a day to see the pieces.">
-          {!days ? <Empty text="Loading…" /> : (
+          {!days ? <Loading /> : (
             <Columns data={days.map((d) => ({ name: d.name, value: d.finishedN, ids: [...d.finished] }))} money={false} name="Pieces finished" height={250}
               highlight={(d) => d.name === "Today"}
               onPick={(d) => openPieces({ title: `Finished: ${d.name}`, sub: "Pieces that reached Completed, Packaging or Dispatched", pieces: (d.ids || []).map((id) => piecesById[id]).filter(Boolean) })} />

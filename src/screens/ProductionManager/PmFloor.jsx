@@ -3,6 +3,7 @@ import { STAGE_GROUPS, getStageGroupKey } from "../../utils/barcodeService";
 import { Chips, Columns, Empty, FilterButton, FilterGroup, Insight, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { FloorBars, useFloor } from "./PmToday";
+import { Dots, Loading } from "./PmCommon";
 import {
   DAY, FLOOR_STEPS, channelOf, dayKey, floorKey, idleDays, isRunning, isUrgent, median, pct, pieceState, plural, todayStart,
 } from "./pmModel";
@@ -235,8 +236,8 @@ export default function FloorPage({ ctx }) {
         <Tile icon="warehouse" label="At Vendors" value={num(floor.atVendor.length)} note={`${num(floor.wh2.length)} more at our Delhi (2)`} onClick={() => openPieces({ title: "At Outside Vendors", sub: "Out with an outside vendor right now", pieces: floor.atVendor })} />
         <Tile icon="alert" tone={floor.stuckActive.length ? "warn" : undefined} label="Stuck Pieces" value={num(floor.stuckActive.length)} note={`${stuckShare}% of live pieces in our warehouses`} onClick={() => openPieces({ title: "Stuck Pieces", sub: "Pieces of active orders not moved for 7+ days", pieces: floor.stuckActive })} />
         <Tile icon="stock" label="Not Started" value={num(notStartedActive.length)} note={`Active orders · ${num(floor.notStarted.length - notStartedActive.length)} more on quiet ones`} onClick={() => openPieces({ title: "Not Started", sub: "Pieces of active orders waiting for Cloth Issue", pieces: notStartedActive })} />
-        <Tile icon="trend" label="Average Lead Time" value={loading ? "…" : flow.leadAvg == null ? "–" : fmtDays(flow.leadAvg)}
-          note={loading ? "Loading scans" : flow.leadMedian == null ? "No finished orders" : `Median ${fmtDays(flow.leadMedian)} · ${plural(flow.leadOrders.length, "order")}`}
+        <Tile icon="trend" label="Average Lead Time" value={loading ? <Dots /> : flow.leadAvg == null ? "–" : fmtDays(flow.leadAvg)}
+          note={loading ? "Loading the scans" : flow.leadMedian == null ? "No finished orders" : `Median ${fmtDays(flow.leadMedian)} · ${plural(flow.leadOrders.length, "order")}`}
           onClick={loading || !flow.leadOrders.length ? undefined : () => openOrders({ title: "Finished in the Last 30 Days", sub: "Orders whose last piece was finished in the last 30 days", orders: flow.leadOrders })} />
       </div>
 
@@ -260,21 +261,21 @@ export default function FloorPage({ ctx }) {
         </Card>
 
         <Card span={5} md={12} title="Bottlenecks" sub="Average days spent in each stage, last 30 days">
-          {loading ? <Empty text="Loading the last 30 days of scans…" /> : (
+          {loading ? <Loading text="Loading the last 30 days of scans" /> : (
             <RankBars rows={flow.bottlenecks} limit={12} format={(v) => fmtDays(v)}
               sub={(r) => `Median ${fmtDays(r.median)} · ${plural(r.n, "stay")}`}
               onRow={(r) => openPieces({ title: `At ${r.name} Now`, sub: "Pieces of running orders at this stage", pieces: floor.pieces.filter((c) => floorKey(c) === r.key && pieceState(c) !== "finished") })} />
           )}
         </Card>
         <Card span={7} md={12} title="Daily Throughput" sub={loading ? undefined : `${num(finishedPieces.length)} pieces finished in 30 days. Click a day to see them.`}>
-          {loading ? <Empty text="Loading…" /> : (
+          {loading ? <Loading /> : (
             <Columns data={flow.days} money={false} name="Pieces finished" height={260} highlight={(d) => d === flow.days[flow.days.length - 1]}
               onPick={(d) => openPieces({ title: `Finished: ${d.name}`, sub: "Pieces that reached Completed, Packaging or Dispatched", pieces: (d.ids || []).map((id) => piecesById[id]).filter(Boolean) })} />
           )}
         </Card>
 
         <Card span={6} md={12} title="Where Pieces Went Next" sub="The most common stage-to-stage moves, last 30 days">
-          {loading ? <Empty text="Loading…" /> : (
+          {loading ? <Loading /> : (
             <RankBars rows={flow.moves.map((m) => ({ ...m, name: `${GROUP_LABEL[m.from] || m.from} → ${GROUP_LABEL[m.to] || m.to}` }))} limit={10}
               format={(v) => plural(v, "move")} sub={(r) => plural(r.ids.size, "piece")}
               onRow={(r) => openPieces({ title: r.name, sub: "Pieces that made this move in the last 30 days", pieces: [...r.ids].map((id) => piecesById[id]).filter(Boolean) })} />

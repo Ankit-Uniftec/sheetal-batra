@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import DispatchReport from "../../components/DispatchReport";
 import { fmtDate as formatDate } from "./pmModel";
 import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, Pager, num } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
-import { DueCell, OrderCell, exportOrders } from "./PmCommon";
+import { Dots, DueCell, exportOrders, OrderCell } from "./PmCommon";
 import { DAY, channelOf, dueDay, hasPromise, isUrgent, localDay, pct, plural, readyToDispatch } from "./pmModel";
 import { GOLD, StackBars } from "./PmQuality";
+import { BoxesList } from "./PmRecords";
 import { coverKey, periodSteps } from "./pmPeriod";
 
 // ============================================================
@@ -144,7 +144,7 @@ export default function DispatchPage({ ctx }) {
       <div className="ceo-tiles">
         <Tile icon="stock" label="Ready to Dispatch" value={num(data.ready.length)} note="Live" onClick={() => openOrders({ title: "Ready to Dispatch", sub: "Every piece finished, not yet dispatched", orders: readyOrders })} />
         <Tile icon="alert" tone={data.stale.length ? "warn" : undefined} label="Waiting Over 2 Days" value={num(data.stale.length)} note="Since the last piece finished" onClick={() => openOrders({ title: "Ready for 2+ Days", sub: "Finished two or more days ago, not yet dispatched", orders: data.stale.map((r) => r.o) })} />
-        <Tile icon="transfer" label="Dispatched" value={dispatchScans ? num(data.dispatched.length) : "…"} note={label} onClick={() => openOrders({ title: "Dispatched", sub: label, orders: data.dispatched })} />
+        <Tile icon="transfer" label="Dispatched" value={dispatchScans ? num(data.dispatched.length) : <Dots />} note={label} onClick={() => openOrders({ title: "Dispatched", sub: label, orders: data.dispatched })} />
         <Tile icon="receive" label="Delivered" value={num(data.delivered.length)} note={label} onClick={() => openOrders({ title: "Delivered", sub: label, orders: data.delivered })} />
         <Tile icon="sale" label="Delivered On Time" value={onTimePct == null ? "–" : `${onTimePct}%`} note={`${num(data.onTime.length)} of ${num(data.judged.length)} dated orders`} onClick={() => openOrders({ title: "Delivered Late", sub: `${label}: after the client's delivery date`, orders: data.late })} />
       </div>
@@ -191,7 +191,7 @@ export default function DispatchPage({ ctx }) {
       </div>
 
       <h2 className="pmd-title">Boxes Dispatched</h2>
-      <section className="ceo-card pm-classic ceo-keep"><DispatchReport hideMoney /></section>
+      <section className="ceo-card pm-records"><BoxesList ctx={ctx} /></section>
       <p className="pm-foot-note">On time means delivered on or before the client's delivery date. Website and stock orders are left out of on-time figures because they carry no promised date.</p>
     </div>
   );

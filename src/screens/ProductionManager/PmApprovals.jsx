@@ -6,7 +6,7 @@ import ReplacementApprovals from "../../components/ReplacementApprovals";
 import { fetchScanReport, scanReportCsv } from "../../utils/scanReport";
 import { Chips, DateRange, Icon, Insight, Seg, num } from "../CeoDashboard/CeoUi";
 import { listRecentDecisions } from "../../utils/stageRequests";
-import { Card } from "./PmCommon";
+import { Card, Dots } from "./PmCommon";
 import { DAY, dayKey, plural, todayStart } from "./pmModel";
 
 // ============================================================
@@ -70,11 +70,11 @@ export default function RequestsPanel({ ctx, initialView = "overrides" }) {
       <div className="ceo-tiles pm-panel-tiles">
         <button type="button" className="ceo-tile is-link" onClick={() => setView("overrides")}>
           <span className={`ceo-tile-ico${w?.requests ? " is-warn" : ""}`}><Icon name="edit" /></span>
-          <span className="ceo-tile-body"><span className="ceo-tile-label">Stage Requests Waiting</span><span className="ceo-tile-value">{w ? num(w.requests) : "…"}</span><span className="ceo-tile-foot"><span className="ceo-tile-note">From the floor</span></span></span>
+          <span className="ceo-tile-body"><span className="ceo-tile-label">Stage Requests Waiting</span><span className="ceo-tile-value">{w ? num(w.requests) : <Dots />}</span><span className="ceo-tile-foot"><span className="ceo-tile-note">From the floor</span></span></span>
         </button>
         <button type="button" className="ceo-tile is-link" onClick={() => setView("replacements")}>
           <span className={`ceo-tile-ico${w?.replacements ? " is-warn" : ""}`}><Icon name="transfer" /></span>
-          <span className="ceo-tile-body"><span className="ceo-tile-label">Replacements Waiting</span><span className="ceo-tile-value">{w ? num(w.replacements) : "…"}</span><span className="ceo-tile-foot"><span className="ceo-tile-note">From the Production Head</span></span></span>
+          <span className="ceo-tile-body"><span className="ceo-tile-label">Replacements Waiting</span><span className="ceo-tile-value">{w ? num(w.replacements) : <Dots />}</span><span className="ceo-tile-foot"><span className="ceo-tile-note">From the Production Head</span></span></span>
         </button>
       </div>
       {says.length > 0 && (

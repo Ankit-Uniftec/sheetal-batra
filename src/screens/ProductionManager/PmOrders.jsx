@@ -152,7 +152,7 @@ export default function OrdersPage({ ctx }) {
 
       {report && (
         <Drawer wide title="Cancellation Report" sub="Cancelled orders by period, channel, reason and how far they had got" onClose={() => setReport(false)}>
-          <CancellationReport />
+          <CancellationReport ctx={ctx} />
         </Drawer>
       )}
       <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={clear} count={list.length} noun="orders" sub="Narrow the order list">

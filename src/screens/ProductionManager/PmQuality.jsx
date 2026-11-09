@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import QcHistoryPanel from "../../components/QcHistoryPanel";
-import ReJourneyPanel from "../../components/ReJourneyPanel";
 import { getStageLabel } from "../../utils/barcodeService";
 import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, RankBars, Seg, barAxis, barMinWidth, fitBarLabel, labelRoom, num, textOn } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
-import { csvFromObjects } from "./PmCommon";
+import { csvFromObjects, Loading } from "./PmCommon";
 import { channelOf, pct, plural, todayStart } from "./pmModel";
+import { QcHistoryList, ReworkList } from "./PmRecords";
 import { coverKey, periodSteps } from "./pmPeriod";
 
 // ============================================================
@@ -215,7 +214,7 @@ export default function QualityPage({ ctx }) {
         <FilterGroup label="Channel"><Chips options={choices.channels} value={channels} onChange={setChannels} /></FilterGroup>
         <FilterGroup label="Checked By"><Chips options={choices.inspectors} value={who} onChange={setWho} /></FilterGroup>
       </FilterDrawer>
-      {!data ? <section className="ceo-card"><Empty text={lazy[qcKey]?.error ? `QC records could not be loaded: ${lazy[qcKey].error}` : "Loading QC records…"} /></section> : (
+      {!data ? <section className="ceo-card">{lazy[qcKey]?.error ? <Empty text={`QC records could not be loaded: ${lazy[qcKey].error}`} /> : <Loading text="Loading QC records" />}</section> : (
         <>
           <div className="ceo-tiles">
             <Tile icon="integrity" label="QC Checks" value={num(data.checks.length)} note={label} onClick={() => openRows("QC Checks", label, data.checks)} />
@@ -302,15 +301,9 @@ export default function QualityPage({ ctx }) {
       )}
 
       <div className="pm-tabs-scroll pmq-tabs"><Seg label="Records" value={view} onChange={setView} options={[{ value: "history", label: "QC History" }, { value: "rework", label: "Pieces in Re-work" }]} /></div>
-      <section className="ceo-card pm-classic ceo-keep">
-        {view === "history" && (
-          <QcHistoryPanel records={lazy.qcAll?.rows || []} loading={!lazy.qcAll || lazy.qcAll.loading} hideMoney
-            onOrderClick={(id) => ordersById[id] && openOrder(ordersById[id])} />
-        )}
-        {view === "rework" && (
-          <ReJourneyPanel rows={lazy.rejourneys?.rows || []} loading={!lazy.rejourneys || lazy.rejourneys.loading}
-            onOrderClick={(id) => ordersById[id] && openOrder(ordersById[id])} />
-        )}
+      <section className="ceo-card pm-records">
+        {view === "history" && <QcHistoryList ctx={ctx} rows={lazy.qcAll?.rows} loading={!lazy.qcAll || lazy.qcAll.loading} />}
+        {view === "rework" && <ReworkList ctx={ctx} rows={lazy.rejourneys?.rows} loading={!lazy.rejourneys || lazy.rejourneys.loading} />}
       </section>
       <p className="pm-foot-note">Final QC overrides are left out of the pass rate: nobody inspected those garments. The figures above follow the date range in the header; the QC History below holds every record.</p>
     </div>
