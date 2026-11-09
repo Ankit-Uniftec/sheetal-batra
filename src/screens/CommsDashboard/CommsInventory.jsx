@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -59,20 +60,10 @@ export default function CommsInventory({ profile, showPopup }) {
   // Time scope by product creation date — shared PeriodFilter (select).
   const { control: periodControl, inPeriod, range: periodRange } = usePeriodFilter("all", { variant: "select", label: "Added:" });
 
-  // Block modal
+  // Reserving a design opens the shared BlockModal below (also used by the
+  // new Comms dashboard), so a block is saved the same way everywhere.
   const [blockModal, setBlockModal] = useState(null); // { product, variant? }
-  const [blockStart, setBlockStart] = useState(todayISO());
-  const [blockEnd, setBlockEnd] = useState("");
-  const [blockPurpose, setBlockPurpose] = useState("");      // dropdown value
-  const [blockPurposeOther, setBlockPurposeOther] = useState(""); // free text when "Other"
-  // Recipient details — captured for Sourcing reservations (who it's for / where
-  // it ships). Name + address required for Sourcing; contact + POC optional.
-  const [blockRecipientName, setBlockRecipientName] = useState("");
-  const [blockRecipientAddress, setBlockRecipientAddress] = useState("");
-  const [blockRecipientContact, setBlockRecipientContact] = useState("");
-  const [blockRecipientPoc, setBlockRecipientPoc] = useState("");
-  const [blockSaving, setBlockSaving] = useState(false);
-  const isSourcingBlock = blockPurpose === "Sourcing";
+  const openBlockModal = (product, variant = null) => setBlockModal({ product, variant });
 
   // Initial load
   useEffect(() => {
@@ -145,72 +136,6 @@ export default function CommsInventory({ profile, showPopup }) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, variants, search, showOutOfStock, periodRange, inPeriod]);
-
-  // Open / close the block modal. We can pass a variant for LXRTS rows or
-  // skip it (defaults to product-level block) for non-LXRTS.
-  const openBlockModal = (product, variant = null) => {
-    setBlockStart(todayISO());
-    setBlockEnd("");
-    setBlockPurpose("");
-    setBlockPurposeOther("");
-    setBlockRecipientName("");
-    setBlockRecipientAddress("");
-    setBlockRecipientContact("");
-    setBlockRecipientPoc("");
-    setBlockModal({ product, variant });
-  };
-  const closeBlockModal = () => { if (!blockSaving) setBlockModal(null); };
-
-  const handleSaveBlock = async () => {
-    if (!blockModal) return;
-    if (!blockEnd) { showPopup({ title: "Required", message: "Please pick an end date.", type: "warning" }); return; }
-    if (!blockPurpose) { showPopup({ title: "Required", message: "Please select a purpose.", type: "warning" }); return; }
-    if (blockPurpose === "Other" && !blockPurposeOther.trim()) {
-      showPopup({ title: "Required", message: "Please describe the purpose.", type: "warning" }); return;
-    }
-    // Sourcing reservations must record who the outfit is for and where it ships.
-    if (isSourcingBlock && (!blockRecipientName.trim() || !blockRecipientAddress.trim())) {
-      showPopup({ title: "Required", message: "Recipient Name and Address are required for a Sourcing reservation.", type: "warning" }); return;
-    }
-    // Stored purpose: the free text for "Other", else the chosen option.
-    const finalPurpose = blockPurpose === "Other" ? blockPurposeOther.trim() : blockPurpose;
-    setBlockSaving(true);
-    try {
-      const payload = {
-        product_id: blockModal.variant ? null : blockModal.product.id,
-        variant_id: blockModal.variant ? blockModal.variant.id : null,
-        start_date: blockStart,
-        end_date: blockEnd,
-        purpose: finalPurpose,
-        created_by: profile?.email || "comms",
-        status: "active",
-        // Recipient details — only meaningful for Sourcing; null otherwise.
-        recipient_name: isSourcingBlock ? blockRecipientName.trim() : null,
-        recipient_address: isSourcingBlock ? blockRecipientAddress.trim() : null,
-        recipient_contact: isSourcingBlock ? (blockRecipientContact.trim() || null) : null,
-        recipient_poc: isSourcingBlock ? (blockRecipientPoc.trim() || null) : null,
-      };
-      const { data, error } = await supabase
-        .from("comms_inventory_blocks")
-        .insert(payload)
-        .select()
-        .single();
-      if (error) throw error;
-      setBlocks((prev) => [...prev, data]);
-      setBlockModal(null);
-      showPopup({
-        title: "Block created",
-        message: `${blockModal.product.name}${blockModal.variant ? ` (size ${blockModal.variant.size})` : ""} reserved until ${formatDate(blockEnd)}.`,
-        type: "success",
-        confirmText: "OK",
-      });
-    } catch (err) {
-      console.error("Create block failed:", err);
-      showPopup({ title: "Failed", message: err.message || "Could not create block.", type: "error" });
-    } finally {
-      setBlockSaving(false);
-    }
-  };
 
   // Release an existing block (sets status='released' so it stops enforcing).
   const releaseBlock = async (block) => {
@@ -426,6 +351,93 @@ export default function CommsInventory({ profile, showPopup }) {
 
       {/* Block modal */}
       {blockModal && (
+        <BlockModal
+          product={blockModal.product}
+          variant={blockModal.variant}
+          currentStock={totalInventoryFor(blockModal.product)}
+          profile={profile}
+          showPopup={showPopup}
+          onClose={() => setBlockModal(null)}
+          onSaved={(row) => setBlocks((prev) => [...prev, row])}
+        />
+      )}
+    </>
+  );
+}
+
+
+/**
+ * Reserve a design (or one size of an LXRTS design) for a shoot, event or
+ * sourcing: saves a comms_inventory_blocks row, which stops stores selling it
+ * for those dates. Drawn over the whole window so any dashboard can open it.
+ */
+export function BlockModal({ product, variant = null, currentStock, profile, showPopup, onClose, onSaved }) {
+  const [blockStart, setBlockStart] = useState(todayISO());
+  const [blockEnd, setBlockEnd] = useState("");
+  const [blockPurpose, setBlockPurpose] = useState("");      // dropdown value
+  const [blockPurposeOther, setBlockPurposeOther] = useState(""); // free text when "Other"
+  // Recipient details — captured for Sourcing reservations (who it's for / where
+  // it ships). Name + address required for Sourcing; contact + POC optional.
+  const [blockRecipientName, setBlockRecipientName] = useState("");
+  const [blockRecipientAddress, setBlockRecipientAddress] = useState("");
+  const [blockRecipientContact, setBlockRecipientContact] = useState("");
+  const [blockRecipientPoc, setBlockRecipientPoc] = useState("");
+  const [blockSaving, setBlockSaving] = useState(false);
+  const isSourcingBlock = blockPurpose === "Sourcing";
+
+  const closeBlockModal = () => { if (!blockSaving) onClose(); };
+
+  const handleSaveBlock = async () => {
+    if (!blockEnd) { showPopup({ title: "Required", message: "Please pick an end date.", type: "warning" }); return; }
+    if (!blockPurpose) { showPopup({ title: "Required", message: "Please select a purpose.", type: "warning" }); return; }
+    if (blockPurpose === "Other" && !blockPurposeOther.trim()) {
+      showPopup({ title: "Required", message: "Please describe the purpose.", type: "warning" }); return;
+    }
+    // Sourcing reservations must record who the outfit is for and where it ships.
+    if (isSourcingBlock && (!blockRecipientName.trim() || !blockRecipientAddress.trim())) {
+      showPopup({ title: "Required", message: "Recipient Name and Address are required for a Sourcing reservation.", type: "warning" }); return;
+    }
+    // Stored purpose: the free text for "Other", else the chosen option.
+    const finalPurpose = blockPurpose === "Other" ? blockPurposeOther.trim() : blockPurpose;
+    setBlockSaving(true);
+    try {
+      const payload = {
+        product_id: variant ? null : product.id,
+        variant_id: variant ? variant.id : null,
+        start_date: blockStart,
+        end_date: blockEnd,
+        purpose: finalPurpose,
+        created_by: profile?.email || "comms",
+        status: "active",
+        // Recipient details — only meaningful for Sourcing; null otherwise.
+        recipient_name: isSourcingBlock ? blockRecipientName.trim() : null,
+        recipient_address: isSourcingBlock ? blockRecipientAddress.trim() : null,
+        recipient_contact: isSourcingBlock ? (blockRecipientContact.trim() || null) : null,
+        recipient_poc: isSourcingBlock ? (blockRecipientPoc.trim() || null) : null,
+      };
+      const { data, error } = await supabase
+        .from("comms_inventory_blocks")
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      onSaved(data);
+      onClose();
+      showPopup({
+        title: "Block created",
+        message: `${product.name}${variant ? ` (size ${variant.size})` : ""} reserved until ${formatDate(blockEnd)}.`,
+        type: "success",
+        confirmText: "OK",
+      });
+    } catch (err) {
+      console.error("Create block failed:", err);
+      showPopup({ title: "Failed", message: err.message || "Could not create block.", type: "error" });
+    } finally {
+      setBlockSaving(false);
+    }
+  };
+
+  return createPortal(
         <div
           style={{
             position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
@@ -442,9 +454,9 @@ export default function CommsInventory({ profile, showPopup }) {
           >
             <h3 style={{ marginTop: 0, color: "#d5b85a" }}>Reserve Product</h3>
             <p style={{ fontSize: 13, color: "#555" }}>
-              <strong>Product:</strong> {blockModal.product.name}
-              {blockModal.variant && <> · size {blockModal.variant.size}</>}<br />
-              <strong>Current Stock:</strong> {totalInventoryFor(blockModal.product)}
+              <strong>Product:</strong> {product.name}
+              {variant && <> · size {variant.size}</>}<br />
+              <strong>Current Stock:</strong> {currentStock}
             </p>
 
             <div style={{ marginTop: 14 }}>
@@ -581,7 +593,14 @@ export default function CommsInventory({ profile, showPopup }) {
             </div>
           </div>
         </div>
-      )}
-    </>
-  );
+  , document.body);
+}
+
+/** Release a block so it stops reserving the design. Throws if it fails. */
+export async function releaseCommsBlock(block) {
+  const { error } = await supabase
+    .from("comms_inventory_blocks")
+    .update({ status: "released", released_at: new Date().toISOString() })
+    .eq("id", block.id);
+  if (error) throw error;
 }

@@ -15,18 +15,15 @@ import useStockRoomView from "../StockRoom/useStockRoomView";
 import { TYPE_LABELS, TYPE_LXRTS, TYPE_MTO } from "../StockRoom/stockRoomModel";
 import { shortInr } from "../CeoDashboard/ceoInsights";
 import {
-  Card as BaseCard, Chips, Drawer, Empty, FilterButton, FilterGroup, Icon, InfoTip, Insight, PageHead, Pager, RankBars,
-  SearchBox, Seg, Select, Table as BaseTable, Thumb, Tile as BaseTile, TrendChart, fullInr, num, DateRange,
+  Chips, Drawer, Empty, FilterGroup, Icon, Insight, PageHead, Pager, RankBars,
+  Seg, Select, Thumb, TrendChart, fullInr, num,
 } from "../CeoDashboard/CeoUi";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./gmDefinitions";
+import { CsvButton, FilterDrawer, ListTools, PeriodFacet, Stat, defineKit, slug, usePagePeriod } from "../CeoDashboard/dashKit";
 
-// Every tile, card and column heading carries its plain-English definition
-// (the "i"), looked up by its label. A page can still pass its own `info`.
-const Tile = (p) => <BaseTile info={TILE_INFO[p.label]} {...p} />;
-const Card = (p) => <BaseCard info={CARD_INFO[p.title]} {...p} />;
-const Table = ({ columns, ...p }) => <BaseTable {...p} columns={columns.map((c) => (c.info || !COLUMN_INFO[c.label] ? c : { ...c, info: COLUMN_INFO[c.label] }))} />;
-/** A small figure in a drawer, with its definition. */
-export const Stat = ({ label, info, children }) => <div className="ceo-dstat"><small>{info ? <InfoTip text={info}>{label}</InfoTip> : label}</small>{children}</div>;
+// Every tile, card and column heading carries its definition (see gmDefinitions).
+const { Tile, Card, Table } = defineKit({ tiles: TILE_INFO, cards: CARD_INFO, columns: COLUMN_INFO });
+export { Stat };
 
 // ============================================================
 // Anushree's (GM) pages. Every figure she had before is still here; each page
@@ -64,11 +61,7 @@ const typeOf = (o) => {
   return item?.order_type === "Custom" || item?.payment_order_type === "Custom" ? "custom" : "standard";
 };
 
-const slug = (t) => String(t || "export").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-/** A small download button. Every list and drawer on this dashboard has one. */
-export const CsvButton = ({ onClick, disabled, label = "Export CSV" }) => (
-  <button type="button" className="ceo-btn is-small" onClick={onClick} disabled={disabled}><Icon name="download" />{label}</button>
-);
+export { CsvButton };
 
 /** What a list of orders adds up to, one row per order, with the figures each page uses. */
 export function exportOrders(title, orders, ctx) {
@@ -114,6 +107,7 @@ function PeriodNote({ ctx }) {
 export function StorePerformancePage({ ctx }) {
   const { sales, prevSales, personOf, isPerson, channelOf, salespersonTable, openOrders } = ctx;
   const [channel, setChannel] = useState("");
+  const [drawer, setDrawer] = useState(false);
 
   const stats = useMemo(() => {
     const revenue = sumOf(sales.filter(isRevenueOrder));
@@ -184,14 +178,19 @@ export function StorePerformancePage({ ctx }) {
           ) : <Empty />}
         </Card>
         <Card span={12} title="Sales Associate Performance" sub="Each associate's own sales. Click a name to see the orders.">
-          <div className="ceo-tools">
-            <Select label="Channel" value={channel} onChange={setChannel} options={options(stats.channels.map((c) => c.name), "All channels")} search={false} />
-            <CsvButton disabled={!saRows.length} onClick={() => downloadCsv({
+          <ListTools
+            filters={channel ? 1 : 0}
+            onFilters={() => setDrawer(true)}
+            exportDisabled={!saRows.length}
+            onExport={() => downloadCsv({
               filename: `gm_associate_performance_${slug(ctx.periodName)}`,
               headers: ["Sales Associate", "Store", "Orders", "Pieces", "Revenue", "Average Order Value", "Discount Given", "Share %"],
               rows: saRows.map((r) => [r.name, r.store || "", r.orders, r.items, Math.round(r.value), Math.round(r.orders ? r.value / r.orders : 0), Math.round(r.discount), pct(r.value, saTotal).toFixed(1)]),
-            })} />
-          </div>
+            })}
+          />
+          <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => setChannel("")} count={saRows.length} noun="associates" sub="Narrow the associate list">
+            <FilterGroup label="Sales Channel"><Chips options={stats.channels.map((c) => ({ value: c.name, label: c.name }))} value={channel} onChange={setChannel} /></FilterGroup>
+          </FilterDrawer>
           <Table
             rowKey={(r) => r.name}
             rows={saRows}
@@ -254,13 +253,11 @@ function TargetsCard({ ctx }) {
     <Card span={12} info="Each sales associate's sales so far this month compared with their monthly target. Exhibition sales count after the exhibition's commission." title={`Sales Targets, ${month}`} sub={rows.length ? `Green when ahead of the ${rows[0].onPace.toFixed(0)}% of the month gone. Click a name to see the orders.` : "No targets are set for sales associates."}>
       {rows.length > 0 && (
         <>
-          <div className="ceo-tools">
-            <CsvButton onClick={() => downloadCsv({
-              filename: `gm_sales_targets_${slug(month)}`,
-              headers: ["Sales Associate", "Store", "Target", "Sold This Month", "Achieved %"],
-              rows: rows.map((r) => [r.name, r.store, Math.round(r.target), Math.round(r.sold), r.achieved.toFixed(1)]),
-            })} />
-          </div>
+          <ListTools onExport={() => downloadCsv({
+            filename: `gm_sales_targets_${slug(month)}`,
+            headers: ["Sales Associate", "Store", "Target", "Sold This Month", "Achieved %"],
+            rows: rows.map((r) => [r.name, r.store, Math.round(r.target), Math.round(r.sold), r.achieved.toFixed(1)]),
+          })} />
           <Table
             rowKey={(r) => r.key}
             rows={rows}
@@ -324,13 +321,11 @@ function DailySales({ ctx }) {
         <TrendChart data={data.list} onPick={openDay} />
       </Card>
       <Card span={12} title="Day-wise Sales by Channel" sub="Click a day to see its orders">
-        <div className="ceo-tools">
-          <CsvButton disabled={!data.list.length} onClick={() => downloadCsv({
-            filename: `gm_day_wise_sales_${slug(ctx.periodName)}`,
-            headers: ["Date", "Total Revenue", "Orders", ...data.channels, "Average Order Value"],
-            rows: data.list.map((r) => [formatDate(r.key), Math.round(r.revenue), r.orders, ...data.channels.map((c) => Math.round(r.byChannel[c] || 0)), Math.round(r.orders ? r.revenue / r.orders : 0)]),
-          })} />
-        </div>
+        <ListTools exportDisabled={!data.list.length} onExport={() => downloadCsv({
+          filename: `gm_day_wise_sales_${slug(ctx.periodName)}`,
+          headers: ["Date", "Total Revenue", "Orders", ...data.channels, "Average Order Value"],
+          rows: data.list.map((r) => [formatDate(r.key), Math.round(r.revenue), r.orders, ...data.channels.map((c) => Math.round(r.byChannel[c] || 0)), Math.round(r.orders ? r.revenue / r.orders : 0)]),
+        })} />
         <Table
           rowKey={(r) => r.key}
           rows={[...data.list].reverse()}
@@ -392,8 +387,14 @@ export function B2bPage({ ctx }) {
   }, [orders, inPeriod, range, prevRange, channelOf, vendorName, sales]);
 
   useEffect(() => { setPage(1); }, [search]);
+  const [drawer, setDrawer] = useState(false);
+  const [partnerType, setPartnerType] = useState("");
+  const [owingOnly, setOwingOnly] = useState("");
   const q = search.trim().toLowerCase();
-  const partners = q ? stats.partners.filter((p) => p.name.toLowerCase().includes(q)) : stats.partners;
+  const partners = stats.partners
+    .filter((p) => !q || p.name.toLowerCase().includes(q))
+    .filter((p) => !partnerType || p.list.some((o) => o.b2b_order_type === partnerType))
+    .filter((p) => !owingOnly || p.balance > 0);
   const owing = stats.partners.filter((p) => p.balance > 0).sort((a, b) => b.balance - a.balance);
   const openPartner = (p) => openOrders({ title: p.name, sub: `B2B orders, ${ctx.periodName}`, orders: p.list, b2b: true });
 
@@ -419,14 +420,20 @@ export function B2bPage({ ctx }) {
         <Card span={4} md={4} title="Consignment"><Tile label={ordersN(stats.consignment.count)} value={shortInr(stats.consignment.value)} title={fullInr(stats.consignment.value)} onClick={() => openOrders({ title: "Consignment Orders", sub: ctx.periodName, orders: stats.consignment.list, b2b: true })} /></Card>
         <Card span={4} md={4} title="Client Order"><Tile label={ordersN(stats.clientOrder.count)} value={shortInr(stats.clientOrder.value)} title={fullInr(stats.clientOrder.value)} onClick={() => openOrders({ title: "Client Orders", sub: ctx.periodName, orders: stats.clientOrder.list, b2b: true })} /></Card>
         <Card span={12} title="Partner-wise Sales" sub="Click a partner to see their orders and record a payment">
-          <div className="ceo-tools">
-            <SearchBox value={search} onChange={setSearch} placeholder="Search partner" />
-            <CsvButton disabled={!partners.length} onClick={() => downloadCsv({
+          <ListTools
+            search={search} onSearch={setSearch} placeholder="Search partner"
+            filters={(partnerType ? 1 : 0) + (owingOnly ? 1 : 0)} onFilters={() => setDrawer(true)}
+            exportDisabled={!partners.length}
+            onExport={() => downloadCsv({
               filename: `gm_b2b_partners_${slug(ctx.periodName)}`,
               headers: ["Partner", "Sales", "Orders", "Amount Received", "Balance Due"],
               rows: partners.map((p) => [p.name, Math.round(p.sales), p.orders, Math.round(p.received), Math.round(p.balance)]),
-            })} />
-          </div>
+            })}
+          />
+          <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setPartnerType(""); setOwingOnly(""); }} count={partners.length} noun="partners" sub="Narrow the partner list">
+            <FilterGroup label="Order Type"><Chips options={["Buyout", "Consignment", "Client Order"].map((v) => ({ value: v, label: v }))} value={partnerType} onChange={setPartnerType} /></FilterGroup>
+            <FilterGroup label="Balance"><Chips options={[{ value: "owing", label: "Still owing money" }]} value={owingOnly} onChange={setOwingOnly} /></FilterGroup>
+          </FilterDrawer>
           <Table
             rowKey={(r) => r.key}
             rows={partners.slice((page - 1) * PAGE, page * PAGE)}
@@ -459,6 +466,7 @@ export function OutstandingPage({ ctx }) {
   const [sa, setSa] = useState("");
   const [store, setStore] = useState("");
   const [bucket, setBucket] = useState("");
+  const [drawer, setDrawer] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const all = useMemo(() => buildOutstanding(orders), [orders]);
@@ -477,9 +485,7 @@ export function OutstandingPage({ ctx }) {
 
   return (
     <div className="ceo-page">
-      <PageHead title="Client Outstanding" desc="Client orders still owing money, with the sales associate who took each one. B2B balances are on B2B Overview.">
-        <CsvButton onClick={exportCsv} disabled={!list.length} />
-      </PageHead>
+      <PageHead title="Client Outstanding" desc="Client orders still owing money, with the sales associate who took each one. B2B balances are on B2B Overview." />
       <div className="ceo-tiles">
         <Tile icon="alert" tone="warn" label="Balance Due from Clients" value={shortInr(summary.total)} title={fullInr(summary.total)} note={`${num(summary.count)} orders, all time`} onClick={() => showRows("Balance Due from Clients", "Every client order still owing money", filtered)} />
         <Tile icon="alert" tone="warn" label="Over 60 Days Past Delivery" value={shortInr(over60?.value)} title={fullInr(over60?.value)} note={`${num(over60?.count)} orders`} onClick={() => showRows("Over 60 Days Past Delivery", "Delivery date more than 60 days ago, still owing", filtered.filter((r) => r.bucket === "d60"))} />
@@ -500,12 +506,16 @@ export function OutstandingPage({ ctx }) {
           <RankBars rows={summary.byStore.map((x) => ({ name: x.key, value: x.value, count: x.count, overdue: x.overdue60 }))} limit={10} colorOf={() => "#c9785a"} sub={(r) => `${num(r.count)} orders · ${shortInr(r.overdue)} over 60 days`} onRow={(r) => showRows(r.name, "Client orders still owing money", filtered.filter((x) => (x.store || "—") === r.name))} />
         </Card>
         <Card span={12} title="Orders With a Balance" sub="Oldest past delivery first">
-          <div className="ceo-tools">
-            <SearchBox value={search} onChange={setSearch} placeholder="Search order, client or associate" />
-            <Select label="Sales associate" value={sa} onChange={setSa} options={options(all.bySa.map((x) => x.key), "All associates")} />
-            <Select label="Store" value={store} onChange={setStore} options={options(all.byStore.map((x) => x.key), "All stores")} search={false} />
-            <Select label="Age" value={bucket} onChange={setBucket} options={[{ value: "", label: "Any age" }, ...AGE_BUCKETS.map((b) => ({ value: b.key, label: b.label }))]} search={false} />
-          </div>
+          <ListTools
+            search={search} onSearch={setSearch} placeholder="Search order, client or associate"
+            filters={(sa ? 1 : 0) + (store ? 1 : 0) + (bucket ? 1 : 0)} onFilters={() => setDrawer(true)}
+            exportDisabled={!list.length} onExport={exportCsv}
+          />
+          <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setSa(""); setStore(""); setBucket(""); }} count={list.length} noun="orders" sub="Narrow the orders with a balance">
+            <FilterGroup label="Sales Associate"><Select label="Sales associate" value={sa} onChange={setSa} options={options(all.bySa.map((x) => x.key), "All associates")} /></FilterGroup>
+            <FilterGroup label="Store"><Chips options={all.byStore.map((x) => ({ value: x.key, label: x.key }))} value={store} onChange={setStore} /></FilterGroup>
+            <FilterGroup label="Days Past Delivery"><Chips options={AGE_BUCKETS.map((b) => ({ value: b.key, label: b.label }))} value={bucket} onChange={setBucket} /></FilterGroup>
+          </FilterDrawer>
           <Table
             rowKey={(r) => r.id}
             rows={list.slice((page - 1) * PAGE, page * PAGE)}
@@ -586,6 +596,7 @@ export function InventoryPage({ ctx }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
+  const [drawer, setDrawer] = useState(false);
   const [page, setPage] = useState(1);
   const [design, setDesign] = useState(null);
   const [list, setList] = useState(null);
@@ -666,12 +677,15 @@ export function InventoryPage({ ctx }) {
           )}
         </Card>
         <Card span={12} title="Design Stock" sub="Click a design to see its sizes and where its pieces are">
-          <div className="ceo-tools">
-            <SearchBox value={search} onChange={setSearch} placeholder="Search design or SKU" />
-            <Select label="Stock level" value={status} onChange={setStatus} options={STATUS_FILTERS} search={false} />
-            <Select label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label }))]} search={false} />
-            <CsvButton disabled={!rows.length} onClick={() => exportDesigns("design stock", rows)} />
-          </div>
+          <ListTools
+            search={search} onSearch={setSearch} placeholder="Search design or SKU"
+            filters={(status ? 1 : 0) + (type ? 1 : 0)} onFilters={() => setDrawer(true)}
+            exportDisabled={!rows.length} onExport={() => exportDesigns("design stock", rows)}
+          />
+          <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setStatus(""); setType(""); }} count={rows.length} noun="designs" sub="Narrow the design list">
+            <FilterGroup label="Stock Level"><Chips options={STATUS_FILTERS.filter((f) => f.value)} value={status} onChange={setStatus} /></FilterGroup>
+            <FilterGroup label="Type"><Chips options={Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label }))} value={type} onChange={setType} /></FilterGroup>
+          </FilterDrawer>
           <Table
             rowKey={(r) => r.id}
             rows={rows.slice((page - 1) * PAGE, page * PAGE)}
@@ -835,14 +849,13 @@ export function ReturnsPage({ ctx }) {
           </Card>
         )}
         <Card span={12} title={picked ? picked.label : "All Issue Orders"} sub="Newest first. Choose an issue to narrow the list.">
-          <div className="ceo-tools">
+          <ListTools exportDisabled={!list.length} onExport={() => downloadCsv({
+            filename: `gm_${slug(picked ? picked.label : "issue orders")}_${slug(ctx.periodName)}`,
+            headers: ["Order No", "Order Date", "Client", "Sales Associate", "Issue", "Reason", "Status", "Value"],
+            rows: list.map((o) => [o.order_no, formatDate(o.created_at), ctx.clientOf(o), personOf(o) || "", kindOf(o), reasonOf(o), getOrderStatusLabel(o.status), Math.round(totalOf(o))]),
+          })}>
             <Seg label="Issue" value={kind} onChange={setKind} options={[{ value: "", label: "All", count: data.issues.length }, ...data.kinds.map((k) => ({ value: k.key, label: k.label, count: k.list.length }))]} />
-            <CsvButton disabled={!list.length} onClick={() => downloadCsv({
-              filename: `gm_${slug(picked ? picked.label : "issue orders")}_${slug(ctx.periodName)}`,
-              headers: ["Order No", "Order Date", "Client", "Sales Associate", "Issue", "Reason", "Status", "Value"],
-              rows: list.map((o) => [o.order_no, formatDate(o.created_at), ctx.clientOf(o), personOf(o) || "", kindOf(o), reasonOf(o), getOrderStatusLabel(o.status), Math.round(totalOf(o))]),
-            })} />
-          </div>
+          </ListTools>
           <Table
             rowKey={(r) => r.id}
             rows={list.slice((page - 1) * PAGE, page * PAGE)}
@@ -899,44 +912,6 @@ const orderNumber = (no) => {
   const m = String(no || "").replace(/-[A-Z]\d*$/, "").match(/(\d{2})(\d{2})-(\d{6})$/);
   return m ? parseInt(m[2] + m[1] + m[3], 10) : 0;
 };
-
-/** A period picker for one page's own list, drawn with our chips and calendar. */
-function usePagePeriod() {
-  const [period, setPeriod] = useState("all");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const range = useMemo(() => {
-    if (period === "all") return null;
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (period === "custom") return from ? { start: new Date(`${from}T00:00:00`), end: to ? new Date(`${to}T23:59:59.999`) : new Date(`${from}T23:59:59.999`) } : null;
-    if (period === "today") return { start, end: now };
-    if (period === "week") { start.setDate(start.getDate() - 6); return { start, end: now }; }
-    if (period === "month") return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
-    if (period === "year") return { start: new Date(now.getFullYear(), 0, 1), end: now };
-    return null;
-  }, [period, from, to]);
-  const inPeriod = (ts) => !range || (ts && new Date(ts) >= range.start && new Date(ts) <= range.end);
-  return { period, setPeriod, from, to, setRange: (a, b) => { setFrom(a); setTo(b); }, range, inPeriod, reset: () => { setPeriod("all"); setFrom(""); setTo(""); } };
-}
-const PAGE_PERIODS = [
-  { value: "all", label: "All Time" }, { value: "today", label: "Today" }, { value: "week", label: "Last 7 Days" },
-  { value: "month", label: "This Month" }, { value: "year", label: "This Year" }, { value: "custom", label: "Choose dates" },
-];
-function PeriodFacet({ p, label = "Order Date" }) {
-  return (
-    <FilterGroup label={label}>
-      <Chips options={PAGE_PERIODS} value={p.period} onChange={(v) => p.setPeriod(v || "all")} />
-      {p.period === "custom" && <DateRange from={p.from} to={p.to} onChange={p.setRange} />}
-    </FilterGroup>
-  );
-}
-const FilterFooter = ({ count, noun, onClear, onClose }) => (
-  <>
-    <button type="button" className="ceo-btn" onClick={onClear}>Clear Filters</button>
-    <button type="button" className="ceo-btn is-primary" onClick={onClose}>Show {num(count)} {noun}</button>
-  </>
-);
 
 export function OrdersPage({ ctx }) {
   const { orders, personOf, isPerson, openOrder, openJourney, makePdf, pdfBusy, startPlaceOrder, clientOf } = ctx;
@@ -1007,16 +982,13 @@ export function OrdersPage({ ctx }) {
   return (
     <div className="ceo-page">
       <PageHead title="Order Management" desc="Find any order, follow each piece through production, and download its client or warehouse PDF.">
-        <FilterButton count={active} onClick={() => setDrawer(true)} />
-        <CsvButton onClick={exportCsv} disabled={!list.length} />
         <button type="button" className="ceo-btn is-primary" onClick={startPlaceOrder}><Icon name="plus" />Place Order</button>
       </PageHead>
       <Card>
-        <div className="ceo-tools">
+        <ListTools search={search} onSearch={setSearch} placeholder={`Search by ${SEARCH_FIELDS.find((f) => f.value === field).label.toLowerCase()}`} filters={active} onFilters={() => setDrawer(true)} onExport={exportCsv} exportDisabled={!list.length}>
           <Select label="Search by" value={field} onChange={setField} options={SEARCH_FIELDS} search={false} />
-          <SearchBox value={search} onChange={setSearch} placeholder={`Search by ${SEARCH_FIELDS.find((f) => f.value === field).label.toLowerCase()}`} />
           <Select label="Sort" value={sort} onChange={setSort} options={SORTS} search={false} />
-        </div>
+        </ListTools>
         <div className="ceo-tools">
           <Seg label="Status" value={tab} onChange={setTab} options={STATUS_TABS.map((t) => ({ ...t, count: counts[t.value] }))} />
         </div>
@@ -1049,7 +1021,7 @@ export function OrdersPage({ ctx }) {
         <Pager page={page} pages={Math.ceil(list.length / PAGE)} onChange={setPage} />
       </Card>
       {drawer && (
-        <Drawer title="Filters" sub="Narrow the order list" onClose={() => setDrawer(false)} footer={<FilterFooter count={list.length} noun="orders" onClear={clear} onClose={() => setDrawer(false)} />}>
+        <FilterDrawer open onClose={() => setDrawer(false)} onClear={clear} count={list.length} noun="orders" sub="Narrow the order list">
           <PeriodFacet p={p} />
           <FilterGroup label="Payment Status"><Chips options={[{ value: "paid", label: "Paid" }, { value: "partial", label: "Partly Paid" }, { value: "unpaid", label: "Unpaid" }]} value={filters.payment} onChange={(v) => set("payment", v)} /></FilterGroup>
           <FilterGroup label="Priority"><Chips options={[{ value: "normal", label: "Normal" }, { value: "urgent", label: "Urgent" }]} value={filters.priority} onChange={(v) => set("priority", v)} /></FilterGroup>
@@ -1063,7 +1035,7 @@ export function OrdersPage({ ctx }) {
               <label><span>₹</span><input type="text" inputMode="numeric" placeholder="To" aria-label="Highest value" value={filters.maxPrice} onChange={(e) => set("maxPrice", e.target.value.replace(/\D/g, ""))} /></label>
             </div>
           </FilterGroup>
-        </Drawer>
+        </FilterDrawer>
       )}
     </div>
   );
@@ -1138,9 +1110,7 @@ export function AccountsPage({ ctx }) {
 
   return (
     <div className="ceo-page">
-      <PageHead title="Accounts & Finance" desc="Every line item with its discount, taxable value and GST (18%, as on the customer invoice). Totals leave out cancelled and returned orders; website orders are not listed.">
-        <FilterButton count={active} onClick={() => setDrawer(true)} />
-      </PageHead>
+      <PageHead title="Accounts & Finance" desc="Every line item with its discount, taxable value and GST (18%, as on the customer invoice). Totals leave out cancelled and returned orders; website orders are not listed." />
       <div className="ceo-tiles">
         <Tile icon="inr" label="Gross Value" value={shortInr(totals.gross)} title={fullInr(totals.gross)} note="MRP, extras included" onClick={() => openTotal("Gross Value", "The MRP of each order, extras included")} />
         <Tile icon="sale" label="Total Discount" value={shortInr(totals.discount)} title={fullInr(totals.discount)} note="Discounts and B2B markdown" onClick={() => openTotal("Total Discount", "MRP minus what was billed: discounts, codes and B2B partner markdown")} />
@@ -1148,14 +1118,11 @@ export function AccountsPage({ ctx }) {
         <Tile icon="trend" label="Invoice Value" value={shortInr(totals.invoice)} title={fullInr(totals.invoice)} note="What was billed" onClick={() => openTotal("Invoice Value", "What each order was billed")} />
       </div>
       <Card>
-        <div className="ceo-tools">
-          <SearchBox value={search} onChange={setSearch} placeholder="Search order, client, product or associate" />
-          <CsvButton disabled={!filtered.length} onClick={() => downloadCsv({
+        <ListTools search={search} onSearch={setSearch} placeholder="Search order, client, product or associate" filters={active} onFilters={() => setDrawer(true)} exportDisabled={!filtered.length} onExport={() => downloadCsv({
             filename: "gm_accounts_line_items",
             headers: ["SA Name", "Order No", "Order Date", "Client", "Product", "Gross", "Discount", "Taxable", "GST", "Invoice", "Qty", "Status", "Counted in Totals", "Delivery Date", "Store"],
             rows: filtered.map((l) => [l.sa, l.orderNo, formatDate(l.date), l.client, l.product, l.gross.toFixed(2), l.discount.toFixed(2), l.taxable.toFixed(2), l.gst.toFixed(2), l.invoice.toFixed(2), l.quantity, getOrderStatusLabel(l.status), isRevenueOrder(l.order) ? "Yes" : "No", l.delivery ? formatDate(l.delivery) : "", l.store]),
           })} />
-        </div>
         <Table
           rowKey={(r) => r.id}
           rows={filtered.slice((page - 1) * 20, page * 20)}
@@ -1179,12 +1146,12 @@ export function AccountsPage({ ctx }) {
         <Pager page={page} pages={Math.ceil(filtered.length / 20)} onChange={setPage} />
       </Card>
       {drawer && (
-        <Drawer title="Filters" sub="Narrow the line items" onClose={() => setDrawer(false)} footer={<FilterFooter count={filtered.length} noun="lines" onClear={() => { p.reset(); setStatus(""); setStore(""); setSa(""); }} onClose={() => setDrawer(false)} />}>
+        <FilterDrawer open onClose={() => setDrawer(false)} onClear={() => { p.reset(); setStatus(""); setStore(""); setSa(""); }} count={filtered.length} noun="lines" sub="Narrow the line items">
           <PeriodFacet p={p} />
           <FilterGroup label="Status"><Chips options={ACCOUNT_STATUSES.map((s) => ({ value: s, label: getOrderStatusLabel(s) }))} value={status} onChange={setStatus} /></FilterGroup>
           <FilterGroup label="Store"><Chips options={storeOptions.map((s) => ({ value: s, label: s }))} value={store} onChange={setStore} /></FilterGroup>
           <FilterGroup label="Salesperson"><Select label="Salesperson" value={sa} onChange={setSa} options={options(saOptions, "All salespersons")} /></FilterGroup>
-        </Drawer>
+        </FilterDrawer>
       )}
     </div>
   );
@@ -1220,6 +1187,9 @@ const WATCH_VIEWS = [
 export function DeliveryPage({ ctx }) {
   const { orders, channelOf, personOf, isPerson, openOrders, openOrder } = ctx;
   const [view, setView] = useState("late");
+  const [drawer, setDrawer] = useState(false);
+  const [fChannel, setFChannel] = useState("");
+  const [fStage, setFStage] = useState("");
   const [page, setPage] = useState(1);
   const data = useMemo(() => {
     // Website orders are left out: they are fulfilled on Shopify and never
@@ -1244,7 +1214,10 @@ export function DeliveryPage({ ctx }) {
     };
   }, [orders, channelOf, personOf, isPerson]);
   useEffect(() => { setPage(1); }, [view]);
-  const list = data[view];
+  const stageName = (o) => (o.warehouse_stage && o.warehouse_stage !== "order_received" ? getStageLabel(o.warehouse_stage) || o.warehouse_stage : "Not started");
+  const list = data[view].filter((r) => (!fChannel || channelOf(r.o) === fChannel) && (!fStage || stageName(r.o) === fStage));
+  const channelChoices = [...new Set(data[view].map((r) => channelOf(r.o)))].sort();
+  const stageChoices = [...new Set(data[view].map((r) => stageName(r.o)))].sort();
   const value = (l) => l.reduce((s, r) => s + totalOf(r.o), 0);
   const viewLabel = WATCH_VIEWS.find((v) => v.value === view).label;
 
@@ -1270,10 +1243,13 @@ export function DeliveryPage({ ctx }) {
           <RankBars rows={data.bySa} format={(v) => ordersN(v)} colorOf={() => "#c9785a"} limit={8} onRow={(r) => openOrders({ title: `${r.name}: past delivery date`, sub: "Late orders this associate took", orders: r.list })} />
         </Card>
         <Card span={12} title={viewLabel}>
-          <div className="ceo-tools">
+          <ListTools filters={(fChannel ? 1 : 0) + (fStage ? 1 : 0)} onFilters={() => setDrawer(true)} exportDisabled={!list.length} onExport={() => exportOrders(viewLabel, list.map((r) => r.o), ctx)}>
             <Seg label="Show" value={view} onChange={setView} options={WATCH_VIEWS.map((v) => ({ ...v, count: data[v.value].length }))} />
-            <CsvButton disabled={!list.length} onClick={() => exportOrders(viewLabel, list.map((r) => r.o), ctx)} />
-          </div>
+          </ListTools>
+          <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setFChannel(""); setFStage(""); }} count={list.length} noun="orders" sub={`Narrow ${viewLabel.toLowerCase()}`}>
+            <FilterGroup label="Sales Channel"><Chips options={channelChoices.map((v) => ({ value: v, label: v }))} value={fChannel} onChange={setFChannel} /></FilterGroup>
+            <FilterGroup label="Production Stage"><Chips options={stageChoices.map((v) => ({ value: v, label: v }))} value={fStage} onChange={setFStage} /></FilterGroup>
+          </FilterDrawer>
           <Table
             rowKey={(r) => r.o.id}
             rows={list.slice((page - 1) * PAGE, page * PAGE)}

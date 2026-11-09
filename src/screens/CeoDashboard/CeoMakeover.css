@@ -639,3 +639,9 @@
 .ceo .notif-bell-btn.is-soft:hover { background: #fff; border-color: var(--ceo-gold); color: var(--ceo-gold-deep) !important; }
 .ceo .notif-bell-btn.is-soft svg { width: 19px; height: 19px; }
 .ceo .notif-bell-btn.is-soft .notif-bell-badge { top: -6px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: #f6edd3; color: #8a6a14 !important; border: 1px solid #e2cf95; box-shadow: 0 0 0 2px #fffdf7; font-size: 9.5px; font-weight: 600; line-height: 15px; letter-spacing: .01em; animation: none; }
+
+/* The standard list toolbar (dashKit ListTools): search · tabs · Filters · Export. */
+.ceo .dash-tools { align-items: center; }
+.ceo .dash-tools .dash-tools-end { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ceo .dash-tools .dash-tools-end:empty { display: none; }
+@media (max-width: 640px) { .ceo .dash-tools .dash-tools-end { margin-left: 0; } }

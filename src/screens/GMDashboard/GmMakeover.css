@@ -12,3 +12,9 @@
    own layout: give them room inside a plain card. */
 .ceo.gm .gm-classic { overflow-x: auto; }
 .ceo.gm .gm-classic h2:first-child { display: none; }
+
+/* Five headline tiles share one row on wide screens instead of leaving the
+   fifth alone on a full-width row. */
+@media (min-width: 1200px) {
+  .ceo.gm .ceo-tiles:has(> .ceo-tile:nth-child(5):last-child) > .ceo-tile { flex-basis: calc(20% - 15px); }
+}

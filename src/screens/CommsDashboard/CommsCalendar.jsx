@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "../../lib/supabaseClient";
 import formatDate from "../../utils/formatDate";
 
@@ -28,14 +29,11 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(todayISO());
 
-  // Modal state
+  // New / Edit open the shared EventModal below (also used by the new Comms
+  // dashboard), so an event is saved the same way everywhere.
   const [modal, setModal] = useState(null); // { mode: "create" | "edit", event? }
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [eventDate, setEventDate] = useState(todayISO());
-  const [eventType, setEventType] = useState("follow_up");
-  const [relatedOrderId, setRelatedOrderId] = useState("");
-  const [saving, setSaving] = useState(false);
+  const openCreate = () => setModal({ mode: "create" });
+  const openEdit = (event) => setModal({ mode: "edit", event });
 
   useEffect(() => {
     let cancelled = false;
@@ -63,74 +61,6 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
   }, [events]);
 
   const eventsForSelected = selectedDate ? (eventsByDate[selectedDate] || []) : [];
-
-  const openCreate = () => {
-    setTitle("");
-    setDescription("");
-    setEventDate(selectedDate || todayISO());
-    setEventType("follow_up");
-    setRelatedOrderId("");
-    setModal({ mode: "create" });
-  };
-
-  const openEdit = (event) => {
-    setTitle(event.title || "");
-    setDescription(event.description || "");
-    setEventDate(event.event_date || todayISO());
-    setEventType(event.event_type || "follow_up");
-    setRelatedOrderId(event.related_order_id || "");
-    setModal({ mode: "edit", event });
-  };
-
-  const closeModal = () => { if (!saving) setModal(null); };
-
-  const handleSave = async () => {
-    if (!title.trim()) {
-      showPopup({ title: "Required", message: "Please add a title.", type: "warning" });
-      return;
-    }
-    if (!eventDate) {
-      showPopup({ title: "Required", message: "Please pick a date.", type: "warning" });
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        user_email: profile.email.toLowerCase(),
-        title: title.trim(),
-        description: description.trim() || null,
-        event_date: eventDate,
-        event_type: eventType,
-        related_order_id: relatedOrderId || null,
-      };
-
-      if (modal.mode === "create") {
-        const { data, error } = await supabase
-          .from("comms_calendar_events")
-          .insert(payload)
-          .select()
-          .single();
-        if (error) throw error;
-        setEvents((prev) => [...prev, data].sort((a, b) => a.event_date.localeCompare(b.event_date)));
-        setSelectedDate(eventDate);
-      } else {
-        const { data, error } = await supabase
-          .from("comms_calendar_events")
-          .update(payload)
-          .eq("id", modal.event.id)
-          .select()
-          .single();
-        if (error) throw error;
-        setEvents((prev) => prev.map((e) => e.id === data.id ? data : e));
-      }
-      setModal(null);
-    } catch (err) {
-      console.error("Save event failed:", err);
-      showPopup({ title: "Failed", message: err.message || "Could not save event.", type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleDelete = async (event) => {
     showPopup({
@@ -278,6 +208,87 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
 
       {/* Create / Edit modal */}
       {modal && (
+        <EventModal
+          mode={modal.mode}
+          event={modal.event}
+          defaultDate={selectedDate || todayISO()}
+          profile={profile}
+          orders={orders}
+          showPopup={showPopup}
+          onClose={() => setModal(null)}
+          onSaved={(row, mode) => {
+            if (mode === "create") { setEvents((prev) => [...prev, row].sort((a, b) => a.event_date.localeCompare(b.event_date))); setSelectedDate(row.event_date); }
+            else setEvents((prev) => prev.map((e) => (e.id === row.id ? row : e)));
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+
+/**
+ * Create or edit an event on the user's own Comms calendar
+ * (comms_calendar_events). Drawn over the whole window so any dashboard can open it.
+ */
+export function EventModal({ mode, event = null, defaultDate, profile, orders = [], showPopup, onClose, onSaved }) {
+  const [title, setTitle] = useState(event?.title || "");
+  const [description, setDescription] = useState(event?.description || "");
+  const [eventDate, setEventDate] = useState(event?.event_date || defaultDate || todayISO());
+  const [eventType, setEventType] = useState(event?.event_type || "follow_up");
+  const [relatedOrderId, setRelatedOrderId] = useState(event?.related_order_id || "");
+  const [saving, setSaving] = useState(false);
+
+  const closeModal = () => { if (!saving) onClose(); };
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      showPopup({ title: "Required", message: "Please add a title.", type: "warning" });
+      return;
+    }
+    if (!eventDate) {
+      showPopup({ title: "Required", message: "Please pick a date.", type: "warning" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        user_email: profile.email.toLowerCase(),
+        title: title.trim(),
+        description: description.trim() || null,
+        event_date: eventDate,
+        event_type: eventType,
+        related_order_id: relatedOrderId || null,
+      };
+
+      if (mode === "create") {
+        const { data, error } = await supabase
+          .from("comms_calendar_events")
+          .insert(payload)
+          .select()
+          .single();
+        if (error) throw error;
+        onSaved(data, "create");
+      } else {
+        const { data, error } = await supabase
+          .from("comms_calendar_events")
+          .update(payload)
+          .eq("id", event.id)
+          .select()
+          .single();
+        if (error) throw error;
+        onSaved(data, "edit");
+      }
+      onClose();
+    } catch (err) {
+      console.error("Save event failed:", err);
+      showPopup({ title: "Failed", message: err.message || "Could not save event.", type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
         <div
           style={{
             position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
@@ -293,7 +304,7 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ marginTop: 0, color: "#d5b85a" }}>
-              {modal.mode === "create" ? "New Event" : "Edit Event"}
+              {mode === "create" ? "New Event" : "Edit Event"}
             </h3>
 
             <div style={{ marginTop: 12 }}>
@@ -381,11 +392,29 @@ export default function CommsCalendar({ profile, orders, showPopup }) {
                   cursor: saving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600,
                   opacity: saving ? 0.6 : 1,
                 }}
-              >{saving ? "Saving…" : (modal.mode === "create" ? "Create" : "Save")}</button>
+              >{saving ? "Saving…" : (mode === "create" ? "Create" : "Save")}</button>
             </div>
           </div>
         </div>
-      )}
-    </>
-  );
+  , document.body);
 }
+
+/** The user's own calendar events, oldest first. */
+export async function loadCommsEvents(email) {
+  if (!email) return [];
+  const { data, error } = await supabase
+    .from("comms_calendar_events")
+    .select("*")
+    .eq("user_email", email.toLowerCase())
+    .order("event_date", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+/** Delete one calendar event. Throws if it fails. */
+export async function deleteCommsEvent(id) {
+  const { error } = await supabase.from("comms_calendar_events").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export { EVENT_TYPES, eventTypeMeta };

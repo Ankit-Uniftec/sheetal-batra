@@ -600,7 +600,11 @@ export function Drawer({ title, sub, onClose, onBack, children, footer, wide }) 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return (
+  // Drawn at the top of the dashboard, not inside the page: a fixed panel inside
+  // a scrolling area is clipped to that area on iPhone Safari, so it opened
+  // inside the page instead of over the whole window.
+  const host = typeof document !== "undefined" ? document.querySelector(".ceo") : null;
+  const panel = (
     <div className="ceo-drawer-root" role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Details"}>
       <button type="button" className="ceo-drawer-back" aria-label="Close" onClick={onClose} />
       <aside className={`ceo-drawer${wide ? " is-wide" : ""}`}>
@@ -621,6 +625,7 @@ export function Drawer({ title, sub, onClose, onBack, children, footer, wide }) 
       </aside>
     </div>
   );
+  return host ? createPortal(panel, host) : panel;
 }
 
 export function FilterGroup({ label, children }) {

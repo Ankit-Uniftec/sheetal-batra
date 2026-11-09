@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "../../lib/supabaseClient";
 import formatDate from "../../utils/formatDate";
 import { usePeriodFilter } from "../../components/PeriodFilter";
@@ -90,135 +91,10 @@ export default function CommsSourcingReturns({ orders, onOrderUpdated, showPopup
     };
   }, [buckets, search]);
 
-  // Modal state
+  // Mark Returned opens the shared modal below; the old list and the new
+  // Comms dashboard both use it, so a return is saved the same way everywhere.
   const [returnModal, setReturnModal] = useState(null); // { order }
-  const [returnCondition, setReturnCondition] = useState("Perfect");
-  const [returnLocation, setReturnLocation] = useState("Delhi store");
-  const [returnLocationOther, setReturnLocationOther] = useState("");
-  const [returnConditionOther, setReturnConditionOther] = useState("");
-  const [returnDamageNotes, setReturnDamageNotes] = useState("");
-  const [processing, setProcessing] = useState(false);
-
-  const openReturnModal = (order) => {
-    setReturnCondition("Perfect");
-    setReturnLocation("Delhi store");
-    setReturnLocationOther("");
-    setReturnConditionOther("");
-    setReturnDamageNotes("");
-    setReturnModal({ order });
-  };
-
-  const closeReturnModal = () => {
-    if (processing) return;
-    setReturnModal(null);
-  };
-
-  const handleSubmitReturn = async () => {
-    if (!returnModal) return;
-    const { order } = returnModal;
-
-    // Validation
-    if (returnLocation === "Others" && !returnLocationOther.trim()) {
-      showPopup({ title: "Required", message: "Please specify the new product location.", type: "warning" });
-      return;
-    }
-    if (returnCondition === "Others" && !returnConditionOther.trim()) {
-      showPopup({ title: "Required", message: "Please describe the condition.", type: "warning" });
-      return;
-    }
-    if ((returnCondition === "Minor damage" || returnCondition === "Major damage" || returnCondition === "Missing component") && !returnDamageNotes.trim()) {
-      showPopup({ title: "Required", message: "Please describe the damage / missing component in the notes.", type: "warning" });
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      const finalCondition = returnCondition === "Others" ? returnConditionOther.trim() : returnCondition;
-      const finalLocation = returnLocation === "Others" ? returnLocationOther.trim() : returnLocation;
-
-      // 1) Update the order row with return details
-      const { data: updated, error: updateErr } = await supabase
-        .from("orders")
-        .update({
-          comms_return_status: "Returned",
-          comms_return_condition: finalCondition,
-          comms_return_new_location: finalLocation,
-          comms_return_damage_notes: returnDamageNotes.trim() || null,
-        })
-        .eq("id", order.id)
-        .select()
-        .single();
-      if (updateErr) throw updateErr;
-
-      // 2) Increment inventory back for each item.
-      // Only when the item came back in usable condition. For "Major damage"
-      // and "Missing component", the piece can't be sold again — don't add
-      // it back to live inventory. Nazreen / inventory team handles those
-      // out-of-band (write-off, repair queue, etc.).
-      const isReusable = finalCondition === "Perfect" || finalCondition === "Minor damage";
-      if (isReusable) {
-        try {
-          for (const item of (order.items || [])) {
-            if (!item.product_id) continue;
-            const quantityReturned = item.quantity || 1;
-            if (item.sync_enabled) {
-              // LXRTS / Shopify-synced — variant-level inventory
-              const { data: variants } = await supabase
-                .from("product_variants")
-                .select("id, inventory, size")
-                .eq("product_id", item.product_id)
-                .eq("size", item.size)
-                .limit(1);
-              if (variants && variants.length > 0) {
-                const variant = variants[0];
-                const newInventory = (variant.inventory || 0) + quantityReturned;
-                await supabase
-                  .from("product_variants")
-                  .update({ inventory: newInventory })
-                  .eq("id", variant.id);
-              }
-            } else {
-              const { data: productData } = await supabase
-                .from("products")
-                .select("inventory")
-                .eq("id", item.product_id)
-                .single();
-              if (productData) {
-                const newInventory = (productData.inventory || 0) + quantityReturned;
-                await supabase
-                  .from("products")
-                  .update({ inventory: newInventory })
-                  .eq("id", item.product_id);
-              }
-            }
-          }
-        } catch (invErr) {
-          console.warn("Comms inventory increment failed (non-blocking):", invErr);
-        }
-      }
-
-      onOrderUpdated(updated);
-      setReturnModal(null);
-      showPopup({
-        title: "Return recorded",
-        message: isReusable
-          ? `Order ${order.order_no} marked as Returned. Inventory updated.`
-          : `Order ${order.order_no} marked as Returned. Inventory NOT incremented because the condition is ${finalCondition} — handle write-off separately.`,
-        type: "success",
-        confirmText: "OK",
-      });
-    } catch (err) {
-      console.error("Sourcing return failed:", err);
-      showPopup({
-        title: "Failed to record return",
-        message: err.message || "Could not update the order. Please try again.",
-        type: "error",
-        confirmText: "OK",
-      });
-    } finally {
-      setProcessing(false);
-    }
-  };
+  const openReturnModal = (order) => setReturnModal({ order });
 
   const renderTable = (rows, kind) => (
     <table className="comms-table">
@@ -322,110 +198,244 @@ export default function CommsSourcingReturns({ orders, onOrderUpdated, showPopup
 
       {/* Return modal */}
       {returnModal && (
-        <div
-          style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-          }}
-          onClick={closeReturnModal}
-        >
-          <div
-            style={{
-              background: "#fff", borderRadius: 12, padding: 24,
-              width: "92%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, color: "#2e7d32" }}>Mark Sourcing Order as Returned</h3>
-            <p style={{ fontSize: 13, color: "#555", lineHeight: 1.5 }}>
-              <strong>Order:</strong> {returnModal.order.order_no}<br />
-              <strong>Client:</strong> {returnModal.order.delivery_name || "—"}<br />
-              <strong>Items:</strong> {(returnModal.order.items || []).length}
-            </p>
-
-            <div style={{ marginTop: 14 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
-                Return Condition <span style={{ color: "#c62828" }}>*</span>
-              </label>
-              <select
-                value={returnCondition}
-                onChange={(e) => setReturnCondition(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
-              >
-                {RETURN_CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              {returnCondition === "Others" && (
-                <input
-                  type="text"
-                  placeholder="Specify condition"
-                  value={returnConditionOther}
-                  onChange={(e) => setReturnConditionOther(e.target.value)}
-                  style={{ marginTop: 6, width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
-                />
-              )}
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
-                New Product Location <span style={{ color: "#c62828" }}>*</span>
-              </label>
-              <select
-                value={returnLocation}
-                onChange={(e) => setReturnLocation(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
-              >
-                {NEW_LOCATION_OPTIONS.map((l) => <option key={l} value={l}>{l}</option>)}
-              </select>
-              {returnLocation === "Others" && (
-                <input
-                  type="text"
-                  placeholder="Specify location"
-                  value={returnLocationOther}
-                  onChange={(e) => setReturnLocationOther(e.target.value)}
-                  style={{ marginTop: 6, width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
-                />
-              )}
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
-                Notes {(returnCondition === "Minor damage" || returnCondition === "Major damage" || returnCondition === "Missing component") && <span style={{ color: "#c62828" }}>*</span>}
-              </label>
-              <textarea
-                rows={3}
-                placeholder={returnCondition === "Perfect" ? "Optional notes…" : "Describe the damage or missing component"}
-                value={returnDamageNotes}
-                onChange={(e) => setReturnDamageNotes(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, resize: "vertical" }}
-              />
-            </div>
-
-            {(returnCondition === "Major damage" || returnCondition === "Missing component") && (
-              <p style={{ fontSize: 12, color: "#c62828", marginTop: 10, lineHeight: 1.4 }}>
-                Inventory will NOT be incremented because the item isn't reusable. Handle write-off separately.
-              </p>
-            )}
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
-              <button
-                disabled={processing}
-                onClick={closeReturnModal}
-                style={{ padding: "8px 16px", border: "1px solid #d4d4d4", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}
-              >Cancel</button>
-              <button
-                disabled={processing}
-                onClick={handleSubmitReturn}
-                style={{
-                  padding: "8px 16px", border: "none", borderRadius: 6, color: "#fff",
-                  background: "#2e7d32",
-                  cursor: processing ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600,
-                  opacity: processing ? 0.6 : 1,
-                }}
-              >{processing ? "Saving…" : "Confirm Return"}</button>
-            </div>
-          </div>
-        </div>
+        <MarkReturnedModal
+          order={returnModal.order}
+          onClose={() => setReturnModal(null)}
+          onDone={onOrderUpdated}
+          showPopup={showPopup}
+        />
       )}
     </>
   );
+}
+
+
+/**
+ * Mark a sourcing order as returned: condition, new location, notes. Updates
+ * the order's comms_return_* columns and, when the piece is reusable, adds it
+ * back to stock (the same products / product_variants counts Stock Room reads).
+ * Drawn over the whole window so any dashboard can open it.
+ */
+export function MarkReturnedModal({ order, onClose, onDone, showPopup }) {
+  const [returnCondition, setReturnCondition] = useState("Perfect");
+  const [returnLocation, setReturnLocation] = useState("Delhi store");
+  const [returnLocationOther, setReturnLocationOther] = useState("");
+  const [returnConditionOther, setReturnConditionOther] = useState("");
+  const [returnDamageNotes, setReturnDamageNotes] = useState("");
+  const [processing, setProcessing] = useState(false);
+
+  const closeReturnModal = () => {
+    if (processing) return;
+    onClose();
+  };
+
+  const handleSubmitReturn = async () => {
+    // Validation
+    if (returnLocation === "Others" && !returnLocationOther.trim()) {
+      showPopup({ title: "Required", message: "Please specify the new product location.", type: "warning" });
+      return;
+    }
+    if (returnCondition === "Others" && !returnConditionOther.trim()) {
+      showPopup({ title: "Required", message: "Please describe the condition.", type: "warning" });
+      return;
+    }
+    if ((returnCondition === "Minor damage" || returnCondition === "Major damage" || returnCondition === "Missing component") && !returnDamageNotes.trim()) {
+      showPopup({ title: "Required", message: "Please describe the damage / missing component in the notes.", type: "warning" });
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const finalCondition = returnCondition === "Others" ? returnConditionOther.trim() : returnCondition;
+      const finalLocation = returnLocation === "Others" ? returnLocationOther.trim() : returnLocation;
+
+      // 1) Update the order row with return details
+      const { data: updated, error: updateErr } = await supabase
+        .from("orders")
+        .update({
+          comms_return_status: "Returned",
+          comms_return_condition: finalCondition,
+          comms_return_new_location: finalLocation,
+          comms_return_damage_notes: returnDamageNotes.trim() || null,
+        })
+        .eq("id", order.id)
+        .select()
+        .single();
+      if (updateErr) throw updateErr;
+
+      // 2) Increment inventory back for each item.
+      // Only when the item came back in usable condition. For "Major damage"
+      // and "Missing component", the piece can't be sold again — don't add
+      // it back to live inventory. Nazreen / inventory team handles those
+      // out-of-band (write-off, repair queue, etc.).
+      const isReusable = finalCondition === "Perfect" || finalCondition === "Minor damage";
+      if (isReusable) {
+        try {
+          for (const item of (order.items || [])) {
+            if (!item.product_id) continue;
+            const quantityReturned = item.quantity || 1;
+            if (item.sync_enabled) {
+              // LXRTS / Shopify-synced — variant-level inventory
+              const { data: variants } = await supabase
+                .from("product_variants")
+                .select("id, inventory, size")
+                .eq("product_id", item.product_id)
+                .eq("size", item.size)
+                .limit(1);
+              if (variants && variants.length > 0) {
+                const variant = variants[0];
+                const newInventory = (variant.inventory || 0) + quantityReturned;
+                await supabase
+                  .from("product_variants")
+                  .update({ inventory: newInventory })
+                  .eq("id", variant.id);
+              }
+            } else {
+              const { data: productData } = await supabase
+                .from("products")
+                .select("inventory")
+                .eq("id", item.product_id)
+                .single();
+              if (productData) {
+                const newInventory = (productData.inventory || 0) + quantityReturned;
+                await supabase
+                  .from("products")
+                  .update({ inventory: newInventory })
+                  .eq("id", item.product_id);
+              }
+            }
+          }
+        } catch (invErr) {
+          console.warn("Comms inventory increment failed (non-blocking):", invErr);
+        }
+      }
+
+      onDone(updated);
+      onClose();
+      showPopup({
+        title: "Return recorded",
+        message: isReusable
+          ? `Order ${order.order_no} marked as Returned. Inventory updated.`
+          : `Order ${order.order_no} marked as Returned. Inventory NOT incremented because the condition is ${finalCondition} — handle write-off separately.`,
+        type: "success",
+        confirmText: "OK",
+      });
+    } catch (err) {
+      console.error("Sourcing return failed:", err);
+      showPopup({
+        title: "Failed to record return",
+        message: err.message || "Could not update the order. Please try again.",
+        type: "error",
+        confirmText: "OK",
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  return createPortal(
+        <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+      }}
+      onClick={closeReturnModal}
+    >
+      <div
+        style={{
+          background: "#fff", borderRadius: 12, padding: 24,
+          width: "92%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ marginTop: 0, color: "#2e7d32" }}>Mark Sourcing Order as Returned</h3>
+        <p style={{ fontSize: 13, color: "#555", lineHeight: 1.5 }}>
+          <strong>Order:</strong> {order.order_no}<br />
+          <strong>Client:</strong> {order.delivery_name || "—"}<br />
+          <strong>Items:</strong> {(order.items || []).length}
+        </p>
+
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
+            Return Condition <span style={{ color: "#c62828" }}>*</span>
+          </label>
+          <select
+            value={returnCondition}
+            onChange={(e) => setReturnCondition(e.target.value)}
+            style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
+          >
+            {RETURN_CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {returnCondition === "Others" && (
+            <input
+              type="text"
+              placeholder="Specify condition"
+              value={returnConditionOther}
+              onChange={(e) => setReturnConditionOther(e.target.value)}
+              style={{ marginTop: 6, width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
+            />
+          )}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
+            New Product Location <span style={{ color: "#c62828" }}>*</span>
+          </label>
+          <select
+            value={returnLocation}
+            onChange={(e) => setReturnLocation(e.target.value)}
+            style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
+          >
+            {NEW_LOCATION_OPTIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+          {returnLocation === "Others" && (
+            <input
+              type="text"
+              placeholder="Specify location"
+              value={returnLocationOther}
+              onChange={(e) => setReturnLocationOther(e.target.value)}
+              style={{ marginTop: 6, width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13 }}
+            />
+          )}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: "#555", display: "block", marginBottom: 6 }}>
+            Notes {(returnCondition === "Minor damage" || returnCondition === "Major damage" || returnCondition === "Missing component") && <span style={{ color: "#c62828" }}>*</span>}
+          </label>
+          <textarea
+            rows={3}
+            placeholder={returnCondition === "Perfect" ? "Optional notes…" : "Describe the damage or missing component"}
+            value={returnDamageNotes}
+            onChange={(e) => setReturnDamageNotes(e.target.value)}
+            style={{ width: "100%", padding: "8px 10px", border: "1px solid #d4d4d4", borderRadius: 6, fontSize: 13, resize: "vertical" }}
+          />
+        </div>
+
+        {(returnCondition === "Major damage" || returnCondition === "Missing component") && (
+          <p style={{ fontSize: 12, color: "#c62828", marginTop: 10, lineHeight: 1.4 }}>
+            Inventory will NOT be incremented because the item isn't reusable. Handle write-off separately.
+          </p>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button
+            disabled={processing}
+            onClick={closeReturnModal}
+            style={{ padding: "8px 16px", border: "1px solid #d4d4d4", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}
+          >Cancel</button>
+          <button
+            disabled={processing}
+            onClick={handleSubmitReturn}
+            style={{
+              padding: "8px 16px", border: "none", borderRadius: 6, color: "#fff",
+              background: "#2e7d32",
+              cursor: processing ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600,
+              opacity: processing ? 0.6 : 1,
+            }}
+          >{processing ? "Saving…" : "Confirm Return"}</button>
+        </div>
+      </div>
+    </div>
+  , document.body);
 }

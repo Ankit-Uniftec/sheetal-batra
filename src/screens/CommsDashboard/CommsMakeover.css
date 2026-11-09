@@ -1,0 +1,48 @@
+/* Comms dashboard extras on top of the shared .ceo dashboard styles. */
+
+/* Engagement type pills: one quiet colour each. */
+.ceo.comms .ceo-pill.comms-eng.is-blue { background: #e4eff0; color: #2f6f73 !important; }
+.ceo.comms .ceo-pill.comms-eng.is-ok { background: #eef1e2; color: #5f6d36 !important; }
+.ceo.comms .ceo-pill.comms-eng.is-warn { background: #f8e9e1; color: #a5553a !important; }
+.ceo.comms .ceo-pill.comms-eng.is-plum { background: #f2e6ee; color: #7b3a5e !important; }
+
+/* Pieces of an order with their production stage, in the order panel. */
+.ceo.comms .comms-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.ceo.comms .comms-chip-piece { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; background: #fff; border: 1px solid var(--ceo-line); border-radius: 10px; font-size: 12.5px; }
+.ceo.comms .comms-chip-piece b { font-weight: 500; }
+.ceo.comms .comms-note { font-size: 12.5px; margin-top: 14px; }
+
+/* Calendar */
+.ceo.comms .comms-cal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.ceo.comms .comms-cal-head h3 { font-size: 1.15rem; min-width: 150px; text-align: center; }
+.ceo.comms .comms-cal-head svg { width: 16px; height: 16px; }
+.ceo.comms .comms-cal-seg { margin-left: auto; }
+.ceo.comms .comms-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.ceo.comms .comms-cal-dow { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; text-align: center; color: var(--ceo-ink-3) !important; padding-bottom: 2px; }
+.ceo.comms .comms-cal-cell { min-height: 78px; padding: 7px 8px; display: flex; flex-direction: column; align-items: stretch; gap: 4px; text-align: left; background: #fff; border: 1px solid var(--ceo-line); border-radius: 10px; cursor: pointer; transition: border-color .15s, background .15s; }
+.ceo.comms .comms-cal-cell:hover { border-color: var(--ceo-gold-line); background: #fffdf6; }
+.ceo.comms .comms-cal-cell.is-empty { background: transparent; border-color: transparent; cursor: default; }
+.ceo.comms .comms-cal-cell.is-today .comms-cal-num { color: var(--ceo-gold-deep) !important; font-weight: 600; }
+.ceo.comms .comms-cal-cell.is-selected { border-color: var(--ceo-gold); box-shadow: 0 0 0 1px var(--ceo-gold) inset; background: #fffaf0; }
+.ceo.comms .comms-cal-num { font-size: 13px; }
+.ceo.comms .comms-cal-marks { display: flex; flex-direction: column; gap: 3px; }
+.ceo.comms .comms-cal-marks i { font-style: normal; font-size: 10.5px; line-height: 1.3; padding: 1px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ceo.comms .comms-cal-marks i.is-delivery { background: #f6edd3; color: #8a6a14 !important; }
+.ceo.comms .comms-cal-marks i.is-event { background: #e4eff0; color: #2f6f73 !important; }
+.ceo.comms .comms-day-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.ceo.comms .comms-day-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; text-align: left; background: #fff; border: 1px solid var(--ceo-line); border-radius: 10px; cursor: pointer; }
+.ceo.comms button.comms-day-item:hover { border-color: var(--ceo-gold-line); }
+.ceo.comms .comms-day-item.is-event { cursor: default; }
+.ceo.comms .comms-day-item b { display: block; font-weight: 500; font-size: 13.5px; }
+.ceo.comms .comms-day-item small { display: block; color: var(--ceo-ink-3) !important; font-size: 12px; }
+.ceo.comms .comms-day-actions { display: inline-flex; gap: 6px; flex-shrink: 0; }
+.ceo.comms .comms-cal-legend { display: none; }
+
+@media (max-width: 640px) {
+  .ceo.comms .comms-cal-cell { min-height: 54px; padding: 5px; }
+  .ceo.comms .comms-cal-marks i { font-size: 0; padding: 0; width: 7px; height: 7px; border-radius: 50%; }
+  .ceo.comms .comms-cal-marks { flex-direction: row; gap: 3px; }
+  .ceo.comms .comms-cal-marks i.is-delivery { background: #c9a85a; }
+  .ceo.comms .comms-cal-marks i.is-event { background: #2f6f73; }
+  .ceo.comms .comms-cal-seg { margin-left: 0; width: 100%; }
+}
