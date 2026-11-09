@@ -480,3 +480,19 @@
 .ceo.pm .pmo-table th:first-child { border-radius: 13px 0 0 0; }
 .ceo.pm .pmo-table th:last-child { border-radius: 0 13px 0 0; }
 .ceo.pm .pmo-table tbody:last-child tr:last-child td { border-bottom: 0; }
+
+/* "Updating" in the header while the saved snapshot is on screen. */
+.ceo.pm .pm-updating { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 99px; background: #faf3e2; font-size: 12.5px; color: #8a6510 !important; white-space: nowrap; }
+.ceo.pm .pm-updating i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #ecdfba; border-top-color: #a9821f; animation: pmSpin .8s linear infinite; }
+@keyframes pmSpin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) { .ceo.pm .pm-updating { font-size: 0; padding: 0 9px; gap: 0; } }
+
+/* The light placeholder shown for the moment the login is checked on a refresh. */
+.ceo.pm .pm-skeleton { display: flex; flex-direction: column; gap: 18px; }
+.ceo.pm .pm-sk { display: block; border-radius: 16px; background: linear-gradient(90deg, #f6f0e2 0%, #fbf8f1 40%, #f6f0e2 80%); background-size: 200% 100%; animation: pmShimmer 1.2s ease-in-out infinite; }
+.ceo.pm .pm-sk.is-head { height: 96px; }
+.ceo.pm .pm-sk-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; }
+.ceo.pm .pm-sk.is-tile { height: 104px; }
+.ceo.pm .pm-sk.is-card { height: 260px; }
+.ceo.pm .pm-sk.is-card.is-short { height: 180px; }
+@keyframes pmShimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }

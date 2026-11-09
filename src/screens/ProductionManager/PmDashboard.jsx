@@ -15,7 +15,7 @@ import { HalfMadeBadge } from "../../components/HalfMadeSuggestion";
 import { runManualCompleteWithOverride, describeBlocking } from "../../utils/manualComplete";
 import { cancelOrder } from "../../utils/cancelOrder";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
-import { fetchFullOrder, PM_ORDER_SELECT } from "../../utils/pmOrderColumns";
+import { fetchFullOrder, PM_LIST_SELECT } from "../../utils/pmOrderColumns";
 import { fetchExternalMovements } from "../../utils/externalMovements";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import { fetchReJourneys } from "../../utils/reJourneys";
@@ -44,6 +44,7 @@ import DispatchPage from "./PmDispatch";
 import PeoplePage from "./PmPeople";
 import RequestsPanel from "./PmApprovals";
 import { ProfileBody } from "./PmMore";
+import { clearSnapshots, hasSnapshotFlag, readSnapshot, writeSnapshot } from "./pmCache";
 import ProductionOverrides from "../../components/ProductionOverrides";
 import "../../components/ProductionOverrides.css";
 import OverrideHistory from "../../components/OverrideHistory";
@@ -89,6 +90,9 @@ const TAB_ALIASES = {
 };
 const PANEL_TABS = { approvals: "overrides", overrides: "overrides", override_log: "log", replacements: "replacements" };
 const CalIcon = () => <CalendarIcon />;
+
+// The slower data sets Today reads, kept in the snapshot so it opens complete.
+const SNAPSHOT_LAZY = ["waiting", "scans8", "qc8", "movements"];
 
 // Loaded the first time a page asks for them, then kept.
 const LOADERS = {
@@ -148,45 +152,69 @@ export default function PmDashboard() {
     if (rawTab === "cancellations") setOrdersTab("cancelled");
   }, [rawTab]);
 
-  const apply = useCallback(({ orders: o, components: c, vendorMap: v }) => {
+  const apply = useCallback(({ orders: o, components: c, vendorMap: v }, at = new Date()) => {
     setOrders(o);
     setComponents(c);
     setVendorMap(v);
-    setSyncedAt(new Date());
+    setSyncedAt(at);
   }, []);
 
+  // Opening: the role check, the last saved snapshot and the fresh data all
+  // start together. Once the role check passes the snapshot (if any) shows at
+  // once, with "Updating" in the header; the fresh data replaces it when it
+  // arrives. The logo screen shows only when there is no snapshot yet (the
+  // very first visit on this browser, or after a day away).
+  const [stale, setStale] = useState(false);
+  const [quickStart] = useState(hasSnapshotFlag);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate("/login", { replace: true }); return; }
-      // The role check and the data reads start together; nothing is shown
-      // until the role check passes.
+      const email = session.user.email?.toLowerCase();
       const data = loadPmCore().catch((err) => ({ error: err }));
-      const { data: sp } = await supabase.from("salesperson").select("*").eq("email", session.user.email?.toLowerCase()).maybeSingle();
+      const saved = readSnapshot(email);
+      const { data: sp } = await supabase.from("salesperson").select("*").eq("email", email).maybeSingle();
       if (cancelled) return;
       if (!sp || sp.role !== "production_manager") {
+        await clearSnapshots();
         await supabase.auth.signOut();
         navigate("/login", { replace: true });
         return;
       }
       setProfile(sp);
+      const snap = await saved;
+      if (cancelled) return;
+      if (snap?.core) {
+        apply(snap.core, new Date(snap.savedAt));
+        // The saved slower data sets show too; each is fetched again in the background.
+        setLazy(Object.fromEntries(Object.entries(snap.lazy || {}).map(([k, rows]) => [k, { loading: false, rows }])));
+        setStale(true);
+        setLoading(false);
+      }
       const loaded = await data;
       if (cancelled) return;
       if (loaded.error) {
         console.error("Production data failed:", loaded.error);
-        showPopup({ title: "Data Not Loaded", message: "The production data could not be loaded. Please refresh the page.", type: "error", confirmText: "Ok" });
+        showPopup({
+          title: "Data Not Updated",
+          message: snap?.core
+            ? "The latest production data could not be loaded, so the dashboard is showing what it last saved. Use Refresh in the menu to try again."
+            : "The production data could not be loaded. Please refresh the page.",
+          type: "error", confirmText: "Ok",
+        });
       } else apply(loaded);
+      setStale(false);
       setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [navigate, apply]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Ask for a slower data set once; pages read it from ctx.lazy[key]. */
+  /** Ask for a slower data set once; pages read it from ctx.lazy[key]. Saved rows stay on screen while it reloads. */
   const need = useCallback((key) => {
     if (started.current[key] || !LOADERS[key]) return;
     started.current[key] = true;
-    setLazy((s) => ({ ...s, [key]: { loading: true, rows: null } }));
+    setLazy((s) => ({ ...s, [key]: { loading: true, rows: s[key]?.rows ?? null } }));
     LOADERS[key]()
       .then((rows) => setLazy((s) => ({ ...s, [key]: { loading: false, rows } })))
       .catch((err) => {
@@ -210,12 +238,22 @@ export default function PmDashboard() {
       apply(await loadPmCore());
       const keys = Object.keys(started.current).filter((k) => started.current[k]);
       started.current = {};
-      setLazy({});
       keys.forEach(need);
     } catch (err) {
       showPopup({ title: "Not Updated", message: "The data could not be updated. Please try again.", type: "error", confirmText: "Ok" });
     } finally { setRefreshing(false); }
   };
+
+  // Keep the snapshot current: a few seconds after fresh data (or an action)
+  // settles, save the production data and the small sets Today reads.
+  useEffect(() => {
+    if (loading || stale || !profile?.email || !orders.length) return undefined;
+    const t = setTimeout(() => {
+      const keep = Object.fromEntries(SNAPSHOT_LAZY.filter((k) => lazy[k]?.rows && !lazy[k].loading).map((k) => [k, lazy[k].rows]));
+      writeSnapshot(profile.email, { core: { orders, components, vendorMap }, lazy: keep });
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [loading, stale, profile, orders, components, vendorMap, lazy]);
 
   const componentsByOrder = useMemo(() => groupPieces(components), [components]);
   const ordersById = useMemo(() => Object.fromEntries(orders.map((o) => [o.id, o])), [orders]);
@@ -226,7 +264,7 @@ export default function PmDashboard() {
   /** Re-read one order and its pieces (after Complete or Cancel) instead of everything. */
   const reloadOrder = useCallback(async (orderId) => {
     const [{ data: row }, pieces] = await Promise.all([
-      supabase.from("orders").select(PM_ORDER_SELECT).eq("id", orderId).maybeSingle(),
+      supabase.from("orders").select(PM_LIST_SELECT).eq("id", orderId).maybeSingle(),
       loadOrderPieces(orderId).catch(() => null),
     ]);
     if (row) patchOrder(row);
@@ -318,7 +356,7 @@ export default function PmDashboard() {
     try { setEditing(await fetchFullOrder(order)); } finally { setBusy(null); }
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+  const handleLogout = async () => { await clearSnapshots(); await supabase.auth.signOut(); navigate("/login"); };
 
   const pages = NAV.flatMap((g) => g.items);
   const ctx = {
@@ -344,7 +382,7 @@ export default function PmDashboard() {
     <>
       {PopupComponent}
       <div className={`ceo gm pm${navOpen ? " is-nav-open" : ""}`}>
-        {loading && (
+        {loading && !quickStart && (
           <div className="ceo-welcome" role="status">
             <LogoLoader />
             <p className="ceo-welcome-state">Bringing the floor together</p>
@@ -397,11 +435,20 @@ export default function PmDashboard() {
               <span className="gm-top-actions">
                 <button type="button" className="ceo-btn" onClick={() => setRequests({ view: "overrides" })} aria-label="Requests and overrides"><Icon name="edit" /><span>Requests &amp; Overrides</span>{waitingCount > 0 && <b className="pm-top-count">{num(waitingCount)}</b>}</button>
               </span>
+              {(stale || refreshing) && <span className="pm-updating" role="status"><i />Updating</span>}
               <NotificationBell userEmail={profile?.email} look="soft" onOrderClick={(id) => { const o = ordersById[id]; if (o) openOrder(o); }} />
             </div>
           </div>
 
           <div className="ceo-scroll">
+            {loading && quickStart && (
+              <div className="ceo-page pm-skeleton" aria-busy="true" aria-label="Loading">
+                <span className="pm-sk is-head" />
+                <div className="pm-sk-row">{[0, 1, 2, 3, 4].map((i) => <span key={i} className="pm-sk is-tile" />)}</div>
+                <span className="pm-sk is-card" />
+                <span className="pm-sk is-card is-short" />
+              </div>
+            )}
             {!loading && (
               <>
                 {activeTab === "today" && <TodayPage ctx={ctx} />}

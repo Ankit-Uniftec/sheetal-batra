@@ -1,7 +1,7 @@
 import { supabase } from "../../lib/supabaseClient";
 import baseFormatDate from "../../utils/formatDate";
 import { fetchAllRowsParallel } from "../../utils/fetchAllRowsParallel";
-import { PM_ORDER_SELECT } from "../../utils/pmOrderColumns";
+import { PM_LIST_SELECT } from "../../utils/pmOrderColumns";
 import {
   STAGE_GROUPS, classifyComponentForStageCard, enrichComponentsWithMovements, getOrderChannelKey, getOrderChannelLabel,
   getStageLabel,
@@ -169,7 +169,7 @@ const TYPE_ORDER = { top: 0, bottom: 1, dupatta: 2, extra: 3 };
 /** Every order (only the production columns), every piece and the vendor names, side by side. */
 export async function loadPmCore() {
   const [ordersRes, compsRes, vendorsRes] = await Promise.all([
-    fetchAllRowsParallel("orders", (q) => q.select(PM_ORDER_SELECT).order("created_at", { ascending: false }).order("id")),
+    fetchAllRowsParallel("orders", (q) => q.select(PM_LIST_SELECT).order("created_at", { ascending: false }).order("id")),
     fetchAllRowsParallel("order_components", (q) => q.select(COMPONENT_COLUMNS).order("created_at", { ascending: false }).order("id"))
       .then(async (res) => (res.error ? res : { ...res, data: await enrichComponentsWithMovements(res.data || []) })),
     fetchAllRowsParallel("vendors", (q) => q.select("id, store_brand_name, vendor_code, location").order("id")),
