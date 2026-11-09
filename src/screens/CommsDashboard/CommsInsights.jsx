@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import formatDate from "../../utils/formatDate";
 import { isOrderStillRunning } from "../../utils/productionMetrics";
 import { supabase } from "../../lib/supabaseClient";
@@ -134,6 +134,20 @@ const TrendTip = ({ active, payload, label }) => {
   );
 };
 
+// Numbers on the chart itself, so they read without hovering: each engagement's
+// count inside its segment when the segment is tall enough to hold it, and the
+// month's total above the bar.
+const LIGHT = new Set(["Sourcing", "Personal order"]);
+const segmentLabel = (eng) => ({ x, y, width, height, value }) => {
+  if (!value || height < 15 || width < 14) return null;
+  return (
+    <text x={x + width / 2} y={y + height / 2} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={600} fill={LIGHT.has(eng) ? "#4a3a12" : "#fff"} pointerEvents="none">{value}</text>
+  );
+};
+const totalLabel = ({ x, y, width, value }) => (value
+  ? <text x={x + width / 2} y={y - 7} textAnchor="middle" fontSize={12} fontWeight={600} fill="#4a3f2c" pointerEvents="none">{value}</text>
+  : null);
+
 export function TrendCard({ ctx }) {
   const { orders, openOrders } = ctx;
   const months = useMemo(() => {
@@ -141,7 +155,7 @@ export function TrendCard({ ctx }) {
     const out = [];
     for (let i = 11; i >= 0; i -= 1) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      out.push({ key: `${d.getFullYear()}-${two(d.getMonth() + 1)}`, label: d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }), list: [], notional: 0, ...Object.fromEntries(ENGAGEMENTS.map((e) => [e, 0])) });
+      out.push({ key: `${d.getFullYear()}-${two(d.getMonth() + 1)}`, label: d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }), list: [], total: 0, notional: 0, ...Object.fromEntries(ENGAGEMENTS.map((e) => [e, 0])) });
     }
     const byKey = Object.fromEntries(out.map((m) => [m.key, m]));
     orders.filter(isLive).forEach((o) => {
@@ -149,6 +163,7 @@ export function TrendCard({ ctx }) {
       const m = byKey[`${d.getFullYear()}-${two(d.getMonth() + 1)}`];
       if (!m) return;
       m.list.push(o);
+      m.total += 1;
       m.notional += ctx.notionalOf(o);
       if (ENGAGEMENTS.includes(o.comms_engagement_type)) m[o.comms_engagement_type] += 1;
     });
@@ -164,13 +179,20 @@ export function TrendCard({ ctx }) {
     <Card span={7} className="comms-trend-card" title="Monthly Trend" sub="Comms orders placed each month, by engagement. Click a month to see its orders.">
       {!months.length ? <Empty /> : (
         <div className="comms-trend-chart">
-          <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
-            <BarChart data={months} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+          {/* minHeight: when the cards stack (phones), the box has no set height,
+              which the chart would read as 0 and draw nothing. */}
+          <ResponsiveContainer width="100%" height="100%" minHeight={260} initialDimension={{ width: 1, height: 260 }}>
+            <BarChart data={months} margin={{ top: 22, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#f1ede2" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} />
               <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} width={30} />
               <Tooltip content={<TrendTip />} cursor={{ fill: "rgba(184,146,46,.07)" }} />
-              {ENGAGEMENTS.map((e, i) => <Bar key={e} dataKey={e} name={e} stackId="eng" fill={ENG_COLOURS[e]} radius={i === ENGAGEMENTS.length - 1 ? [5, 5, 0, 0] : 0} maxBarSize={42} isAnimationActive={false} onClick={pick} style={{ cursor: "pointer" }} />)}
+              {ENGAGEMENTS.map((e, i) => (
+                <Bar key={e} dataKey={e} name={e} stackId="eng" fill={ENG_COLOURS[e]} radius={i === ENGAGEMENTS.length - 1 ? [5, 5, 0, 0] : 0} maxBarSize={42} isAnimationActive={false} onClick={pick} style={{ cursor: "pointer" }}>
+                  <LabelList dataKey={e} content={segmentLabel(e)} />
+                  {i === ENGAGEMENTS.length - 1 && <LabelList dataKey="total" content={totalLabel} />}
+                </Bar>
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
