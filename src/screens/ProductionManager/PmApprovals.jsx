@@ -1,20 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import ProductionOverrides from "../../components/ProductionOverrides";
-import "../../components/ProductionOverrides.css";
-import OverrideHistory from "../../components/OverrideHistory";
-import ReplacementApprovals from "../../components/ReplacementApprovals";
 import { fetchScanReport, scanReportCsv } from "../../utils/scanReport";
 import { Chips, DateRange, Icon, Insight, Seg, num } from "../CeoDashboard/CeoUi";
 import { listRecentDecisions } from "../../utils/stageRequests";
 import { Card, Dots } from "./PmCommon";
+import { OverrideLog, OverrideTool, ReplacementList } from "./PmOverrides";
 import { DAY, dayKey, plural, todayStart } from "./pmModel";
 
 // ============================================================
 // Requests & Overrides: everything that waits for the Production Manager's
 // decision, in one side panel opened from the menu or the header. The panels
-// are the same ones the old dashboard used, so every approval, override and
-// rejection is saved exactly as before. Overrides for one order open from that
-// order's own actions instead.
+// (PmOverrides.jsx) call the same functions the old dashboard's panels did, so
+// every approval, override and rejection is saved exactly as before. Overrides
+// for one order open from that order's own actions instead.
 // ============================================================
 
 const VIEWS = [
@@ -84,10 +81,10 @@ export default function RequestsPanel({ ctx, initialView = "overrides" }) {
         </section>
       )}
       <div className="pm-tabs-scroll"><Seg label="Approvals" value={view} onChange={setView} options={VIEWS} /></div>
-      <section className="ceo-card pm-classic ceo-keep">
-        {view === "overrides" && <ProductionOverrides currentUserEmail={ctx.email} />}
-        {view === "replacements" && <ReplacementApprovals currentUserEmail={ctx.email} hideMoney />}
-        {view === "log" && <OverrideHistory />}
+      <section className="ceo-card pm-records">
+        {view === "overrides" && <OverrideTool ctx={ctx} />}
+        {view === "replacements" && <ReplacementList ctx={ctx} />}
+        {view === "log" && <OverrideLog ctx={ctx} />}
       </section>
     </>
   );

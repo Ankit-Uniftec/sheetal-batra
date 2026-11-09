@@ -9,9 +9,7 @@ import NotificationBell from "../../components/NotificationBell";
 import LogoLoader from "../../components/LogoLoader";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
-import CompletePicker from "../../components/CompletePicker";
 import useHalfMadeSuggestions from "../../hooks/useHalfMadeSuggestions";
-import { HalfMadeBadge } from "../../components/HalfMadeSuggestion";
 import { runManualCompleteWithOverride, describeBlocking } from "../../utils/manualComplete";
 import { cancelOrder } from "../../utils/cancelOrder";
 import { downloadWarehousePdf } from "../../utils/pdfLazy";
@@ -36,6 +34,7 @@ import {
 import { OrdersTable, PiecesTable, orderStatus, piecesLine } from "./PmCommon";
 import { DEFAULT_PERIOD, PM_PERIODS, pmPeriod } from "./pmPeriod";
 import { PmCancelModal, PmEditOrderModal, PmPriorityModal } from "./PmModals";
+import { HalfMadeButton, PmCompletePicker } from "./PmPicker";
 import TodayPage from "./PmToday";
 import OrdersPage from "./PmOrders";
 import FloorPage from "./PmFloor";
@@ -47,9 +46,7 @@ import PeoplePage from "./PmPeople";
 import RequestsPanel from "./PmApprovals";
 import { ProfileBody } from "./PmMore";
 import { clearSnapshots, hasSnapshotFlag, readSnapshot, writeSnapshot } from "./pmCache";
-import ProductionOverrides from "../../components/ProductionOverrides";
-import "../../components/ProductionOverrides.css";
-import OverrideHistory from "../../components/OverrideHistory";
+import { OverrideLog, OverrideTool } from "./PmOverrides";
 import StockPage from "./PmStock";
 
 // ============================================================
@@ -401,7 +398,7 @@ export default function PmDashboard() {
     profile, email: profile?.email || "", orders, ordersById, components, componentsByOrder, piecesById, vendorMap, halfMade,
     lazy, need, syncedAt, period,
     openOrder, openOrders, openPieces, go, openJourney, showPopup, navigate, ordersTab, setOrdersTab, stockFocus, setStockFocus,
-    openRequests,
+    openRequests, reloadOrder, refreshWaiting,
     openOverrideLog: (order) => setOverrideLog(order),
     actions: { complete, cancel: setCancelling, edit, priority: setPrioritising, warehousePdf, override: (o) => setOverriding(o), busy },
   };
@@ -601,12 +598,12 @@ export default function PmDashboard() {
         )}
         {overriding && (
           <Drawer wide title="Move or Override Pieces" sub={`${overriding.order_no} · choose a piece, then the override`} onClose={() => { const id = overriding.id; setOverriding(null); reloadOrder(id); }}>
-            <div className="pm-classic ceo-keep"><ProductionOverrides currentUserEmail={profile?.email} initialOrder={overriding} /></div>
+            <div className="pm-records"><OverrideTool ctx={ctx} initialOrder={overriding} /></div>
           </Drawer>
         )}
         {overrideLog && (
           <Drawer wide title="Override History" sub={`Every override recorded on ${overrideLog.order_no}`} onClose={() => setOverrideLog(null)}>
-            <div className="pm-classic ceo-keep"><OverrideHistory title="Overrides on this order" initialSearch={overrideLog.order_no} /></div>
+            <div className="pm-records"><OverrideLog ctx={ctx} initialSearch={overrideLog.order_no} /></div>
           </Drawer>
         )}
         {periodOpen && (
@@ -651,15 +648,14 @@ export default function PmDashboard() {
         <ComponentJourneyModal orderNo={journey.orderNo} components={journey.components} onClose={() => { const id = journey.orderId; setJourney(null); reloadOrder(id); }} />,
         document.body,
       )}
-      {picker && createPortal(
-        <CompletePicker
+      {picker && (
+        <PmCompletePicker
           order={picker.order}
           components={componentsByOrder[picker.order.id] || []}
           productIdxs={picker.products}
           onConfirm={(picked) => { const o = picker.order; setPicker(null); complete(o, picked); }}
           onClose={() => setPicker(null)}
-        />,
-        document.body,
+        />
       )}
       {editing && <PmEditOrderModal order={editing} onClose={() => setEditing(null)} onSaved={patchOrder} showPopup={showPopup} />}
       {prioritising && <PmPriorityModal order={prioritising} onClose={() => setPrioritising(null)} onSaved={patchOrder} showPopup={showPopup} />}
@@ -779,7 +775,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
       </div>
       <OrderChecks order={o} ctx={ctx} />
       {ctx.halfMade?.byOrder?.[o.id] && (
-        <div className="pm-halfmade"><HalfMadeBadge order={o} suggestions={ctx.halfMade.byOrder[o.id]} by={ctx.halfMade.me?.email} onUsed={ctx.halfMade.reload} /></div>
+        <div className="pm-halfmade"><HalfMadeButton order={o} suggestions={ctx.halfMade.byOrder[o.id]} by={ctx.halfMade.me?.email} onUsed={ctx.halfMade.reload} /></div>
       )}
 
       <div className="pm-od-grid">

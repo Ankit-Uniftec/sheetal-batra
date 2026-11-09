@@ -1,6 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import VendorDelaysTab from "../../components/VendorDelays/VendorDelaysTab";
-import VendorRequest from "../../components/VendorRequest";
 import { fmtDate as formatDate } from "./pmModel";
 import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, Seg, num } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
@@ -8,6 +6,7 @@ import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import { csvFromObjects, Loading } from "./PmCommon";
 import { DAY, isOwnTrip, localDay, pct, plural } from "./pmModel";
 import { VendorTripsList } from "./PmRecords";
+import { VendorDelays, VendorDirectory } from "./PmVendorTools";
 import { GOLD, StackBars } from "./PmQuality";
 
 // ============================================================
@@ -230,12 +229,9 @@ export default function VendorsPage({ ctx }) {
         <Seg label="Vendor records" value={view} onChange={setView} options={[{ value: "out", label: "Trips" }, { value: "delays", label: "Delays & Penalties" }, { value: "directory", label: "Directory" }]} />
       </div>
       {view === "out" && <section className="ceo-card pm-records"><VendorTripsList ctx={ctx} rows={moves} loading={!moves} /></section>}
-      {view !== "out" && <section className="ceo-card pm-classic ceo-keep">
-        {view === "delays" && (
-          <VendorDelaysTab movements={moves || []} loading={!moves} orders={ctx.orders} onOrderClick={onOrderClick}
-            canPenalise={(ctx.profile?.role || "").toLowerCase() === "production_manager"} />
-        )}
-        {view === "directory" && <VendorRequest currentUserEmail={ctx.email} />}
+      {view !== "out" && <section className="ceo-card pm-records">
+        {view === "delays" && <VendorDelays ctx={ctx} moves={moves} />}
+        {view === "directory" && <VendorDirectory ctx={ctx} />}
       </section>}
     </div>
   );
