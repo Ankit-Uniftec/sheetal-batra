@@ -766,3 +766,37 @@
   .ceo.pm .pmc-product { grid-template-columns: 52px minmax(0, 1fr); }
   .ceo.pm .pmc-ppieces { grid-column: 1 / -1; }
 }
+
+/* Pieces as small cards across the width, under the product's details. */
+.ceo.pm .pmc-product { grid-template-columns: 64px minmax(0, 1.2fr) minmax(0, 1fr); }
+.ceo.pm .pmc-ppieces { grid-column: 2 / -1; padding: 10px 0 0; border-left: 0; border-top: 1px dashed #f1ebdc; }
+.ceo.pm .pmc-ppieces .pmc-plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.ceo.pm .pmc-ppieces .pmc-piece { padding: 8px 10px; border: 1px solid #f1ebdc; border-radius: 10px; background: #fffdf8; gap: 6px; }
+.ceo.pm .pmc-ppieces .pmo-chip { background: transparent !important; padding: 0; grid-template-columns: minmax(60px, max-content) minmax(0, 1fr); }
+.ceo.pm .pmc-ppieces .pmc-piece:has(.pmo-chip.is-finished) { background: #fbf6e6; }
+.ceo.pm .pmc-ppieces .pmc-piece:has(.pmo-chip.is-at_vendor) { background: #fdf6f0; }
+.ceo.pm .pmc-ppieces .pmc-mchips { padding-left: 0; }
+.ceo.pm .pmc-ready { font-size: 11.5px; font-weight: 600; color: #7e5f10 !important; background: #f6ecce; padding: 1px 8px; border-radius: 99px; }
+@media (max-width: 1100px) { .ceo.pm .pmc-product { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .ceo.pm .pmc-product { grid-template-columns: 52px minmax(0, 1fr); }
+  .ceo.pm .pmc-ppieces { grid-column: 1 / -1; }
+  .ceo.pm .pmc-ppieces .pmc-plist { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Bigger product photo; click it to see it full size. */
+.ceo.pm .pmc-product { grid-template-columns: 92px minmax(0, 1.2fr) minmax(0, 1fr); }
+.ceo.pm .pmc-thumb { width: 92px; height: 118px; }
+.ceo.pm .pmc-thumb-btn { padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 10px; line-height: 0; }
+.ceo.pm .pmc-thumb-btn:hover .pmc-thumb { box-shadow: 0 6px 16px -8px rgba(70, 52, 12, .5); }
+@media (max-width: 1100px) { .ceo.pm .pmc-product { grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 760px) {
+  .ceo.pm .pmc-product { grid-template-columns: 72px minmax(0, 1fr); }
+  .ceo.pm .pmc-thumb { width: 72px; height: 92px; }
+}
+.pmc-lightbox { position: fixed; inset: 0; z-index: 1300; background: rgba(20, 16, 8, .82); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+.pmc-lightbox figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; cursor: default; }
+.pmc-lightbox img { max-width: min(92vw, 900px); max-height: 82vh; border-radius: 12px; object-fit: contain; box-shadow: 0 20px 60px rgba(0, 0, 0, .45); background: #fff; }
+.pmc-lightbox figcaption { font-family: "Futura", "Jost", sans-serif !important; font-size: 14px; color: #f6efd9 !important; text-align: center; max-width: 80vw; }
+.pmc-lightbox-x { position: fixed; top: 16px; right: 18px; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, .35); background: rgba(255, 255, 255, .12); color: #fff !important; font-size: 26px; line-height: 1; cursor: pointer; }
+.pmc-lightbox-x:hover { background: rgba(255, 255, 255, .22); }

@@ -149,6 +149,25 @@ function PieceRow({ c, item }) {
   );
 }
 
+/** A product photo shown large over the page; click anywhere or press Escape to close. */
+function PhotoView({ photo, onClose }) {
+  useEffect(() => {
+    const onKey = (ev) => { if (ev.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return createPortal(
+    <div className="pmc-lightbox" role="dialog" aria-modal="true" aria-label={photo.name || "Product photo"} onClick={onClose}>
+      <figure onClick={(ev) => ev.stopPropagation()}>
+        <img src={photo.src} alt={photo.name || ""} />
+        {photo.name && <figcaption>{photo.name}</figcaption>}
+      </figure>
+      <button type="button" className="pmc-lightbox-x" aria-label="Close" onClick={onClose}>×</button>
+    </div>,
+    document.body,
+  );
+}
+
 /** A label over a value, for the card header. */
 const HeadItem = ({ label, children, sub, tone }) => (
   <div className="pmc-hitem">
@@ -165,14 +184,17 @@ const Line = ({ label, children }) => (
 export default function OrderRows({ ctx, rows }) {
   const { componentsByOrder, actions } = ctx;
   const hexOf = useColourHex();
+  const [photo, setPhoto] = useState(null); // { src, name } shown large
   if (!rows.length) return <Empty text="No orders match." />;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   return (
     <div className="pmc-list">
+      {photo && <PhotoView photo={photo} onClose={() => setPhoto(null)} />}
       {rows.map((o) => {
         const comps = componentsByOrder[o.id] || [];
         const live = comps.filter((c) => !c.cancelled_at);
         const done = live.filter((c) => pieceState(c) === "finished").length;
+        const passedQc = live.filter((c) => c.current_stage === "final_qc_passed").length;
         const items = (o.items || []).filter((it) => it && !it.is_charge);
         const shownItems = (items.length ? items : [{}]).slice(0, MAX_PRODUCTS);
         const running = isRunning(o);
@@ -215,7 +237,12 @@ export default function OrderRows({ ctx, rows }) {
               <div className="pmc-products">
                 {shownItems.map((it, i) => (
                   <div key={i} className="pmc-product">
-                    <Thumb src={it.image_url} alt={it.product_name || ""} className="pmc-thumb" />
+                    {it.image_url ? (
+                      <button type="button" className="pmc-thumb-btn" aria-label="View the photo larger"
+                        onClick={(ev) => { ev.stopPropagation(); setPhoto({ src: it.image_url, name: it.product_name }); }}>
+                        <Thumb src={it.image_url} alt={it.product_name || ""} className="pmc-thumb" />
+                      </button>
+                    ) : <Thumb src={it.image_url} alt="" className="pmc-thumb" />}
                     <div className="pmc-pinfo">
                       <Line label="Product">{it.product_name || "–"}</Line>
                       <Line label="Category">{it.product_name ? getItemCategory(it) : "–"}</Line>
@@ -250,6 +277,7 @@ export default function OrderRows({ ctx, rows }) {
               <span className="pmc-foot-note">
                 <span className="pmc-progress">
                   Pieces: <b>{live.length ? `${done} of ${live.length} finished` : "none yet"}</b>
+                  {passedQc > 0 && <span className="pmc-ready">{passedQc} passed Final QC</span>}
                   {live.length > 0 && <span className="pm-mini-bar"><i style={{ width: `${(done / live.length) * 100}%` }} /></span>}
                 </span>
                 {o.mode_of_delivery ? <span>Delivery: <b>{o.mode_of_delivery}</b></span> : null}
